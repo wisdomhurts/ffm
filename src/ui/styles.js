@@ -818,19 +818,20 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .br-val{font-size:11.5px}
   .br-star{display:none}
   .tut{position:fixed;left:var(--sl);right:var(--sr);top:calc(var(--st) + 150px);display:flex;align-items:center;gap:8px;width:auto;max-width:none;padding:5px 8px 5px 6px;border-radius:15px}
-  .tut-head{order:2;gap:6px}
+  /* the distance sits under the arrow and the count over Skip, so the instruction gets the width */
+  .tut-head{order:2;flex-direction:column;align-items:flex-end;gap:5px}
   .tut-kicker,.tut-list{display:none}
   .tut-text{font-size:11.5px;line-height:1.25;margin-top:1px;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
-  .tut-nav{flex-direction:row;gap:5px}
-  .tut-now{flex:1;min-width:0;margin:0;padding:0;gap:6px;background:none}
+  .tut-nav{gap:2px}
+  .tut-now{flex:1;min-width:0;margin:0;padding:0;gap:7px;background:none}
   .tut-skip{padding:4px 6px;font-size:10px}
   .tut-num{display:none}
-  .tut-copy b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tut-copy b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tut-arrow{width:28px;height:28px;padding:4px}
-  .tut-copy b{font-size:14px}
   .tut-text{font-size:11.5px}
+  .tut.yield{display:none}
   .hud-top{top:calc(var(--st) + 164px);width:calc(100% - 24px)}
-  .hud:has(.tut:not(.gone):not(.hidden):not(.wait)) .hud-top{top:calc(var(--st) + 214px)}
+  .hud:has(.tut:not(.gone):not(.hidden):not(.wait):not(.yield)) .hud-top{top:calc(var(--st) + 214px)}
   .alerts .alert:nth-child(n+3){display:none}
   .center-moment{top:54%}
   .is-touch .hud-bottom .hotbar{margin-top:186px}
@@ -925,13 +926,17 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .chip{font-size:10.5px;padding:3px 7px 3px 4px}
   .chip svg{width:12px;height:12px}
   .ch-speed em{display:none}
-  .tut{display:flex;align-items:center;gap:6px;width:236px;max-width:236px;padding:4px 6px}
-  .tut-head{order:2;flex-direction:column;align-items:flex-end;gap:3px}
+  /* tutorial: a compact card with the arrow + distance on the left, the title and Skip on top and the
+     instruction underneath across the full width (two lines, never cut) */
+  .tut{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"nav title skip" "nav text text";align-items:center;column-gap:6px;row-gap:2px;
+    width:236px;max-width:236px;padding:5px 6px 6px}
+  .tut-head,.tut-now,.tut-copy{display:contents}
   .tut-kicker,.tut-list{display:none}
-  .tut-now{flex:1;min-width:0;margin:0;padding:0;gap:6px;background:none}
+  .tut-nav{grid-area:nav;gap:2px}
   .tut-arrow{width:26px;height:26px;padding:4px}
-  .tut-copy b{font-size:14px}
-  .tut-text{font-size:11px}
+  .tut-copy b{grid-area:title;align-self:end;font-size:14px}
+  .tut-text{grid-area:text;align-self:start;margin:0;font-size:11px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
+  .tut-skip{grid-area:skip;align-self:center}
   .board{width:168px;--rowh:26px;padding:4px}
   .board-head{padding:0 3px 3px 4px}
   .bh-title{font-size:11px}
@@ -1051,7 +1056,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .aw-title{font-size:12px}
   .aw-name{font-size:10.5px}
   .aw-stat{display:none}
-  .end-actions .btn-lg{min-height:40px;font-size:16px;padding:6px 14px 8px;border-radius:14px}
+  .end-actions .btn-lg{min-height:44px;font-size:16px;padding:7px 14px 9px;border-radius:14px}
   .pause-panel{width:min(560px,100%)}
   .pause-btns{display:grid;grid-template-columns:1fr 1fr}
   .pause-btns .btn-lg{grid-column:1/-1}
@@ -1082,17 +1087,19 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   /* the Showdown board is a row taller */
   .hud:has(.board.showdown) .tut{top:calc(var(--st) + 162px)}
   .hud:has(.board.showdown) .hud-top{top:calc(var(--st) + 176px)}
-  .hud:has(.board.showdown):has(.tut:not(.gone):not(.hidden):not(.wait)) .hud-top{top:calc(var(--st) + 226px)}
+  .hud:has(.board.showdown):has(.tut:not(.gone):not(.hidden):not(.wait):not(.yield)) .hud-top{top:calc(var(--st) + 226px)}
   .hud:has(.carry.show) .alerts .alert:nth-child(n+2){display:none}
   .carry.full .cp-l2{font-size:14px}
-  /* next goal: a one-line chip under the cash ("Lv 1 $100 -> Greenhollow") */
-  .nextgoal{max-width:100%;padding:4px 10px 7px 4px;gap:5px;border-radius:13px}
+  /* next goal: a compact two-line chip under the cash ("Lv 8 $6.21K" / "-> Tanglemire"), so long biome
+     names never run under the family board; the banners below step down to make room */
+  .nextgoal{max-width:100%;padding:4px 10px 6px 4px;gap:6px;border-radius:13px}
   .ng-ic{width:22px;height:22px;padding:3px}
   .ng-k,.ng-word,.ng-more{display:none}
-  .ng-copy{flex-direction:row;align-items:center;gap:5px;white-space:nowrap}
+  .ng-copy{gap:2px;white-space:nowrap}
   .ng-l1{font-size:14px;gap:3px}
   .ng-l1 svg{width:14px;height:14px}
-  .ng-l2{font-size:12px}
+  .ng-l2{font-size:12px;line-height:1.1}
+  .hud:has(.nextgoal:not([hidden])) .hud-top{top:calc(var(--st) + 178px)}
 }
 /* short phones (portrait): one alert, no chat log, slimmer pills; the weather chip steps aside while a
    prompt or carry pill needs the middle of the screen */
@@ -1120,7 +1127,8 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .cc-title{font-size:11px}
   .tut-num,.tut-count{display:none}
   .tut-copy b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tut-dist{white-space:normal;text-align:center;max-width:44px;line-height:1.1}
+  .tut-dist{white-space:normal;text-align:center;max-width:40px;line-height:1.1}
+  .is-touch .tut-skip{padding:4px 6px;font-size:11px}
   .nextgoal{max-width:236px;padding:5px 10px 8px 5px;gap:6px;border-radius:14px}
   .ng-ic{width:24px;height:24px;padding:4px}
   .ng-k,.ng-long{display:none}
@@ -1150,6 +1158,95 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .tut{width:212px;max-width:212px}
   .hud-top{left:calc(var(--sl) + 228px);right:calc(var(--sr) + 176px);width:auto;min-width:0;max-width:none;transform:none}
   .stick-idle{left:calc(var(--sl) + 104px)}
+  .meter{top:calc(var(--st) + 200px)}
+  /* title: slim side-by-side cast cards so a returning player's whole title screen fits */
+  .scr-title{gap:8px}
+  .cast{width:100%;max-width:660px}
+  .cast-card{flex:1 1 0;min-width:0;width:auto;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:7px;row-gap:3px;align-items:center;justify-items:start;
+    padding:6px 7px 6px 6px;text-align:left;border-radius:16px;background:linear-gradient(90deg,var(--c) 0,var(--c) 26px,transparent 26px),var(--panel)}
+  .cc-ava{--s:40px;grid-row:1/3}
+  .cc-name{align-self:end;margin-top:0;font-size:17px}
+  .cc-title{align-self:start;font-size:9.5px;padding:3px 6px;letter-spacing:.03em;line-height:1.1}
+  .cc-the{display:none}
+}
+
+/* short portrait phones (iPhone SE and friends): the title screen fits without scrolling, returning
+   players included, and the Showdown results card stays a slim lower third below the 3D podium */
+@media (max-width:640px) and (max-height:760px) and (orientation:portrait){
+  .scr-title{gap:10px;padding-top:max(14px,var(--st))}
+  .logo-row{font-size:clamp(44px,7.4vh,58px)}
+  .edition span{font-size:18px;padding:6px 20px 8px}
+  .cast{gap:8px}
+  .cast-card{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:8px;row-gap:3px;align-items:center;justify-items:start;
+    padding:7px 8px 7px 7px;text-align:left;border-radius:18px;background:linear-gradient(90deg,var(--c) 0,var(--c) 31px,transparent 31px),var(--panel)}
+  .cc-ava{--s:48px;grid-row:1/3;border-width:3px}
+  .cc-name{align-self:end;margin-top:0;font-size:19px}
+  .cc-title{align-self:start;font-size:9.5px;padding:3px 6px;letter-spacing:.04em;line-height:1.1}
+  .cc-the{display:none}
+  .title-actions{gap:10px;width:100%}
+  .title-main{flex-wrap:nowrap;gap:10px;width:100%;max-width:420px}
+  .title-main .btn-xl{flex:1 1 0;min-width:0;font-size:24px;min-height:58px;padding:10px 12px 13px;border-radius:19px}
+  .title-main .btn-xl:only-child{flex:0 1 260px}
+  .btn-cont{padding-left:10px;padding-right:12px;gap:8px}
+  .btn-cont .bl span{font-size:20px}
+  .btn-cont .bl small{font-size:10.5px}
+  .btn-cont .btn-ava{--s:32px}
+  .title-foot{display:none}
+
+  .scr-end{gap:6px}
+  .end-top{gap:4px}
+  .end-kicker{font-size:11px}
+  .end-title{font-size:40px}
+  .end-sub{font-size:13px;padding:3px 12px 3px 3px}
+  .end-top.win .end-sub{padding:5px 12px}
+  .es-ava{--s:24px}
+  .end-card{gap:6px;padding:8px 8px 9px;border-radius:18px}
+  .end-chips{gap:5px}
+  .end-chip{gap:5px;padding:3px 8px 3px 3px}
+  .ec-rank{width:20px;height:20px;font-size:13px}
+  .ec-ava{--s:26px;border-width:2px}
+  .ec-crown{left:29px;top:-11px;width:19px;height:19px}
+  .ec-copy{gap:2px}
+  .ec-name{font-size:14px}
+  .ec-val{font-size:12px}
+  .end-you{gap:3px 8px;font-size:12px}
+  .ey-net,.ey-bl{display:none}
+  .ey-k{padding:3px 7px;font-size:11px}
+  .ey-v b{font-size:15px}
+  /* awards: a one-line ticker (menus.js rotates .on); tap it to see the next one */
+  .awards{display:grid;grid-template-areas:"aw";justify-items:center;align-items:center;cursor:pointer}
+  .award{grid-area:aw;gap:6px;padding:3px 10px 3px 3px;border-radius:13px;animation:none;opacity:0;visibility:hidden;transform:translateY(8px) scale(.94);
+    transition:opacity .3s,transform .35s var(--spring),visibility 0s .35s}
+  .award.on{opacity:1;visibility:visible;transform:none;transition:opacity .3s,transform .35s var(--spring)}
+  .aw-ava{--s:26px;border-width:2px}
+  .aw-ic{width:16px;height:16px;padding:2px;right:-5px;bottom:-4px}
+  .aw-copy{flex-direction:row;align-items:baseline;gap:6px}
+  .aw-title{font-size:14px}
+  .aw-name{font-size:12px}
+  .end-actions{flex-wrap:nowrap;gap:8px;width:100%}
+  .end-actions .btn{flex:1 1 0;min-width:0}
+  .end-actions .btn-lg{min-height:46px;font-size:18px;padding:8px 10px 10px;border-radius:16px}
+}
+/* portrait phones: Settings / Photo Booth / How to Play as three equal tiles (always one row) */
+@media (max-width:640px) and (orientation:portrait){
+  .title-small{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;max-width:420px}
+  .title-small .btn{flex-direction:column;gap:3px;min-height:0;padding:6px 4px 7px;font-size:13.5px;border-radius:14px;white-space:nowrap}
+  .title-small .btn .bi{width:19px;height:19px}
+}
+
+/* narrow landscape phones (568-640 wide) also match the portrait max-width:640px rules above: undo the
+   ones that only make sense standing up (they pushed the weather chip, banners and prompts behind the
+   hotbar or off the top of the screen) */
+@media (max-width:640px) and (max-height:500px) and (orientation:landscape){
+  #ui .hud-top{top:var(--st)}
+  .tut{position:static}
+  .is-touch .hud-bottom .hotbar{margin-top:0}
+  .meter{top:calc(var(--st) + 150px);bottom:calc(var(--sb) + 20px)}
+  .hud:has(.prompt.show) .evchip,.hud:has(.carry.show) .evchip{display:flex}
+  .cast{display:flex}
+  .end-chips{display:flex}
+}
+@media (max-width:640px) and (max-height:400px) and (orientation:landscape){
   .meter{top:calc(var(--st) + 200px)}
 }
 

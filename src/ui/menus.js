@@ -1,6 +1,6 @@
 // Menus. Contract: createMenus(app) -> { showTitle(), showSelect(mode), showPause(), hidePause(), showEnd(ranking),
 //   openShop(shop), closeShop(), hideAll(), isBlocking() }  (+ extras: openSettings(), openPhotoBooth(), openHowTo())
-import { CHARACTERS, CHARACTER, DIFFICULTY, MATCH, PLANT, RARITY } from '../config.js';
+import { CHARACTERS, CHARACTER, DIFFICULTY, MATCH, PLANT } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings, setSetting } from '../core/settings.js';
 import { load, save, storageOK } from '../core/save.js';
@@ -11,6 +11,7 @@ import { buildShop } from './shops.js';
 import { buildSettings } from './settingsPanel.js';
 import { buildPhotoBooth } from './photobooth.js';
 import { buildHowTo } from './howto.js';
+import { rarityColor } from '../view/gameView.js';
 
 const DIFF_DESC = {
   chill: 'Best for your first game: the family goes easy on you.',
@@ -179,7 +180,7 @@ export function createMenus(app) {
           sel.charId = c.id;
           showMode();
         },
-      }, avatarEl(c.id, 'cc-ava'), h('span', { class: 'cc-name', text: c.name }), h('span', { class: 'cc-title', text: c.title }), h('span', { class: 'cc-tag', text: `"${c.tagline}"` }))));
+      }, avatarEl(c.id, 'cc-ava'), h('span', { class: 'cc-name', text: c.name }), castTitle(c.title), h('span', { class: 'cc-tag', text: `"${c.tagline}"` }))));
     const cont = continueTarget();
     const actions = h('div', { class: 'title-actions' },
       h('div', { class: 'title-main' },
@@ -235,7 +236,7 @@ export function createMenus(app) {
     const startRow = h('div', { class: 'start-row' });
     const diffDesc = h('div', { class: 'diff-desc' });
     const modeCards = [
-      ['endless', ICON.infinity, 'Endless', 'Farm, steal and grow forever. Saves automatically on this device.'],
+      ['endless', ICON.infinity, 'Endless', `Farm, steal and grow forever. ${storageOK ? 'Saves automatically on this device.' : "This browser can't save progress."}`],
       ['showdown', ICON.trophy, 'Family Showdown', `${Math.round(MATCH.showdownSeconds / 60)}-minute race. Highest net worth wins the crown!`],
     ].map(([id, icon, name, desc]) => h('button', {
       class: 'mode-card', type: 'button', role: 'radio', 'data-mode': id,
@@ -316,7 +317,7 @@ export function createMenus(app) {
       meBox = h('div', { class: 'pause-me', style: `--c:${me.char.color}` }, avatarEl(me.id, 'pm-ava'),
         h('div', {}, h('b', { text: me.name }), h('span', { class: 'cash', text: money(me.cash) }), h('span', { class: 'pm-rank', text: `#${rank} of ${g.players.length} in net worth` })));
     }
-    const note = g?.match ? 'Quitting ends this Showdown.' : 'Your garden saves automatically on this device.';
+    const note = g?.match ? 'Quitting ends this Showdown.' : storageOK ? 'Your garden saves automatically on this device.' : "This browser can't save progress.";
     const panel = h('div', { class: 'panel pause-panel' },
       h('h2', { class: 'pp-title', text: 'Paused' }),
       meBox,
@@ -397,8 +398,10 @@ export function createMenus(app) {
       you = h('div', { class: 'end-you', style: `--c:${me.char.color}` },
         h('span', { class: 'ey-k', text: 'Your result' }),
         h('span', { class: 'ey-v' }, h('b', { text: `#${myRank}` }), ' of ', String(list.length)),
-        h('span', { class: 'ey-v' }, 'Net worth ', h('b', { class: 'cash', text: money(list[myRank - 1].netWorth) })),
-        h('span', { class: 'ey-v ey-best', html: best ? `Best plant <b style="--rc:${best.color}">${esc(best.name)}</b> <em>${money(best.income)}/s</em>` : 'No plants yet' }));
+        h('span', { class: 'ey-v ey-net' }, 'Net worth ', h('b', { class: 'cash', text: money(list[myRank - 1].netWorth) })),
+        h('span', { class: 'ey-v ey-best', html: best
+          ? `<span class="ey-bl">Best plant </span><b class="${best.secret ? 'secret' : ''}" style="--rc:${best.color}">${esc(best.name)}</b> <em>${money(best.income)}/s</em>`
+          : 'No plants yet' }));
     }
     const awardList = computeAwards(list.map((r) => r.player));
     const awards = awardList.length ? h('div', { class: 'awards' }, awardList.map((a, i) =>
@@ -407,6 +410,24 @@ export function createMenus(app) {
         h('span', { class: 'aw-copy' },
           h('span', { class: 'aw-title', text: a.title }),
           h('span', { class: 'aw-name' }, h('b', { text: a.player.name }), h('span', { class: 'aw-stat', text: ` · ${a.stat}` })))))) : null;
+    // Short phones show the awards as a one-line ticker (CSS shows only the .on award); tap to skip ahead.
+    let spin = 0;
+    if (awards && awardList.length > 1) {
+      const els = [...awards.children];
+      let k = 0;
+      els[0].classList.add('on');
+      const next = () => {
+        els[k].classList.remove('on');
+        k = (k + 1) % els.length;
+        els[k].classList.add('on');
+      };
+      spin = setInterval(next, 2600);
+      awards.addEventListener('click', () => {
+        clearInterval(spin);
+        next();
+        spin = setInterval(next, 2600);
+      });
+    } else if (awards) awards.firstChild.classList.add('on');
     const confetti = h('div', { class: 'confetti', 'aria-hidden': 'true' });
     if (!reducedMotion()) {
       const colors = ['#ffd23f', '#ff4f9a', '#3d9bff', '#4cd964', '#9b5cff', '#1ec8a5', '#ff7a3d'];
@@ -434,6 +455,7 @@ export function createMenus(app) {
         h('div', { class: 'end-actions' },
           btn(iconLabel(ICON.reset, 'Play Again'), 'btn-green btn-lg', again, { 'data-autofocus': '' }),
           btn(iconLabel(ICON.home, 'Title'), 'btn-blue btn-lg', () => app.quitToTitle()))));
+    if (spin) screen.dispose = () => clearInterval(spin);
   }
 
   function closeAllModals(silent = true) {
@@ -468,6 +490,12 @@ export function createMenus(app) {
   };
 }
 
+// "The Sneaky Thief": the compact phone cards drop the "The " (CSS hides .cc-the) to keep the chip on one line.
+function castTitle(title) {
+  const m = /^(the )(.+)$/i.exec(title);
+  return h('span', { class: 'cc-title' }, m ? [h('span', { class: 'cc-the', text: m[1] }), m[2]] : title);
+}
+
 const ordinal = (n) => n + (n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th');
 
 // The best-paying plant in a player's garden at the final whistle.
@@ -476,7 +504,8 @@ function bestPlant(game, p) {
   for (const pl of game?.gardens?.[p.slot]?.planters || []) {
     if (!pl.plant) continue;
     const income = game.plantIncome(pl.plant, p);
-    if (!best || income > best.income) best = { income, name: game.plantName(pl.plant.speciesId, pl.plant.mutation), color: RARITY[PLANT[pl.plant.speciesId].rarity].color };
+    const rarity = PLANT[pl.plant.speciesId].rarity;
+    if (!best || income > best.income) best = { income, name: game.plantName(pl.plant.speciesId, pl.plant.mutation), color: rarityColor(rarity), secret: rarity === 'secret' };
   }
   return best;
 }

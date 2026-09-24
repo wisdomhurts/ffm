@@ -9,21 +9,35 @@ import { ICON } from './icons.js';
 import { isTouch } from './device.js';
 import { guidePoint } from './route.js';
 
-const act = () => (isTouch() ? 'Action' : 'E');
 const ROAD = { x: 0, z: LAYOUT.roadGate.z + 8 }; // just inside the Sunny Field
 
+// Touch copy is shorter: on phones the card is a slim strip with room for two short lines.
 const STEPS = [
   { id: 'grab', title: 'Grab a seed', text: () => (isTouch() ? 'Run up the road. Tap Grab on a seed.' : 'Run up the Seed Road. Press E at a seed.'), ev: 'seed:grabbed', test: (p, me) => p.player === me },
   { id: 'plant', title: 'Plant it', text: () => 'Run it into your garden. It plants itself!', ev: 'plant:planted', test: (p, me) => p.player === me },
   { id: 'collect', title: 'Collect cash', text: () => 'When it grows, step on COLLECT.', ev: 'cash:collected', test: (p, me) => p.player === me },
   { id: 'speed', title: 'Get faster', text: () => 'Buy Speed at the Speed Shop.', ev: 'speed:up', test: (p, me) => p.player === me },
-  { id: 'steal', title: 'Steal from family', text: () => (isTouch() ? 'Hold Steal on their grown plants.' : 'Hold E on their grown plants.'), ev: 'steal:grabbed', test: (p, me) => p.thief === me },
+  { id: 'steal', title: 'Steal from family', text: () => (isTouch() ? 'Hold Steal on a grown plant.' : 'Hold E on their grown plants.'), ev: 'steal:grabbed', test: (p, me) => p.thief === me },
   { id: 'lock', title: 'Lock your garden', text: () => 'Step on LOCK to keep thieves out.', ev: 'lock:on', test: (p, me) => p.player === me },
 ];
+
+// The steal step's live line, by how safe the chosen garden is right now.
+const STEAL_NOTE = {
+  none: () => (isTouch() ? 'Wait for a family plant to grow.' : 'Wait for a family plant to grow (locked gardens are off limits).'),
+  away: (n) => `${isTouch() ? 'Hold Steal on a grown plant.' : 'Hold E on their grown plants.'} ${n} is away!`,
+  near: (n) => `${isTouch() ? 'Hold Steal on a plant.' : 'Hold E on their grown plants.'} Watch out, ${n} is nearby!`,
+  home: (n) => `${isTouch() ? 'Hold Steal on a plant.' : 'Hold E on their grown plants.'} Watch out, ${n} is home!`,
+};
+const growingText = (s) => (isTouch() ? `Growing… ${s}s. Grab another seed!` : `Growing… ${s}s. Grab another seed while you wait!`);
 
 const REVEAL_DELAY = 1.0; // seconds after the intro camera lands
 // How close counts as "there" (the arrow hides): pads need you ON them, prompts appear from further away.
 const ARRIVE = { grab: 4.5, plant: 6, collect: 1.6, speed: 5, steal: 4, lock: 1.4 };
+const ARRIVE_SEED = 4.5; // any step that points at a seed pod: the Grab prompt shows from here
+// An owner only counts as "away" when they really are: up the Seed Road, or far from home and not
+// on their way back. Anything closer can be home to BONK you within seconds.
+const AWAY_Z = LAYOUT.roadGate.z + 10;
+const AWAY_DIST = 70;
 
 export function createTutorial(app, parent) {
   const game = app.game;
@@ -63,6 +77,12 @@ export function createTutorial(app, parent) {
   });
 
   let current = -1;
+  let liveText = ''; // the instruction line on show (steps rewrite it live)
+  const say = (t) => {
+    if (t === liveText) return;
+    liveText = t;
+    setText(nowText, t);
+  };
   const visible = () => settings.tips !== false && !finished;
 
   function pop() {
@@ -82,7 +102,7 @@ export function createTutorial(app, parent) {
       finished = true;
       save('tutorial:done', true);
       setText(nowTitle, 'You did it!');
-      setText(nowText, 'You know everything. Now go get rich!');
+      say('You know everything. Now go get rich!');
       toggle(el, 'has-arrow', false);
       el.classList.add('complete');
       leave(4200);
@@ -92,7 +112,7 @@ export function createTutorial(app, parent) {
       current = idx;
       stealPick = null;
       setHTML(nowTitle, `<span class="tut-num">${idx + 1}.</span> ${STEPS[idx].title}`);
-      setText(nowText, STEPS[idx].text());
+      say(STEPS[idx].text());
       if (celebrate) pop();
     }
   }
@@ -116,77 +136,93 @@ export function createTutorial(app, parent) {
   }));
 
   let stealPick = null; // {g, pl}: sticky so the arrow doesn't flip between gardens every tick
-  let stealNote = '';
+  let arrive = 7; // how close counts as "there" for the current target (set by target())
+
+  // Is this garden's owner really away (so a first steal won't be bonked seconds later)?
+  function ownerAway(g) {
+    const o = g.owner;
+    const dx = g.L.center.x - o.pos.x, dz = g.L.center.z - o.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (o.pos.z <= AWAY_Z && d <= AWAY_DIST) return false;
+    if (o.carrying) return false; // loot goes straight home
+    const v = Math.hypot(o.vel.x, o.vel.z);
+    return !(v > 2 && (o.vel.x * dx + o.vel.z * dz) / (v * Math.max(d, 1e-6)) > 0.5);
+  }
 
   // The best plant to practise stealing on: never in a locked garden, preferably while its owner is
-  // away from home, preferably in the column nearest the gate.
+  // really away, preferably in the column nearest the gate.
   function pickSteal() {
     let best = null;
     let bs = Infinity;
     for (const g of game.gardens) {
       if (g.owner === me || game.isLocked(g)) continue;
       const o = g.owner.pos;
-      const home = gardenContains(g.L, o.x, o.z, -12);
+      const away = ownerAway(g);
+      const home = !away && gardenContains(g.L, o.x, o.z, -12);
       for (const pl of g.planters) {
         if (!pl.plant || pl.plant.growLeft > 0) continue;
         const back = pl.index % 2 === 1; // far column: you have to hop a planter
-        const s = Math.hypot(pl.x - me.pos.x, pl.z - me.pos.z) + (home ? 90 : 0) + (back ? 25 : 0) + (stealPick?.pl === pl ? -30 : 0);
+        const s = Math.hypot(pl.x - me.pos.x, pl.z - me.pos.z) + (away ? 0 : home ? 120 : 70) + (back ? 25 : 0) + (stealPick?.pl === pl ? -30 : 0);
         if (s < bs) {
           bs = s;
-          best = { g, pl, home };
+          best = { g, pl, away, home };
         }
       }
     }
     return best;
   }
 
+  // The nearest seed waiting in a pod (the route helper steers the arrow through the arch).
+  function nearestSeed() {
+    let best = null;
+    let bd = Infinity;
+    for (const pod of game.pods) {
+      if (!pod.seed) continue;
+      const d = (pod.x - me.pos.x) ** 2 + (pod.z - me.pos.z) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = pod;
+      }
+    }
+    return best;
+  }
+  // point at a seed ("there" = close enough for the Grab prompt); up the road if every pod is empty
+  const toSeed = () => {
+    arrive = ARRIVE_SEED;
+    return nearestSeed() || ROAD;
+  };
+
   // What the current step wants the player to walk to (null = no arrow), plus live text tweaks.
   function target() {
     const step = STEPS[current];
     if (!step) return null;
+    arrive = ARRIVE[step.id] ?? 7;
     const L = LAYOUT.gardens[me.slot];
     switch (step.id) {
-      case 'grab': {
-        if (me.carrying) return null;
-        if (me.pos.z < LAYOUT.roadGate.z) return ROAD;
-        let best = null;
-        let bd = Infinity;
-        for (const pod of game.pods) {
-          if (!pod.seed) continue;
-          const d = (pod.x - me.pos.x) ** 2 + (pod.z - me.pos.z) ** 2;
-          if (d < bd) {
-            bd = d;
-            best = pod;
-          }
-        }
-        return best;
-      }
+      case 'grab':
+        return me.carrying ? null : toSeed();
       case 'plant':
-        return me.carrying ? null : ROAD;
+        return me.carrying ? null : toSeed(); // dropped it: go get another one
       case 'collect': {
         const garden = game.gardens[me.slot];
         if (game.gardenIncome(garden) > 0 || garden.cashPile >= 1) {
-          setText(nowText, 'It grew! Step on COLLECT for your cash.');
+          say('It grew! Step on COLLECT for your cash.');
           return L.collectPad;
         }
         let left = Infinity;
         for (const pl of garden.planters) if (pl.plant && pl.plant.growLeft > 0) left = Math.min(left, pl.plant.growLeft);
-        if (left < Infinity) setText(nowText, `Growing… ${Math.ceil(left)}s. Grab another seed while you wait!`);
-        else setText(nowText, 'Plant a seed, then step on COLLECT when it grows.');
-        return me.carrying ? null : ROAD;
+        if (left < Infinity) say(growingText(Math.ceil(left)));
+        else say(isTouch() ? 'Plant a seed, then step on COLLECT.' : 'Plant a seed, then step on COLLECT when it grows.');
+        // while it grows: off to fetch another seed
+        return me.carrying ? null : toSeed();
       }
       case 'speed':
         return LAYOUT.shops.speed;
       case 'steal': {
         if (me.carrying) return null;
         stealPick = pickSteal();
-        const note = !stealPick ? 'none' : stealPick.home ? 'home' : 'go';
-        if (note !== stealNote) {
-          stealNote = note;
-          if (note === 'none') setText(nowText, 'Wait for a family plant to grow (locked gardens are off limits).');
-          else if (note === 'home') setText(nowText, `${STEPS[current].text()} Watch out, ${stealPick.g.owner.name} is home!`);
-          else setText(nowText, `${STEPS[current].text()} ${stealPick.g.owner.name} is away!`);
-        }
+        const note = !stealPick ? 'none' : stealPick.away ? 'away' : stealPick.home ? 'home' : 'near';
+        say(STEAL_NOTE[note](stealPick?.g.owner.name));
         return stealPick?.pl || null;
       }
       case 'lock':
@@ -219,7 +255,7 @@ export function createTutorial(app, parent) {
       acc = 0;
       const t = target();
       const g = t ? guidePoint(me.pos, t, game.physics?.boxes) : null;
-      const show = !!g && g.dist > (ARRIVE[STEPS[current]?.id] ?? 7);
+      const show = !!g && g.dist > arrive;
       toggle(el, 'has-arrow', show);
       if (show) {
         const a = screenAngle(me.pos, g, app.cam.yaw);

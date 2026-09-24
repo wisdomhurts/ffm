@@ -33,19 +33,31 @@ export function wireNotifications(app, alerts) {
     });
   });
   on('steal:cancel', ({ thief }) => alerts.remove('steal' + thief.slot));
-  // The friendly "practice steal" on Chill: coach the kid through chasing and bonking.
-  on('practice:steal', ({ stage, thief, victim }) => {
+  // The friendly "practice steal" on Chill: coach the kid through chasing and bonking. Catching the
+  // practice thief shows ONE alert (the lesson), not a generic "you saved it" banner plus the lesson.
+  let practiceThief = null; // the bot running the lesson (from 'start'/'carry' until it ends)
+  let merged = null; // practice thief whose steal:foiled banner already carries the lesson
+  const LESSON = "<small>That's how you protect your garden. Use LOCK when you leave, too.</small>";
+  on('practice:steal', ({ stage, thief, victim, plant }) => {
     if (victim !== me) return;
     const key = isTouch() ? 'the noodle button' : 'F or click';
+    if (stage === 'start' || stage === 'carry') practiceThief = thief;
     if (stage === 'carry') {
+      alerts.remove('chase' + thief.slot); // the friendly coaching replaces the scary "grabbed your plant!"
       alerts.show({
         key: 'practice', kind: 'info', face: thief.id, duration: 7000,
         html: `Practice time! Chase ${who(thief, true)}<small>Get close and BONK them (${key}) to get your plant back.</small>`,
       });
-    } else if (stage === 'caught') {
-      alerts.remove('practice');
-      alerts.show({ kind: 'good', face: thief.id, duration: 3800, html: `Great bonk!<small>That's how you protect your garden. Use LOCK when you leave, too.</small>` });
-    } else if (stage === 'escaped') alerts.remove('practice');
+      return;
+    }
+    if (stage !== 'caught' && stage !== 'escaped') return;
+    alerts.remove('practice');
+    practiceThief = null;
+    if (stage === 'caught' && merged !== thief) {
+      // bonked before they grabbed it (no steal:foiled): the lesson on its own
+      alerts.show({ key: 'saved' + thief.slot, kind: 'good', face: thief.id, duration: 4200, html: `Great bonk!${plant ? ` You saved your ${plantTag(plant)}!` : ''}${LESSON}` });
+    }
+    merged = null;
   });
   on('steal:grabbed', ({ thief, victim, plant }) => {
     alerts.remove('steal' + thief.slot);
@@ -79,9 +91,16 @@ export function wireNotifications(app, alerts) {
   on('steal:foiled', ({ thief, victim, plant, by, cause }) => {
     alerts.remove('chase' + thief.slot);
     if (victim === me) {
+      const practice = thief === practiceThief;
+      if (practice) {
+        alerts.remove('practice');
+        merged = thief;
+      }
       alerts.show({
-        kind: 'good', face: (by || me).id, duration: 3800,
-        html: by === me ? `BONK! You saved your ${plantTag(plant)}!` : `Your ${plantTag(plant)} flew back home!<small>${causeText(cause, by, thief)}</small>`,
+        key: 'saved' + thief.slot, kind: 'good', face: (by || me).id, duration: practice ? 4200 : 3800,
+        html: by === me
+          ? `${practice ? 'Great bonk!' : 'BONK!'} You saved your ${plantTag(plant)}!${practice ? LESSON : ''}`
+          : `Your ${plantTag(plant)} flew back home!<small>${causeText(cause, by, thief)}</small>`,
       });
     } else if (thief === me) {
       alerts.remove('heist');
@@ -145,10 +164,17 @@ export function wireNotifications(app, alerts) {
     if (player !== me || !ITEM[item]) return;
     alerts.show({ key: 'itemempty', kind: 'info', icon: ITEM_ICONS[item], duration: 2600, html: `No ${esc(ITEM[item].name)}s left.<small>Buy more at the Gear Shop.</small>` });
   });
+  // Stacking extends the timer (game.useItem adds the duration), so say the real time left.
   on('item:used', ({ player, item }) => {
     if (player !== me) return;
-    if (item === 'coil') alerts.toast('Speed Coil! <b>+50% speed</b> for 15s', 'info', { icon: ITEM_ICONS.coil });
-    if (item === 'cloak') alerts.toast('You are invisible for 10s!', 'info', { icon: ITEM_ICONS.cloak });
+    const left = (until) => Math.max(1, Math.round(until - game.time));
+    if (item === 'coil') {
+      const extra = me.coilUntil - game.time > ITEM.coil.duration + 0.5;
+      alerts.toast(`Speed Coil${extra ? ' stacked' : ''}! <b>+${Math.round((ITEM.coil.mult - 1) * 100)}% speed</b> for ${left(me.coilUntil)}s`, 'info', { key: 'coil', icon: ITEM_ICONS.coil });
+    }
+    if (item === 'cloak') {
+      alerts.toast(`You are invisible for ${left(me.cloakUntil)}s!`, 'info', { key: 'cloak', icon: ITEM_ICONS.cloak });
+    }
   });
   on('plant:watered', ({ player }) => {
     if (player === me) alerts.toast('Splash! Growing time cut in half.', 'info', { icon: ITEM_ICONS.bucket });

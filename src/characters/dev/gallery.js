@@ -1,7 +1,7 @@
 // Dev gallery for the characters module: the four family avatars (with photo faces when the page is
 // family.html) and the five road monsters on a studded baseplate.
 // URL hash (or window.__gallery.apply({...})) controls what is shown:
-//   view=family|lineup|lineup34|monsters|all|close:<id>|close34:<id>|side:<id>|back:<id>|game[:dist]|game34|behind|monster:<type>|faces
+//   view=family|lineup|lineup34|monsters|all|close:<id>|close34:<id>|side:<id>|back:<id>|backr:<id>|back34:<id>|rside:<id>|lside:<id>|game[:dist]|game34|behind|monster:<type>|faces
 //   state=idle|walk|run|sprint|jump|fall|carry|swing|stunned|celebrate|steal|grab|invisible|coil|mix|cycle
 //   swing=<0..1> (frozen swing phase)   mstate=patrol|chase|stunned|attack   freeze=1   t=<seconds>
 //   settle=<seconds> (animation simulated before the shot, default 1)
@@ -187,6 +187,20 @@ function setCamera(view) {
       camera.position.set(ax - 4, 6, -8.5);
       camera.lookAt(ax, 3.3, 0);
       break;
+    case 'rside':
+    case 'lside': {
+      // straight side-on (right or left profile), close: how the noodle sits on the back (use solo=<id>)
+      const sx = kind === 'rside' ? -1 : 1;
+      camera.position.set(ax + sx * 6.5, headY - 0.9, -0.6);
+      camera.lookAt(ax, headY - 1.6, -0.6);
+      break;
+    }
+    case 'back34': {
+      // over the right shoulder from behind and above, close (use solo=<id>)
+      camera.position.set(ax - 3.3, headY + 1.3, -4.4);
+      camera.lookAt(ax, headY - 1.4, 0);
+      break;
+    }
     case 'game': {
       // gameplay follow-camera distance (~20 studs, pitch 0.42) looking at the family from the front
       const d = +(arg || 20);

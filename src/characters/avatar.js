@@ -27,10 +27,23 @@ const KID = { scale: 0.82, head: 1.14 }; // big heads on small bodies: kids' fac
 const NOODLE_SEG = 1.5; // the noodle is 3 segments = 4.5 studs
 const NOODLE_CURVE = [0.07, -0.07, -0.07]; // gentle permanent bend per segment
 // Slung across the back (torso space): grip end up over the right shoulder, tip down at the left hip,
-// a little off the back so the swinging arms and long hair don't cut through it.
-const SLING = { tilt: Math.PI / 4, y: 1.25, z: -0.95 };
+// a little off the back so the swinging arms don't cut through it. Long hair falls down the back, so
+// there it lies over the hair instead: further back (more for big kid heads), a little lower, and leaning
+// in with the hair (pitch) so the tip still sits by the hip. twist: share of the steal's look-around done
+// with the shoulders (long hair swings with the head).
+const SLING = { tilt: Math.PI / 4, y: 1.25, z: -0.95, pitch: 0, twist: 0 };
+const SLING_LONG = { y: 1.05, z: -1.55, pitch: -0.17, twist: 0.6 };
+const LONG_TUCK = 0.12; // long hair leans in towards the back by this angle (radians)
 const GLOW = 0.2; // soft self-illumination so characters pop against the world
 const TAU = Math.PI * 2;
+// the noodle's grip frame inside the baked sling mesh (the hand noodle's frame maps onto it)
+const SLING_BASE = new THREE.Matrix4()
+  .makeTranslation(-Math.sin(SLING.tilt) * NOODLE_SEG * 1.5, Math.cos(SLING.tilt) * NOODLE_SEG * 1.5, 0)
+  .multiply(new THREE.Matrix4().makeRotationZ(Math.PI + SLING.tilt));
+const SLING_BASE_INV = SLING_BASE.clone().invert();
+const _m = new THREE.Matrix4();
+const _m2 = new THREE.Matrix4();
+const _v = new THREE.Vector3();
 
 // ------------------------------------------------------------------ shared geometry
 
@@ -123,8 +136,10 @@ function buildHair(style, longLen) {
     for (const s of [-1, 1]) P.push(part(box(0.44, 2.55, 0.36, 2, 0.16), [s * (hw - 0.15), hh - 1.22, hd - 0.13], [0, 0, 0], STRANDS));
     // sides over the ears
     for (const s of [-1, 1]) P.push(part(box(0.3, 2.35, D - 0.3, 2, 0.13), [s * (hw + 0.04), hh - 1.12, -0.2], [0, 0, 0], STRANDS));
-    // long fall down the back, slightly tucked towards the shoulders
-    P.push(part(box(W + 0.16, longLen, 0.5, 2, 0.22), [0, hh + 0.1 - longLen / 2, -hd - 0.06], [-0.06, 0, 0], STRANDS));
+    // long fall down the back, hinged at the crown and tucked in to lie along the back (the slung
+    // noodle rests across it)
+    const c = new THREE.Vector3(0, -longLen / 2, -0.25).applyAxisAngle(new THREE.Vector3(1, 0, 0), -LONG_TUCK);
+    P.push(part(box(W + 0.16, longLen, 0.5, 2, 0.22), [0, hh + 0.1 + c.y, -hd + 0.19 + c.z], [-LONG_TUCK, 0, 0], STRANDS));
   } else if (style === 'short-thick') {
     P.push(part(box(W + 0.26, 0.88, D + 0.3, 3, 0.4), [0, hh - 0.02, -0.05], [0, 0, 0], STRANDS));
     // chunky bangs that stop just above the eyebrows
@@ -183,9 +198,7 @@ function sharedGeometry() {
   // the same noodle baked into one static mesh (centred, so it pops in place), slung diagonally
   const slingParts = [];
   {
-    const dir = new THREE.Vector3(Math.sin(SLING.tilt), -Math.cos(SLING.tilt), 0);
-    const grip = dir.clone().multiplyScalar((-NOODLE_SEG * 3) / 2);
-    const m = new THREE.Matrix4().makeTranslation(grip.x, grip.y, grip.z).multiply(new THREE.Matrix4().makeRotationZ(Math.PI + SLING.tilt));
+    const m = SLING_BASE.clone();
     [noodle.base, noodle.mid, noodle.tip].forEach((geo, i) => {
       if (i) m.multiply(new THREE.Matrix4().makeTranslation(0, NOODLE_SEG, 0));
       m.multiply(new THREE.Matrix4().makeRotationX(NOODLE_CURVE[i]));
@@ -290,9 +303,37 @@ const smooth = (a, b, x) => {
 const READY = { armRx: -0.55, armRz: -0.12, wrist: 2.3 };
 const DRAW_U = 0.2; // swing phase where the noodle leaves the back and lands in the fist
 const READY_HOLD = 1.4; // seconds it stays in hand after the last swing
-// Holster: the arm swings up out to the side while the noodle turns back first (so it never
-// sweeps across the face), then it drops onto the back at `swap`.
-const HOLSTER = { time: 0.34, swap: 0.5, armRx: -2.75, armRz: -0.6, wrist: 0.05 };
+// Holster (h = 0..1 over `time` seconds, keys spread evenly, Catmull-Rom through them): the fist lifts
+// the noodle up out to the side (clear of the face and hair), over the top and back over the right
+// shoulder, where the arm (twisted by ry) lays it along the back just where it's slung (`letGo`, per
+// sling, fitted offline). At `swap` the hand lets go, the noodle settles into its slung pose over
+// `slide` seconds and the arm carries on round, down behind and back to the side.
+const HOLSTER = {
+  time: 0.45,
+  swap: 0.6,
+  slide: 0.1,
+  armRx: [READY.armRx, -2.1, -3.4, 0, -5.3, -TAU],
+  armRy: [0, 0, 0.2, 0, 0.3, 0],
+  armRz: [READY.armRz, -0.8, -0.6, 0, -0.55, -0.07],
+  wrist: [READY.wrist, 2.9, 2.4, 0, 1.3, READY.wrist],
+};
+const LET_GO = {
+  short: { armRx: -4.35, armRy: 0.91, armRz: 0.36, wrist: 1.13 },
+  long: { armRx: -4.5, armRy: 0.86, armRz: 0.12, wrist: 1.35 },
+};
+// the equivalent of angle a nearest to ref (so blends take the short way round)
+const near = (a, ref) => a + TAU * Math.round((ref - a) / TAU);
+function holsterKey(arr, e) {
+  const n = arr.length - 1;
+  const x = clamp01(e) * n;
+  const i = Math.min(n - 1, Math.floor(x));
+  const t = x - i;
+  const p0 = arr[Math.max(0, i - 1)];
+  const p1 = arr[i];
+  const p2 = arr[i + 1];
+  const p3 = arr[Math.min(n, i + 2)];
+  return p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+}
 // Noodle whack keyframes (u = 0..1 over the 0.35 s swing): wind up overhead, snap forward, follow through.
 const SW_T = [0, 0.3, 0.5, 0.68, 1];
 const SW_EASE = [(t) => 1 - (1 - t) * (1 - t), (t) => t * t * t, (t) => 1 - (1 - t) * (1 - t), (t) => t * t * (3 - 2 * t)];
@@ -364,6 +405,8 @@ export function createAvatar(char, faceImage, skinHex) {
   const kid = look.build === 'kid';
   const S = ADULT_SCALE * (kid ? KID.scale : 1);
   const hs = kid ? KID.head : 1;
+  const longHair = look.hair === 'long';
+  const slung = longHair ? { ...SLING_LONG, z: SLING_LONG.z - (hs - 1) } : SLING;
   let skin = boostSkin(skinHex || look.skin);
   let faceImg = faceImage || null;
 
@@ -511,8 +554,11 @@ export function createAvatar(char, faceImage, skinHex) {
   // pool noodle: slung across the back, or in the right fist while swinging
   const sling = new THREE.Mesh(G.sling, M.noodle);
   sling.name = 'sling';
-  sling.position.set(0, SLING.y, SLING.z);
+  sling.position.set(0, slung.y, slung.z);
+  sling.rotation.x = slung.pitch;
   torso.add(sling);
+  const slingRest = { p: sling.position.clone(), q: sling.quaternion.clone() };
+  const slideFrom = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
   const hand = new THREE.Group();
   hand.position.set(0, ARM_TOP - 1.72, 0.02);
   armR.add(hand);
@@ -553,7 +599,7 @@ export function createAvatar(char, faceImage, skinHex) {
 
   // ---- animation state
   const W = { move: 0, air: 0, carry: 0, stun: 0, celeb: 0, steal: 0, reach: 0, coil: 0, ready: 0 };
-  const P = { rigY: 0, rigRX: 0, rigRZ: 0, rigYaw: 0, torsoX: 0, torsoY: 0, torsoZ: 0, headX: 0, headY: 0, headZ: 0, armRx: 0, armRz: 0, armLx: 0, armLz: 0, legRx: 0, legLx: 0, wrist: READY.wrist, lift: 0 };
+  const P = { rigY: 0, rigRX: 0, rigRZ: 0, rigYaw: 0, torsoX: 0, torsoY: 0, torsoZ: 0, headX: 0, headY: 0, headZ: 0, armRx: 0, armRy: 0, armRz: 0, armLx: 0, armLz: 0, legRx: 0, legLx: 0, wrist: READY.wrist, lift: 0 };
   let clock = Math.random() * 10;
   let phase = Math.random() * TAU;
   let prevArm = 0;
@@ -561,8 +607,12 @@ export function createAvatar(char, faceImage, skinHex) {
   let inHand = false;
   let lastSwing = -10;
   let holster = -1; // 0..1 while putting it back over the shoulder
-  let holsterArm = 0; // holster pose weights (fade out if a swing or a pickup interrupts it)
-  let holsterWrist = 0;
+  let holsterArm = 0; // holster pose weight (fades out if a swing or a pickup interrupts it)
+  let holsterAt = 0; // 0..1 along the holster keys
+  const letGo = LET_GO[longHair ? 'long' : 'short'];
+  const HK = {};
+  for (const k of ['armRx', 'armRy', 'armRz', 'wrist']) HK[k] = HOLSTER[k].map((v, i) => (i === 3 ? letGo[k] : v));
+  let slide = 2; // 0..1 while the let-go noodle settles onto the back (2 = at rest)
   let handScale = 0;
   let slingScale = 1;
   let bend = 0;
@@ -640,21 +690,28 @@ export function createAvatar(char, faceImage, skinHex) {
         holster = -1;
       } else if (holster < 0 && clock - lastSwing > READY_HOLD) holster = 0;
     }
+    let letting = false;
     if (holster >= 0) {
       holster += dt / HOLSTER.time;
       if (inHand && holster >= HOLSTER.swap) {
         inHand = false;
-        snap = true;
+        snap = letting = true;
       }
-      if (holster >= 1) holster = -1;
+      if (holster >= 1) {
+        holster = -1;
+        holsterArm = 0;
+      }
     }
     if (holster >= 0) {
-      const up = holster < HOLSTER.swap;
-      holsterArm = up ? smooth(0, HOLSTER.swap, holster) : 1 - smooth(HOLSTER.swap, 1, holster);
-      holsterWrist = up ? smooth(0, HOLSTER.swap * 0.6, holster) : holsterArm;
+      holsterArm = smooth(0, 0.08, holster) * (1 - smooth(0.8, 1, holster));
+      holsterAt = holster;
     } else {
       holsterArm = damp(holsterArm, 0, 22, dt);
-      holsterWrist = damp(holsterWrist, 0, 22, dt);
+    }
+    if (inHand && slide <= 1) {
+      slide = 2;
+      sling.position.copy(slingRest.p);
+      sling.quaternion.copy(slingRest.q);
     }
     if (snap) {
       handScale = inHand ? 1 : 0;
@@ -756,8 +813,12 @@ export function createAvatar(char, faceImage, skinHex) {
       P.armLx = lerp(P.armLx, -1.4 - wig, ws);
       P.armRz = lerp(P.armRz, 0.26, ws);
       P.armLz = lerp(P.armLz, -0.26, ws);
-      P.headX = lerp(P.headX, -0.32, ws);
-      P.headY = lerp(P.headY, Math.sin(t * 2.4) * 0.55, ws);
+      // long hair swings with the head and the noodle lies across it: look round with the shoulders
+      // too and keep the chin down a little, so the hair never sweeps through the noodle
+      const peek = Math.sin(t * 2.4) * 0.55;
+      P.torsoY = lerp(P.torsoY, peek * slung.twist, ws);
+      P.headX = lerp(P.headX, longHair ? -0.2 : -0.32, ws);
+      P.headY = lerp(P.headY, peek * (1 - slung.twist), ws);
     }
 
     // --- carry: both arms up holding the item over the head
@@ -806,17 +867,21 @@ export function createAvatar(char, faceImage, skinHex) {
       P.headX += Math.cos(t * 5) * 0.14 * wt;
     }
 
-    // --- put the noodle back: up and over the right shoulder, then the arm drops
+    // --- put the noodle back: up out to the side, over the top and down behind the shoulder
+    P.armRy = 0;
     if (holsterArm > 0.001) {
-      P.armRx = lerp(P.armRx, HOLSTER.armRx, holsterArm);
-      P.armRz = lerp(P.armRz, HOLSTER.armRz, holsterArm);
-      P.wrist = lerp(P.wrist, HOLSTER.wrist, holsterWrist);
+      const rx = holsterKey(HK.armRx, holsterAt);
+      P.armRx = lerp(near(P.armRx, rx), rx, holsterArm);
+      P.armRy = holsterKey(HK.armRy, holsterAt) * holsterArm;
+      P.armRz = lerp(P.armRz, holsterKey(HK.armRz, holsterAt), holsterArm);
+      P.wrist = lerp(P.wrist, holsterKey(HK.wrist, holsterAt), holsterArm);
     }
 
     // --- noodle whack overlay
     if (swinging) {
       const w = smooth(0, 0.12, u) * (1 - smooth(0.8, 1, u));
-      P.armRx = lerp(P.armRx, swingKey(SW.armRx, u), w);
+      const rx = swingKey(SW.armRx, u);
+      P.armRx = lerp(near(P.armRx, rx), rx, w);
       P.armRz = lerp(P.armRz, swingKey(SW.armRz, u), w);
       P.wrist = lerp(P.wrist, swingKey(SW.wrist, u), w);
       P.torsoY = lerp(P.torsoY, swingKey(SW.torsoY, u), w);
@@ -833,7 +898,7 @@ export function createAvatar(char, faceImage, skinHex) {
     head.rotation.set(P.headX, P.headY, P.headZ);
     armR.position.y = SHOULDER_Y + P.lift;
     armL.position.y = SHOULDER_Y + P.lift;
-    armR.rotation.set(P.armRx, 0, P.armRz);
+    armR.rotation.set(P.armRx, P.armRy, P.armRz);
     armL.rotation.set(P.armLx, 0, P.armLz);
     legR.hip.rotation.x = P.legRx;
     legL.hip.rotation.x = P.legLx;
@@ -846,7 +911,7 @@ export function createAvatar(char, faceImage, skinHex) {
 
     // foam noodle: tip lags behind the arm like a spring
     if (dt > 0) {
-      const armVel = (P.armRx - prevArm) / dt;
+      const armVel = (P.armRx - near(prevArm, P.armRx)) / dt;
       prevArm = P.armRx;
       const target = Math.max(-0.7, Math.min(0.7, armVel * 0.03));
       bendV += ((target - bend) * 320 - bendV * 15) * dt;
@@ -854,6 +919,22 @@ export function createAvatar(char, faceImage, skinHex) {
       bend = Math.max(-0.9, Math.min(0.9, bend));
     }
     for (let i = 0; i < 3; i++) joints[i].rotation.x = NOODLE_CURVE[i] + bend * NOODLE_FLEX[i];
+    // let go: the slung noodle takes over exactly where the hand noodle is, then settles onto the back
+    if (letting) {
+      armR.updateMatrix();
+      hand.updateMatrix();
+      wrist.updateMatrix();
+      _m.multiplyMatrices(armR.matrix, hand.matrix).multiply(wrist.matrix);
+      _m.multiply(_m2.makeTranslation(noodle.position)).multiply(SLING_BASE_INV);
+      _m.decompose(slideFrom.p, slideFrom.q, _v);
+      slide = 0;
+    }
+    if (slide <= 1) {
+      const e = smooth(0, 1, slide);
+      sling.position.lerpVectors(slideFrom.p, slingRest.p, e);
+      sling.quaternion.slerpQuaternions(slideFrom.q, slingRest.q, e);
+      slide = slide >= 1 ? 2 : Math.min(1, slide + dt / HOLSTER.slide);
+    }
     noodle.visible = handScale > 0.02;
     noodle.scale.setScalar(Math.max(0.001, handScale));
     sling.visible = slingScale > 0.02;

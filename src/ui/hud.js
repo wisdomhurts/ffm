@@ -79,6 +79,33 @@ export function createHUD(app) {
   parts.push(createKeyHints(app, root));
   parts.push(createMatchClock(app, alerts));
 
+  // On short phones the banners sit under the tutorial card, right above the prompt / carry pills. While a
+  // banner would cover a pill, the card steps aside (.yield) so the banner moves up; it comes back once the
+  // banner or the pill is gone.
+  const tutEl = root.querySelector('.tut');
+  let yielding = false;
+  function yieldTutorial() {
+    if (!tutEl) return;
+    const c = tutEl.classList;
+    let on = false;
+    if (!c.contains('gone') && !c.contains('hidden') && !c.contains('wait')) {
+      let pillTop = Infinity;
+      for (const p of bottom.querySelectorAll('.prompt.show, .carry.show')) pillTop = Math.min(pillTop, p.getBoundingClientRect().top);
+      if (pillTop < Infinity) {
+        let alertBottom = -Infinity;
+        for (const a of top.querySelectorAll('.alert:not(.out)')) {
+          const r = a.getBoundingClientRect();
+          if (r.height) alertBottom = Math.max(alertBottom, r.bottom);
+        }
+        on = alertBottom > -Infinity && (yielding || alertBottom > pillTop - 6);
+      }
+    }
+    if (on !== yielding) {
+      yielding = on;
+      c.toggle('yield', on);
+    }
+  }
+
   // Stay hidden while the intro camera swoops down, then fade in as it lands.
   let intro = true;
   root.classList.add('intro');
@@ -100,6 +127,7 @@ export function createHUD(app) {
         let danger = game.gardens[me.slot].planters.some((pl) => pl.stealer != null);
         if (!danger) danger = game.players.some((p) => p !== me && p.carrying?.kind === 'plant' && p.carrying.fromSlot === me.slot);
         toggle(vignette, 'on', danger && app.state === 'playing');
+        yieldTutorial();
       }
     },
     dispose() {
@@ -439,7 +467,7 @@ function createHotbar(app, parent, me) {
       void b.offsetWidth;
       b.classList.add('press');
     });
-    return { b, count, timer, it };
+    return { b, count, timer, it, until: 0, total: 1 };
   });
   const bar = h('div', { class: 'hotbar', role: 'toolbar', 'aria-label': 'Items' }, slots.map((s) => s.b));
   parent.append(tip, bar);
@@ -470,9 +498,16 @@ function createHotbar(app, parent, me) {
         setText(s.count, n > 99 ? '99+' : String(n));
         toggle(s.b, 'sel', i === sel);
         toggle(s.b, 'empty', n <= 0);
+        // timed items: stacking extends the timer, so the bar tracks the whole stack (full on each use)
         let f = 0;
-        if (s.it.id === 'coil' && now < me.coilUntil) f = (me.coilUntil - now) / s.it.duration;
-        if (s.it.id === 'cloak' && now < me.cloakUntil) f = (me.cloakUntil - now) / s.it.duration;
+        const until = s.it.id === 'coil' ? me.coilUntil : s.it.id === 'cloak' ? me.cloakUntil : 0;
+        if (until > now) {
+          if (until !== s.until) {
+            s.until = until;
+            s.total = Math.max(s.it.duration || 1, until - now);
+          }
+          f = (until - now) / s.total;
+        }
         toggle(s.b, 'active', f > 0);
         setStyle(s.timer, 'transform', `scaleX(${Math.max(0, Math.min(1, f)).toFixed(3)})`);
       });
