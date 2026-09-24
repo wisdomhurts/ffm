@@ -396,7 +396,8 @@ vec3 plantHue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0
 `;
 
 // Adds per-vertex glow (aGlow), rainbow hue cycling, and a soft (or rainbow) rim light to a built-in material.
-function patch(mat, key, { rainbow = false, rim = 0, rimRainbow = false, glowPulse = true } = {}) {
+// All variants are expressed through defines (part of three's program key), so the patched programs are shared.
+function patch(mat, { rainbow = false, rim = 0, rimRainbow = false, glowPulse = true } = {}) {
   mat.defines = mat.defines || {};
   if (rainbow) mat.defines.PLANT_RAINBOW = '';
   if (rim > 0 || rimRainbow) mat.defines.PLANT_RIM = rim.toFixed(3);
@@ -439,7 +440,7 @@ totalEmissiveRadiance += diffuseColor.rgb * plantGlow;
 }
 #endif`);
   };
-  mat.customProgramCacheKey = () => 'plant:' + key;
+  mat.customProgramCacheKey = () => 'plantPatch1';
   mat.onBeforeRender = captureCamera;
   return mat;
 }
@@ -456,19 +457,19 @@ function cachedMat(key, make) {
  * mutation: 'normal' | 'gold' | 'diamond' | 'rainbow'; secret adds a rainbow rim.
  */
 export function plantMat(kind, mutation = 'normal', secret = false) {
-  const key = `${kind}|${mutation}|${secret ? 1 : 0}`;
+  const key = kind === 'face' ? 'face' : `${kind}|${mutation}|${secret ? 1 : 0}`;
   return cachedMat(key, () => {
     const rimRainbow = secret;
     if (kind === 'face') {
       return patch(new THREE.MeshLambertMaterial({
         map: faceAtlas(), transparent: true, depthWrite: false,
         polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
-      }), key, { glowPulse: false });
+      }), { glowPulse: false });
     }
     if (kind === 'galaxy') {
       return patch(new THREE.MeshLambertMaterial({
         map: galaxyTex(), emissiveMap: galaxyTex(), emissive: 0xffffff, emissiveIntensity: 0.75, side: THREE.DoubleSide,
-      }), key, { rim: 0.6, rimRainbow });
+      }), { rim: 0.6, rimRainbow });
     }
     if (kind === 'trans') {
       const m = new THREE.MeshPhongMaterial({
@@ -476,22 +477,22 @@ export function plantMat(kind, mutation = 'normal', secret = false) {
         depthWrite: false, side: THREE.FrontSide,
       });
       if (mutation === 'gold' || mutation === 'diamond') m.opacity = 0.6;
-      return patch(m, key, { rainbow: mutation === 'rainbow', rim: 0, rimRainbow: true });
+      return patch(m, { rainbow: mutation === 'rainbow', rim: 0, rimRainbow: true });
     }
     // base
     if (mutation === 'gold') {
       return patch(new THREE.MeshStandardMaterial({
         vertexColors: true, metalness: 0.95, roughness: 0.24, envMap: envTex(), envMapIntensity: 1.35,
         side: THREE.DoubleSide, emissive: 0x3a2400, emissiveIntensity: 0.35,
-      }), key, { rim: 0.35, rimRainbow });
+      }), { rim: 0.35, rimRainbow });
     }
     if (mutation === 'diamond') {
       return patch(new THREE.MeshStandardMaterial({
         vertexColors: true, metalness: 0.35, roughness: 0.05, envMap: envTex(), envMapIntensity: 1.4, flatShading: true,
         side: THREE.DoubleSide, emissive: 0x0b3a55, emissiveIntensity: 0.35,
-      }), key, { rim: 0.8, rimRainbow });
+      }), { rim: 0.8, rimRainbow });
     }
-    return patch(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), key, {
+    return patch(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), {
       rainbow: mutation === 'rainbow', rim: mutation === 'rainbow' ? 0.4 : 0.28, rimRainbow,
     });
   });

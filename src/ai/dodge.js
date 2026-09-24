@@ -3,6 +3,7 @@
 // velocity smoothing, clamped to their biome) and picks the heading that is not caught and makes
 // the most progress home. Tested against lane-keeping heuristics: this cuts losses by ~5x.
 import { PLAYER, WORLD } from '../config.js';
+import { BLOCK, getNav } from './nav.js';
 
 const HEADINGS = 13;
 const SPREAD = 1.5; // radians either side of "forward"
@@ -53,6 +54,7 @@ export function planDodge(game, p, fx, fz, out, state) {
   }
   const s = p.maxSpeed(now, game.difficulty.botSpeedMult);
   const acc = PLAYER.accel;
+  const road = getNav(game).road;
   let best = 0, bestScore = -Infinity;
   for (let h = 0; h < HEADINGS; h++) {
     const a = -SPREAD + (2 * SPREAD * h) / (HEADINGS - 1);
@@ -76,10 +78,18 @@ export function planDodge(game, p, fx, fz, out, state) {
         vx += tx * k;
         vz += tz * k;
       }
+      const ox = px, oz = pz;
       px += vx * STEP;
       pz += vz * STEP;
       if (px > P_HALF) px = P_HALF;
       else if (px < -P_HALF) px = -P_HALF;
+      if (road.at(px, pz) === BLOCK) {
+        // a rock or other prop: this heading stalls against it
+        px = ox;
+        pz = oz;
+        vx *= 0.3;
+        vz *= 0.3;
+      }
       for (let i = 0; i < n; i++) {
         if (t < mStun[i]) continue;
         const dx = px - sx[i], dz = pz - sz[i];

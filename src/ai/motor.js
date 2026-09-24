@@ -1,8 +1,8 @@
 // Bot locomotion: follows routes from nav.js with braking before corners and targets (the game's
-// acceleration is finite, so fast bots must brake early), steers around monsters, banana peels and
-// other players, hops over planters and peels, and recovers when it gets stuck.
+// acceleration is finite, so fast bots must brake early), dodges monsters (dodge.js), steers around
+// banana peels and other players, hops where the route crosses a planter, and recovers when stuck.
 import { PLAYER, WORLD } from '../config.js';
-import { BLOCK, JUMP, getNav } from './nav.js';
+import { BLOCK, getNav } from './nav.js';
 
 const BRAKE = PLAYER.accel * 0.75; // deceleration budget used for speed planning
 const ROAD_HALF = WORLD.road.width / 2;
@@ -217,11 +217,6 @@ export class Motor {
     if (nav.cellAt(px + ax * 1.8, pz + az * 1.8) === BLOCK && nav.cellAt(px + dx * 1.8, pz + dz * 1.8) !== BLOCK) {
       ax = dx;
       az = dz;
-    }
-    // hop onto/over low boxes (planters) that sit on the route
-    if (p.onGround && hyp(p.vel.x, p.vel.z) > 3) {
-      const c = nav.cellAt(px + ax * 1.6, pz + az * 1.6);
-      if (c === JUMP && nav.cellAt(px, pz) !== JUMP) it.jump = true;
     }
     if (st.jump) {
       if (p.onGround) it.jump = true;

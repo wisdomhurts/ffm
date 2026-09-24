@@ -197,6 +197,7 @@ const CONGA_FILL = [[12, 'hi', 0.7, true], [13, 'hi', 0.55, false], [14, 'mid', 
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const human = () => 0.9 + Math.random() * 0.2;
+const COMP_DECAY = { decay: 0.65 }; // arpeggios: shorter tails keep the groove crisp and the voice count low
 
 export class MusicEngine {
   /** @param {BaseAudioContext} ac  @param {object} mixer from createMixer() */
@@ -477,7 +478,7 @@ export class MusicEngine {
       const pat = title ? COMP.title : S.bridge ? COMP.bridge : name === 'B' || (this.iter & 1) ? COMP.busy : COMP.play;
       for (let i = 0; i < pat.length; i++) {
         if (pat[i][0] !== s) continue;
-        marimba(ac, B.comp, t + rnd(-0.003, 0.003), chord.comp[pat[i][1]] + tr, pat[i][2] * human());
+        marimba(ac, B.comp, t + rnd(-0.003, 0.003), chord.comp[pat[i][1]] + tr, pat[i][2] * human(), COMP_DECAY);
       }
     }
 
@@ -554,18 +555,18 @@ export class MusicEngine {
       const n = ev.len * 2;
       const rate = title || this.lite ? 2 : 1;
       for (let k = rate; k < n; k += rate) {
-        play(t + k * STEP * 0.5 + rnd(-0.002, 0.002), midi, vel * rnd(0.34, 0.46), { decay: 0.45, bright: 0.6 });
+        play(t + k * STEP * 0.5 + rnd(-0.002, 0.002), midi, vel * rnd(0.34, 0.46), { decay: 0.35, cheap: true });
       }
     }
     // harmony a diatonic third below (B and bridge always; A sections from the 2nd loop on)
-    const harm = S.harm || (mode !== 'title' && this.iter >= 1 && name === 'A2') || mode === 'victory';
+    const harm = !this.lite && (S.harm || (mode !== 'title' && this.iter >= 1 && name === 'A2') || mode === 'victory');
     if (harm && !(title && useMarimba)) {
       const hm = diatonic(ev.midi, -2) + tr;
-      steelPan(ac, B.harm, t + 0.004, hm, vel * 0.8, { bright: 0.7 });
-      if (ev.roll && !this.lite) for (let k = 2; k < ev.len * 2; k += 2) steelPan(ac, B.harm, t + k * STEP * 0.5, hm, vel * 0.32, { decay: 0.4, bright: 0.5 });
+      steelPan(ac, B.harm, t + 0.004, hm, vel * 0.8, { bright: 0.7, cheap: this.lite });
+      if (ev.roll && !this.lite) for (let k = 2; k < ev.len * 2; k += 2) steelPan(ac, B.harm, t + k * STEP * 0.5, hm, vel * 0.32, { decay: 0.35, cheap: true });
     }
     // marimba doubling an octave down on odd loops
-    if (mode === 'play' && (this.iter & 1) && (name === 'A' || name === 'A2')) marimba(ac, B.harm, t, midi - 12, vel * 0.7);
+    if (mode === 'play' && !this.lite && (this.iter & 1) && (name === 'A' || name === 'A2')) marimba(ac, B.harm, t, midi - 12, vel * 0.7);
   }
 
   _drums(t, s, bar, S, name, lastBar) {
@@ -647,7 +648,11 @@ export class MusicEngine {
     if ((bar & 3) === 3 && s >= 8) snare(ac, C, t, 0.2 + (s - 8) * 0.06);
     if ((bar & 7) === 7 && s >= 12) tom(ac, C, t, [210, 175, 145, 115][s - 12], 0.75);
     // tension bass: pumping 8ths with octave jumps
-    if ((s & 1) === 0) tensionBass(ac, C, t, chord.bass + (this.tr || 0) + ((s & 7) === 4 ? 12 : 0), s === 0 ? 0.95 : 0.7, STEP * 1.2);
+    if ((s & 1) === 0) {
+      const m = chord.bass + (this.tr || 0) + ((s & 7) === 4 ? 12 : 0);
+      if (this.lite) bass(ac, C, t, m, s === 0 ? 0.9 : 0.65, STEP * 1.1);
+      else tensionBass(ac, C, t, m, s === 0 ? 0.95 : 0.7, STEP * 1.2);
+    }
   }
 
   _sparkle(t, s, bar, chord) {
@@ -698,6 +703,7 @@ export function scheduleOffline(ac, mixer, seconds, opts = {}) {
     eng.bar = 0;
   }
   if (opts.iter != null) eng.iter = opts.iter;
+  if (opts.lite) eng.lite = true;
   if (opts.event) eng.setEvent(opts.event, 0);
   if (opts.solo) for (const k in eng.bus) if (!opts.solo.includes(k)) eng.bus[k].gain.value = 0;
   const chaseAt = opts.chase === true ? 0 : typeof opts.chase === 'number' ? opts.chase : null;

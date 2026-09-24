@@ -99,6 +99,17 @@ export function steelPan(ac, out, t, midi, vel = 0.8, o = {}) {
   const k = kit(ac);
   const f = mtof(midi);
   const dec = clamp(2.1 - (midi - 60) * 0.04, 0.45, 2.3) * (o.decay || 1);
+  if (o.cheap) {
+    // roll strikes / quiet doublings: no FM (half the nodes), the attack is masked anyway
+    const x = oscOf(ac, k.pan, f, t);
+    const g = ac.createGain();
+    perc(g.gain, t, vel * 0.3 * (o.gain ?? 1), 0.004, dec);
+    x.connect(g);
+    g.connect(out);
+    x.start(t);
+    finish([x], [x, g], t + dec * 0.8);
+    return;
+  }
   const car = oscOf(ac, k.pan, f, t);
   const mod = oscOf(ac, 'sine', f, t);
   const mg = ac.createGain();
@@ -114,7 +125,7 @@ export function steelPan(ac, out, t, midi, vel = 0.8, o = {}) {
   if (o.send) amp.connect(o.send);
   car.start(t);
   mod.start(t);
-  finish([car, mod], [car, mod, mg, amp], t + dec + 0.02);
+  finish([car, mod], [car, mod, mg, amp], t + dec * 0.8);
 }
 
 /** Marimba: sine fundamental plus the bar's quick-dying 4th partial (the mallet "tock"). */
@@ -135,7 +146,7 @@ export function marimba(ac, out, t, midi, vel = 0.8, o = {}) {
   if (o.send) g1.connect(o.send);
   o1.start(t);
   o2.start(t);
-  finish([o1, o2], [o1, o2, g1, g2], t + dec + 0.02);
+  finish([o1, o2], [o1, o2, g1, g2], t + dec * 0.8);
 }
 
 /** Warm round bass with a tiny pitch "thump" at the start. */

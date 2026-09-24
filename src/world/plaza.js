@@ -28,7 +28,6 @@ export function buildPlaza(ctx) {
   // ---------------------------------------------------------------- baseplate + paths
   const I = ISLAND;
   const GREEN = '#5ec24a';
-  floor.box((I.minX + I.maxX) / 2, -0.8, (I.minZ + I.maxZ) / 2, I.maxX - I.minX, 1.6, I.maxZ - I.minZ, GREEN, { ao: 0.45 });
   const SAND = '#f4dea6', CURB = '#d9b877';
   const path = (x0, x1, z0, z1) => {
     floor.box((x0 + x1) / 2, 0.02, (z0 + z1) / 2, x1 - x0 + 1.2, 0.06, z1 - z0 + 1.2, CURB, { ao: 0 });
@@ -42,6 +41,8 @@ export function buildPlaza(ctx) {
   path(-44, 44, -57, -44);
   // terracotta tiles framing the path into the road
   for (let i = 0; i < 6; i++) floor.box(0, 0.05, 44 + i * 2.6, 20, 0.1, 1.2, i % 2 ? '#e8793a' : '#f2b640', { ao: 0 });
+  // the baseplate itself goes last so the layers above it win the depth test first (less overdraw)
+  floor.box((I.minX + I.maxX) / 2, -0.8, (I.minZ + I.maxZ) / 2, I.maxX - I.minX, 1.6, I.maxZ - I.minZ, GREEN, { ao: 0.45 });
 
   // spawn location
   const sp = layout.spawn;
@@ -184,12 +185,13 @@ export function buildPlaza(ctx) {
   const beachMesh = new THREE.Mesh(beachGeo, new THREE.MeshLambertMaterial({ vertexColors: true, map: sandDetail() }));
   beachMesh.receiveShadow = true;
   beachMesh.name = 'beach';
+  beachMesh.renderOrder = 3;
   group.add(beachMesh);
   // beach palms & rocks around the island
   const perim = perimeterSamples(3.2);
   perim.forEach(([px, pz, nx, nz], i) => {
     if (pz > 52) return;
-    if (r() < 0.2 * dens + 0.12) {
+    if (r() < 0.12 * dens + 0.08) {
       const d = r.range(2.5, 6.5);
       palm(beach, px + nx * d, pz + nz * d, r, { y: -1.0, h: r.range(9, 14), lean: r.range(0.2, 0.45), yaw: Math.atan2(nx, nz) + r.range(-0.5, 0.5) });
     }
@@ -271,11 +273,14 @@ export function buildPlaza(ctx) {
   const ocean = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200, 1, 1).rotateX(-Math.PI / 2), oceanMaterial({ cx: (I.minX + I.maxX) / 2, cz: (I.minZ + I.maxZ) / 2, hx: (I.maxX - I.minX) / 2, hz: (I.maxZ - I.minZ) / 2, shoreD: SHORE_D, mainlandZ: 60 }));
   ocean.position.set(0, WATER_Y, -400);
   ocean.name = 'ocean';
+  ocean.renderOrder = 8; // after everything opaque that covers it
   group.add(ocean);
 
   // ---------------------------------------------------------------- bake
   const add = (mesh) => mesh && group.add(mesh);
-  add(floor.build(mats.stud, { name: 'plaza-floor' }));
+  const floorMesh = floor.build(mats.stud, { name: 'plaza-floor' });
+  floorMesh.renderOrder = 2;
+  add(floorMesh);
   add(props.build(mats.stud, { name: 'plaza-props', castShadow: quality.shadows }));
   add(glow.build(mats.glow, { name: 'plaza-glow', receiveShadow: false }));
   add(beach.build(mats.stud, { name: 'beach-props' }));

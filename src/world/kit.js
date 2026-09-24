@@ -43,7 +43,7 @@ export function mix(a, b, t) {
 
 // ------------------------------------------------------------------ primitives
 
-// Unit primitives, all non-indexed so they can be concatenated. Box: 1x1x1 centred.
+// Unit primitives (indexed where three builds them indexed). Box: 1x1x1 centred.
 // Cylinders/cones: radius 0.5, height 1, centred.
 const PRIMS = new Map();
 export function prim(name) {
@@ -75,7 +75,7 @@ export function prim(name) {
     }
     default: throw new Error('unknown prim ' + name);
   }
-  if (g.index) g = g.toNonIndexed();
+  g.deleteAttribute('uv1');
   g.computeBoundingBox();
   PRIMS.set(name, g);
   return g;
@@ -111,6 +111,7 @@ export class Merger {
   constructor({ uv = 'flat', uvScale = 0.5, flatUV = [0.012, 0.012] } = {}) {
     this.parts = [];
     this.count = 0;
+    this.icount = 0;
     this.uvMode = uv;
     this.uvScale = uvScale;
     this.flatUV = flatUV;
@@ -125,10 +126,10 @@ export class Merger {
    */
   add(geo, matrix, color, o = {}) {
     if (typeof geo === 'string') geo = prim(geo);
-    if (geo.index) geo = geo.toNonIndexed();
     if (!geo.boundingBox) geo.computeBoundingBox();
     this.parts.push({ geo, matrix: matrix.clone(), color: new THREE.Color(color), o });
     this.count += geo.attributes.position.count;
+    this.icount += geo.index ? geo.index.count : geo.attributes.position.count;
     return this;
   }
 
@@ -182,7 +183,9 @@ export class Merger {
     const nor = new Float32Array(N * 3);
     const uv = new Float32Array(N * 2);
     const colr = new Float32Array(N * 3);
+    const index = N > 65535 ? new Uint32Array(this.icount) : new Uint16Array(this.icount);
     let k = 0;
+    let ii = 0;
     for (const part of this.parts) {
       const { geo, matrix, color, o } = part;
       const P = geo.attributes.position;
@@ -198,19 +201,27 @@ export class Merger {
       const mode = o.uv || this.uvMode;
       const us = o.uvScale ?? this.uvScale;
       const flip = matrix.determinant() < 0;
+      const base = k;
+      // indices (winding reversed when the transform mirrors)
+      const I = geo.index;
+      const ic = I ? I.count : P.count;
+      for (let t = 0; t < ic; t += 3) {
+        const a = I ? I.getX(t) : t, b = I ? I.getX(t + 1) : t + 1, c = I ? I.getX(t + 2) : t + 2;
+        index[ii++] = base + a;
+        index[ii++] = base + (flip ? c : b);
+        index[ii++] = base + (flip ? b : c);
+      }
       for (let i = 0; i < P.count; i++) {
-        const j = flip ? i - (i % 3) + (2 - (i % 3)) : i; // keep winding when mirrored
-        _v.fromBufferAttribute(P, j);
+        _v.fromBufferAttribute(P, i);
         const ty = (_v.y - y0) / yh;
         _v.applyMatrix4(matrix);
-        _n.fromBufferAttribute(Nn, j).applyMatrix3(_n3).normalize();
+        _n.fromBufferAttribute(Nn, i).applyMatrix3(_n3).normalize();
         pos[k * 3] = _v.x;
         pos[k * 3 + 1] = _v.y;
         pos[k * 3 + 2] = _v.z;
         nor[k * 3] = _n.x;
         nor[k * 3 + 1] = _n.y;
         nor[k * 3 + 2] = _n.z;
-        // colour
         if (topFace && _n.y > 0.6) _c1.copy(topFace);
         else if (top) _c1.copy(color).lerp(top, ty);
         else _c1.copy(color);
@@ -218,11 +229,10 @@ export class Merger {
         colr[k * 3] = _c1.r * f;
         colr[k * 3 + 1] = _c1.g * f;
         colr[k * 3 + 2] = _c1.b * f;
-        // uv
         let u, w;
         if (mode === 'geo' && U) {
-          u = U.getX(j);
-          w = U.getY(j);
+          u = U.getX(i);
+          w = U.getY(i);
         } else if (mode === 'studs') {
           if (_n.y > 0.6) {
             u = _v.x * us;
@@ -257,6 +267,7 @@ export class Merger {
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     g.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
     g.computeBoundingSphere();
     g.computeBoundingBox();
     return g;

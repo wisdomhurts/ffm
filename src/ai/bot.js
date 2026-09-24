@@ -1,5 +1,7 @@
 // Bot brains for the three family members you play against (and all four in the title attract mode).
 // Contract: new BotController(personality, difficultyId) ; getIntent(game, player, dt) -> Intent
+// Optional extras: a third `{seed}` argument for deterministic sims, `debugState`, `dispose()`, and
+// `intent.emote = 'celebrate'` after a successful steal (ignored unless the game supports it).
 //
 // Layers:
 //   perception (every tick)  threats to my garden, stat changes that deserve a chat line
@@ -95,6 +97,7 @@ export class BotController {
     it.useItem = null;
     it.selectSlot = null;
     it.aimYaw = null;
+    it.emote = null;
     const now = game.time;
     this._perceive(game, p, now);
     if (p.carrying && this.goal?.type !== 'return') this._setGoal(new ReturnGoal(), game, p);
@@ -108,6 +111,11 @@ export class BotController {
       if (status !== 'running') this._finish(game, p, status);
     }
     this._hops(game, p, it);
+    if (this.emoteNext && !p.carrying) {
+      // optional: games that support intent.emote play the celebration dance
+      it.emote = this.emoteNext;
+      this.emoteNext = null;
+    }
     return it;
   }
 
@@ -217,6 +225,7 @@ export class BotController {
       const lc = this.lastCarry;
       if (lc) this.say(game, p, 'steal', { plant: game.plantName(lc.plant.speciesId, lc.plant.mutation), victim: lc.victim.name }, { urgent: true });
       this.hop(2);
+      this.emoteNext = 'celebrate';
     }
     if (p.stats.bonks > this.seenBonks) {
       this.seenBonks = p.stats.bonks;

@@ -129,12 +129,12 @@ function markerAtlas(values) {
 
 // ---------------------------------------------------------------- cliffs
 
-function cliffs(rockM, topM, s, z0, z1, st, r, face, inset = 0) {
+function cliffs(rockM, topM, s, z0, z1, st, r, face, inset = 0, backM = rockM) {
   const H = st.H;
   const back = face + 3.2;
-  // backing mass reaching out to the horizon
+  // backing mass reaching out to the horizon (does not cast shadows: only the face blocks do)
   const zb = z0 + inset;
-  rockM.box(s * (back + 320) / 2, (H - 10) / 2, (zb + z1) / 2, 320 - back, H + 10, z1 - zb, st.rock[0], { topFace: st.top, ao: 0.3 });
+  backM.box(s * (back + 320) / 2, (H - 10) / 2, (zb + z1) / 2, 320 - back, H + 10, z1 - zb, st.rock[0], { topFace: st.top, ao: 0.3 });
   topM.box(s * (face + 320) / 2, H + 0.02, (zb + z1) / 2, 320 - face, 0.04, z1 - zb, st.top, { ao: 0 });
   // terraced blocks along the face
   let z = z0;
@@ -665,6 +665,7 @@ export function buildRoad(ctx) {
     const B = {
       group, z0: R.minZ, z1: R.maxZ, st, dens,
       rockM: new Merger({ uv: 'box', uvScale: 1 / 12 }),
+      backM: new Merger({ uv: 'box', uvScale: 1 / 12 }),
       topM: new Merger({ uv: 'studs', uvScale: 1 / 14 }),
       props: new Merger(),
       glow: new Merger(),
@@ -672,7 +673,7 @@ export function buildRoad(ctx) {
       pools: [], lavaDiscs: [], lavaFalls: [], spin: [], bob: [],
     };
     const face = st.channel ? 23.8 : 20;
-    for (const s of [-1, 1]) cliffs(B.rockM, B.topM, s, R.minZ, R.maxZ, st, r, face, bi === 0 ? 5 : 0);
+    for (const s of [-1, 1]) cliffs(B.rockM, B.topM, s, R.minZ, R.maxZ, st, r, face, bi === 0 ? 5 : 0, B.backM);
     if (bi === 0) southFace(B, r);
     for (const s of [-1, 1]) DECOR[b.id](ctx, B, s, r);
     if (b.id === 'starbloom') floatingIslands(ctx, B, r);
@@ -688,6 +689,7 @@ export function buildRoad(ctx) {
     const road = new THREE.Mesh(geo, roadMat);
     road.position.set(0, 0, (R.minZ + R.maxZ) / 2);
     road.receiveShadow = true;
+    road.renderOrder = 2;
     road.name = 'road-' + b.id;
     group.add(road);
     // threshold strip at the biome start
@@ -738,8 +740,13 @@ export function buildRoad(ctx) {
     // bake
     const add = (m) => m && group.add(m);
     add(B.rockM.build(mats.rock, { name: 'cliffs-' + b.id, castShadow: quality.shadows }));
-    add(B.topM.build(st.ground === 'sand' ? mats.sand : st.ground === 'grass' ? mats.grass : mats.rockTop, { name: 'plateau-' + b.id }));
-    add(B.props.build(mats.stud, { name: 'props-' + b.id, castShadow: quality.shadows }));
+    const back = B.backM.build(mats.rock, { name: 'cliffback-' + b.id });
+    if (back) back.renderOrder = 3;
+    add(back);
+    const top = B.topM.build(st.ground === 'sand' ? mats.sand : st.ground === 'grass' ? mats.grass : mats.rockTop, { name: 'plateau-' + b.id });
+    if (top) top.renderOrder = 2;
+    add(top);
+    add(B.props.build(mats.stud, { name: 'props-' + b.id }));
     add(B.glowLit.build(mats.glowLit, { name: 'glowlit-' + b.id }));
     add(B.glow.build(mats.glow, { name: 'glow-' + b.id, receiveShadow: false }));
     biomes.push({ group, minZ: R.minZ, maxZ: R.maxZ, spin: B.spin, bob: B.bob });

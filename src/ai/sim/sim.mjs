@@ -29,7 +29,7 @@ export function runSim({ minutes = 15, difficulty = 'normal', human = 'none', se
   const S = new Map(game.players.map((p) => [p, {
     grabs: 0, maxBiome: -1, bestTier: -1, bestPlant: '', stealStart: 0, stealOk: 0, stealFoiled: 0, stolenFrom: 0,
     bonkHits: 0, balloonHits: 0, peelHits: 0, swings: 0, locks: 0, caught: 0, chat: 0, stuck: 0, goals: {}, planted: 0,
-    items: 0, sold: 0, unlocks: 0, rebirths: 0, speedAt: [], monsterBonks: 0, targeted: 0, firstBiome: [],
+    items: 0, sold: 0, unlocks: 0, rebirths: 0, speedAt: [], monsterBonks: 0, targeted: 0, firstBiome: [], hitsTaken: 0,
   }]));
   const on = (e, f) => bus.on(e, f);
   on('seed:grabbed', ({ player, pod }) => {
@@ -58,8 +58,9 @@ export function runSim({ minutes = 15, difficulty = 'normal', human = 'none', se
     S.get(victim).stolenFrom++;
   });
   on('steal:foiled', ({ thief }) => S.get(thief).stealFoiled++);
-  on('player:hit', ({ by, cause }) => {
+  on('player:hit', ({ target, by, cause }) => {
     if (!by) return;
+    S.get(target).hitsTaken++;
     const s = S.get(by);
     if (cause === 'bonk') s.bonkHits++;
     else if (cause === 'balloon') s.balloonHits++;
@@ -137,7 +138,7 @@ export function runSim({ minutes = 15, difficulty = 'normal', human = 'none', se
       name: p.name, human: p.isHuman, speed: p.speedLevel, rebirths: p.rebirths, net: Math.round(game.netWorth.get(p)),
       income: Math.round(game.gardenIncome(game.gardens[p.slot])), maxBiome: s.maxBiome, best: s.bestPlant,
       grabs: s.grabs, planted: s.planted, caught: s.caught,
-      steals: `${s.stealOk}/${s.stealStart} (foiled ${s.stealFoiled})`, robbed: `${s.stolenFrom} (attempts on me ${s.targeted})`,
+      steals: `${s.stealOk}/${s.stealStart} (foiled ${s.stealFoiled})`, robbed: `${s.stolenFrom} (attempts on me ${s.targeted}, hit ${s.hitsTaken}x)`,
       hits: `bonk ${s.bonkHits}+${s.monsterBonks}m/${s.swings} balloon ${s.balloonHits} peel ${s.peelHits}`,
       locks: s.locks, items: s.items, sold: s.sold, unlocks: s.unlocks, chat: s.chat, stuck: s.stuck,
       stuckEvents: p.controller.debugState?.stuck ?? 0,

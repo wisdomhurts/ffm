@@ -88,7 +88,7 @@ function smallFlower(b, p, size, petal, center = '#ffd23f', n = 5, tilt = 0.9, y
   const save = b.F;
   b.frame(fm(p, tilt, yaw));
   ring(b, n, { r0: size * 0.12, up: 0.2, len: size, wid: size * 0.75, shape: 'round', segL: 2, c: petal, c2: shade(petal, 0.15), bend: 0.1, cup: 0.25 });
-  b.add(P.sphere(6, 4), { p: [0, 0.05, 0], s: [size * 0.32, size * 0.2, size * 0.32], c: center });
+  b.add(P.oct(), { p: [0, 0.05, 0], s: [size * 0.32, size * 0.2, size * 0.32], c: center });
   b.frame(save);
 }
 
@@ -112,10 +112,10 @@ function rock(b, p, s, c = '#8d8a86', seed = 1, o = {}) {
 const SEED_PROFILE = [[0, 0], [0.28, 0.05], [0.44, 0.24], [0.47, 0.5], [0.38, 0.8], [0.2, 1.02], [0, 1.12]];
 export function seedBody(b, c0, c1, p = [0, 0, 0], s = 1, r = [0, 0, 0], o = {}) {
   const stripe = (x, y, z) => {
-    const k = Math.floor(((Math.atan2(x, z) + PI) / TAU) * 10) % 10;
+    const k = Math.floor(((Math.atan2(x, z) + PI) / TAU) * 8) % 8;
     return k % 2 ? c1 : null;
   };
-  b.add(latheGeo('seed', SEED_PROFILE, 10), { p, r, s, c: shade(c0, -0.05), c2: shade(c0, 0.2), gy: [0, 1.1], cf: stripe, glow: o.glow });
+  b.add(latheGeo('seed', SEED_PROFILE, 8), { p, r, s, c: shade(c0, -0.05), c2: shade(c0, 0.2), gy: [0, 1.1], cf: stripe, glow: o.glow });
 }
 
 // ------------------------------------------------------------------ seedlings (stages 0 and 1)
@@ -407,7 +407,7 @@ export const LOOKS = {
         stem(b, [[0, 0.05, 0], [x * 0.3 + 0.15 * Math.sin(i * 2), y * 0.4, z * 0.3], [x * 0.85, y * 0.72, z * 0.8], [x, y - r * 0.95, z]], 0.05, 0.035, '#3aa987', { segs: 5, radial: 3 });
         b.add(P.cone(5), { p: [x, y - r * 1.02, z], s: [r * 0.3, r * 0.25, r * 0.3], c: '#3aa987' });
         b.use(g, [x, y, z]);
-        b.add(P.sphere(10, 7), { p: [x, y, z], s: r, ch: 'trans', c: o.c0, c2: o.c1, gy: [-1, 1] });
+        b.add(P.sphere(9, 6), { p: [x, y, z], s: r, ch: 'trans', c: o.c0, c2: o.c1, gy: [-1, 1] });
         b.add(P.oct(), { p: [x - r * 0.38, y + r * 0.45, z + r * 0.68], r: [0.3, 0, 0.6], s: [r * 0.2, r * 0.11, r * 0.06], c: '#ffffff', glow: 0.9, keep: true });
         if (i === 0) sphereFace(b, o.bud ? 'sleepy' : 'oh', [x, y, z], r, r * 0.98, 0.15);
         b.use('body');
@@ -526,7 +526,7 @@ export const LOOKS = {
       const lf = mixCol(o.c1, '#4fc23a', 0.7), spud = o.c0;
       const sc = o.bud ? 0.75 : 1;
       // bushy potato top: round leaves in clusters on short stems, behind the spud
-      const clusters = [[0, 2.1, -0.4], [-0.8, 1.6, -0.3], [0.8, 1.7, -0.35], [-0.5, 1.35, 0.25], [0.5, 1.3, 0.2], [0, 1.5, -0.9]];
+      const clusters = [[0, 2.1, -0.45], [-0.8, 1.6, -0.3], [0.8, 1.7, -0.35], [-0.5, 1.35, 0.25], [0.5, 1.3, 0.2]];
       clusters.forEach(([x, y, z], i) => {
         y *= sc;
         stem(b, [[x * 0.15, 0.05, z * 0.3 - 0.2], [x * 0.6, y * 0.55, z * 0.7 - 0.1], [x, y, z]], 0.07, 0.05, shade(lf, -0.25), { segs: 3, radial: 4 });
@@ -534,16 +534,15 @@ export const LOOKS = {
           const a = (k / 4) * TAU + i * 0.7;
           blade(b, { p: [x, y - 0.05, z], a, up: 0.05 + hash(i * 5 + k) * 0.45, len: 0.85 * sc, wid: 0.72 * sc, shape: 'round', segL: 3, c: shade(lf, -0.25), c2: lf, bend: -0.3, cup: 0.3 });
         }
-        b.add(P.sphere(6, 4), { p: [x, y + 0.02, z], s: [0.5 * sc, 0.3 * sc, 0.5 * sc], c: shade(lf, -0.15), c2: lf, gy: [-1, 1] });
+        b.add(P.sphere(5, 3), { p: [x, y + 0.02, z], s: [0.5 * sc, 0.3 * sc, 0.5 * sc], c: shade(lf, -0.15), c2: lf, gy: [-1, 1] });
       });
       if (!o.bud) {
         smallFlower(b, [0, 2.36, -0.4], 0.28, '#f1e3ff', '#ffd23f', 5, 0.3);
         smallFlower(b, [-0.8, 1.86, -0.3], 0.26, '#ffffff', '#ffd23f', 5, 0.5, -0.5);
         smallFlower(b, [0.82, 1.96, -0.35], 0.26, '#e6d0ff', '#ffd23f', 5, 0.5, 0.6);
-        smallFlower(b, [0.05, 1.75, -1.1], 0.24, '#ffffff', '#ffd23f', 5, -0.3, PI);
       }
       const spots = (x, y, z, i) => (hash(i * 1.7) > 0.84 ? shade(spud, -0.3) : null);
-      b.add(P.blob(9, 0.1, 1), { p: [-0.95, 0.12, 0.5], r: [0.3, 0.5, 0.4], s: [0.34, 0.26, 0.3], c: spud, cf: spots });
+      b.add(P.blob(9, 0.12, 0), { p: [-0.95, 0.12, 0.5], r: [0.3, 0.5, 0.4], s: [0.34, 0.26, 0.3], c: spud, cf: spots });
       b.add(P.dome(10, 2), { p: [0, 0, 0.45], s: [1.2, 0.2, 1.0], c: '#6e4a2c', c2: '#8f6440' });
       b.use('tater', [0, 0.1, 0.55], { look: true });
       const s2 = o.bud ? 0.72 : 1;
@@ -580,7 +579,7 @@ export const LOOKS = {
       stem(b, [[0, 0.3, -0.1], [0.08, 2.0, -0.15], [0.02, 3.5, -0.1]], 0.07, 0.05, '#7a9a4a');
       for (let i = 0; i < 12; i++) {
         const a = i * 2.4, y = 3.0 + i * 0.07, r = 0.12 + (1 - i / 12) * 0.12;
-        b.add(P.cyl(1, 0.35, 6), { p: [0.02 + Math.sin(a) * r, y, -0.1 + Math.cos(a) * r], q: aim([Math.sin(a) * 0.9, -1, Math.cos(a) * 0.9]), s: [0.07, 0.34, 0.07], c: '#ff5a1a', c2: '#ffb020', gy: [0, 1] });
+        b.add(P.cyl(1, 0.35, 5, true), { p: [0.02 + Math.sin(a) * r, y, -0.1 + Math.cos(a) * r], q: aim([Math.sin(a) * 0.9, -1, Math.cos(a) * 0.9]), s: [0.07, 0.34, 0.07], c: '#ff5a1a', c2: '#ffb020', gy: [0, 1] });
       }
     },
     anim(p, t, ph) {
@@ -598,8 +597,8 @@ export const LOOKS = {
         stem(b, stemPts, 0.1 * s + 0.02, 0.07, shade(g, -0.15));
         const lower = fm(hinge, 0, yaw);
         b.frame(lower);
-        b.add(P.dome(9, 3), { p: [0, 0, 0.55 * s], r: [PI, 0, 0], s: [0.62 * s, 0.3 * s, 0.55 * s], c: shade(g, -0.1), c2: g, gy: [-1, 0] });
-        b.add(P.dome(9, 2), { p: [0, 0.02, 0.55 * s], r: [PI, 0, 0], s: [0.56 * s, 0.25 * s, 0.49 * s], c: shade(red, -0.15), c2: red, gy: [-1, 0] });
+        b.add(P.dome(s > 0.9 ? 9 : 7, 3), { p: [0, 0, 0.55 * s], r: [PI, 0, 0], s: [0.62 * s, 0.3 * s, 0.55 * s], c: shade(g, -0.1), c2: g, gy: [-1, 0] });
+        b.add(P.dome(s > 0.9 ? 9 : 7, 2), { p: [0, 0.02, 0.55 * s], r: [PI, 0, 0], s: [0.56 * s, 0.25 * s, 0.49 * s], c: shade(red, -0.15), c2: red, gy: [-1, 0] });
         const nt = s > 0.9 ? 7 : 5;
         for (let k = 0; k < nt; k++) {
           const a = -1.35 + (k / (nt - 1)) * 2.7;
@@ -609,15 +608,15 @@ export const LOOKS = {
         if (o.bud) return;
         b.use(name, hinge, { yaw });
         b.frame(fm(hinge));
-        b.add(P.dome(9, 3), { p: [0, 0, 0.55 * s], s: [0.62 * s, 0.32 * s, 0.55 * s], c: g, c2: shade(g, 0.15), gy: [0, 1] });
-        b.add(P.dome(9, 2), { p: [0, -0.02, 0.55 * s], s: [0.56 * s, 0.26 * s, 0.49 * s], c: red, c2: shade(red, -0.15), gy: [0, 1] });
+        b.add(P.dome(s > 0.9 ? 9 : 7, 3), { p: [0, 0, 0.55 * s], s: [0.62 * s, 0.32 * s, 0.55 * s], c: g, c2: shade(g, 0.15), gy: [0, 1] });
+        b.add(P.dome(s > 0.9 ? 9 : 7, 2), { p: [0, -0.02, 0.55 * s], s: [0.56 * s, 0.26 * s, 0.49 * s], c: red, c2: shade(red, -0.15), gy: [0, 1] });
         for (let k = 0; k < nt; k++) {
           const a = -1.35 + (k / (nt - 1)) * 2.7;
           b.add(P.cone(3), { p: [Math.sin(a) * 0.6 * s, -0.03, 0.55 * s + Math.cos(a) * 0.53 * s], r: [PI, 0, 0], s: [0.05 * s, 0.2 * s, 0.05 * s], c: '#fffbe6', keep: true });
         }
         if (eyes) {
           for (const ex of [-0.22, 0.22]) {
-            b.add(P.sphere(7, 5), { p: [ex * s, 0.34 * s, 0.42 * s], s: 0.17 * s, c: '#ffffff', keep: true });
+            b.add(P.sphere(6, 4), { p: [ex * s, 0.34 * s, 0.42 * s], s: 0.17 * s, c: '#ffffff', keep: true });
             b.add(P.oct(), { p: [ex * s * 1.05, 0.36 * s, 0.57 * s], s: [0.08 * s, 0.09 * s, 0.04 * s], c: '#1e1418', keep: true });
           }
         }
@@ -668,8 +667,8 @@ export const LOOKS = {
         for (let k = 0; k < n; k++) {
           const a = k * 2.1 + x;
           const px = x + Math.sin(a) * 0.2, py = y + (k === 2 ? -0.2 : 0), pz = z + Math.cos(a) * 0.1;
-          b.add(P.sphere(6, 4), { p: [px, py, pz], s: 0.24, c: berry, c2: hi, gy: [-1, 1], glow: 0.08 });
-          if (k === 0) b.add(P.oct(), { p: [px - 0.07, py + 0.1, pz + 0.17], s: 0.045, c: '#ffffff', glow: 0.7, keep: true });
+          b.add(P.sphere(6, 3), { p: [px, py, pz], s: 0.24, c: berry, c2: hi, gy: [-1, 1], glow: 0.08 });
+          if (k === 0 && z > 0.5) b.add(P.oct(), { p: [px - 0.07, py + 0.1, pz + 0.17], s: 0.045, c: '#ffffff', glow: 0.7, keep: true });
         }
       };
       cluster(-0.72, 1.75, 0.72, 3);
@@ -677,10 +676,10 @@ export const LOOKS = {
       cluster(0.1, 2.72, 0.35, 2);
       cluster(-1.3, 1.05, 0.3, 2);
       cluster(1.32, 1.15, 0.2, 2);
-      cluster(-0.6, 1.9, -0.95, 3);
+      cluster(-0.6, 1.9, -0.95, 2);
       cluster(0.7, 1.4, -0.95, 2);
       b.use('head', [0, 1.3, 1.05], { look: true });
-      b.add(P.sphere(10, 7), { p: [0, 1.3, 1.05], s: 0.46, c: shade(berry, 0.0), c2: hi, gy: [-1, 1] });
+      b.add(P.sphere(9, 6), { p: [0, 1.3, 1.05], s: 0.46, c: berry, c2: hi, gy: [-1, 1] });
       b.add(P.oct(), { p: [-0.2, 1.52, 1.43], s: 0.08, c: '#ffffff', glow: 0.7, keep: true });
       sphereFace(b, 'happy', [0, 1.3, 1.05], 0.46, 0.6, 0.25);
       blade(b, { p: [0, 1.73, 1.02], a: 0.8, up: 0.6, len: 0.38, wid: 0.26, shape: 'round', segL: 3, c: lf, c2: shade(lf, 0.2) });
@@ -711,7 +710,7 @@ export const LOOKS = {
       const sc = o.bud ? 0.7 : 1;
       const shroom = (x, z, h, r, fx, lean) => {
         h *= sc;
-        const big = r > 0.5;
+        const big = r > 0.6;
         r *= sc;
         const prof = [[0.3, 0], [0.34, 0.1], [0.27, 0.5], [0.22, 0.9], [0.25, 1.0], [0.0, 1.02]];
         b.add(latheGeo(big ? 'glowStalk' : 'glowStalkS', prof, big ? 8 : 6), { p: [x, 0, z], r: [lean, 0, -lean * 0.5], s: [r * 1.1, h, r * 1.1], c: '#cfc2f0', c2: '#efe8ff', glow: 0.1, glow2: 0.25 });

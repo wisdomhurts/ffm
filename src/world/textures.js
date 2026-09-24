@@ -50,6 +50,17 @@ function tileNoise(seed, period) {
   };
 }
 
+/** Tileable grey value-noise (linear data, not colour) for the water/lava shaders. */
+export function noiseTexture() {
+  return once('noise', () => {
+    const n = tileNoise(97, 8);
+    const n2 = tileNoise(98, 16);
+    return drawTexture(256, 256, (g, w, h) => {
+      pixels(g, w, h, (x, y) => [n(x, y, w, h, 4) * 255, n2(x, y, w, h, 3) * 255, 0]);
+    }, { srgb: false });
+  });
+}
+
 // ------------------------------------------------------------------ studs
 
 /** Classic Roblox studs, 4x4 per tile, near-white so vertex colours tint it. Texel (0..3,0..3) is flat. */

@@ -1,6 +1,7 @@
 // Animated liquid shaders: the Cabo ocean around the island, plus pools (fountain, swamp, lava).
 import * as THREE from 'three';
-import { fogShader, GLSL_NOISE } from './kit.js';
+import { fogShader } from './kit.js';
+import { noiseTexture } from './textures.js';
 
 const VERT = `
   varying vec3 vW;
@@ -32,13 +33,14 @@ export function oceanMaterial({ cx, cz, hx, hz, shoreD, mainlandZ }) {
       uIsland: { value: new THREE.Vector4(cx, cz, hx, hz) },
       uShore: { value: shoreD },
       uMainZ: { value: mainlandZ },
+      uNoise: { value: noiseTexture() },
     },
     vertex: VERT,
     fragment: `
       uniform vec3 uDeep, uMid, uShallow, uFoam;
       uniform vec4 uIsland; uniform float uShore, uMainZ;
+      uniform sampler2D uNoise;
       varying vec3 vW;
-      ${GLSL_NOISE}
       float sdBox(vec2 p, vec2 b){ vec2 q = abs(p) - b; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0); }
       void main(){
         vec2 p = vW.xz;
@@ -46,8 +48,8 @@ export function oceanMaterial({ cx, cz, hx, hz, shoreD, mainlandZ }) {
         float dm = (uMainZ - p.y) - 0.3;
         float d = min(di, dm);
         float t = uTime;
-        float n = fbm(p * 0.045 + vec2(t * 0.035, t * 0.02));
-        float n2 = fbm(p * 0.12 + vec2(-t * 0.06, t * 0.05));
+        float n = texture2D(uNoise, p * 0.0028 + vec2(t * 0.0022, t * 0.0013)).r;
+        float n2 = texture2D(uNoise, p * 0.0075 + vec2(-t * 0.004, t * 0.0033)).g;
         float w = n * 0.6 + n2 * 0.4;
         float sh = 1.0 - smoothstep(0.0, 70.0, d + (n - 0.5) * 16.0);
         vec3 col = mix(uDeep, uMid, smoothstep(0.0, 0.6, sh));
@@ -84,19 +86,21 @@ export function liquidMaterial({ c1, c2, c3, scale = 0.12, flow = [0.2, 0.1], gl
       uRip: { value: ripple },
       uOpacity: { value: opacity },
       uVert: { value: vertical ? 1 : 0 },
+      uNoise: { value: noiseTexture() },
     },
     transparent: opacity < 1,
     depthWrite: opacity >= 1,
     vertex: VERT,
     fragment: `
       uniform vec3 uC1, uC2, uC3; uniform float uScale, uGlow, uBub, uRip, uOpacity, uVert; uniform vec2 uFlow;
+      uniform sampler2D uNoise;
       varying vec3 vW;
-      ${GLSL_NOISE}
+      float h21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
       void main(){
         vec2 p = (uVert > 0.5 ? vec2(vW.x + vW.z, vW.y * 0.5) : vW.xz) * uScale;
         float t = uTime;
-        float n = fbm(p + uFlow * t);
-        float n2 = fbm(p * 2.3 - uFlow.yx * t * 1.7 + 4.0);
+        float n = texture2D(uNoise, (p + uFlow * t) * 0.16).r;
+        float n2 = texture2D(uNoise, (p * 2.3 - uFlow.yx * t * 1.7) * 0.16 + 0.37).g;
         float v = n * 0.65 + n2 * 0.35;
         vec3 col = mix(uC1, uC2, smoothstep(0.3, 0.6, v));
         col = mix(col, uC3, smoothstep(0.62, 0.78, v));

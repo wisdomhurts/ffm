@@ -533,7 +533,7 @@ export function buildGardens(ctx) {
   }
 
   // bamboo instances
-  const bambooGeo = withColors(new THREE.CylinderGeometry(1, 1, 1, 6, 1).translate(0, 0.5, 0));
+  const bambooGeo = withColors(new THREE.CylinderGeometry(1, 1, 1, 6, 1, true).translate(0, 0.5, 0));
   const bambooMat = new THREE.MeshLambertMaterial({ map: bambooTexture(), vertexColors: true });
   const bamboo = new THREE.InstancedMesh(bambooGeo, bambooMat, bambooXf.length);
   const bc = new THREE.Color();
@@ -561,7 +561,9 @@ export function buildGardens(ctx) {
   group.add(flagMesh);
 
   const add = (m) => m && group.add(m);
-  add(lawn.build(lawnMat, { name: 'garden-lawn' }));
+  const lawnMesh = lawn.build(lawnMat, { name: 'garden-lawn' });
+  lawnMesh.renderOrder = 1;
+  add(lawnMesh);
   add(soil.build(soilMat, { name: 'garden-soil' }));
   add(wood.build(mats.stud, { name: 'garden-wood', castShadow: quality.shadows }));
 

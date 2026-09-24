@@ -118,7 +118,8 @@ function createSkyDome() {
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), mat);
   mesh.frustumCulled = false;
-  mesh.renderOrder = -10;
+  // drawn after the opaque world (depth = far plane) so it only shades uncovered pixels
+  mesh.renderOrder = 1000;
   mesh.name = 'sky';
   return mesh;
 }
