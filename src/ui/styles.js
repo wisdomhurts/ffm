@@ -1161,11 +1161,11 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   /* title: slim side-by-side cast cards so a returning player's whole title screen fits */
   .scr-title{gap:8px}
   .cast{width:100%;max-width:660px}
-  .cast-card{flex:1 1 0;min-width:0;width:auto;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:7px;row-gap:3px;align-items:center;justify-items:start;
-    padding:6px 7px 6px 6px;text-align:left;border-radius:16px;background:linear-gradient(90deg,var(--c) 0,var(--c) 26px,transparent 26px),var(--panel)}
+  .cast-card{flex:1 1 0;min-width:0;width:auto;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:6px;row-gap:3px;align-items:center;justify-items:start;
+    padding:6px 6px 6px 5px;text-align:left;border-radius:16px;background:linear-gradient(90deg,var(--c) 0,var(--c) 26px,transparent 26px),var(--panel)}
   .cc-ava{--s:40px;grid-row:1/3}
   .cc-name{align-self:end;margin-top:0;font-size:17px}
-  .cc-title{align-self:start;font-size:9.5px;padding:3px 6px;letter-spacing:.03em;line-height:1.1}
+  .cc-title{align-self:start;font-size:9px;padding:3px 5px;letter-spacing:.02em;line-height:1.1}
   .cc-the{display:none}
 }
 
@@ -1176,11 +1176,11 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .logo-row{font-size:clamp(44px,7.4vh,58px)}
   .edition span{font-size:18px;padding:6px 20px 8px}
   .cast{gap:8px}
-  .cast-card{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:8px;row-gap:3px;align-items:center;justify-items:start;
-    padding:7px 8px 7px 7px;text-align:left;border-radius:18px;background:linear-gradient(90deg,var(--c) 0,var(--c) 31px,transparent 31px),var(--panel)}
+  .cast-card{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:7px;row-gap:3px;align-items:center;justify-items:start;
+    padding:7px 6px 7px 7px;text-align:left;border-radius:18px;background:linear-gradient(90deg,var(--c) 0,var(--c) 31px,transparent 31px),var(--panel)}
   .cc-ava{--s:48px;grid-row:1/3;border-width:3px}
   .cc-name{align-self:end;margin-top:0;font-size:19px}
-  .cc-title{align-self:start;font-size:9.5px;padding:3px 6px;letter-spacing:.04em;line-height:1.1}
+  .cc-title{align-self:start;font-size:9.5px;padding:3px 6px;letter-spacing:.03em;line-height:1.1}
   .cc-the{display:none}
   .title-actions{gap:10px;width:100%}
   .title-main{flex-wrap:nowrap;gap:10px;width:100%;max-width:420px}
@@ -1221,6 +1221,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .end-actions .btn{flex:1 1 0;min-width:0}
   .end-actions .btn-lg{min-height:46px;font-size:18px;padding:8px 10px 10px;border-radius:16px}
 }
+@media (max-width:370px) and (max-height:760px) and (orientation:portrait){.cc-title{font-size:9px;padding:3px 5px;letter-spacing:.02em}}
 /* short screens: the Showdown awards become a one-line ticker (menus.js rotates .on; tap for the next) */
 @media (max-width:640px) and (max-height:760px) and (orientation:portrait),(max-height:500px) and (orientation:landscape){
   .awards{display:grid;grid-template-areas:"ticker";justify-items:center;align-items:center;cursor:pointer}
