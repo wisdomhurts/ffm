@@ -77,7 +77,7 @@ Income accumulates into the garden's cash pile; step on the COLLECT pad to bank 
   Reach your garden → it becomes yours. Owner gets a big alert.
 * **Bonk** (click / F / tap 🟦): swing a **pool noodle**. Hit → target stunned 1 s,
   knocked back, drops what they carry (stolen plants fly home; wild seeds fall on the ground
-  for anyone to grab). Also stuns road monsters for 2 s.
+  for anyone to grab). Also stuns road monsters for 2 s (only with empty hands: bonk the guard before you grab).
 * **Lock** (step on your LOCK pad): laser gate for 40 s (+10 s per rebirth); only the owner passes.
   60 s recharge.
 * **Collect** (step on COLLECT pad): bank your garden's cash pile.

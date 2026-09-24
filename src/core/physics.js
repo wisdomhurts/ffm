@@ -113,10 +113,15 @@ export class PhysicsWorld {
   step(body, dt, extraBoxes) {
     const r = WORLD.playerRadius;
     body.vel.y -= WORLD.gravity * dt;
-    body.pos.x += body.vel.x * dt;
-    body.pos.z += body.vel.z * dt;
     body.pos._grounded = body.onGround;
-    this.resolve(body.pos, r, extraBoxes);
+    // never move more than r/2 between collision resolves, so fast players can't tunnel through thin fences
+    const mx = body.vel.x * dt, mz = body.vel.z * dt;
+    const n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / (r * 0.5)));
+    for (let i = 0; i < n; i++) {
+      body.pos.x += mx / n;
+      body.pos.z += mz / n;
+      this.resolve(body.pos, r, extraBoxes);
+    }
     body.pos.y += body.vel.y * dt;
     const g = this.groundHeight(body.pos.x, body.pos.z, r, body.pos.y + STEP);
     if (body.pos.y <= g) {

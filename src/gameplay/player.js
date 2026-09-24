@@ -76,11 +76,12 @@ export class Player {
 
   restore(s) {
     if (!s) return;
-    this.cash = s.cash ?? this.cash;
-    this.speedLevel = s.speedLevel ?? 0;
-    this.rebirths = s.rebirths ?? 0;
-    this.upgradeSpend = s.upgradeSpend ?? 0;
-    Object.assign(this.items, s.items || {});
-    Object.assign(this.stats, s.stats || {});
+    const num = (v, d) => (Number.isFinite(v) && v >= 0 ? v : d);
+    this.cash = num(s.cash, this.cash);
+    this.speedLevel = Math.min(25, Math.floor(num(s.speedLevel, 0)));
+    this.rebirths = Math.floor(num(s.rebirths, 0));
+    this.upgradeSpend = num(s.upgradeSpend, 0);
+    if (s.items && typeof s.items === 'object') for (const k of Object.keys(this.items)) this.items[k] = Math.floor(num(s.items[k], 0));
+    if (s.stats && typeof s.stats === 'object') for (const k of Object.keys(this.stats)) if (k !== 'best') this.stats[k] = num(s.stats[k], 0);
   }
 }

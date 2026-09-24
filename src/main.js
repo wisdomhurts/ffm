@@ -59,6 +59,9 @@ class App {
     bus.on('shop:open', ({ player, shop }) => {
       if (player === this.human && this.state === 'playing') this.menus.openShop(shop);
     });
+    bus.on('player:hit', ({ target }) => {
+      if (target === this.human && this.state === 'shop') this.resume();
+    });
     bus.on('camera:shake', ({ amount = 0.5 } = {}) => this.cam?.addShake(amount));
     bus.on('match:end', ({ ranking }) => {
       if (!this.human) return;
@@ -106,7 +109,8 @@ class App {
   startAttract() {
     this._newGame({ humanId: null, mode: 'endless', difficulty: 'normal' });
     // give the bots a head start so the title screen looks lively
-    for (let i = 0; i < 40 * 20; i++) this.game.update(1 / 40);
+    for (let i = 0; i < 40 * 4; i++) this.game.update(1 / 40);
+    this._warmup = 40 * 16; // the rest of the head start is spread over the first title frames
     this.state = 'title';
     this.touch.setVisible(false);
     this.audio.setMusicMode('title');
@@ -118,7 +122,13 @@ class App {
   startGame({ charId, mode = 'endless', difficulty = settings.difficulty, fresh = false }) {
     const saveKey = `save:${mode}:${charId}`;
     const saved = !fresh && mode === 'endless' ? load(saveKey, null) : null;
-    const game = this._newGame({ humanId: charId, mode, difficulty, save: saved });
+    let game;
+    try {
+      game = this._newGame({ humanId: charId, mode, difficulty, save: saved });
+    } catch (e) {
+      console.warn('[save] unreadable save, starting fresh', e);
+      game = this._newGame({ humanId: charId, mode, difficulty, save: null });
+    }
     game.saveKey = mode === 'endless' ? saveKey : null;
     this.hud = createHUD(this);
     this.menus.hideAll();
@@ -162,6 +172,7 @@ class App {
     this.menus.hidePause();
     this.menus.closeShop();
     this.input.reset();
+    if (this.humanCtrl) this.humanCtrl._interactTapFrames = 0;
     this.touch.setVisible(true);
     bus.emit('app:state', { state: 'playing' });
   }
@@ -190,12 +201,19 @@ class App {
   frame(dt, t) {
     const g = this.game;
     if (!g) return;
+    if (this.state === 'paused' || this.state === 'shop') {
+      this.input.pollGamepad(); // Start works in menus too
+      if (this.input.take('interactTap')) this.input.latched.pause = true; // B = back
+    }
     if (this.input.take('pause')) {
       if (this.state === 'playing') this.pause();
       else if (this.state === 'paused' || this.state === 'shop') this.resume();
     }
     if (this.state === 'playing' && this.humanCtrl) this.humanCtrl.beginFrame();
     if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
+    if (this.state === 'title' && this._warmup > 0) {
+      for (let i = 0; i < 6 && this._warmup > 0; i++, this._warmup--) g.update(1 / 40);
+    }
     // camera
     if (this.human && this.state !== 'title') {
       const p = this.human;

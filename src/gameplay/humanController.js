@@ -28,7 +28,12 @@ export class HumanController {
 
   getIntent(game, p) {
     const it = emptyIntent();
-    if (!this.input.enabled) return it;
+    if (!this.input.enabled) {
+      // a menu took over: drop any E-tap in flight so it can't re-fire when the menu closes
+      this._interactTapFrames = 0;
+      this.frameEdges = null;
+      return it;
+    }
     const a = this.input.axis();
     const yaw = this.cam.yaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);

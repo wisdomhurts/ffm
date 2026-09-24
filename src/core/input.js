@@ -20,7 +20,8 @@ export class Input {
       this.lastDevice = 'keyboard';
       if (!this.keys.has(e.code)) this._edge(e.code);
       this.keys.add(e.code);
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
+      const inUI = e.target instanceof Element && e.target.closest('button, a, input, select, [role="dialog"], [tabindex]');
+      if (!inUI && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
     };
     this._ku = (e) => this.keys.delete(e.code);
     this._blur = () => {

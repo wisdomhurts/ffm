@@ -266,7 +266,7 @@ export function buildGardens(ctx) {
         wood.box(GX, y, pz + face, 0.7, 0.42, 0.3, '#3a3f4a', { ao: 0 });
         ctx.glow.box(GX, y, pz + face * 1.22, 0.36, 0.22, 0.06, '#ff3a3a', { ao: 0 });
       }
-      ctx.colliders.push({ minX: GX - 0.75, maxX: GX + 0.75, minY: 0, maxY: 9, minZ: pz - 0.75, maxZ: pz + 0.75, tag: 'fence' });
+      ctx.colliders.push({ minX: GX - 0.75, maxX: GX + 0.75, minY: 0, maxY: 30, minZ: pz - 0.75, maxZ: pz + 0.75, tag: 'fence' });
     }
 
     // ---------------------------------------------------------- planters

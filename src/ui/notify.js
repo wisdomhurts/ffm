@@ -93,7 +93,7 @@ export function wireNotifications(app, alerts) {
   });
   on('monster:aggro', ({ monster, target }) => {
     if (target !== me) return;
-    alerts.show({ key: 'monster', kind: 'warn', cls: 'shake', icon: ICON.target, duration: 2600, html: `A ${esc(monster.def.name)} is chasing you!<small>RUN! Or bonk it with your noodle.</small>` });
+    alerts.show({ key: 'monster', kind: 'warn', cls: 'shake', icon: ICON.target, duration: 2600, html: `A ${esc(monster.def.name)} is chasing you!<small>RUN home! More Speed outruns it. (Bonk monsters before you grab.)</small>` });
   });
   on('monster:caught', ({ monster, target }) => {
     if (target !== me) return;

@@ -68,11 +68,12 @@ function staticColliders(gardens) {
   const T = 1; // wall thickness
   // Home area boundary: x in [-72,72], z in [-66,60], open to the road at x in [-20,20].
   const H = { minX: -72, maxX: 72, minZ: -66, maxZ: 60 };
-  box(H.minX - T, H.minX, H.minZ, H.maxZ, 12);
-  box(H.maxX, H.maxX + T, H.minZ, H.maxZ, 12);
-  box(H.minX, H.maxX, H.minZ - T, H.minZ, 12);
-  box(H.minX, -ROAD.width / 2, H.maxZ, H.maxZ + T, 12);
-  box(ROAD.width / 2, H.maxX, H.maxZ, H.maxZ + T, 12);
+  const WALL_H = 60; // invisible; no prop + jump may clear it
+  box(H.minX - T, H.minX, H.minZ, H.maxZ, WALL_H);
+  box(H.maxX, H.maxX + T, H.minZ, H.maxZ, WALL_H);
+  box(H.minX, H.maxX, H.minZ - T, H.minZ, WALL_H);
+  box(H.minX, -ROAD.width / 2, H.maxZ, H.maxZ + T, WALL_H);
+  box(ROAD.width / 2, H.maxX, H.maxZ, H.maxZ + T, WALL_H);
   // Road walls and end cap.
   box(-ROAD.width / 2 - 4, -ROAD.width / 2, ROAD.startZ, ROAD_END_Z, 30, 0, 'cliff');
   box(ROAD.width / 2, ROAD.width / 2 + 4, ROAD.startZ, ROAD_END_Z, 30, 0, 'cliff');
@@ -81,7 +82,7 @@ function staticColliders(gardens) {
   for (const g of gardens) {
     const b = g.bounds;
     const F = 0.6;
-    const fenceH = 9; // taller than max jump height (~6.9)
+    const fenceH = 30; // collider only (the art is ~6-9 tall): props beside fences must never let you hop over
     // outer (non-gate) x wall
     const outerX = g.west ? b.minX : b.maxX;
     box(outerX - F / 2, outerX + F / 2, b.minZ, b.maxZ, fenceH, 0, 'fence');
