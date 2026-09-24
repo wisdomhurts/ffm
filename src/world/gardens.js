@@ -44,12 +44,13 @@ function laserMaterial() {
         float along = vUv.x;
         if (along > uGrow) discard;
         float d = abs(vUv.y - 0.5) * 2.0;
-        float core = exp(-d * d * 90.0);
-        float halo = exp(-d * d * 7.0) * 0.6;
+        float floorGlow = step(vBeam, -0.5);
+        float core = exp(-d * d * 90.0) * (1.0 - floorGlow);
+        float halo = exp(-d * d * 7.0) * (0.75 - floorGlow * 0.45);
         float shimmer = 0.72 + 0.28 * sin(along * 70.0 - uTime * 24.0 + vBeam * 1.7) * sin(along * 19.0 + uTime * 7.0 + vBeam);
         float flick = 0.88 + 0.12 * sin(uTime * 37.0 + vBeam * 3.0);
         float tip = smoothstep(uGrow, uGrow - 0.03, along);
-        vec3 col = vec3(1.0, 0.1, 0.12) * halo * shimmer + vec3(1.0, 0.78, 0.72) * core * 1.4;
+        vec3 col = vec3(1.0, 0.08, 0.1) * halo * shimmer * 1.3 + vec3(1.0, 0.55, 0.5) * core * 1.3;
         gl_FragColor = vec4(col * flick * tip * uAlpha, 1.0);
       }`,
     transparent: true,
@@ -75,6 +76,13 @@ function laserGeometry(L) {
       idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
   });
+  // soft red glow on the ground under the beams
+  const base = pos.length / 3;
+  const fw = 1.6;
+  pos.push(x - fw, 0.09, z0, x - fw, 0.09, z1, x + fw, 0.09, z1, x + fw, 0.09, z0);
+  uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+  beam.push(-1, -1, -1, -1);
+  idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
