@@ -88,6 +88,7 @@ class App {
     bus.on('camera:shake', ({ amount = 0.5 } = {}) => this.cam?.addShake(amount));
     bus.on('match:end', ({ ranking }) => {
       if (!this.human) return;
+      this._stagePodium(ranking);
       this.state = 'ended';
       bus.emit('app:state', { state: 'ended' });
       this.touch.setVisible(false);
@@ -117,6 +118,82 @@ class App {
     this._gfxTimer = setTimeout(() => (btn.hidden = false), 5000);
     this.container.appendChild(el);
     this._gfxEl = el;
+  }
+
+  // Showdown finale: the top three stand on podium blocks at the spawn pad; the camera orbits them.
+  _stagePodium(ranking) {
+    const g = this.game;
+    this._clearPodium();
+    const group = new THREE.Group();
+    group.name = 'podium';
+    const spots = [
+      { x: 0, h: 3.2, color: '#ffd23f', label: '1' },
+      { x: -5, h: 2.1, color: '#d9e2f0', label: '2' },
+      { x: 5, h: 1.4, color: '#e0925a', label: '3' },
+    ];
+    spots.forEach((s) => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const x = c.getContext('2d');
+      x.fillStyle = s.color;
+      x.fillRect(0, 0, 128, 128);
+      x.fillStyle = 'rgba(0,0,0,.18)';
+      x.fillRect(0, 118, 128, 10);
+      x.font = '900 84px "Lilita One", "Arial Black", sans-serif';
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      x.lineWidth = 10;
+      x.strokeStyle = '#10163a';
+      x.strokeText(s.label, 64, 66);
+      x.fillStyle = '#fff';
+      x.fillText(s.label, 64, 66);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const side = new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.45, metalness: s.label === '1' ? 0.35 : 0.15 });
+      const front = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 });
+      // BoxGeometry material order: +x, -x, +y, -y, +z, -z (the camera looks from -z)
+      const m = new THREE.Mesh(new THREE.BoxGeometry(4.4, s.h, 4.4), [side, side, side, side, side, front]);
+      m.position.set(s.x, s.h / 2, 0);
+      m.castShadow = m.receiveShadow = true;
+      group.add(m);
+    });
+    this.engine.scene.add(group);
+    this._podium = group;
+    ranking.forEach((r, i) => {
+      const p = r.player;
+      if (p.carrying?.kind === 'plant') g.returnPlant(p.carrying.plant, p.carrying.fromSlot, p.carrying.fromIndex);
+      p.carrying = null;
+      p.stunUntil = p.invulnUntil = 0;
+      p.cloakUntil = p.coilUntil = 0;
+      p.vel.x = p.vel.y = p.vel.z = 0;
+      const s = spots[i];
+      if (s) {
+        p.pos.x = s.x;
+        p.pos.y = s.h;
+        p.pos.z = 0;
+      } else {
+        p.pos.x = 9.5;
+        p.pos.y = 0;
+        p.pos.z = -2;
+      }
+      p.yaw = Math.PI; // face the camera
+      p.celebrateUntil = i === 0 ? g.time + 1e6 : 0;
+    });
+    this._podiumT = 0;
+  }
+
+  _clearPodium() {
+    if (!this._podium) return;
+    this.engine.scene.remove(this._podium);
+    this._podium.traverse((o) => {
+      o.geometry?.dispose();
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      mats.forEach((m) => {
+        m.map?.dispose();
+        m.dispose();
+      });
+    });
+    this._podium = null;
   }
 
   start() {
@@ -168,7 +245,7 @@ class App {
     this.state = 'title';
     this.touch.setVisible(false);
     this.audio.setMusicMode('title');
-    this._attractAngle = 0;
+    this._attractAngle = 2.2; // opens on the plaza, gardens and ocean (not the back of the road arch)
     bus.emit('app:state', { state: 'title' });
   }
 
@@ -238,6 +315,7 @@ class App {
   }
 
   disposeGame() {
+    this._clearPodium();
     if (!this.game) return;
     bus.emit('game:dispose', { game: this.game });
     this.hud?.dispose();
@@ -269,7 +347,17 @@ class App {
       for (let i = 0; i < 6 && this._warmup > 0; i++, this._warmup--) g.update(1 / 40);
     }
     // camera
-    if (this.human && this.state !== 'title') {
+    if (this.state === 'ended' && this._podium) {
+      this._podiumT += dt;
+      const a = Math.sin(this._podiumT * 0.35) * 0.38;
+      const k = Math.min(1, this._podiumT / 1.6);
+      const cam = this.engine.camera;
+      const tx = Math.sin(a) * 17, ty = 7.2, tz = -Math.cos(a) * 17;
+      if (k < 1) cam.position.lerp({ x: tx, y: ty, z: tz }, 0.08 + k * 0.2);
+      else cam.position.set(tx, ty, tz);
+      cam.lookAt(0, 4.6, 0);
+      this.engine.setFocus(0, 0, 0);
+    } else if (this.human && this.state !== 'title') {
       const p = this.human;
       const moving = Math.hypot(p.vel.x, p.vel.z) > 2;
       this.cam.update(dt, this.state === 'playing' ? this.input : null, p.pos, p.yaw, moving);
@@ -279,8 +367,8 @@ class App {
       this._attractAngle = (this._attractAngle || 0) + dt * 0.06;
       const a = this._attractAngle;
       const cam = this.engine.camera;
-      cam.position.set(Math.sin(a) * 95, 48, Math.cos(a) * 95 - 5);
-      cam.lookAt(0, 4, 10);
+      cam.position.set(Math.sin(a) * 95, 55, Math.cos(a) * 95 - 5);
+      cam.lookAt(0, 2, 0);
       this.engine.setFocus(0, 0, 0);
     }
     this.labels.begin();

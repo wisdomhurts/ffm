@@ -285,6 +285,8 @@ void main() {
   vec2 uv = position.xy + 0.5;
   vUv = vec2((col + uv.x) / uCells, (uCells - row - 1.0 + uv.y) / uCells);
   vColor = iColor;
+  // fade sprites that get very close to the camera so they never blow out into huge white stars
+  vColor.a *= smoothstep(1.5, 5.0, -mv.z);
   vAdd = iParams.z;
 }`;
 

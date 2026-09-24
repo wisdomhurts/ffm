@@ -882,8 +882,12 @@ export function createEffects(engine, container) {
       const pal = EVENT_COLORS[event?.type] || CONFETTI;
       const h = H();
       const f = h ? h.pos : engine.focus;
-      burst('sparkle', at(f.x, f.y + 4, f.z), { colors: pal, count: 26, scale: 1.8 });
-      burst('confetti', at(f.x, f.y + 6, f.z), { colors: pal, count: 40 });
+      // a ring of sparkles around the player (not on top of them) so they stay visible
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        burst('sparkle', at(f.x + Math.sin(a) * 4, f.y + 4, f.z + Math.cos(a) * 4), { colors: pal, count: 2, scale: 1.1 });
+      }
+      burst('confetti', at(f.x, f.y + 8, f.z), { colors: pal, count: 30 });
       storm(f, 2.5, { follow: h ? h.pos : null, colors: pal, rate: 40, sparkle: true });
     },
 

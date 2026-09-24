@@ -122,7 +122,7 @@ export class GameView {
       if (invisible > 0.05) {
         const tag = p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`;
         let carry = '';
-        if (c) {
+        if (c && p !== human) {
           const sid = c.kind === 'seed' ? c.speciesId : c.plant.speciesId;
           const mut = c.kind === 'seed' ? c.mutation : c.plant.mutation;
           carry = `<div class="nt-carry">${c.kind === 'plant' ? 'STOLEN ' : ''}${mutationTag(mut)} <b style="color:${rarityColor(PLANT[sid].rarity)}">${esc(PLANT[sid].name)}</b></div>`;
@@ -132,7 +132,19 @@ export class GameView {
       }
     });
 
-    // planters / plants
+    // planters / plants: only the planter nearest the player gets the full card (others get a chip)
+    let nearKey = null;
+    let nearD = 12;
+    for (const gd of g.gardens) {
+      for (const pl of gd.planters) {
+        if (!pl.plant) continue;
+        const d = Math.hypot(pl.x - focus.x, pl.z - focus.z);
+        if (d < nearD) {
+          nearD = d;
+          nearKey = gd.slot + ':' + pl.index;
+        }
+      }
+    }
     g.gardens.forEach((gd) => {
       const signs = this.world.gardens?.[gd.slot];
       gd.planters.forEach((pl) => {
@@ -170,7 +182,7 @@ export class GameView {
           const fd = Math.hypot(pl.x - focus.x, pl.z - focus.z);
           const labelY = 1.2 + Math.max(4.4, rec.view.topY || 0) + 1.0;
           const stealing = pl.stealer != null ? '<div class="pl-steal">BEING STOLEN!</div>' : '';
-          if (fd < 12 || stealing) {
+          if (k === nearKey || stealing) {
             L.set('pt' + k, { x: pl.x, y: labelY, z: pl.z },
               `${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${stealing}`,
               { cls: 'plantlbl' + (grown ? ' grown' : ''), maxDist: 70 });
@@ -187,11 +199,16 @@ export class GameView {
       // collect pad + lock pad labels
       const Lg = gd.L;
       const pile = Math.floor(gd.cashPile);
-      L.set('cp' + gd.slot, { x: Lg.collectPad.x, y: 3.2, z: Lg.collectPad.z }, `<div class="cp-amt">$${fmt(pile)}</div><div class="cp-lbl">COLLECT</div>`, { cls: 'padlbl collect' + (gd.owner === human ? ' mine' : ''), maxDist: 60 });
+      const mineG = gd.owner === human;
+      const padD = Math.hypot(Lg.collectPad.x - focus.x, Lg.collectPad.z - focus.z);
+      if (mineG || !human || (pile > 0 && padD < 30)) {
+        L.set('cp' + gd.slot, { x: Lg.collectPad.x, y: 1.8, z: Lg.collectPad.z }, `<div class="cp-amt">$${fmt(pile)}</div><div class="cp-lbl">COLLECT</div>`, { cls: 'padlbl collect' + (mineG ? ' mine' : ''), maxDist: 60 });
+      }
       const locked = g.isLocked(gd);
       const ready = now >= gd.lockReadyAt;
       const lockTxt = locked ? `LOCKED ${Math.ceil(gd.lockedUntil - now)}s` : ready ? 'LOCK' : `LOCK ${Math.ceil(gd.lockReadyAt - now)}s`;
-      L.set('lk' + gd.slot, { x: Lg.lockPad.x, y: 3, z: Lg.lockPad.z }, `<div class="lk">${lockTxt}</div>`, { cls: 'padlbl lock' + (locked ? ' on' : ready ? ' ready' : ''), maxDist: 60 });
+      // your own lock pad gets a label; rivals' gates show their countdown on the 3D gate post
+      if (mineG) L.set('lk' + gd.slot, { x: Lg.lockPad.x, y: 1.6, z: Lg.lockPad.z }, `<div class="lk">${lockTxt}</div>`, { cls: 'padlbl lock' + (locked ? ' on' : ready ? ' ready' : ''), maxDist: 60 });
       signs?.setLocked?.(locked, locked ? gd.lockedUntil - now : 0);
       signs?.setCashPile?.(gd.cashPile);
     });
@@ -236,7 +253,8 @@ export class GameView {
       if (gi.kind === 'seed') {
         const left = gi.expiresAt - now;
         v.object3d.visible = left > 3 || Math.floor(time * 8) % 2 === 0;
-        L.set('gi' + gi.uid, { x: gi.x, y: 3.2, z: gi.z }, `<div class="pd-name" style="color:${rarityColor(PLANT[gi.speciesId].rarity)}">${esc(PLANT[gi.speciesId].name)}</div>`, { cls: 'podlbl', maxDist: 45 });
+        const gsp = PLANT[gi.speciesId];
+        L.set('gi' + gi.uid, { x: gi.x, y: 3.2, z: gi.z }, `${mutationTag(gi.mutation)}<div class="pd-name" style="color:${rarityColor(gsp.rarity)}">${esc(gsp.name)}</div>${rarityTag(gsp.rarity)}<div class="pl-time">${Math.max(0, Math.ceil(left))}s</div>`, { cls: 'podlbl', maxDist: 50 });
       }
     }
     for (const [id, v] of this.groundViews) {

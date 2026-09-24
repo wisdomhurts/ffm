@@ -2,7 +2,7 @@
 // Roblox-inspired but premium: chunky outlined panels, bold display type, bouncy micro-animations.
 // Contract: injectStyles()
 
-const FONT_HREF = 'https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;700;800;900&display=swap';
+import { FONT_FACES, fontsReady } from './fonts.js';
 
 const css = `
 :root{
@@ -1054,32 +1054,23 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 `;
 
 function addFonts() {
-  // Web fonts are optional: until the display face arrives (or if it never does) <html class="no-webfont">
-  // makes the system fallback heavier so headings stay chunky. Automated test browsers skip the
-  // request so a blocked network can't show up as a console error.
+  // Fonts are embedded (ui/fonts.js), so they work offline and in sandboxed pages. Until the display face
+  // is ready, <html class="no-webfont"> makes the system fallback heavier so headings stay chunky.
   const root = document.documentElement;
   root.classList.add('no-webfont');
   try {
-    if (navigator.webdriver && !window.__WEBFONTS__) return;
-    if (document.querySelector('link[data-ui-fonts]')) return;
-    const ready = () => {
+    if (document.getElementById('ui-fonts')) return;
+    const st = document.createElement('style');
+    st.id = 'ui-fonts';
+    st.textContent = FONT_FACES;
+    document.head.appendChild(st);
+    fontsReady(4000).then(() => {
       try {
-        if ([...document.fonts].some((f) => f.family.replace(/"/g, '') === 'Lilita One' && f.status === 'loaded')) root.classList.remove('no-webfont');
+        if (document.fonts?.check?.('20px "Lilita One"')) root.classList.remove('no-webfont');
       } catch {
         /* FontFaceSet unsupported */
       }
-    };
-    document.fonts?.addEventListener?.('loadingdone', ready);
-    const pre = document.createElement('link');
-    pre.rel = 'preconnect';
-    pre.href = 'https://fonts.gstatic.com';
-    pre.crossOrigin = 'anonymous';
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = FONT_HREF;
-    link.dataset.uiFonts = '1';
-    link.onload = () => document.fonts?.load?.('20px "Lilita One"').then(ready, () => {});
-    document.head.append(pre, link);
+    });
   } catch {
     /* fonts are a nice-to-have */
   }
