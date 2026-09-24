@@ -136,7 +136,7 @@ export class PhysicsWorld {
     const list = this.query(minX, maxX, minZ, maxZ, this._tmp3 || (this._tmp3 = []));
     for (const b of list) {
       // the camera may pass through low/invisible blockers (fences' invisible upper part, boundary walls)
-      if (b.tag === 'planter' || b.tag === 'fence' || b.tag === 'wall' || b.tag === 'laser') continue;
+      if (b.tag === 'planter' || b.tag === 'fence' || b.tag === 'wall' || b.tag === 'laser' || b.tag === 'deco') continue;
       let tmin = 0, tmax = best;
       for (const [oa, da, mn, mx] of [[o.x, d.x, b.minX, b.maxX], [o.y, d.y, b.minY, b.maxY], [o.z, d.z, b.minZ, b.maxZ]]) {
         if (Math.abs(da) < 1e-9) {

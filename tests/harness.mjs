@@ -107,5 +107,8 @@ export async function manualFrames(page) {
 export async function stepFrames(page, n = 1, dt = 1 / 30) {
   await page.evaluate(([n, dt]) => {
     for (let i = 0; i < n; i++) window.__app.engine.frame(dt);
+    // drain the GL queue so screenshots don't time out on slow software rendering
+    const gl = window.__app.engine.renderer.getContext();
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
   }, [n, dt]);
 }

@@ -30,7 +30,7 @@ export class Engine {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     renderer.shadowMap.enabled = this.quality.shadows;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.domElement.id = 'game-canvas';
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
