@@ -80,6 +80,17 @@ export class BotController {
     this.prevCarry = p.carrying;
     this.goal = null;
     this.motor.stop();
+    // memories are in game time: forget them when bound to a new match
+    this.threat = null;
+    this.podBlock.clear();
+    this.lurkBlock.clear();
+    this.peelSeen.clear();
+    this.biomeFail = [];
+    this.lastStealAt = -999;
+    this.revenge = null;
+    this.stayHomeUntil = this.mugReadyAt = this.balloonAt = this.bananaAt = this.kitAt = this.coilAt = this.dodgeAt = 0;
+    this.lastShopAt = this.lastCollectAt = -99;
+    this.hopsLeft = 0;
     // stagger the first decisions so the bots do not move in lockstep
     this.nextDecideAt = game.time + this.rng.range(0.1, 0.9);
     getNav(game);
