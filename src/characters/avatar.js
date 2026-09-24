@@ -438,6 +438,7 @@ export function createAvatar(char, faceImage, skinHex) {
   const torso = new THREE.Group(); // lean + twist pivot at the hips
   hips.add(torso);
   const torsoMesh = mesh(G.torso, M.torso);
+  torsoMesh.name = 'torso';
   torsoMesh.position.y = TORSO_H / 2;
   torso.add(torsoMesh);
   const neck = new THREE.Group();
@@ -447,11 +448,13 @@ export function createAvatar(char, faceImage, skinHex) {
   head.scale.setScalar(hs);
   neck.add(head);
   const headMesh = mesh(G.head, M.head);
+  headMesh.name = 'head';
   headMesh.position.y = HEAD.h / 2;
   head.add(headMesh);
   const hairGeo = hairGeometry(look.hair, char.id === 'maddie' ? 3.0 : 3.4);
   if (hairGeo) {
     const hair = mesh(hairGeo, M.hair, false); // no self-shadow across the face
+    hair.name = 'hair';
     hair.position.y = HEAD.h / 2;
     head.add(hair);
   }
@@ -461,6 +464,7 @@ export function createAvatar(char, faceImage, skinHex) {
     sh.position.set(side * 1.5, SHOULDER_Y, 0);
     torso.add(sh);
     const a = mesh(G.arm, M.arm);
+    a.name = 'arm';
     a.position.y = ARM_TOP - 1;
     sh.add(a);
     return sh;
@@ -473,6 +477,7 @@ export function createAvatar(char, faceImage, skinHex) {
     hip.position.set(side * 0.5, 0, 0);
     hips.add(hip);
     const l = mesh(G.leg, M.leg);
+    l.name = 'leg';
     l.position.y = -LEG_H / 2;
     hip.add(l);
     const sandal = look.shirt === 'dress';
@@ -498,12 +503,14 @@ export function createAvatar(char, faceImage, skinHex) {
   let skirt = null;
   if (M.skirt) {
     skirt = mesh(G.skirt, M.skirt);
+    skirt.name = 'skirt';
     skirt.position.y = 0.02;
     torso.add(skirt);
   }
 
   // pool noodle: slung across the back, or in the right fist while swinging
   const sling = new THREE.Mesh(G.sling, M.noodle);
+  sling.name = 'sling';
   sling.position.set(0, SLING.y, SLING.z);
   torso.add(sling);
   const hand = new THREE.Group();
@@ -524,6 +531,7 @@ export function createAvatar(char, faceImage, skinHex) {
     j.rotation.x = NOODLE_CURVE[i];
     parent.add(j);
     const m = new THREE.Mesh(geo, M.noodle);
+    m.name = 'noodle';
     j.add(m);
     joints.push(j);
     parent = j;
