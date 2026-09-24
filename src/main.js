@@ -90,6 +90,14 @@ class App {
     }
     this.human = game.human;
     this.view = new GameView({ engine: this.engine, game, world: this.world, labels: this.labels, fx: this.fx });
+    // Build every shader now (incl. far-away monsters) so nothing hitches the first time it appears.
+    try {
+      const r = this.engine.renderer;
+      if (r.compileAsync) r.compileAsync(this.engine.scene, this.engine.camera).catch(() => {});
+      else r.compile(this.engine.scene, this.engine.camera);
+    } catch {
+      /* optional warm-up */
+    }
     this.fx.attach?.(game);
     this.audio.attach(game);
     return game;

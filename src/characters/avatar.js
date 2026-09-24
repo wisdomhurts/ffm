@@ -131,6 +131,13 @@ function buildHair(style, longLen) {
   return P.length ? mergeParts(P) : null;
 }
 
+// Geometry shared by every avatar (and reused across matches) is tagged so views can skip it on dispose.
+function markShared(o) {
+  if (o?.isBufferGeometry) o.userData.shared = true;
+  else if (o && typeof o === 'object') Object.values(o).forEach(markShared);
+  return o;
+}
+
 let GEO = null;
 function sharedGeometry() {
   if (GEO) return GEO;
@@ -212,6 +219,7 @@ function sharedGeometry() {
     skirt,
     hair: {},
   };
+  markShared(GEO);
   return GEO;
 }
 
@@ -234,14 +242,14 @@ function shoeGeometry(look) {
   const parts = sandal
     ? [colored(part(box(1.04, 0.14, 1.26, 1, 0.06), [0, 0.07, 0]), sole)]
     : [colored(part(box(1.08, 0.16, 1.36, 1, 0.07), [0, 0.08, 0]), sole), colored(part(box(1.02, 0.34, 1.26, 1, 0.14), [0, 0.3, -0.02]), upper)];
-  G[key] = mergeParts(parts);
+  G[key] = markShared(mergeParts(parts));
   return G[key];
 }
 
 function hairGeometry(style, len) {
   const G = sharedGeometry();
   const key = style + ':' + len;
-  if (!(key in G.hair)) G.hair[key] = buildHair(style, len);
+  if (!(key in G.hair)) G.hair[key] = markShared(buildHair(style, len));
   return G.hair[key];
 }
 

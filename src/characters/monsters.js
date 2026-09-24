@@ -112,6 +112,13 @@ function rng(seed) {
 
 // ------------------------------------------------------------------ shared bits
 
+// Geometry shared by every monster of a type is tagged so views can skip it on dispose.
+function markShared(o) {
+  if (o?.isBufferGeometry) o.userData.shared = true;
+  else if (o && typeof o === 'object' && !o.isMaterial && !o.isTexture) Object.values(o).forEach(markShared);
+  return o;
+}
+
 let SHARED = null;
 function shared() {
   if (SHARED) return SHARED;
@@ -135,6 +142,7 @@ function shared() {
     halo,
     eye: sph(14, 10),
   };
+  markShared(SHARED.halo);
   return SHARED;
 }
 
@@ -237,7 +245,7 @@ function stumpGeo() {
     whites: merge(eyes.whites),
     brows, mouth, arm, leg,
   };
-  return TYPE_CACHE.stump;
+  return markShared(TYPE_CACHE.stump);
 }
 
 function buildStump(body, eyeMat) {
@@ -385,7 +393,7 @@ function crabGeo() {
     claw, pincer,
     legs: merge(legParts),
   };
-  return TYPE_CACHE.crab;
+  return markShared(TYPE_CACHE.crab);
 }
 
 function buildCrab(body, eyeMat) {
@@ -524,7 +532,7 @@ function snapperGeo() {
     whites: merge(eyes.whites),
     pupils: upPupils,
   };
-  return TYPE_CACHE.snapper;
+  return markShared(TYPE_CACHE.snapper);
 }
 
 function buildSnapper(body, eyeMat) {
@@ -573,7 +581,6 @@ function buildSnapper(body, eyeMat) {
       const chomp = 0.35 + 0.45 * Math.max(0, Math.sin(t * 9));
       let open = lerp(breathe, chomp, W.chase);
       if (W.biteRaw > 0) open = W.biteRaw < 0.3 ? lerp(open, 1.15, W.biteRaw / 0.3) : Math.max(0, 1.15 * (1 - (W.biteRaw - 0.3) / 0.12));
-      upper.position.z = 0;
       upper.rotation.x = -open;
     },
   };
@@ -650,7 +657,7 @@ function lavaGeo() {
     flameSide: flame(0.36, 1.35),
     flameMat: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
   };
-  return TYPE_CACHE.lavasprout;
+  return markShared(TYPE_CACHE.lavasprout);
 }
 
 function buildLava(body, eyeMat) {
@@ -810,7 +817,7 @@ function lurkerGeo() {
     core: new THREE.SphereGeometry(0.9, 12, 8),
     coreMat: new THREE.MeshBasicMaterial({ color: '#ff7ae0', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
   };
-  return TYPE_CACHE.lurker;
+  return markShared(TYPE_CACHE.lurker);
 }
 
 function buildLurker(body, eyeMat) {
@@ -822,6 +829,7 @@ function buildLurker(body, eyeMat) {
   const bellMat = new THREE.MeshStandardMaterial({ map: G.starTex, emissive: '#ffffff', emissiveMap: G.glowTex, emissiveIntensity: 0.9, roughness: 0.3 });
   // tentacles wave on the CPU (per-instance copy of the geometry) so they share the vcMat shader
   const tentGeo = G.tentacles.clone();
+  tentGeo.userData = {}; // per-instance: not shared
   tentGeo.boundingSphere = G.tentacles.boundingSphere.clone();
   tentGeo.boundingSphere.radius += 1.5;
   const tPos = tentGeo.attributes.position;
@@ -845,6 +853,11 @@ function buildLurker(body, eyeMat) {
   const eyes = new THREE.Mesh(G.eyes, eyeMat);
   torso.add(eyes);
   const tent = new THREE.Mesh(tentGeo, S.vcMat);
+  // only wave the tentacles while they are actually drawn (onBeforeRender runs after frustum culling)
+  let drawn = 2;
+  tent.onBeforeRender = () => {
+    drawn = 2;
+  };
   tent.castShadow = true;
   torso.add(tent);
   return {
@@ -855,7 +868,8 @@ function buildLurker(body, eyeMat) {
       const amp = 1 + W.chase * 0.5;
       const reach = W.move * 0.35 + W.chase * 0.3 - W.bite * 1.6;
       const arr = tPos.array;
-      for (let i = 0, n = tPos.count; i < n; i++) {
+      if (drawn > 0) drawn--;
+      for (let i = 0, n = drawn > 0 ? tPos.count : 0; i < n; i++) {
         const k = tk[i];
         if (k <= 0) continue;
         const a = ta[i];
@@ -864,7 +878,7 @@ function buildLurker(body, eyeMat) {
         arr[o + 1] = base[o + 1] + reach * k * k * 0.5;
         arr[o + 2] = base[o + 2] + Math.cos(t * 1.9 + k * 2.7 + a * 3.0) * 0.4 * k * amp - reach * k * k * 1.6;
       }
-      tPos.needsUpdate = true;
+      if (drawn > 0) tPos.needsUpdate = true;
       const pulse = Math.sin(t * lerp(2.2, 6, W.chase));
       float.position.y = 0.2 + Math.sin(t * 1.7) * 0.3;
       torso.scale.set(1 + pulse * 0.05 - W.bite * 0.1, 1 - pulse * 0.06 + W.bite * 0.15, 1 + pulse * 0.05 - W.bite * 0.1);

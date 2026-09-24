@@ -125,7 +125,8 @@ export class GameView {
           const mut = c.kind === 'seed' ? c.mutation : c.plant.mutation;
           carry = `<div class="nt-carry">${c.kind === 'plant' ? 'STOLEN ' : ''}${mutationTag(mut)} <b style="color:${rarityColor(PLANT[sid].rarity)}">${esc(PLANT[sid].name)}</b></div>`;
         }
-        if (tag || carry) L.set('pl' + i, { x: p.pos.x, y: p.pos.y + (c ? 9.2 : 6.6), z: p.pos.z }, tag + carry, { cls: 'nametag' + (c?.kind === 'plant' ? ' thief' : ''), maxDist: 110 });
+        const top = av.headTop.position.y * av.object3d.scale.y;
+        if (tag || carry) L.set('pl' + i, { x: p.pos.x, y: p.pos.y + top + (c ? 3.9 : 1.4), z: p.pos.z }, tag + carry, { cls: 'nametag' + (c?.kind === 'plant' ? ' thief' : ''), maxDist: 110 });
       }
     });
 
@@ -254,10 +255,12 @@ export class GameView {
     this.disposed = true;
     this.unsub.forEach((f) => f());
     this.engine.scene.remove(this.root);
+    // modules mark geometry they share across matches with userData.shared
     this.root.traverse((o) => {
-      o.geometry?.dispose?.();
+      if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose();
     });
     this.avatars.forEach((a) => a.dispose?.());
+    this.monsterViews.forEach((m) => m.dispose?.());
   }
 }
 

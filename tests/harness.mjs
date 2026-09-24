@@ -38,7 +38,7 @@ export async function openGame(page, file = 'family.html') {
 
 export async function shot(page, name) {
   const p = path.join(OUT, name.endsWith('.png') ? name : name + '.png');
-  await page.screenshot({ path: p });
+  await page.screenshot({ path: p, timeout: 180000 });
   return p;
 }
 
