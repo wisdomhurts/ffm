@@ -726,6 +726,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .ey-v b{font:var(--fdw) 18px/1 var(--fd);color:#fff;letter-spacing:.01em}
 .ey-v b.cash{color:var(--cash)}
 .ey-best b{color:var(--rc,#fff);color:color-mix(in srgb,var(--rc,#fff) 70%,#fff)}
+.ey-best b.secret{color:transparent;background:var(--rainbow);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;animation:rainbowPan 2s linear infinite}
 .ey-best em{font-style:normal;color:var(--cash);font-weight:900}
 .awards{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;width:100%}
 .award{display:flex;align-items:center;gap:9px;padding:5px 13px 5px 5px;border-radius:16px;border:2.5px solid var(--ink);background:rgba(10,15,40,.5);animation:cardIn .5s var(--d) var(--spring) both;min-width:0}
@@ -829,9 +830,8 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .tut-copy b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tut-arrow{width:28px;height:28px;padding:4px}
   .tut-text{font-size:11.5px}
-  .tut.yield{display:none}
   .hud-top{top:calc(var(--st) + 164px);width:calc(100% - 24px)}
-  .hud:has(.tut:not(.gone):not(.hidden):not(.wait):not(.yield)) .hud-top{top:calc(var(--st) + 214px)}
+  .hud:not(.squeeze):has(.tut:not(.gone):not(.hidden):not(.wait)) .hud-top{top:calc(var(--st) + 214px)}
   .alerts .alert:nth-child(n+3){display:none}
   .center-moment{top:54%}
   .is-touch .hud-bottom .hotbar{margin-top:186px}
@@ -1032,13 +1032,13 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .end-sub{font-size:13px;padding:3px 12px 3px 3px}
   .end-top.win .end-sub{padding:4px 12px}
   .es-ava{--s:22px}
-  .end-card{width:min(860px,100%);display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"chips chips" "you act" "aw aw";align-items:center;column-gap:12px;row-gap:5px;padding:6px 10px 7px;border-radius:18px}
+  .end-card{width:min(860px,100%);display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"chips chips" "you act" "aw act";align-items:center;column-gap:12px;row-gap:4px;padding:6px 10px 7px;border-radius:18px}
   .end-chips{grid-area:chips}
   .end-you{grid-area:you;justify-content:flex-start}
   .awards{grid-area:aw}
+  .end-you{align-self:end}
   .end-actions{grid-area:act;flex-wrap:nowrap;gap:8px}
   .end-chip.me .ec-name::after{content:none}
-  .aw-name{display:none}
   .end-chips{flex-wrap:nowrap;gap:6px}
   .end-chip{gap:6px;padding:3px 10px 3px 3px}
   .ec-rank{width:20px;height:20px;font-size:13px}
@@ -1047,15 +1047,14 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .ec-name{font-size:14px}
   .ec-val{font-size:12px}
   .end-you{font-size:12px;gap:3px 12px}
-  .ey-k{padding:3px 7px;font-size:10px}
+  .ey-k{padding:3px 7px;font-size:11px}
   .ey-v b{font-size:15px}
-  .awards{flex-wrap:nowrap;gap:6px}
   .award{gap:6px;padding:3px 9px 3px 3px;border-radius:13px}
   .aw-ava{--s:26px;border-width:2px}
   .aw-ic{width:16px;height:16px;padding:2px;right:-5px;bottom:-4px}
-  .aw-title{font-size:12px}
-  .aw-name{font-size:10.5px}
-  .aw-stat{display:none}
+  .aw-title{font-size:13px}
+  .aw-name{font-size:11.5px}
+  .ey-net{display:none}
   .end-actions .btn-lg{min-height:44px;font-size:16px;padding:7px 14px 9px;border-radius:14px}
   .pause-panel{width:min(560px,100%)}
   .pause-btns{display:grid;grid-template-columns:1fr 1fr}
@@ -1087,7 +1086,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   /* the Showdown board is a row taller */
   .hud:has(.board.showdown) .tut{top:calc(var(--st) + 162px)}
   .hud:has(.board.showdown) .hud-top{top:calc(var(--st) + 176px)}
-  .hud:has(.board.showdown):has(.tut:not(.gone):not(.hidden):not(.wait):not(.yield)) .hud-top{top:calc(var(--st) + 226px)}
+  .hud:not(.squeeze):has(.board.showdown):has(.tut:not(.gone):not(.hidden):not(.wait)) .hud-top{top:calc(var(--st) + 226px)}
   .hud:has(.carry.show) .alerts .alert:nth-child(n+2){display:none}
   .carry.full .cp-l2{font-size:14px}
   /* next goal: a compact two-line chip under the cash ("Lv 8 $6.21K" / "-> Tanglemire"), so long biome
@@ -1213,20 +1212,23 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .ey-net,.ey-bl{display:none}
   .ey-k{padding:3px 7px;font-size:11px}
   .ey-v b{font-size:15px}
-  /* awards: a one-line ticker (menus.js rotates .on); tap it to see the next one */
-  .awards{display:grid;grid-template-areas:"aw";justify-items:center;align-items:center;cursor:pointer}
-  .award{grid-area:aw;gap:6px;padding:3px 10px 3px 3px;border-radius:13px;animation:none;opacity:0;visibility:hidden;transform:translateY(8px) scale(.94);
-    transition:opacity .3s,transform .35s var(--spring),visibility 0s .35s}
-  .award.on{opacity:1;visibility:visible;transform:none;transition:opacity .3s,transform .35s var(--spring)}
+  .award{gap:6px;padding:3px 10px 3px 3px;border-radius:13px}
   .aw-ava{--s:26px;border-width:2px}
   .aw-ic{width:16px;height:16px;padding:2px;right:-5px;bottom:-4px}
-  .aw-copy{flex-direction:row;align-items:baseline;gap:6px}
   .aw-title{font-size:14px}
   .aw-name{font-size:12px}
   .end-actions{flex-wrap:nowrap;gap:8px;width:100%}
   .end-actions .btn{flex:1 1 0;min-width:0}
   .end-actions .btn-lg{min-height:46px;font-size:18px;padding:8px 10px 10px;border-radius:16px}
 }
+/* short screens: the Showdown awards become a one-line ticker (menus.js rotates .on; tap for the next) */
+@media (max-width:640px) and (max-height:760px) and (orientation:portrait),(max-height:500px) and (orientation:landscape){
+  .awards{display:grid;grid-template-areas:"ticker";justify-items:center;align-items:center;cursor:pointer}
+  .award{grid-area:ticker;animation:none;opacity:0;visibility:hidden;transform:translateY(8px) scale(.94);transition:opacity .3s,transform .35s var(--spring),visibility 0s .35s}
+  .award.on{opacity:1;visibility:visible;transform:none;transition:opacity .3s,transform .35s var(--spring)}
+  .aw-copy{flex-direction:row;align-items:baseline;gap:6px}
+}
+@media (max-height:500px) and (orientation:landscape){.awards{justify-items:start}}
 /* portrait phones: Settings / Photo Booth / How to Play as three equal tiles (always one row) */
 @media (max-width:640px) and (orientation:portrait){
   .title-small{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;max-width:420px}
@@ -1249,6 +1251,19 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 @media (max-width:640px) and (max-height:400px) and (orientation:landscape){
   .meter{top:calc(var(--st) + 200px)}
 }
+/* 568x320: a slimmer hotbar so it clears the Bonk button */
+@media (max-width:600px) and (max-height:400px) and (orientation:landscape){
+  .hud-bottom{min-width:0;width:calc(100% - 300px)}
+  .slot,.is-touch .slot{--sz:44px}
+  .hb-ic{width:30px;height:30px}
+}
+
+/* a banner or the tutorial card would cover the prompt / carry pill (hud.js): the card steps aside (in
+   portrait the banners sit under it, so they move up); still too tight: banners keep their first line;
+   tiny screens: the banners wait */
+.hud.squeeze .tut{display:none}
+.hud.squeeze2 .alert small{display:none}
+.hud.squeeze3 .alerts{visibility:hidden}
 
 /* ------------------------------------------------------------ keyframes */
 @keyframes fadeIn{from{opacity:0}}

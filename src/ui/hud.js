@@ -79,30 +79,44 @@ export function createHUD(app) {
   parts.push(createKeyHints(app, root));
   parts.push(createMatchClock(app, alerts));
 
-  // On short phones the banners sit under the tutorial card, right above the prompt / carry pills. While a
-  // banner would cover a pill, the card steps aside (.yield) so the banner moves up; it comes back once the
-  // banner or the pill is gone.
+  // Small phones: banners (and the tutorial card) must never cover the prompt / carry pills. While one would,
+  // the HUD squeezes: level 1 moves the tutorial card aside (in portrait the banners sit under it, so they
+  // move up), level 2 drops the banners' second line, level 3 (tiny screens) hides the banners until the
+  // pill is gone (the pills carry the urgent news anyway). It relaxes once the banners (or pills) are gone.
+  // Boxes come from offsets, not getBoundingClientRect, so slide-in animations can't hide a clash.
   const tutEl = root.querySelector('.tut');
-  let yielding = false;
-  function yieldTutorial() {
-    if (!tutEl) return;
-    const c = tutEl.classList;
-    let on = false;
-    if (!c.contains('gone') && !c.contains('hidden') && !c.contains('wait')) {
-      let pillTop = Infinity;
-      for (const p of bottom.querySelectorAll('.prompt.show, .carry.show')) pillTop = Math.min(pillTop, p.getBoundingClientRect().top);
-      if (pillTop < Infinity) {
-        let alertBottom = -Infinity;
-        for (const a of top.querySelectorAll('.alert:not(.out)')) {
-          const r = a.getBoundingClientRect();
-          if (r.height) alertBottom = Math.max(alertBottom, r.bottom);
-        }
-        on = alertBottom > -Infinity && (yielding || alertBottom > pillTop - 6);
+  let squeeze = 0;
+  let tutRect = null; // the card's last box while it was on screen
+  const layoutBox = (el, hr) => ({ l: hr.left + el.offsetLeft, t: hr.top + el.offsetTop, r: hr.left + el.offsetLeft + el.offsetWidth, b: hr.top + el.offsetTop + el.offsetHeight });
+  const hits = (a, b, pad = 0) => a.l < b.r && a.r > b.l && a.t < b.b + pad && a.b > b.t - pad;
+  function unclutter() {
+    const shown = [...bottom.querySelectorAll('.prompt.show, .carry.show')].filter((p) => p.offsetParent);
+    let level = 0;
+    if (shown.length) {
+      const br = bottom.getBoundingClientRect();
+      const pills = shown.map((p) => layoutBox(p, br));
+      const c = tutEl?.classList;
+      const tutOn = !!c && !c.contains('gone') && !c.contains('hidden') && !c.contains('wait');
+      if (tutOn && tutEl.offsetParent) {
+        const r = tutEl.getBoundingClientRect();
+        tutRect = { l: r.left, t: r.top, r: r.right, b: r.bottom };
       }
+      const tr = top.getBoundingClientRect();
+      const banners = [];
+      for (const a of top.querySelectorAll('.alert:not(.out)')) if (a.offsetParent) banners.push(layoutBox(a, tr));
+      const bannerClash = banners.some((a) => pills.some((p) => hits(a, p, 6)));
+      const tutClash = tutOn && !!tutRect && pills.some((p) => hits(tutRect, p));
+      // step up one level per check while they clash (level 1 only helps with the card on screen), hold
+      // the level while banners stay up
+      if (bannerClash) level = Math.min(3, Math.max(squeeze + 1, tutOn ? 1 : 2));
+      else if (banners.length && squeeze) level = squeeze;
+      else level = tutClash ? 1 : 0;
     }
-    if (on !== yielding) {
-      yielding = on;
-      c.toggle('yield', on);
+    if (level !== squeeze) {
+      squeeze = level;
+      root.classList.toggle('squeeze', level >= 1);
+      root.classList.toggle('squeeze2', level >= 2);
+      root.classList.toggle('squeeze3', level >= 3);
     }
   }
 
@@ -127,7 +141,7 @@ export function createHUD(app) {
         let danger = game.gardens[me.slot].planters.some((pl) => pl.stealer != null);
         if (!danger) danger = game.players.some((p) => p !== me && p.carrying?.kind === 'plant' && p.carrying.fromSlot === me.slot);
         toggle(vignette, 'on', danger && app.state === 'playing');
-        yieldTutorial();
+        unclutter();
       }
     },
     dispose() {
