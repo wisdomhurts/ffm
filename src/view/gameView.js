@@ -82,6 +82,8 @@ export class GameView {
     const now = g.time;
     const L = this.labels;
     const human = g.human;
+    // labels are sized by distance to the player (or the camera in attract mode)
+    const focus = human ? human.pos : camera.position;
 
     // players
     g.players.forEach((p, i) => {
@@ -162,9 +164,20 @@ export class GameView {
           const body = grown
             ? `<div class="pl-inc">$${fmt(inc)}/s</div>`
             : `<div class="pl-bar"><i style="width:${(p01 * 100).toFixed(0)}%"></i></div><div class="pl-time">${Math.ceil(plant.growLeft)}s</div>`;
-          L.set('pt' + k, { x: pl.x, y: 6.4, z: pl.z },
-            `${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${pl.stealer != null ? '<div class="pl-steal">BEING STOLEN!</div>' : ''}`,
-            { cls: 'plantlbl' + (grown ? ' grown' : ''), maxDist: 55 });
+          // Level of detail: full card close to the player, a compact income chip further away.
+          const fd = Math.hypot(pl.x - focus.x, pl.z - focus.z);
+          const labelY = 1.2 + Math.max(4.4, rec.view.topY || 0) + 1.0;
+          const stealing = pl.stealer != null ? '<div class="pl-steal">BEING STOLEN!</div>' : '';
+          if (fd < 12 || stealing) {
+            L.set('pt' + k, { x: pl.x, y: labelY, z: pl.z },
+              `${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${stealing}`,
+              { cls: 'plantlbl' + (grown ? ' grown' : ''), maxDist: 70 });
+          } else if (fd < 46) {
+            const chip = grown
+              ? `<div class="pl-inc" style="--rc:${rarityColor(sp.rarity)}">$${fmt(inc)}/s</div>`
+              : `<div class="pl-bar"><i style="width:${(p01 * 100).toFixed(0)}%"></i></div>`;
+            L.set('pt' + k, { x: pl.x, y: labelY - 0.6, z: pl.z }, chip, { cls: 'plantlbl compact' + (grown ? ' grown' : ''), maxDist: 70 });
+          }
         } else if (!pl.unlocked && gd.owner === human) {
           L.set('pt' + k, { x: pl.x, y: 3, z: pl.z }, `<div class="pl-lock"><i class="ic-lock"></i> $${fmt(PLANTERS.unlockCost[pl.index])}</div>`, { cls: 'plantlbl locked', maxDist: 40 });
         }
@@ -192,7 +205,11 @@ export class GameView {
       rec.view.update(dt, time);
       if (pod.seed) {
         const sp = PLANT[pod.seed.speciesId];
-        L.set('pod' + i, { x: pod.x, y: 4.2, z: pod.z }, `${mutationTag(pod.seed.mutation)}<div class="pd-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}`, { cls: 'podlbl', maxDist: 45 });
+        const fd = Math.hypot(pod.x - focus.x, pod.z - focus.z);
+        const special = pod.seed.mutation !== 'normal' || pod.seed.lucky || RARITY[sp.rarity].tier >= 5;
+        if (fd < 26 || (special && fd < 60)) {
+          L.set('pod' + i, { x: pod.x, y: 4.2, z: pod.z }, `${mutationTag(pod.seed.mutation)}<div class="pd-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}`, { cls: 'podlbl' + (fd < 26 ? '' : ' compact'), maxDist: 70 });
+        }
       }
     });
 

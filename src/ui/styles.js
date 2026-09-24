@@ -55,6 +55,9 @@ html.menu-screen .labels-layer{visibility:hidden}
 .nametag.thief .nt-carry{background:linear-gradient(180deg,#ff5a73,#d81f45);animation:thief .45s ease-in-out infinite alternate}
 .nametag.thief .nt-carry b{color:#fff!important}
 .plantlbl{gap:0}
+.plantlbl.compact .pl-inc{font-size:13px;padding:1px 7px;border-radius:99px;background:rgba(16,22,58,.72);border:2px solid var(--rc,#1b2440);animation:none}
+.plantlbl.compact .pl-bar{width:40px;height:7px}
+.podlbl.compact{transform-origin:50% 100%;opacity:.9}
 .pl-name,.pd-name{font:var(--fdw) 17px/1.05 var(--fd);letter-spacing:.01em}
 .pd-name{font-size:15px}
 .rar{font:900 11px/1 var(--fb);text-transform:uppercase;letter-spacing:.09em;margin-top:2px}
