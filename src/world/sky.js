@@ -29,7 +29,7 @@ const ZONES = [
 
 const WEATHER = {
   golden: palette({ skyTop: '#f07a5a', skyHorizon: '#ffd38a', fog: '#ffcf98', fogNear: 110, fogFar: 460, hemiSky: '#ffd9a8', hemiGround: '#a8703a', hemi: 1.25, sun: '#ffb25a', sunI: 2.7, sunDir: [70, 26, -60], sunGlow: '#ff9a3a', cloud: '#ffd0a8', cloudEm: '#a0583a' }),
-  diamond: palette({ skyTop: '#040828', skyHorizon: '#26357a', fog: '#1d2858', fogNear: 90, fogFar: 420, hemiSky: '#98b4ff', hemiGround: '#1f2a55', hemi: 1.0, sun: '#d2e2ff', sunI: 1.0, stars: 1, night: 1, sunDir: [-35, 60, -45], cloud: '#34406e', cloudEm: '#10163a', exposure: 1.15 }),
+  diamond: palette({ skyTop: '#040828', skyHorizon: '#26357a', fog: '#1d2858', fogNear: 90, fogFar: 420, hemiSky: '#98b4ff', hemiGround: '#1f2a55', hemi: 0.88, sun: '#d2e2ff', sunI: 0.85, stars: 1, night: 1, sunDir: [-35, 60, -45], cloud: '#34406e', cloudEm: '#10163a', exposure: 1.15 }),
   rainbow: palette({ skyTop: '#76a8d8', skyHorizon: '#dbe8f2', fog: '#c6d6e2', fogNear: 80, fogFar: 380, hemiSky: '#e6f0ff', hemiGround: '#7d9a80', hemi: 1.25, sun: '#fff7e8', sunI: 1.7, cloud: '#e8eef5', cloudEm: '#6a7888' }),
 };
 
@@ -369,7 +369,7 @@ export function createAmbience(engine, quality, layout) {
   function zoneBlend(z) {
     zoneW.fill(0);
     // boundaries between zone k-1 and k at B0 + (k-1)*BL
-    let idx = z < B0 ? 0 : Math.min(6, 1 + Math.floor((z - B0) / BL));
+    const idx = z < B0 ? 0 : Math.min(6, 1 + Math.floor((z - B0) / BL));
     for (let k = 1; k <= 6; k++) {
       const b = B0 + (k - 1) * BL;
       if (Math.abs(z - b) < T) {
@@ -382,6 +382,13 @@ export function createAmbience(engine, quality, layout) {
     zoneW[idx] = 1;
     return lerpPalette(tmp, ZONES[idx], ZONES[idx], 0);
   }
+
+  let camPos = null;
+  const setFx = (p, o) => {
+    p.material.uniforms.uOpacity.value = o;
+    p.visible = o > 0.01;
+    if (p.visible) p.material.uniforms.uCam.value.copy(camPos);
+  };
 
   const api = {
     root,
@@ -446,11 +453,7 @@ export function createAmbience(engine, quality, layout) {
       clouds.update(t, cp.x, cp.z);
 
       // particles
-      const setFx = (p, o) => {
-        p.material.uniforms.uOpacity.value = o;
-        p.visible = o > 0.01;
-        if (p.visible) p.material.uniforms.uCam.value.copy(cp);
-      };
+      camPos = cp;
       const scale = engine.renderer.domElement.height * 0.83;
       for (const k in fx) fx[k].material.uniforms.uScale.value = scale;
       setFx(fx.pollen, (zoneW[0] * 0.5 + zoneW[1]) * (1 - weather.rainbow));
