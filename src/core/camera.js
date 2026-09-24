@@ -63,10 +63,11 @@ export class FollowCamera {
       if (z) this.distance = Math.max(this.minDist, Math.min(this.maxDist, this.distance * (1 + z * 0.1)));
     }
     // Gentle auto-follow: after a moment without manual orbit, drift behind the running player.
+    // Only while the player pushes forward: following a held strafe/diagonal would make them run in circles.
     if (settings.autoRotate && moving && this.time - this.lastManual > 1.4) {
+      const fwd = input ? input.axis().y : 0;
       const d = Math.atan2(Math.sin(playerYaw - this.yaw), Math.cos(playerYaw - this.yaw));
-      // don't swing around when running towards the camera
-      if (Math.abs(d) < 2.2) this.yaw += d * Math.min(1, dt * 1.6);
+      if (fwd > 0.2 && Math.abs(d) < 1.0) this.yaw += d * Math.min(1, dt * 0.8) * fwd;
     }
     this.target.set(focus.x, focus.y + 4.2, focus.z);
     if (this.smoothTarget.lengthSq() === 0) this.smoothTarget.copy(this.target);

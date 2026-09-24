@@ -281,7 +281,9 @@ export class Game {
       p.yaw = it.aimYaw;
     }
     if (it.emote === 'celebrate' && this.time >= p.celebrateUntil) p.celebrateUntil = this.time + 1.5;
-    if (it.jump && p.onGround && !stunned) {
+    if (it.jump) p._jumpQ = this.time + 0.12; // buffer: a press just before landing still counts
+    if (p._jumpQ > this.time && p.onGround && !stunned) {
+      p._jumpQ = 0;
       p.vel.y = WORLD.jumpVelocity;
       p.onGround = false;
       bus.emit('player:jump', { player: p });
@@ -386,7 +388,11 @@ export class Game {
       }
     }
     // shops (human-facing prompts; bots call the buy methods directly)
-    if (swapping) return best;
+    if (swapping) {
+      // nothing to sell or unlock: let them put the seed down instead of carrying it forever
+      if (!best) best = { key: 'drop', verb: 'Drop', label: 'Seed (garden full)', hold: 0.4, action: () => this.dropCarried(p, null, 'drop') };
+      return best;
+    }
     const sh = LAYOUT.shops;
     if (dist2(pos, sh.gear) < sh.gear.r ** 2) consider(dist2(pos, sh.gear) + 1, { key: 'shop:gear', verb: 'Open', label: 'Gear Shop', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'gear' }) });
     if (dist2(pos, sh.speed) < sh.speed.r ** 2) {
@@ -535,7 +541,10 @@ export class Game {
   _handleAutoPlant(p) {
     if (!p.carrying) return;
     const g = this.gardens[p.slot];
-    if (!gardenContains(g.L, p.pos.x, p.pos.z, 1)) return;
+    if (!gardenContains(g.L, p.pos.x, p.pos.z, 1)) {
+      p._fullWarned = false;
+      return;
+    }
     let best = null;
     let bd = Infinity;
     for (const pl of g.planters) {
@@ -549,8 +558,8 @@ export class Game {
     const c = p.carrying;
     if (c.kind === 'seed') {
       if (!best) {
-        if (this.time > (p._fullWarnAt || 0)) {
-          p._fullWarnAt = this.time + 4;
+        if (!p._fullWarned) {
+          p._fullWarned = true; // once per visit
           bus.emit('garden:full', { player: p });
         }
         return;
@@ -584,6 +593,10 @@ export class Game {
   _handleBonk(p) {
     const it = p.intent;
     const now = this.time;
+    if (it.bonk && p.carrying && now >= (p._blockedAt || 0)) {
+      p._blockedAt = now + 1.2;
+      bus.emit('bonk:blocked', { player: p }); // hands full: the HUD tells you to run
+    }
     if (!it.bonk || now < p.stunUntil || now < p.bonkReadyAt || p.carrying) return;
     p.bonkReadyAt = now + PLAYER.bonk.cooldown;
     p.swingStart = now;
@@ -697,10 +710,10 @@ export class Game {
           vx: fx * def.speed + p.vel.x * 0.3, vy: 16, vz: fz * def.speed + p.vel.z * 0.3, born: now });
         break;
       case 'coil':
-        p.coilUntil = now + def.duration;
+        p.coilUntil = Math.max(now, p.coilUntil) + def.duration; // stacking extends the timer
         break;
       case 'cloak':
-        p.cloakUntil = now + def.duration;
+        p.cloakUntil = Math.max(now, p.cloakUntil) + def.duration;
         break;
       case 'bucket': {
         const g = this.gardens[p.slot];
@@ -738,7 +751,7 @@ export class Game {
       if (!pop) {
         for (const q of this.players) {
           if (q.slot === b.owner) continue;
-          if ((q.pos.x - b.x) ** 2 + (q.pos.z - b.z) ** 2 < 2.2 ** 2 && b.y > q.pos.y && b.y < q.pos.y + 6) {
+          if ((q.pos.x - b.x) ** 2 + (q.pos.z - b.z) ** 2 < 2.4 ** 2 && b.y > q.pos.y - 0.5 && b.y < q.pos.y + WORLD.playerHeight + 2.5) {
             pop = true;
             break;
           }
