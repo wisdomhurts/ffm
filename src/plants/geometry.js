@@ -4,7 +4,7 @@
 // material are merged into ONE geometry, so a whole plant is typically 1-4 draw calls.
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { col, recolor, vivid, plantMat, FACE } from './materials.js';
+import { col, recolor, vivid, plantMat, plantQuality, FACE } from './materials.js';
 
 const TAU = Math.PI * 2;
 const geoCache = new Map();
@@ -408,10 +408,12 @@ export class Template {
     for (const g of groups) for (const m of g.meshes) this.tris += m.geometry.attributes.position.count / 3;
   }
 
-  /** Cheap instance: new Object3Ds, shared geometry + materials. Returns {root, parts:{name:Object3D}, list:[...]} */
+  /** Cheap instance: new Object3Ds, shared geometry + materials. Returns {root, parts:{name:Object3D}, dispose()} */
   instantiate() {
     const root = new THREE.Group();
     const parts = {};
+    // Only plant bodies cast shadows, and only when the renderer draws shadows at all.
+    const shadows = plantQuality() !== 'low';
     for (const g of this.groups) {
       const node = new THREE.Group();
       node.name = g.name;
@@ -422,7 +424,7 @@ export class Template {
       node.userData.yaw = g.yaw;
       for (const m of g.meshes) {
         const mesh = new THREE.Mesh(m.geometry, m.material);
-        mesh.castShadow = m.shadow;
+        mesh.castShadow = m.shadow && shadows;
         mesh.receiveShadow = false;
         mesh.renderOrder = m.renderOrder;
         mesh.matrixAutoUpdate = false;
@@ -431,7 +433,7 @@ export class Template {
       root.add(node);
       parts[g.name] = node;
     }
-    return { root, parts };
+    return { root, parts, dispose() {} };
   }
 }
 

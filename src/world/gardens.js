@@ -2,7 +2,7 @@
 // beams, planter boxes (crated when locked), COLLECT / LOCK pads, a growing cash pile, owner billboard.
 import * as THREE from 'three';
 import { CHARACTERS, PLANTERS } from '../config.js';
-import { Merger, makeRand, makeCanvas, canvasTexture, drawTexture, chunkyText, roundRect, uTime, withColors, signMaterial, mergedGeometry } from './kit.js';
+import { Merger, makeRand, makeCanvas, canvasTexture, drawTexture, chunkyText, roundRect, uTime, withColors, signMaterial, mergedGeometry, onDisplayFont } from './kit.js';
 import { lawnTexture, soilTexture, collectTexture, lockTexture } from './textures.js';
 import { bush, flower } from './props.js';
 
@@ -122,6 +122,26 @@ function padlockGeometry() {
   return m.buildGeometry();
 }
 
+// Coins scattered around the cash pallet, in pallet space: u points away from the COLLECT pad, z along the
+// fence. [u, z, stacked on an earlier coin]. Spots on the pallet (|u| < 1.8, |z| < 1.62) rest on its deck;
+// the rest lie flat on the lawn, clear of the pad.
+const COIN_SPOTS = [
+  [1.55, 0.35], [2.35, -0.55], [-1.55, -0.85], [0.55, 2.1], [1.55, -0.95], [2.25, 1.2], [-0.35, -2.1], [1.55, 0.35, 1], [2.8, 0.35],
+  [-1.55, 0.45], [1.25, -2.15], [1.55, 1.2], [-0.9, 2.05], [2.55, -1.75], [1.55, -0.95, 1], [1.95, 2.2], [-1.55, -0.85, 1], [0.2, -2.5],
+];
+const PALLET = { hx: 1.8, hz: 1.62, top: 0.3 };
+
+function coinSlots(r) {
+  return COIN_SPOTS.slice(0, MAX_COINS).map(([u, z, stacked]) => {
+    const onPallet = Math.abs(u) < PALLET.hx && Math.abs(z) < PALLET.hz;
+    if (!onPallet) return { u, z, y: 0.095, rx: 0, rz: 0 };
+    const rx = r.range(-0.1, 0.1), rz = r.range(-0.1, 0.1);
+    // a tilted disc (radius 0.34, half-thickness 0.05) resting on the deck
+    const y = PALLET.top + 0.34 * Math.sin(Math.hypot(rx, rz)) + 0.05 + (stacked ? 0.1 : 0);
+    return { u, z, y, rx, rz };
+  });
+}
+
 function cashSlots(r) {
   const slots = [];
   const layers = [[3, 4], [3, 3], [2, 3], [2, 2], [1, 2], [1, 1], [1, 1]];
@@ -130,7 +150,7 @@ function cashSlots(r) {
       for (let iz = 0; iz < cz; iz++) {
         slots.push({
           x: (ix - (cx - 1) / 2) * 1.02 + r.range(-0.06, 0.06),
-          y: 0.35 + li * 0.44,
+          y: 0.52 + li * 0.44,
           z: (iz - (cz - 1) / 2) * 0.58 + r.range(-0.05, 0.05),
           ry: r.range(-0.12, 0.12) + (li === 6 ? 0.6 : 0),
         });
@@ -182,11 +202,7 @@ export function buildGardens(ctx) {
   for (let i = 0; i < brickMesh.count; i++) brickMesh.setMatrixAt(i, zero);
   for (let i = 0; i < coinMesh.count; i++) coinMesh.setMatrixAt(i, zero);
   const slots = cashSlots(r);
-  const coinSlots = Array.from({ length: MAX_COINS }, (_, i) => {
-    const a = i * 2.4;
-    const rad = 1.9 + (i % 3) * 0.25;
-    return { x: Math.cos(a) * rad, z: Math.sin(a) * rad * 0.85, y: 0.08 + (i % 4 === 3 ? 0.1 : 0), rx: r.range(-0.3, 0.3), rz: r.range(-0.3, 0.3) };
-  });
+  const coins = coinSlots(r);
 
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
   const apis = [];
@@ -224,7 +240,7 @@ export function buildGardens(ctx) {
         bambooXf.push({ x: ax + (bx - ax) * t + outward[0] * r.range(-0.04, 0.04), z: az + (bz - az) * t + outward[1] * r.range(-0.04, 0.04), h, r: 0.28, c: r() });
       }
       // lashing rails on both faces
-      for (const y of [1.5, 4.5]) {
+      for (const y of [1.55, 4.5]) {
         for (const s of [-1, 1]) {
           wood.box((ax + bx) / 2 + outward[0] * s * 0.33, y, (az + bz) / 2 + outward[1] * s * 0.33, Math.abs(dx) * len + Math.abs(outward[0]) * 0.14, 0.32, Math.abs(dz) * len + Math.abs(outward[1]) * 0.14, '#7a5230', { ao: 0 });
         }
@@ -266,7 +282,8 @@ export function buildGardens(ctx) {
         wood.box(GX, y, pz + face, 0.7, 0.42, 0.3, '#3a3f4a', { ao: 0 });
         ctx.glow.box(GX, y, pz + face * 1.22, 0.36, 0.22, 0.06, '#ff3a3a', { ao: 0 });
       }
-      ctx.colliders.push({ minX: GX - 0.75, maxX: GX + 0.75, minY: 0, maxY: 30, minZ: pz - 0.75, maxZ: pz + 0.75, tag: 'fence' });
+      // 30 tall so nobody hops over; the camera only collides with the visible post (camMaxY)
+      ctx.colliders.push({ minX: GX - 0.75, maxX: GX + 0.75, minY: 0, maxY: 30, camMaxY: tall + 0.5, minZ: pz - 0.75, maxZ: pz + 0.75, tag: 'fence' });
     }
 
     // ---------------------------------------------------------- planters
@@ -327,16 +344,19 @@ export function buildGardens(ctx) {
     group.add(lTop);
     // cash pallet beside the collect pad
     const pile = { x: cp.x + inw * 4.4, z: cp.z };
-    wood.block(pile.x, 0, pile.z, 3.6, 0.3, 2.8, '#b0743e', { ao: 0.2 });
-    for (const s of [-1, 0, 1]) wood.block(pile.x, 0, pile.z + s * 1.1, 3.6, 0.12, 0.5, '#8a5a2a', { ao: 0 });
+    for (const s of [-1, 0, 1]) wood.block(pile.x, 0, pile.z + s * 1.3, 2 * PALLET.hx, 0.14, 0.45, '#8a5a2a', { ao: 0 });
+    for (let k = -2; k <= 2; k++) wood.block(pile.x, 0.14, pile.z + k * 0.655, 2 * PALLET.hx, PALLET.top - 0.14, 0.6, k % 2 ? '#b0743e' : '#c08450', { ao: 0.15 });
 
     // ---------------------------------------------------------- owner billboard (on the north gate post)
+    // The board sits clear above the north gate post's cap (top 8.9); its legs stay inside the 0.5 frame.
     const S = L.sign;
-    const boardW = 6.6, boardH = 5.6, boardY = 8.6;
+    const boardW = 6.6, boardH = 5.6, boardY = 9.6;
     const legZ2 = S.z + 2.6;
-    wood.block(GX, 0, legZ2, 0.7, boardY + 0.4, 0.7, '#8a5a34', { ao: 0.3 });
-    wood.block(GX, 8.4, gpN, 0.9, 1.0, 0.9, '#8a5a34', { ao: 0 });
+    wood.block(GX, 0, legZ2, 0.46, boardY + 0.4, 0.46, '#8a5a34', { ao: 0.3 });
+    wood.block(GX, 8.9, gpN, 0.46, boardY - 8.5, 0.46, '#8a5a34', { ao: 0 });
     acc.box(GX, boardY + boardH / 2, S.z + 0.2, 0.5, boardH + 0.5, boardW + 0.5, WH, { ao: 0.12 });
+    // camera-only blocker for the board (above head height, over the fence line)
+    ctx.colliders.push({ minX: GX - 0.3, maxX: GX + 0.3, minY: boardY - 0.25, maxY: boardY + boardH + 0.25, minZ: L.gate.maxZ, maxZ: S.z + 0.2 + boardW / 2 + 0.25, tag: 'sign' });
     const signCanvas = makeCanvas(512, 440);
     const signTex = canvasTexture(signCanvas, { clamp: true });
     const signMat = signMaterial(signTex, 0.25);
@@ -412,6 +432,10 @@ export function buildGardens(ctx) {
     let avatarKey = null;
     const redrawSign = () => drawSign(signCanvas, owner, avatarImg, signTex);
     redrawSign();
+    onDisplayFont(() => {
+      redrawSign();
+      cdShown = -1;
+    });
     const lock = { on: false, grow: 0, secs: 0 };
     const cash = { n: -1, coins: -1, bounce: 0 };
     const api = {
@@ -500,10 +524,10 @@ export function buildGardens(ctx) {
           coinMesh.setMatrixAt(id, zero);
           continue;
         }
-        const s = coinSlots[i];
+        const s = coins[i];
         _e.set(s.rx, 0, s.rz);
         _q.setFromEuler(_e);
-        _p.set(pile.x + s.x, s.y + 0.3, pile.z + s.z);
+        _p.set(pile.x + s.u * inw, s.y, pile.z + s.z);
         _s.set(1, 1, 1);
         _m.compose(_p, _q, _s);
         coinMesh.setMatrixAt(id, _m);
@@ -668,9 +692,9 @@ function drawSign(canvas, char, img, tex) {
     chunkyText(g, initials, cx, cy + 6, { size: 120, fill: '#ffffff', stroke: '#1b2440', strokeW: 16 });
   }
   g.restore();
-  // name + subtitle
-  chunkyText(g, char.name.toUpperCase(), cx, 346, { size: 78, fill: col, stroke: '#1b2440', strokeW: 15, maxW: W - 90 });
-  chunkyText(g, "'S GARDEN", cx, 398, { size: 34, fill: '#1b2440', stroke: '#ffffff', strokeW: 6, shadow: false });
+  // "DORIAN'S" / "GARDEN"
+  chunkyText(g, char.name.toUpperCase() + "'S", cx, 344, { size: 76, fill: col, stroke: '#1b2440', strokeW: 15, maxW: W - 80 });
+  chunkyText(g, 'GARDEN', cx, 400, { size: 40, fill: '#1b2440', stroke: '#ffffff', strokeW: 8, shadow: false });
   tex.needsUpdate = true;
 }
 

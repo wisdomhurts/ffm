@@ -2,7 +2,7 @@
 // biome entrance banners, distance markers and the Starbloom end cap. One group per biome for culling.
 import * as THREE from 'three';
 import { BIOMES, RARITY } from '../config.js';
-import { Merger, makeRand, drawTexture, chunkyText, roundRect, signMaterial } from './kit.js';
+import { Merger, makeRand, drawTexture, chunkyText, roundRect, signMaterial, signFont } from './kit.js';
 import { roadTexture } from './textures.js';
 import { liquidMaterial } from './water.js';
 import { roundTree, pine, rock, bush, flower, leaf, palm } from './props.js';
@@ -41,7 +41,7 @@ function warnTriangle(g, x, y, s) {
 }
 
 function pill(g, x, y, text, bg, fg, size, stroke = '#1b2440') {
-  g.font = `900 ${size}px ${'"Fredoka", "Lilita One", "Arial Black", Arial, sans-serif'}`;
+  g.font = signFont(size);
   const w = g.measureText(text).width + size * 1.2;
   roundRect(g, x - w / 2, y - size * 0.72, w, size * 1.44, size * 0.72);
   g.fillStyle = bg;
@@ -80,7 +80,7 @@ function bannerTextures(bi) {
     chunkyText(g, b.name.toUpperCase(), W / 2, 84, { size: 96, fill: '#ffffff', stroke: '#1b2440', strokeW: 18, maxW: W - 100 });
     const rarityText = (b.rarity === 'mythic' ? 'MYTHIC + SECRET' : rar.name.toUpperCase()) + ' SEEDS';
     const monster = b.monster ? `${b.monster.name.toUpperCase()}S AHEAD!` : 'SAFE ZONE - NO MONSTERS';
-    g.font = `900 40px "Fredoka", "Lilita One", "Arial Black", Arial, sans-serif`;
+    g.font = signFont(40);
     const w1 = g.measureText(rarityText).width + 48;
     const w2 = g.measureText(monster).width + 48 + (b.monster ? 50 : 0);
     const gap = 26;
@@ -106,14 +106,36 @@ function shadeHex(hex, k) {
   return '#' + c.getHexString();
 }
 
+function houseIcon(g, x, y, s, fill) {
+  g.beginPath();
+  g.moveTo(x, y - s);
+  g.lineTo(x + s, y - s * 0.05);
+  g.lineTo(x + s * 0.72, y - s * 0.05);
+  g.lineTo(x + s * 0.72, y + s * 0.8);
+  g.lineTo(x - s * 0.72, y + s * 0.8);
+  g.lineTo(x - s * 0.72, y - s * 0.05);
+  g.lineTo(x - s, y - s * 0.05);
+  g.closePath();
+  g.lineJoin = 'round';
+  g.lineWidth = s * 0.34;
+  g.strokeStyle = '#1b2440';
+  g.stroke();
+  g.fillStyle = fill;
+  g.fill();
+  g.fillStyle = '#1b2440';
+  g.fillRect(x - s * 0.2, y + s * 0.25, s * 0.4, s * 0.55);
+}
+
+// Two cells per marker: the front (distance from home, read heading out) and the back (read heading home).
 function markerAtlas(values) {
-  const cols = 4, rows = Math.ceil(values.length / cols);
+  const cols = 4, rows = Math.ceil((values.length * 2) / cols);
   const cw = 256, ch = 160;
+  const cell = (i) => [(i % cols) * cw, Math.floor(i / cols) * ch];
   const tex = drawTexture(cols * cw, rows * ch, (g, W, H) => {
     g.fillStyle = '#1b2440';
     g.fillRect(0, 0, W, H);
     values.forEach((v, i) => {
-      const x = (i % cols) * cw, y = Math.floor(i / cols) * ch;
+      let [x, y] = cell(i * 2);
       roundRect(g, x + 8, y + 8, cw - 16, ch - 16, 24);
       g.fillStyle = '#fdf6e3';
       g.fill();
@@ -122,9 +144,27 @@ function markerAtlas(values) {
       g.stroke();
       chunkyText(g, String(v), x + cw / 2, y + 68, { size: 78, fill: '#1b2440', stroke: '#ffffff', strokeW: 6, shadow: false });
       chunkyText(g, 'STUDS', x + cw / 2, y + 126, { size: 30, fill: '#e8793a', stroke: '#ffffff', strokeW: 4, shadow: false });
+      // back: "HOME" + house, with the distance still to go
+      [x, y] = cell(i * 2 + 1);
+      roundRect(g, x + 8, y + 8, cw - 16, ch - 16, 24);
+      const gr = g.createLinearGradient(0, y, 0, y + ch);
+      gr.addColorStop(0, '#3fdcc8');
+      gr.addColorStop(1, '#16a9a0');
+      g.fillStyle = gr;
+      g.fill();
+      g.lineWidth = 10;
+      g.strokeStyle = '#1b2440';
+      g.stroke();
+      houseIcon(g, x + 58, y + 54, 26, '#ffe07a');
+      chunkyText(g, 'HOME', x + 150, y + 56, { size: 56, fill: '#ffffff', stroke: '#1b2440', strokeW: 10, shadow: false, maxW: 150 });
+      chunkyText(g, `${v} STUDS`, x + cw / 2, y + 118, { size: 38, fill: '#1b2440', stroke: '#ffffff', strokeW: 6, shadow: false, maxW: cw - 44 });
     });
   }, { clamp: true });
-  return { tex, cols, rows };
+  const uvRect = (i) => {
+    const cu = i % cols, cv = Math.floor(i / cols);
+    return [cu / cols, 1 - (cv + 1) / rows, (cu + 1) / cols, 1 - cv / rows];
+  };
+  return { tex, uvRect };
 }
 
 // ---------------------------------------------------------------- cliffs
@@ -609,6 +649,10 @@ function buildGateArch(ctx, group, props, glow, z) {
   b.position.set(0, 16.2, z + 2.8);
   props.block(0, 11.7, z + 1.5, 31, 8.9, 2.4, '#1b2440', { ao: 0 });
   group.add(f, b);
+  // Camera-solid colliders: the pillars (outside the lane, |x| > 21.4) and the sign board. The board's box
+  // starts above the highest jump (feet 6.9 + height 5.2) so it never touches a player.
+  for (const s of [-1, 1]) ctx.colliders.push({ minX: s * 23 - 1.6, maxX: s * 23 + 1.6, minY: 0, maxY: 26.4, minZ: z - 0.1, maxZ: z + 3.1, tag: 'arch' });
+  ctx.colliders.push({ minX: -21.4, maxX: 21.4, minY: 12.2, maxY: 23, minZ: z + 0.3, maxZ: z + 2.7, tag: 'arch' });
 }
 
 function buildBanner(ctx, group, props, z, bi, st) {
@@ -746,23 +790,25 @@ export function buildRoad(ctx) {
   {
     const posts = new Merger();
     const pos = [], uv = [], idx = [];
+    // quad of size w x h centred at (cx, cy, cz) facing the horizontal normal (nx, nz), texture upright
+    const face = (cx, cy, cz, nx, nz, w, h, [u0, v0, u1, v1]) => {
+      const rx = (nz * w) / 2, rz = (-nx * w) / 2; // the viewer's right
+      const base = pos.length / 3;
+      pos.push(cx - rx, cy - h / 2, cz - rz, cx + rx, cy - h / 2, cz + rz, cx + rx, cy + h / 2, cz + rz, cx - rx, cy + h / 2, cz - rz);
+      uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    };
     markerPos.forEach((z, i) => {
-      const cu = i % atlas.cols, cv = Math.floor(i / atlas.cols);
-      const u0 = cu / atlas.cols, u1 = (cu + 1) / atlas.cols;
-      const v1 = 1 - cv / atlas.rows, v0 = 1 - (cv + 1) / atlas.rows;
       for (const s of [-1, 1]) {
         const x = s * 19.55;
         posts.block(x, 0, z, 0.35, 5.2, 0.35, '#6b4424', { ao: 0.2 });
-        // plaque angled towards travellers heading north
-        const ang = s * 0.5;
+        // plaque turned a little towards the road centre: front read heading out (north), back heading home
+        const ang = s * 0.15;
         const w = 2.6, h = 1.62, cx = x - s * 0.1, cy = 5.9, cz = z;
-        const dx = Math.cos(ang) * w / 2, dz = -Math.sin(ang) * w / 2;
-        // facing -z (towards arrivals) rotated slightly towards the road centre
-        const base = pos.length / 3;
-        pos.push(cx + dx, cy - h / 2, cz + dz, cx - dx, cy - h / 2, cz - dz, cx - dx, cy + h / 2, cz - dz, cx + dx, cy + h / 2, cz + dz);
-        uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
-        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-        posts.box(cx + Math.sin(ang) * 0.08, cy, cz + Math.cos(ang) * 0.08, w + 0.3, h + 0.3, 0.14, '#1b2440', { ry: ang, ao: 0 });
+        const nx = Math.sin(ang), nz = Math.cos(ang); // the back's normal (the front faces -n)
+        face(cx, cy, cz, -nx, -nz, w, h, atlas.uvRect(i * 2));
+        face(cx + nx * 0.17, cy, cz + nz * 0.17, nx, nz, w, h, atlas.uvRect(i * 2 + 1));
+        posts.box(cx + nx * 0.085, cy, cz + nz * 0.085, w + 0.3, h + 0.3, 0.14, '#1b2440', { ry: ang, ao: 0 });
       }
     });
     const g = new THREE.BufferGeometry();

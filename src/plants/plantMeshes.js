@@ -11,14 +11,19 @@
 // plantTemplate()/seedTemplate()/plantScale() are exported for tools and the dev gallery (src/plants/dev/gallery.js).
 //
 // Performance: every species/mutation/stage is baked once into a Template (merged, vertex-coloured geometry
-// per animation group + shared materials). Views are cheap Object3D trees pointing at shared data; all glow,
-// rainbow and sparkle animation runs in shaders from one shared time uniform, so update() is O(1).
+// per animation group + shared materials). Views are cheap Object3D trees pointing at shared data. Rarity and
+// mutation effects (sparkles, auras, beams, glows, halos, crowns) are NOT meshes in the view: each view owns an
+// FxRig whose items are drawn by a handful of scene-wide instanced batches (see fx.js), and all glow, rainbow and
+// sparkle animation runs in shaders from one shared time uniform, so update() is O(1).
 import * as THREE from 'three';
 import { PLANT, PLANTS, RARITY, MUTATIONS, BIOMES } from '../config.js';
 import { Builder, P } from './geometry.js';
 import { LOOKS, buildSeedling, seedBody } from './species.js';
-import { U, camPos, glowMat } from './materials.js';
-import { sparkles, aura, beam, groundGlow, rainbowRing, halo, crownTemplate } from './fx.js';
+import { U, camPos } from './materials.js';
+import { FxRig } from './fx.js';
+
+export { setPlantQuality } from './materials.js';
+export { fxStats } from './fx.js';
 import { podTemplate, potTemplate } from './pods.js';
 
 const TAU = Math.PI * 2;
@@ -141,64 +146,51 @@ function popAt(kind, t) {
   return 1 - (1 - p.from) * Math.cos(t * p.w) * Math.exp(-t * p.d);
 }
 
-/** Rarity + mutation + species effects for one plant stage. Returns {ring, crown} for animation. */
-function addPlantFx(sp, mut, tpl, stage, groundNode, fxNode) {
+/** Rarity + mutation + species effects for one plant stage, as items on the view's rig. */
+function addPlantFx(rig, sp, mut, tpl, stage, groundNode, fxNode, ph) {
   const tier = tierOf(sp);
   const rc = rarityColor(sp);
   const grown = stage === 3;
   const h = Math.max(1, tpl.height);
   const rx = Math.min(1.9, Math.max(0.8, tpl.radius * 0.85));
-  const out = { ring: null, ringSize: 0, crown: null, crownY: 0 };
   if (tier >= 1 && tier <= 2) {
-    groundNode.add(groundGlow(rc, tier === 1 ? 3.4 : 3.9, { opacity: tier === 1 ? 0.3 : 0.45 }));
+    rig.ground(groundNode, 'radial', rc, tier === 1 ? 3.4 : 3.9, tier === 1 ? 0.3 : 0.45);
   }
   if (tier >= 3 && tier <= 5) {
-    groundNode.add(groundGlow(rc, 3.4, { opacity: 0.22 }));
-    out.ringSize = tier >= 4 ? 4.5 : 4.2;
-    out.ring = groundGlow(rc, out.ringSize, { texture: 'ring', opacity: grown ? 0.85 : 0.5 });
-    groundNode.add(out.ring);
+    rig.ground(groundNode, 'radial', rc, 3.4, 0.22);
+    rig.ground(groundNode, 'ring', rc, tier >= 4 ? 4.5 : 4.2, grown ? 0.85 : 0.5, { pulse: 0.05, phase: ph });
   }
   if (tier >= 6) {
-    groundNode.add(groundGlow('#ffffff', 4.4, { texture: 'void', opacity: 0.85, dark: true }));
-    out.ringSize = 4.6;
-    out.ring = rainbowRing(out.ringSize, grown ? 1 : 0.6);
-    groundNode.add(out.ring);
+    rig.ground(groundNode, 'void', '#ffffff', 4.4, 0.85);
+    rig.ground(groundNode, 'rainbow', '#ffffff', 4.6, grown ? 1 : 0.6, { pulse: 0.05, phase: ph });
   }
-  if (!grown) return out;
+  if (!grown) return;
   if (tier === 4) {
-    fxNode.add(sparkles('twinkle', '#fff0a0', 10, rx * 1.1, h * 0.9, h * 0.2, { size: 0.45, seed: 3 }));
-    fxNode.add(sparkles('rise', rc, 6, rx, h * 1.2, 0, { size: 0.16, star: false, seed: 4 }));
+    rig.sparkles(fxNode, 'twinkle', '#fff0a0', 10, rx * 1.1, h * 0.9, h * 0.2, { size: 0.45, seed: 3 });
+    rig.sparkles(fxNode, 'rise', rc, 6, rx, h * 1.2, 0, { size: 0.16, star: false, seed: 4 });
   }
   if (tier === 5) {
-    fxNode.add(aura(rc, Math.min(1.9, rx * 1.1), h + 1.6, 0.3));
-    fxNode.add(sparkles('rise', '#ffb3c6', 16, rx * 1.1, h * 1.3, 0, { size: 0.2, star: false, seed: 5 }));
-    fxNode.add(sparkles('twinkle', '#ffffff', 6, rx, h * 0.9, h * 0.2, { size: 0.4, seed: 6 }));
+    rig.column(fxNode, rc, Math.min(1.9, rx * 1.1), h + 1.6, 0.3);
+    rig.sparkles(fxNode, 'rise', '#ffb3c6', 16, rx * 1.1, h * 1.3, 0, { size: 0.2, star: false, seed: 5 });
+    rig.sparkles(fxNode, 'twinkle', '#ffffff', 6, rx, h * 0.9, h * 0.2, { size: 0.4, seed: 6 });
   }
   if (tier >= 6) {
-    fxNode.add(aura('rainbow', Math.min(2.0, rx * 1.15), h + 2, 0.35));
-    fxNode.add(sparkles('orbit', 'rainbow', 14, rx * 1.15, h * 0.9, h * 0.15, { size: 0.36, seed: 7 }));
-    fxNode.add(sparkles('rise', '#1a0b2e', 12, rx * 1.1, h * 1.2, 0, { size: 0.3, star: false, dark: true, intensity: 1.3, seed: 8 }));
-    const crown = crownTemplate().instantiate().root;
-    crown.scale.setScalar(1.3);
-    out.crownY = h + 0.55;
-    crown.position.y = out.crownY;
-    fxNode.add(crown);
-    out.crown = crown;
+    rig.column(fxNode, 'rainbow', Math.min(2.0, rx * 1.15), h + 2, 0.35);
+    rig.sparkles(fxNode, 'orbit', 'rainbow', 14, rx * 1.15, h * 0.9, h * 0.15, { size: 0.36, seed: 7 });
+    rig.sparkles(fxNode, 'rise', '#1a0b2e', 12, rx * 1.1, h * 1.2, 0, { size: 0.3, star: false, dark: true, intensity: 1.3, seed: 8, fine: true });
+    rig.crown(fxNode, h + 0.55, 1.3, { bob: 0.12, bobSpeed: 1.6, spin: 0.9, phase: ph });
   }
   if (MUT_FX[mut]) {
-    if (mut === 'rainbow') fxNode.add(sparkles('orbit', 'rainbow', 9, rx * 1.05, h * 0.8, h * 0.15, { size: 0.26, star: false, seed: 9 }));
-    else fxNode.add(sparkles('twinkle', MUT_FX[mut], 9, rx * 0.9, h * 0.85, h * 0.12, { size: 0.55, seed: mut === 'gold' ? 10 : 11 }));
+    if (mut === 'rainbow') rig.sparkles(fxNode, 'orbit', 'rainbow', 9, rx * 1.05, h * 0.8, h * 0.15, { size: 0.26, star: false, seed: 9 });
+    else rig.sparkles(fxNode, 'twinkle', MUT_FX[mut], 9, rx * 0.9, h * 0.85, h * 0.12, { size: 0.55, seed: mut === 'gold' ? 10 : 11 });
   }
   for (const f of tpl.meta.fx || []) {
     if (f.kind === 'halo') {
-      const s = halo(fxColor(f.color, mut, true), f.size, f.opacity);
-      s.position.set(f.p[0], f.p[1], f.p[2]);
-      fxNode.add(s);
+      rig.halo(fxNode, fxColor(f.color, mut, true), f.size, f.opacity, 'radial', f.p);
     } else if (f.kind === 'sparkle') {
-      fxNode.add(sparkles(f.mode, fxColor(f.color, mut, false), f.count, f.rx, f.h, f.y0 || 0, { size: f.size, star: f.star, seed: 20 }));
+      rig.sparkles(fxNode, f.mode, fxColor(f.color, mut, false), f.count, f.rx, f.h, f.y0 || 0, { size: f.size, star: f.star, seed: 20 });
     }
   }
-  return out;
 }
 
 // ------------------------------------------------------------------ planted plant
@@ -233,21 +225,23 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
   let tpl = null;
   let inst = null;
   let looks = [];
-  let fx = null;
   let growScale = 1;
   let popKind = null;
   let popT = 99;
+  const rig = new FxRig(root, () => inst?.dispose());
 
   function build(st) {
-    if (inst) body.remove(inst.root);
+    if (inst) {
+      body.remove(inst.root);
+      inst.dispose();
+    }
     tpl = plantTemplate(sp.id, mut, st);
     inst = tpl.instantiate();
     body.add(inst.root);
     looks = tpl.meta.lookAll ? [inst.root] : tpl.groups.filter((g) => g.look).map((g) => inst.parts[g.name]);
     for (const n of looks) n.rotation.y = Math.random() - 0.5;
-    fxNode.clear();
-    groundNode.clear();
-    fx = addPlantFx(sp, mut, tpl, st, groundNode, fxNode);
+    rig.clear();
+    addPlantFx(rig, sp, mut, tpl, st, groundNode, fxNode, ph);
   }
 
   return {
@@ -276,6 +270,7 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
     update(dt, t) {
       if (stage < 0) this.setGrowth(1);
       U.time.value = t;
+      rig.wake();
       if (!oriented) {
         oriented = true;
         root.updateWorldMatrix(true, false);
@@ -292,11 +287,6 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
       faceCamera(orient, looks, dt, lookOffset, 2.4, tpl.meta.lookClamp);
       if (tpl.meta.anim) tpl.meta.anim(inst.parts, t, ph);
       else if (inst.parts.head) inst.parts.head.rotation.z = Math.sin(t * 2 + ph) * 0.08;
-      if (fx.ring) fx.ring.scale.set(fx.ringSize * (1 + Math.sin(t * 2.2 + ph) * 0.05), 1, fx.ringSize * (1 + Math.sin(t * 2.2 + ph) * 0.05));
-      if (fx.crown) {
-        fx.crown.position.y = fx.crownY + Math.sin(t * 1.6 + ph) * 0.12;
-        fx.crown.rotation.y = t * 0.9;
-      }
     },
   };
 }
@@ -318,19 +308,18 @@ export function createSeedView(speciesId, mutation = 'normal') {
   const tpl = seedTemplate(sp.id, mut);
   const inst = tpl.instantiate();
   spin.add(inst.root);
+  const rig = new FxRig(root, () => inst.dispose());
   const cy = 0.56 * SEED_SIZE;
-  const h = halo(rc === 'rainbow' ? '#ffffff' : rc, SEED_HALO[tier], SEED_HALO_A[tier], 'halo');
-  h.position.y = cy;
-  root.add(h);
-  if (tier >= 4) root.add(sparkles('twinkle', tier >= 6 ? '#ffffff' : '#fff0a0', 6, 0.85, 1.5, 0.05, { size: 0.4, seed: 31 }));
-  if (tier === 5) root.add(sparkles('rise', '#ff9fb4', 7, 0.6, 2.2, 0, { size: 0.16, star: false, seed: 32 }));
+  rig.halo(root, rc === 'rainbow' ? '#ffffff' : rc, SEED_HALO[tier], SEED_HALO_A[tier], 'halo', [0, cy, 0]);
+  if (tier >= 4) rig.sparkles(root, 'twinkle', tier >= 6 ? '#ffffff' : '#fff0a0', 6, 0.85, 1.5, 0.05, { size: 0.4, seed: 31 });
+  if (tier === 5) rig.sparkles(root, 'rise', '#ff9fb4', 7, 0.6, 2.2, 0, { size: 0.16, star: false, seed: 32 });
   if (tier >= 6) {
-    root.add(sparkles('orbit', 'rainbow', 10, 0.9, 0.9, 0.2, { size: 0.28, seed: 33 }));
-    root.add(sparkles('rise', '#1a0b2e', 7, 0.6, 2.0, 0, { size: 0.26, star: false, dark: true, intensity: 1.3, seed: 34 }));
+    rig.sparkles(root, 'orbit', 'rainbow', 10, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
+    rig.sparkles(root, 'rise', '#1a0b2e', 7, 0.6, 2.0, 0, { size: 0.26, star: false, dark: true, intensity: 1.3, seed: 34 });
   }
   if (MUT_FX[mut]) {
-    if (mut === 'rainbow') root.add(sparkles('orbit', 'rainbow', 7, 0.85, 0.8, 0.25, { size: 0.22, star: false, seed: 35 }));
-    else root.add(sparkles('twinkle', MUT_FX[mut], 6, 0.55, 1.2, 0.1, { size: 0.42, seed: 36 }));
+    if (mut === 'rainbow') rig.sparkles(root, 'orbit', 'rainbow', 7, 0.85, 0.8, 0.25, { size: 0.22, star: false, seed: 35 });
+    else rig.sparkles(root, 'twinkle', MUT_FX[mut], 6, 0.55, 1.2, 0.1, { size: 0.42, seed: 36 });
   }
   const ph = Math.random() * 100;
   const offset = (Math.random() - 0.5) * 0.4;
@@ -343,6 +332,7 @@ export function createSeedView(speciesId, mutation = 'normal') {
     mutation: mut,
     update(dt, t) {
       U.time.value = t;
+      rig.wake();
       // face the viewer, with a playful twirl every few seconds
       const c = ((t * 0.18 + ph) % 1 + 1) % 1;
       const twirl = c < 0.12 ? (1 - Math.cos((c / 0.12) * Math.PI)) * Math.PI : 0;
@@ -373,26 +363,25 @@ export function createCarriedPlantView(speciesId, mutation = 'normal') {
   plantNode.position.y = potTemplate().meta.soilY - 0.02;
   plantNode.add(inst.root);
   wob.add(plantNode);
+  const rig = new FxRig(root, () => {
+    inst.dispose();
+    pot.dispose();
+  });
   // small rarity / mutation flourishes
-  const fxNode = new THREE.Group();
-  plantNode.add(fxNode);
+  const fxNode = plantNode;
   const h = tpl.height;
-  let crown = null;
-  if (tier >= 4) fxNode.add(sparkles('twinkle', '#fff0a0', 7, 1.4, h, h * 0.2, { size: 0.5, seed: 41 }));
-  if (tier === 5) fxNode.add(sparkles('rise', '#ffb3c6', 8, 1.2, h * 1.2, 0, { size: 0.26, star: false, seed: 42 }));
+  const ph = Math.random() * 100;
+  if (tier >= 4) rig.sparkles(fxNode, 'twinkle', '#fff0a0', 7, 1.4, h, h * 0.2, { size: 0.5, seed: 41 });
+  if (tier === 5) rig.sparkles(fxNode, 'rise', '#ffb3c6', 8, 1.2, h * 1.2, 0, { size: 0.26, star: false, seed: 42 });
   if (tier >= 6) {
-    fxNode.add(sparkles('orbit', 'rainbow', 10, 1.8, h * 0.8, h * 0.2, { size: 0.5, seed: 43 }));
-    crown = crownTemplate().instantiate().root;
-    crown.scale.setScalar(1.6);
-    crown.position.y = h + 0.6;
-    fxNode.add(crown);
+    rig.sparkles(fxNode, 'orbit', 'rainbow', 10, 1.8, h * 0.8, h * 0.2, { size: 0.5, seed: 43 });
+    rig.crown(fxNode, h + 0.6, 1.6, { bob: 0.15, bobSpeed: 2, spin: 1, phase: ph });
   }
   if (MUT_FX[mut]) {
-    if (mut === 'rainbow') fxNode.add(sparkles('orbit', 'rainbow', 8, 1.5, h * 0.8, h * 0.15, { size: 0.4, star: false, seed: 44 }));
-    else fxNode.add(sparkles('twinkle', MUT_FX[mut], 8, 1.3, h * 0.85, h * 0.1, { size: 0.7, seed: 45 }));
+    if (mut === 'rainbow') rig.sparkles(fxNode, 'orbit', 'rainbow', 8, 1.5, h * 0.8, h * 0.15, { size: 0.4, star: false, seed: 44 });
+    else rig.sparkles(fxNode, 'twinkle', MUT_FX[mut], 8, 1.3, h * 0.85, h * 0.1, { size: 0.7, seed: 45 });
   }
   const looks = tpl.meta.lookAll ? [inst.root] : tpl.groups.filter((g) => g.look).map((g) => inst.parts[g.name]);
-  const ph = Math.random() * 100;
   let popT = 0;
   return {
     object3d: root,
@@ -402,6 +391,7 @@ export function createCarriedPlantView(speciesId, mutation = 'normal') {
     mutation: mut,
     update(dt, t) {
       U.time.value = t;
+      rig.wake();
       popT += dt;
       const m = popAt('stage', popT);
       wob.scale.set(m, m, m);
@@ -409,10 +399,6 @@ export function createCarriedPlantView(speciesId, mutation = 'normal') {
       wob.rotation.x = Math.sin(t * 4.1 + ph) * 0.04;
       faceCamera(root, looks, dt, 0, 4, tpl.meta.lookClamp);
       if (tpl.meta.anim) tpl.meta.anim(inst.parts, t, ph);
-      if (crown) {
-        crown.position.y = h + 0.6 + Math.sin(t * 2 + ph) * 0.15;
-        crown.rotation.y = t;
-      }
     },
   };
 }
@@ -430,29 +416,24 @@ export function createPodView(biomeIndex = 0) {
   const anchor = new THREE.Group();
   anchor.position.y = tpl.meta.seedY;
   root.add(anchor);
-  const top = groundGlow('#ffffff', 2.4, { opacity: 0.5 });
-  top.position.y = tpl.meta.topY + 0.03;
-  top.visible = false;
-  root.add(top);
-  if (tpl.meta.halo) {
-    const hl = halo(tpl.meta.halo, 3.2, 0.35);
-    hl.position.y = tpl.meta.topY;
-    root.add(hl);
-  }
+  const rig = new FxRig(root, () => inst.dispose());
   const ph = Math.random() * 100;
+  const top = rig.ground(root, 'radial', '#ffffff', 2.4, 0.5, { y: tpl.meta.topY + 0.03, pulse: 0.08, phase: ph });
+  top.on = false;
+  if (tpl.meta.halo) rig.halo(root, tpl.meta.halo, 3.2, 0.35, 'radial', [0, tpl.meta.topY, 0]);
   let seed = null;
   let bm = null;
   return {
     object3d: root,
     setSeed(view) {
-      if (seed) anchor.remove(seed.object3d);
+      if (seed && seed !== view) anchor.remove(seed.object3d);
       if (bm) {
-        root.remove(bm);
+        rig.remove(bm);
         bm = null;
       }
       seed = view || null;
       if (!seed) {
-        top.visible = false;
+        top.on = false;
         return;
       }
       seed.object3d.position.set(0, 0, 0);
@@ -461,25 +442,20 @@ export function createPodView(biomeIndex = 0) {
       const tier = seed.tier ?? tierOf(sp);
       const mut = seed.mutation || 'normal';
       const rc = rarityColor(sp);
-      top.material = glowMat(rc === 'rainbow' ? '#ffffff' : rc, { opacity: 0.35 + tier * 0.08 });
-      top.visible = true;
+      rig.setGround(top, rc === 'rainbow' ? '#ffffff' : rc, 2.4, 0.35 + tier * 0.08);
+      top.on = true;
       // Loot beam for anything special: lucky (above this biome), mutated, mythic or secret.
       if (tier > biomeTier || tier >= 5 || mut !== 'normal') {
         const col = MUT_BEAM[mut] || rc;
-        bm = beam(col, tier >= 6 ? 1.0 : 0.8, tier >= 5 ? 22 : 16, tier >= 6 ? 0.7 : 0.55);
-        bm.position.y = tpl.meta.topY;
-        root.add(bm);
+        bm = rig.column(root, col, tier >= 6 ? 1.0 : 0.8, tier >= 5 ? 22 : 16, tier >= 6 ? 0.7 : 0.55, { beam: true, y: tpl.meta.topY });
       }
     },
     update(dt, t) {
       U.time.value = t;
+      rig.wake();
       anchor.position.y = tpl.meta.seedY + Math.sin(t * 2.2 + ph) * 0.18;
       if (seed) seed.update(dt, t);
       if (inst.parts.crystals) inst.parts.crystals.rotation.y = t * 0.5 + ph;
-      if (top.visible) {
-        const k = 2.4 * (1 + Math.sin(t * 2.2 + ph) * 0.08);
-        top.scale.set(k, 1, k);
-      }
     },
   };
 }

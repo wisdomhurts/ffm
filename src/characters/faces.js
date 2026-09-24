@@ -44,7 +44,7 @@ export async function getFace(id) {
 // (a little bigger so it reads from the gameplay camera, eyes just under the middle).
 export const FACE_LAYOUT = {
   flat: { scale: 1, eyeY: 0.42 },
-  head: { scale: 1.16, eyeY: 0.48 },
+  head: { scale: 1.1, eyeY: 0.38 },
 };
 
 // The feathered face region, in photo coordinates (an egg: narrower at the chin).

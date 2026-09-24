@@ -11,9 +11,11 @@
 //     planters: [{ setUnlocked(bool) }],
 //   }]
 // }
-// Extras: root (THREE.Group), ambience (sky/weather controller), weather (current id).
+// Extras: root (THREE.Group), ambience (sky/weather controller), weather (current id),
+//   redrawSigns() (repaints canvas signs once the display font has loaded; called automatically).
 import * as THREE from 'three';
-import { Merger, setTextureQuality, uTime } from './kit.js';
+import { Merger, setTextureQuality, uTime, redrawSigns } from './kit.js';
+import { fontsReady } from '../ui/fonts.js';
 import { studTexture, rockDetail, grassDetail, sandDetail } from './textures.js';
 import { createAmbience } from './sky.js';
 import { buildPlaza } from './plaza.js';
@@ -74,6 +76,7 @@ export function buildWorld(engine, layout, quality = engine.quality) {
     setWeather(id) {
       ambience.setWeather(id || null);
     },
+    redrawSigns,
     update(dt, c = {}) {
       const t = c.time ?? uTime.value + dt;
       uTime.value = t;
@@ -89,12 +92,22 @@ export function buildWorld(engine, layout, quality = engine.quality) {
       const cz = cam.position.z;
       home.visible = cz < 66 + dd;
       if (home.visible) {
-        plaza.update(dt, t);
+        plaza.update(dt, t, Math.max(ambience.weather.diamond, ambience.zoneW[6]));
         gardens.update(dt, t);
         shops.update(dt, t);
       }
       road.update(dt, t, cz, dd);
     },
   };
+  // Signs are painted synchronously above; repaint them with "Lilita One" as soon as it has loaded.
+  fontsReady(4000).then(() => {
+    if (redrawSigns()) return;
+    const fonts = typeof document !== 'undefined' ? document.fonts : null;
+    if (!fonts?.addEventListener) return;
+    const retry = () => {
+      if (redrawSigns()) fonts.removeEventListener('loadingdone', retry);
+    };
+    fonts.addEventListener('loadingdone', retry);
+  });
   return api;
 }

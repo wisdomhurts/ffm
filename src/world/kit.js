@@ -306,7 +306,17 @@ export function canvasTexture(canvas, { repeat = null, srgb = true, mips = true,
 export function drawTexture(w, h, draw, opts) {
   const c = makeCanvas(w, h);
   draw(c.getContext('2d'), w, h);
-  return canvasTexture(c, opts);
+  const tex = canvasTexture(c, opts);
+  // Painted text before the display font had loaded: repaint on a fresh canvas once it has (redrawSigns).
+  if (textCanvases.has(c) && !displayFont) {
+    fontRedraws.push(() => {
+      const c2 = makeCanvas(w, h);
+      draw(c2.getContext('2d'), w, h);
+      tex.image = c2;
+      tex.needsUpdate = true;
+    });
+  }
+  return tex;
 }
 
 // Sprinkle soft blobs (tileable when wrap=true).
@@ -327,18 +337,62 @@ export function blobs(g, w, h, n, rand, { rMin = 4, rMax = 12, colors = ['rgba(0
 
 // ------------------------------------------------------------------ sign text
 
-export const SIGN_FONT = '"Fredoka", "Fredoka One", "Lilita One", "Luckiest Guy", "Baloo 2", "Arial Rounded MT Bold", "Arial Black", "Helvetica Neue", Arial, sans-serif';
+// "Lilita One" is the UI's display face, embedded as a data-URI @font-face by ui/fonts.js.
+export const SIGN_FONT = '"Lilita One", "Fredoka", "Fredoka One", "Luckiest Guy", "Baloo 2", "Arial Rounded MT Bold", "Arial Black", "Helvetica Neue", Arial, sans-serif';
+
+// Lilita One has a single (already heavy) weight: once it has loaded it is drawn at 400 so the browser does
+// not smear it with synthetic bold. Until then the system fallbacks are drawn at 900 to stay chunky.
+let displayFont = false;
+const textCanvases = new WeakSet(); // canvases chunkyText has painted on
+let fontRedraws = []; // repaint jobs for text painted before the display font loaded
+
+function checkDisplayFont() {
+  try {
+    if (typeof document !== 'undefined' && document.fonts) {
+      for (const f of document.fonts) {
+        if (f.status === 'loaded' && f.family.replace(/["']/g, '') === 'Lilita One') return (displayFont = true);
+      }
+    }
+  } catch {
+    /* FontFaceSet unsupported */
+  }
+  return (displayFont = false);
+}
+checkDisplayFont();
+
+/** Canvas font string for sign text (matches what chunkyText draws with). */
+export function signFont(size, weight = 900) {
+  return `${displayFont ? 400 : weight} ${size}px ${SIGN_FONT}`;
+}
+
+/** Queue a repaint for when the display font becomes available (for canvases not made by drawTexture). */
+export function onDisplayFont(fn) {
+  if (!displayFont) fontRedraws.push(fn);
+}
+
+/**
+ * Repaints every sign drawn with a fallback font, once "Lilita One" has loaded. Returns true when the
+ * display font is available (the queue is then emptied), false if it has not loaded (yet).
+ */
+export function redrawSigns() {
+  if (!checkDisplayFont()) return false;
+  const jobs = fontRedraws;
+  fontRedraws = [];
+  for (const fn of jobs) fn();
+  return true;
+}
 
 /** Chunky outlined game text. */
 export function chunkyText(g, text, x, y, { size = 64, fill = '#fff', stroke = '#1b2440', strokeW = size * 0.18, align = 'center', baseline = 'middle', weight = 900, maxW = 0, shadow = true, gradient = null } = {}) {
+  if (g.canvas) textCanvases.add(g.canvas);
   g.save();
   let s = size;
-  g.font = `${weight} ${s}px ${SIGN_FONT}`;
+  g.font = signFont(s, weight);
   if (maxW) {
     const w = g.measureText(text).width;
     if (w > maxW) {
       s = Math.floor(s * maxW / w);
-      g.font = `${weight} ${s}px ${SIGN_FONT}`;
+      g.font = signFont(s, weight);
       strokeW *= s / size;
     }
   }

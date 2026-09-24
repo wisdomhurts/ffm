@@ -168,10 +168,17 @@ export const EVENTS = {
 
 export const MATCH = { showdownSeconds: 480 };
 
+// Bot rubber band (read by ai/): biomeLead = how many biomes past the human's deepest seed grab the
+// bots may farm; paceCap = a bot richer than paceCap x the human's net worth eases off (0 = never);
+// practiceSteal = one slow, telegraphed steal that teaches a new player to chase and bonk
+// (after: earliest match second; unrobbedOnly: only if nobody has robbed the human yet).
 export const DIFFICULTY = {
-  chill: { name: 'Chill', botSpeedMult: 0.85, stealRate: 0.35, reaction: 0.9, bonkAccuracy: 0.5, monsterSpeedMult: 0.85, monsterAggroMult: 0.8 },
-  normal: { name: 'Normal', botSpeedMult: 1.0, stealRate: 1.0, reaction: 0.5, bonkAccuracy: 0.75, monsterSpeedMult: 1, monsterAggroMult: 1 },
-  chaos: { name: 'Chaos', botSpeedMult: 1.1, stealRate: 1.8, reaction: 0.25, bonkAccuracy: 0.92, monsterSpeedMult: 1.05, monsterAggroMult: 1.1 },
+  chill: { name: 'Chill', botSpeedMult: 0.85, stealRate: 0.35, reaction: 0.9, bonkAccuracy: 0.5, monsterSpeedMult: 0.85, monsterAggroMult: 0.8,
+    biomeLead: 0, paceCap: 0.8, practiceSteal: { after: 75, unrobbedOnly: false } },
+  normal: { name: 'Normal', botSpeedMult: 1.0, stealRate: 1.0, reaction: 0.5, bonkAccuracy: 0.75, monsterSpeedMult: 1, monsterAggroMult: 1,
+    biomeLead: 1, paceCap: 1.4, practiceSteal: { after: 240, unrobbedOnly: true } },
+  chaos: { name: 'Chaos', botSpeedMult: 1.1, stealRate: 1.8, reaction: 0.25, bonkAccuracy: 0.92, monsterSpeedMult: 1.05, monsterAggroMult: 1.1,
+    biomeLead: 99, paceCap: 0, practiceSteal: null },
 };
 
 export const CHARACTERS = [

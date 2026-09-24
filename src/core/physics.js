@@ -134,16 +134,19 @@ export class PhysicsWorld {
   }
 
   // Ray (origin o, unit dir d, length L) against boxes; returns hit distance or L.
+  // Boxes may carry `camMaxY`: the camera only collides with them up to that height (the visual top of a
+  // fence whose collider is extended upwards so nobody can hop over it).
   raycast(o, d, L) {
     let best = L;
     const minX = Math.min(o.x, o.x + d.x * L), maxX = Math.max(o.x, o.x + d.x * L);
     const minZ = Math.min(o.z, o.z + d.z * L), maxZ = Math.max(o.z, o.z + d.z * L);
     const list = this.query(minX, maxX, minZ, maxZ, this._tmp3 || (this._tmp3 = []));
     for (const b of list) {
-      // the camera may pass through low/invisible blockers (fences' invisible upper part, boundary walls)
-      if (b.tag === 'planter' || b.tag === 'fence' || b.tag === 'wall' || b.tag === 'laser' || b.tag === 'deco') continue;
+      // the camera may pass through low/invisible blockers (planters, boundary walls, lasers, small decor)
+      if (b.tag === 'planter' || b.tag === 'wall' || b.tag === 'laser' || b.tag === 'deco') continue;
+      const top = Math.min(b.maxY, b.camMaxY ?? b.maxY);
       let tmin = 0, tmax = best;
-      for (const [oa, da, mn, mx] of [[o.x, d.x, b.minX, b.maxX], [o.y, d.y, b.minY, b.maxY], [o.z, d.z, b.minZ, b.maxZ]]) {
+      for (const [oa, da, mn, mx] of [[o.x, d.x, b.minX, b.maxX], [o.y, d.y, b.minY, top], [o.z, d.z, b.minZ, b.maxZ]]) {
         if (Math.abs(da) < 1e-9) {
           if (oa < mn || oa > mx) { tmin = Infinity; break; }
         } else {

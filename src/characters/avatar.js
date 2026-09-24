@@ -20,7 +20,7 @@ const LEG_H = 2;
 const TORSO_H = 2;
 const ARM_TOP = 0.15; // shoulder pivot sits this far below the top of the arm
 const SHOULDER_Y = TORSO_H - ARM_TOP;
-const HEAD = { w: 2.2, h: 2.12, d: 1.95, r: 0.52, bulge: 0.08 };
+const HEAD = { w: 2.2, h: 2.12, d: 1.95, r: 0.4, bulge: 0.08 };
 const ADULT_SCALE = WORLD.playerHeight / (LEG_H + TORSO_H + HEAD.h);
 const KID = { scale: 0.82, head: 1.08 };
 const NOODLE_SEG = 1.5; // the noodle is 3 segments = 4.5 studs
@@ -312,11 +312,13 @@ function cachedFace(img, skin) {
   const k = img || noPhoto;
   let m = faceCache.get(k);
   if (!m) faceCache.set(k, (m = new Map()));
-  if (!m.has(skin)) {
+  const L = FACE_LAYOUT.head;
+  const key = skin + '|' + L.scale + '|' + L.eyeY;
+  if (!m.has(key)) {
     if (m.size > 4) m.clear();
-    m.set(skin, composeFaceCanvas(img, skin, 512, { layout: FACE_LAYOUT.head }));
+    m.set(key, composeFaceCanvas(img, skin, 512, { layout: L }));
   }
-  return m.get(skin);
+  return m.get(key);
 }
 
 function canvasTexture(c, aniso = 4) {

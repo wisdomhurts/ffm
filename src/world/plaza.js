@@ -1,7 +1,7 @@
 // The home island: studded baseplate, Cabo-style plaza (mosaic, spawn, paths), palms, lamps, fountain,
 // beach with rope fence and palapas, animated ocean, a pier with a panga and El Arco out at sea.
 import * as THREE from 'three';
-import { Merger, makeRand, withColors } from './kit.js';
+import { Merger, makeRand, withColors, drawTexture, trs } from './kit.js';
 import { mosaicTexture, spawnTexture, sandDetail } from './textures.js';
 import { oceanMaterial, liquidMaterial } from './water.js';
 import { palm, lamp, tikiTorch, palapa, lounger, rope, rock, bush, flower } from './props.js';
@@ -24,6 +24,7 @@ export function buildPlaza(ctx) {
   const beach = new Merger();
   const solid = (x, z, hw, hd, maxY, tag = 'deco') => ctx.colliders.push({ minX: x - hw, maxX: x + hw, minY: 0, maxY, minZ: z - hd, maxZ: z + hd, tag });
   const flames = [];
+  const lights = []; // [x, z, radius]: warm pools of light under lamps and torches at night
 
   // ---------------------------------------------------------------- baseplate + paths
   const I = ISLAND;
@@ -76,6 +77,7 @@ export function buildPlaza(ctx) {
   for (const [x, z] of [[-27, 0], [27, 0], [-27, 42], [27, 42], [-27, -42], [27, -42], [-45, -45], [45, -45]]) {
     lamp(props, glow, x, z, { light: '#fff0b8' });
     solid(x, z, 0.55, 0.55, 9);
+    lights.push([x, z, 4.4]);
   }
   // tiki torches on each garden's fence line, beside the gate (inside the fence collider)
   for (const g of layout.gardens) flames.push(tikiTorch(props, g.gate.x, g.center.z - 9.2));
@@ -83,6 +85,7 @@ export function buildPlaza(ctx) {
     flames.push(tikiTorch(props, x, z, { h: 5.4 }));
     solid(x, z, 0.35, 0.35, 6);
   }
+  for (const [x, , z] of flames) lights.push([x, z, 3.6]);
 
   // fountain (north-west strip) with a golden seed statue
   const F = { x: -46, z: 53 };
@@ -282,21 +285,37 @@ export function buildPlaza(ctx) {
   floorMesh.renderOrder = 2;
   add(floorMesh);
   add(props.build(mats.flat, { name: 'plaza-props', castShadow: quality.shadows }));
-  add(glow.build(mats.glow, { name: 'plaza-glow', receiveShadow: false }));
+  // lamp bulbs get their own (same-program) material so they can burn brighter at night
+  const bulbMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+  add(glow.build(bulbMat, { name: 'plaza-glow', receiveShadow: false }));
+  const pools = lightPools(lights);
+  group.add(pools);
   add(beach.build(mats.flat, { name: 'beach-props' }));
 
   // flickering torch flames (instanced)
   const flameGeo = new THREE.ConeGeometry(0.42, 1.5, 7).translate(0, 0.6, 0);
-  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffa630 });
+  const flameCol = new THREE.Color(0xffa630), innerCol = new THREE.Color(0xfff2a0);
+  const flameMat = new THREE.MeshBasicMaterial({ color: flameCol });
+  const innerMat = new THREE.MeshBasicMaterial({ color: innerCol });
   const flameMesh = new THREE.InstancedMesh(flameGeo, flameMat, flames.length);
-  const innerMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(0.24, 0.9, 6).translate(0, 0.4, 0), new THREE.MeshBasicMaterial({ color: 0xfff2a0 }), flames.length);
+  const innerMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(0.24, 0.9, 6).translate(0, 0.4, 0), innerMat, flames.length);
   flameMesh.name = 'flames';
   group.add(flameMesh, innerMesh);
   const fm = new THREE.Matrix4(), fq = new THREE.Quaternion(), fp = new THREE.Vector3(), fs = new THREE.Vector3(), fe = new THREE.Euler();
 
+  let lastNight = -1;
   return {
     group,
-    update(dt, t) {
+    // night: 0..1 (Diamond Night / Starbloom), lights the lamps and torches up
+    update(dt, t, night = 0) {
+      if (night !== lastNight) {
+        lastNight = night;
+        bulbMat.color.setScalar(1 + 1.6 * night);
+        flameMat.color.copy(flameCol).multiplyScalar(1 + 1.3 * night);
+        innerMat.color.copy(innerCol).multiplyScalar(1 + 1.3 * night);
+        pools.visible = night > 0.01;
+      }
+      if (pools.visible) pools.material.opacity = 0.35 * night * (0.93 + 0.07 * Math.sin(t * 9));
       for (let i = 0; i < flames.length; i++) {
         const [x, y, z] = flames[i];
         const k = 1 + Math.sin(t * 13 + i * 1.7) * 0.12 + Math.sin(t * 23 + i) * 0.08;
@@ -315,6 +334,37 @@ export function buildPlaza(ctx) {
       curtain.material.opacity = 0.38 + Math.sin(t * 6) * 0.06;
     },
   };
+}
+
+// Additive warm discs on the ground under the lamps and torches (one draw call, only shown at night).
+function lightPools(list) {
+  const tex = drawTexture(64, 64, (g, w, h) => {
+    const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    gr.addColorStop(0, '#ffffff');
+    gr.addColorStop(0.3, '#c8c8c8');
+    gr.addColorStop(0.65, '#4a4a4a');
+    gr.addColorStop(1, '#000000');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, w, h);
+  }, { srgb: false, clamp: true });
+  const m = new Merger({ uv: 'geo' });
+  const disc = new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2);
+  for (const [x, z, rad] of list) m.add(disc, trs(x, 0.14, z, rad, 1, rad), '#ffffff', { ao: 0 });
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    color: 0xffe8a0,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
+  });
+  const mesh = m.build(mat, { name: 'light-pools', receiveShadow: false });
+  mesh.renderOrder = 9;
+  mesh.visible = false;
+  return mesh;
 }
 
 // Perimeter of the island rect with outward normals; corners get quarter-circle fans.

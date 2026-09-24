@@ -142,11 +142,13 @@ function runPre(goal, bot, game, p, it, dt) {
 // ------------------------------------------------------------------ carrying something home
 
 export class ReturnGoal extends Goal {
-  constructor() {
+  /** `practice`: the practice thief strolls home at ~70% so the owner can catch up, no tricks. */
+  constructor(practice = false) {
     super('return', 1e9);
     this.sellT = 0;
     this.waitT = 0;
-    this.opts = { arrive: 0.8, key: 'home', lane: 0 };
+    this.practice = practice;
+    this.opts = { arrive: 0.8, key: 'home', lane: 0, speed: practice ? 0.7 : 1 };
   }
 
   get interruptible() {
@@ -163,7 +165,7 @@ export class ReturnGoal extends Goal {
     this.opts.lane = bot.lane;
     bot.motor.goTo(home.inside.x, home.inside.z, this.opts);
     bot.motor.update(game, p, dt, it);
-    bot.escapeKit(game, p, it);
+    if (!this.practice || p.carrying.kind !== 'plant') bot.escapeKit(game, p, it);
     return 'running';
   }
 
@@ -362,6 +364,131 @@ export class StealGoal extends Goal {
     }
 
     // steal: hold E for stealHold seconds
+    if (p.interact.key !== key) {
+      if (this.inPhase(game) > 0.5) this.setPhase('enter', game);
+      return 'running';
+    }
+    bot.motor.stop();
+    it.moveX = 0;
+    it.moveZ = 0;
+    it.interact = true;
+    it.aimYaw = yawTo(p.pos.x, p.pos.z, pl.x, pl.z);
+    if (!this.announced) {
+      this.announced = true;
+      bot.onStealStart(game, p, owner);
+    }
+    return 'running';
+  }
+}
+
+/**
+ * The practice steal (Chill, or Normal if nobody robbed the human yet): walk over in plain sight,
+ * look around at the gate and at the planter, hold the steal, then stroll home (ReturnGoal in
+ * practice mode). Never bails out when the owner comes: getting bonked is the whole point.
+ */
+export class PracticeStealGoal extends Goal {
+  constructor(vslot, index) {
+    super('practice', 1e5);
+    this.vslot = vslot;
+    this.index = index;
+    this.sig = 'practice';
+    this.walkOpts = { arrive: 2.2, key: 'pgate', speed: 0.8 };
+  }
+
+  get interruptible() {
+    return false;
+  }
+
+  begin(bot, game, p) {
+    super.begin(bot, game, p);
+    const b = getBoard(game);
+    b.practice.state = 'active';
+    b.practice.slot = p.slot;
+    // nobody else robs the human around the lesson
+    b.humanStealUntil = Math.max(b.humanStealUntil, game.time + 60);
+    b.stealClaims.set(p.slot, this.vslot);
+    this.setPhase('approach', game);
+  }
+
+  end(bot, game, p) {
+    const b = getBoard(game);
+    b.stealClaims.delete(p.slot);
+    const pr = b.practice;
+    if (pr.state !== 'active' || pr.slot !== p.slot || p.carrying) return; // carrying: the return trip owns it now
+    if (this.bonked) {
+      pr.state = 'done';
+      bot.sayPractice(game, p, 'caught', { victim: game.players[this.vslot].name });
+    } else {
+      pr.state = 'idle';
+      pr.checkAt = game.time + 12;
+    }
+  }
+
+  update(bot, game, p, it, dt) {
+    if (p.carrying) return 'done';
+    const now = game.time;
+    const g = game.gardens[this.vslot];
+    const pl = g.planters[this.index];
+    const owner = g.owner;
+    if (now < p.stunUntil) {
+      // bonked before we even got the pot: lesson learned early
+      if (p.lastHitBy === owner) this.bonked = true;
+      return 'failed';
+    }
+    if (!grownPlant(pl) || (pl.stealer != null && pl.stealer !== p.slot)) return 'failed';
+    const inside = gardenContains(g.L, p.pos.x, p.pos.z);
+    if (game.isLocked(g) && !inside) return 'failed';
+    if (this.age(game) > 60) return 'failed';
+    const key = 'steal' + g.slot + '_' + pl.index;
+    const look = () => yawTo(p.pos.x, p.pos.z, owner.pos.x, owner.pos.z);
+    // only a lesson if the owner is around to see it
+    const ownerD = hyp(owner.pos.x - g.L.center.x, owner.pos.z - g.L.center.z);
+    const ownerHere = ownerD < 45 || (ownerD < 90 && owner.carrying?.kind === 'seed' && owner.pos.z < 60);
+
+    if (this.phase === 'approach') {
+      const o = g.L.outside;
+      const d = hyp(o.x - p.pos.x, o.z - p.pos.z);
+      if (!inside && d > 2.5) {
+        // hurry over, then walk the last bit in plain sight
+        this.walkOpts.speed = d > 30 ? 1 : 0.75;
+        bot.motor.goTo(o.x, o.z, this.walkOpts);
+        bot.motor.update(game, p, dt, it);
+        return bot.motor.failed ? 'failed' : 'running';
+      }
+      this.setPhase('peek', game);
+      bot.hop(1);
+    }
+
+    if (this.phase === 'peek') {
+      // a sneaky look around at the gate (plenty of warning); wait a little for the owner to come home
+      bot.motor.stop();
+      it.aimYaw = look() + Math.sin(this.inPhase(game) * 5) * 0.6;
+      if (!ownerHere) {
+        this.waited = (this.waited || 0) + dt;
+        return this.waited > 15 ? 'failed' : 'running';
+      }
+      if (this.inPhase(game) < 1.2) return 'running';
+      this.setPhase('enter', game);
+    }
+
+    // they left again before we started: try another time
+    if (this.phase !== 'steal' && ownerD > 60) return 'failed';
+
+    if (this.phase === 'enter') {
+      const r = goToPlanter(bot, game, p, it, dt, g, pl, key, grownPlant, this);
+      if (r === 'ready') this.setPhase('windup', game);
+      else if (r === 'fail' || this.inPhase(game) > 12) return 'failed';
+      return 'running';
+    }
+
+    if (this.phase === 'windup') {
+      bot.motor.stop();
+      it.aimYaw = this.inPhase(game) < 0.5 ? look() : yawTo(p.pos.x, p.pos.z, pl.x, pl.z);
+      if (this.inPhase(game) < 0.9) return 'running';
+      this.setPhase('steal', game);
+    }
+
+    // steal: hold E for the full stealHold
     if (p.interact.key !== key) {
       if (this.inPhase(game) > 0.5) this.setPhase('enter', game);
       return 'running';

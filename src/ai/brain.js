@@ -1,7 +1,7 @@
 // Utility brain: scores every option (farm a pod, steal a plant, defend, shop, ...) in one currency,
 // "income per second gained, per second of effort", and returns the best goal. Personality weights
 // and difficulty knobs bend the scores; the bot adds hysteresis so it does not dither.
-import { PLANT, PLANTERS, ITEM, PLAYER, REBIRTH, speedCost } from '../config.js';
+import { PLANT, PLANTS, PLANTERS, ITEM, PLAYER, REBIRTH, BIOMES, speedCost } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import {
   hyp, clamp, gardenInfo, podSpot, seedIncome, runSpeed, carrySeedSpeed, carryPlantSpeed, approxDist, runSafety, podGuards,
@@ -15,6 +15,20 @@ import {
 const MIN_REF = 0.02;
 const STEAL_SCALE = 0.6; // stealing is the spice, farming is the meal
 
+// Typical income of a seed from each biome (a relaxed bot does not chase the shiny ones).
+const BIOME_INC = BIOMES.map((b) => {
+  const list = PLANTS.filter((x) => x.rarity === b.rarity);
+  return list.reduce((a, x) => a + x.income, 0) / list.length;
+});
+
+/** How much a seed is worth to this bot: the more relaxed it plays, the less it cares about rarity and mutations. */
+function wantInc(bot, p, speciesId, mutation, biome) {
+  const inc = seedIncome(p, speciesId, mutation);
+  const e = bot.ease;
+  if (e <= 0 || biome < 0) return inc;
+  return inc + (Math.min(inc, BIOME_INC[biome] * REBIRTH.incomeMult(p.rebirths)) - inc) * e;
+}
+
 function bestFarm(bot, game, p, info) {
   const now = game.time;
   const pers = bot.pers;
@@ -25,8 +39,8 @@ function bestFarm(bot, game, p, info) {
   let best = null;
   for (const pod of game.pods) {
     const seed = pod.seed;
-    if (!seed) continue;
-    const inc = seedIncome(p, seed.speciesId, seed.mutation);
+    if (!seed || pod.biome > bot.biomeCap) continue;
+    const inc = wantInc(bot, p, seed.speciesId, seed.mutation, pod.biome);
     let gain, needRoom = false;
     if (info.free > 0) gain = inc;
     else if (info.weakest && inc >= info.weakestInc * 1.5) {
@@ -104,9 +118,12 @@ function bestSteal(bot, game, p, info) {
       const dBack = approxDist(pl.x, pl.z, home.x, home.z);
       const T = dGo / spd + PLAYER.stealHold + dBack / cps + 3;
       let u = (value / T) * pers.steal * diff.stealRate * STEAL_SCALE;
-      if (victim.isHuman) u *= diff.humanStealMult;
+      // comeback: while the human is last, leave their garden (mostly) alone
+      if (victim.isHuman) u *= diff.humanStealMult * (bot.humanLast ? diff.lastStealMult : 1);
       if (others) u *= 0.25;
       if (bot.revenge === victim && now < bot.revengeUntil) u *= 1.6;
+      // a rival running away with the match (and easing off) is everyone's favourite target
+      if (!victim.isHuman && victim.controller?.ease > 0) u *= 1 + victim.controller.ease;
       // spread the misery: someone who was just robbed is a less tempting target
       if (now - (board.lastStealOn.get(g.slot) ?? -99) < 60) u *= 0.4;
       const safe = u * P;
@@ -125,7 +142,9 @@ function bestGround(bot, game, p, info) {
     if (gi.kind !== 'seed') continue;
     const d = hyp(gi.x - p.pos.x, gi.z - p.pos.z);
     if (d > 70) continue;
-    const inc = seedIncome(p, gi.speciesId, gi.mutation);
+    const bi = game.biomeAt(gi.z);
+    if (bi > bot.biomeCap) continue;
+    const inc = wantInc(bot, p, gi.speciesId, gi.mutation, Math.max(0, bi));
     if (info.free === 0 && inc < info.weakestInc * 1.5) continue;
     const gain = info.free > 0 ? inc : inc - info.weakestInc;
     // someone else is closer to it?
@@ -148,7 +167,7 @@ function bestMug(bot, game, p, info, farm) {
   let best = null;
   for (const q of game.players) {
     if (q === p || q.carrying?.kind !== 'seed' || q.invisible(now) || now < q.invulnUntil) continue;
-    const mult = pers.mug * (q.isHuman ? bot.diff.humanMug : 1);
+    const mult = pers.mug * (q.isHuman ? bot.diff.humanMug * (bot.humanLast ? bot.diff.lastStealMult : 1) : 1);
     if (mult <= 0) continue;
     const d = hyp(q.pos.x - p.pos.x, q.pos.z - p.pos.z);
     if (d > 13) continue;

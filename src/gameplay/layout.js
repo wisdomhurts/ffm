@@ -95,6 +95,8 @@ function staticColliders(gardens) {
     // planter boxes: low (you can hop onto them)
     for (const p of g.planters) box(p.x - 2.4, p.x + 2.4, p.z - 2.4, p.z + 2.4, 1.2, 0, 'planter');
   }
+  // the follow camera collides with fences only up to their visual height
+  for (const b of boxes) if (b.tag === 'fence') b.camMaxY = 6.6;
   // Shop counters
   box(-36, -24, -60, -57, 4, 0, 'shop');
   box(24, 36, -60, -57, 4, 0, 'shop');

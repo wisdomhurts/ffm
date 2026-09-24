@@ -408,14 +408,30 @@ export function roadTexture(biomeId) {
         }
       }
     } else if (S.path === 'ruts') {
+      // packed dirt: per-pixel smooth blend of three tones (no hard thresholds, no sub-pixel rects), painted
+      // into a strip on integer pixels and composited through the path clip
       const nn = tileNoise(71, 8);
-      for (let y = 0; y < H; y += 2) {
-        for (let x = cx - pathHalf - 20; x < cx + pathHalf + 20; x += 2) {
-          const v = nn(x, y, W, H);
-          g.fillStyle = v > 0.55 ? pc[2] : v < 0.4 ? pc[1] : pc[0];
-          g.fillRect(x, y, 2, 2);
+      const x0 = Math.floor(cx - pathHalf - 20), x1 = Math.ceil(cx + pathHalf + 20);
+      const sw = x1 - x0;
+      const strip = makeCanvas(sw, H);
+      const sg = strip.getContext('2d');
+      const sd = sg.createImageData(sw, H);
+      const [c0, c1, c2] = pc.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+      const sm = (e0, e1, v) => {
+        const t = Math.max(0, Math.min(1, (v - e0) / (e1 - e0)));
+        return t * t * (3 - 2 * t);
+      };
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < sw; x++) {
+          const v = nn(x0 + x, y, W, H);
+          const dark = sm(0.45, 0.35, v), light = sm(0.5, 0.62, v);
+          const i = (y * sw + x) * 4;
+          for (let k = 0; k < 3; k++) sd.data[i + k] = c0[k] + (c1[k] - c0[k]) * dark + (c2[k] - c0[k]) * light;
+          sd.data[i + 3] = 255;
         }
       }
+      sg.putImageData(sd, 0, 0);
+      g.drawImage(strip, x0, 0);
       g.strokeStyle = 'rgba(110,70,30,0.45)';
       g.lineWidth = 9;
       for (const off of [-4.2, 4.2]) {

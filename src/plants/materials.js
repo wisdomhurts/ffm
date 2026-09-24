@@ -7,6 +7,15 @@ export const U = { time: { value: 0 }, bufH: { value: 900 } };
 // Last camera position seen by a plant material (used to turn faces toward the viewer).
 export const camPos = new THREE.Vector3(0, 30, -40);
 
+let qualityOverride = null;
+/** Optional: tell the plant module the render quality ('low' | 'medium' | 'high'). Defaults to the app's engine. */
+export function setPlantQuality(q) {
+  qualityOverride = q || null;
+}
+export function plantQuality() {
+  return qualityOverride || (typeof window !== 'undefined' && window.__app?.engine?.qualityId) || 'high';
+}
+
 const _buf = new THREE.Vector2();
 export function captureCamera(renderer, scene, camera) {
   if (camera && camera.isPerspectiveCamera) {
@@ -408,7 +417,12 @@ function patch(mat, { rainbow = false, rim = 0, rimRainbow = false, glowPulse = 
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;\nvarying vec3 vWPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      .replace('#include <project_vertex>', `#include <project_vertex>
+#ifdef USE_INSTANCING
+vWPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+#else
+vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+#endif`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying float vGlow;\nvarying vec3 vWPos;' + GLSL_HUE)
       .replace('#include <color_fragment>', `#include <color_fragment>

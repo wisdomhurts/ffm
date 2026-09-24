@@ -1,7 +1,7 @@
 // Dev gallery for the characters module: the four family avatars (with photo faces when the page is
 // family.html) and the five road monsters on a studded baseplate.
 // URL hash (or window.__gallery.apply({...})) controls what is shown:
-//   view=family|monsters|all|close:<id>|side:<id>|back:<id>|game|monster:<type>|faces
+//   view=family|lineup|lineup34|monsters|all|close:<id>|close34:<id>|side:<id>|back:<id>|game[:dist]|game34|behind|monster:<type>|faces
 //   state=idle|walk|run|sprint|jump|fall|carry|swing|stunned|celebrate|steal|grab|invisible|coil|mix|cycle
 //   swing=<0..1> (frozen swing phase)   mstate=patrol|chase|stunned|attack   freeze=1   t=<seconds>
 // Build: node build.mjs --entry src/characters/dev/gallery.js --out <dir>
@@ -141,15 +141,29 @@ function setCamera(view) {
   const idx = Math.max(0, CHARACTERS.findIndex((c) => c.id === arg));
   const ax = (idx - 1.5) * 5.5;
   const S = avatars[idx].av.scale || 0.87;
-  const headY = 5.2 * (S / 0.8667) - 1;
+  // head centre: just under the head-top anchor (kids have bigger heads on smaller bodies)
+  const headY = avatars[idx].av.headTop.position.y - 0.95 * (S / 0.8667);
   switch (kind) {
     case 'family':
       camera.position.set(0, 5, 17);
       camera.lookAt(0, 3, 0);
       break;
+    case 'lineup':
+      // front-facing family photo at ~12 studs, camera at head height
+      camera.position.set(0, 4.3, 12);
+      camera.lookAt(0, 3.4, 0);
+      break;
+    case 'lineup34':
+      camera.position.set(8, 4.6, 9);
+      camera.lookAt(0, 3.2, 0);
+      break;
     case 'close':
       camera.position.set(ax, headY + 0.3, 5.2);
       camera.lookAt(ax, headY, 0);
+      break;
+    case 'close34':
+      camera.position.set(ax + 3.6, headY + 0.4, 3.9);
+      camera.lookAt(ax, headY - 0.1, 0);
       break;
     case 'side':
       camera.position.set(ax + 5, headY + 0.6, 5.5);
@@ -164,9 +178,23 @@ function setCamera(view) {
       camera.lookAt(ax, 3, 0);
       break;
     case 'game': {
-      // gameplay follow-camera distance (~22 studs, pitch 0.42) looking at the family from the front
-      const d = 22;
+      // gameplay follow-camera distance (~20 studs, pitch 0.42) looking at the family from the front
+      const d = +(arg || 20);
       camera.position.set(0, 4.2 + Math.sin(0.42) * d, Math.cos(0.42) * d);
+      camera.lookAt(0, 4.2, 0);
+      break;
+    }
+    case 'game34': {
+      const d = +(arg || 20);
+      const a = 0.75;
+      camera.position.set(Math.sin(a) * Math.cos(0.42) * d, 4.2 + Math.sin(0.42) * d, Math.cos(a) * Math.cos(0.42) * d);
+      camera.lookAt(0, 4.2, 0);
+      break;
+    }
+    case 'behind': {
+      // the local player's view: follow camera behind the family
+      const d = +(arg || 20);
+      camera.position.set(0, 4.2 + Math.sin(0.42) * d, -Math.cos(0.42) * d);
       camera.lookAt(0, 4.2, 0);
       break;
     }
@@ -217,13 +245,13 @@ function apply(o = {}) {
   opts.freeze = opts.freeze === true || opts.freeze === '1';
   opts.swing = opts.swing == null || opts.swing === '' ? null : +opts.swing;
   opts.t = +opts.t || 0;
-  setCamera(opts.view);
 
   showFaces(opts.view === 'faces');
   // settle poses: simulate a second of animation at 60 fps, then (optionally) freeze
   engine.timeScale = 1;
   simTime = opts.t;
   for (let i = 0; i < 60; i++) step(1 / 60);
+  setCamera(opts.view);
   engine.timeScale = opts.freeze ? 0 : 1;
   engine.frame(0);
 }
@@ -252,6 +280,14 @@ engine.add((dt) => {
   if (dt > 0) step(dt);
 });
 window.addEventListener('hashchange', () => apply());
-window.__gallery = { apply, engine, avatars, monsters, THREE, createAvatar, createMonster, composeFaceCanvas, FACE_LAYOUT, ready: Promise.all(CHARACTERS.map((c) => getFace(c.id))).then(() => new Promise((r) => setTimeout(r, 50))) };
+// live face-framing tuning: __gallery.setLayout({scale, eyeY})
+function setLayout(o) {
+  Object.assign(FACE_LAYOUT.head, o);
+  for (const a of avatars) {
+    const f = faceInfo[a.char.id];
+    if (f) a.av.setFace(f.face, f.skin);
+  }
+}
+window.__gallery = { apply, setLayout, engine, avatars, monsters, THREE, createAvatar, createMonster, composeFaceCanvas, FACE_LAYOUT, ready: Promise.all(CHARACTERS.map((c) => getFace(c.id))).then(() => new Promise((r) => setTimeout(r, 50))) };
 apply();
 engine.start();

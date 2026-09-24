@@ -9,18 +9,25 @@
 //   goal (every tick)        a small state machine that drives the motor and interactions (goals.js)
 //   motor (every tick)       routes, braking, dodging monsters and peels, un-sticking (motor.js)
 // Personalities: tycoon (Dorian), guardian (Esther), speedster (Maddie), thief (Micah).
+//
+// Rubber band (`_pace`, from config DIFFICULTY): bots farm at most `biomeLead` biomes deeper than the
+// human has been, a bot much richer than the human eases off (jogs, longer breathers, stays shallower),
+// and while the human is last the bots think slower and mostly leave the human's garden alone.
+// On Chill (and on Normal if nobody has robbed the human by ~4 min) one bot does a slow, telegraphed
+// "practice steal" of the human's cheapest plant so a new player learns to chase and bonk.
 import { PLAYER, BIOMES, REBIRTH, speedCost, speedAt } from '../config.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { makeRng } from '../core/rng.js';
-import { PERSONALITIES, difficultyTuning } from './personalities.js';
+import { PERSONALITIES, PRACTICE_LINES, difficultyTuning } from './personalities.js';
 import { Motor } from './motor.js';
 import { getNav } from './nav.js';
 import { chooseGoal } from './brain.js';
 import { planDodge } from './dodge.js';
-import { ReturnGoal } from './goals.js';
-import { getBoard, trySay, releaseClaims } from './blackboard.js';
-import { hyp, yawTo, wrapAngle, balloonYaw, tierOf, gardenInfo, carrySeedSpeed } from './util.js';
+import { ReturnGoal, PracticeStealGoal } from './goals.js';
+import { getBoard, trySay, releaseClaims, updateHuman } from './blackboard.js';
+import { practiceTarget } from './practice.js';
+import { hyp, clamp, yawTo, wrapAngle, balloonYaw, tierOf, gardenInfo, carrySeedSpeed, approxDist } from './util.js';
 
 export class BotController {
   /**
@@ -65,6 +72,12 @@ export class BotController {
     this.dodgeOn = false;
     this.dodgeDir = { x: 0, z: -1 };
     this.dodgeState = { prev: null };
+    // rubber band state (see _pace)
+    this.ease = 0;
+    this.tempo = 1;
+    this.biomeCap = 99;
+    this.humanLast = false;
+    this.practiceCarry = null;
   }
 
   _bind(game, p) {
@@ -91,6 +104,11 @@ export class BotController {
     this.stayHomeUntil = this.mugReadyAt = this.balloonAt = this.bananaAt = this.kitAt = this.coilAt = this.dodgeAt = 0;
     this.lastShopAt = this.lastCollectAt = -99;
     this.hopsLeft = 0;
+    this.ease = 0;
+    this.tempo = 1;
+    this.biomeCap = 99;
+    this.humanLast = false;
+    this.practiceCarry = null;
     // stagger the first decisions so the bots do not move in lockstep
     this.nextDecideAt = game.time + this.rng.range(0.1, 0.9);
     getNav(game);
@@ -110,8 +128,9 @@ export class BotController {
     it.aimYaw = null;
     it.emote = null;
     const now = game.time;
+    updateHuman(game);
     this._perceive(game, p, now);
-    if (p.carrying && this.goal?.type !== 'return') this._setGoal(new ReturnGoal(), game, p);
+    if (p.carrying && this.goal?.type !== 'return') this._setGoal(new ReturnGoal(this.goal?.type === 'practice'), game, p);
     if (!p.carrying) {
       const urgent = this.threat && !this.threat.handled && now >= this.threat.reactAt;
       if (urgent) this.threat.handled = true;
@@ -132,18 +151,23 @@ export class BotController {
 
   /** Debug snapshot (used by the headless sims). */
   get debugState() {
-    return { goal: this.goal?.type ?? null, phase: this.goal?.phase ?? '', stuck: this.motor.stuckEvents, moving: this.motor.wantsMove };
+    return {
+      goal: this.goal?.type ?? null, phase: this.goal?.phase ?? '', stuck: this.motor.stuckEvents, moving: this.motor.wantsMove,
+      ease: this.ease, biomeCap: this.biomeCap, practice: this.goal?.type === 'practice' || !!this.practiceCarry,
+    };
   }
 
   // ---------------------------------------------------------------- brain plumbing
 
   _decide(game, p, now) {
-    this.nextDecideAt = now + this.diff.decide * this.rng.range(0.8, 1.25);
-    const cand = chooseGoal(this, game, p);
-    // an idle line now and then, only after a quiet spell for this bot
-    const quiet = now - (getBoard(game).chatBy.get(p.slot) ?? -99);
-    if (quiet > 45 && this.rng.next() < 0.025 * this.pers.chatty) this.say(game, p, 'idle', {});
+    this._pace(game, p, now);
+    this.nextDecideAt = now + this.diff.decide * this.rng.range(0.8, 1.25) * (this.humanLast ? this.diff.lastDecide : 1);
     const cur = this.goal;
+    if (this._practice(game, p, now)) return;
+    const cand = chooseGoal(this, game, p);
+    // an idle line now and then, only after a quiet spell for this bot (a relaxed bot chats more)
+    const quiet = now - (getBoard(game).chatBy.get(p.slot) ?? -99);
+    if (quiet > 45 - this.ease * 20 && this.rng.next() < (0.025 + this.ease * 0.03) * this.pers.chatty) this.say(game, p, 'idle', {});
     if (!cand) return;
     if (!cur) return this._setGoal(cand, game, p);
     if (cand.sig === cur.sig) {
@@ -156,6 +180,73 @@ export class BotController {
     }
     if (!cur.interruptible) return;
     if (cand.u > cur.u * 1.35 + 1e-4) this._setGoal(cand, game, p);
+  }
+
+  /**
+   * Rubber band: read the human's progress and set how far up the road this bot may farm (`biomeCap`),
+   * how relaxed it plays (`ease` 0..1: jogs, longer breathers, stays shallower) and whether the human
+   * is in last place (comeback help). No human (attract mode) or Chaos: no limits.
+   */
+  _pace(game, p, now) {
+    const hs = getBoard(game).human;
+    const d = this.diff;
+    this.ease = 0;
+    this.tempo = 1;
+    this.biomeCap = 99;
+    this.humanLast = false;
+    if (!hs) return;
+    this.humanLast = hs.last && now > 30;
+    if (d.biomeLead < 50) this.biomeCap = hs.deep + d.biomeLead;
+    if (d.paceCap > 0 && now > 40) {
+      const mine = game.netWorth.get(p) || 0;
+      this.ease = clamp((mine / (Math.max(hs.net, 400) * d.paceCap) - 1) / 0.4, 0, 1);
+      // well ahead: farm a biome shallower than we otherwise would
+      if (this.ease > 0.4) this.biomeCap = Math.max(0, Math.min(this.biomeCap, hs.deep + d.biomeLead - 1));
+      this.tempo = 1 - this.ease * d.easeTempo;
+    }
+  }
+
+  /** Practice steal: assign it to one bot, and start it when this bot is the one. Returns true when started. */
+  _practice(game, p, now) {
+    const b = getBoard(game);
+    const pr = b.practice;
+    if (pr.state === 'idle' && now >= (pr.checkAt || 0)) {
+      pr.checkAt = now + 1;
+      const pl = practiceTarget(game, this.diff);
+      if (pl) {
+        const o = game.layout.gardens[game.human.slot].outside;
+        let best = null, bd = 160;
+        for (const q of game.players) {
+          if (q.isHuman || !q.controller?.canPractice?.(game, q)) continue;
+          const d = approxDist(q.pos.x, q.pos.z, o.x, o.z);
+          if (d < bd) {
+            bd = d;
+            best = q;
+          }
+        }
+        if (best) Object.assign(pr, { state: 'assigned', slot: best.slot, at: now, index: pl.index });
+      }
+    }
+    if (pr.state !== 'assigned' || pr.slot !== p.slot) return false;
+    const cur = this.goal;
+    if (now - pr.at > 20 || !this.canPractice(game, p)) {
+      // could not get free in time: let the next check pick again
+      pr.state = 'idle';
+      pr.checkAt = now + 8;
+      return false;
+    }
+    if (cur && !cur.interruptible) return false;
+    this._setGoal(new PracticeStealGoal(game.human.slot, pr.index), game, p);
+    return true;
+  }
+
+  /** Free to do the practice steal right now (Micah sits it out on Chill so it never feels like a dogpile). */
+  canPractice(game, p) {
+    if (p.carrying || game.time < p.stunUntil) return false;
+    if (this.diff.id === 'chill' && this.personality === 'thief') return false;
+    const t = this.goal?.type;
+    if (t === 'defend' || t === 'return' || (t === 'steal' && this.goal.phase === 'steal')) return false;
+    return true;
   }
 
   _setGoal(goal, game, p) {
@@ -184,12 +275,14 @@ export class BotController {
     if (g.type === 'lurk') this.lurkBlock.set(g.vslot, now + 40);
     if (g.type === 'return' && status === 'done') {
       // back home with a seed: guardians hang around, others sometimes take a breather
-      if (this.pers.patrol) this.stayHomeUntil = now + this.rng.range(3, 9) * this.diff.beat;
-      else if (this.rng.next() < this.diff.breakChance) this.stayHomeUntil = now + this.rng.range(2, 6) * this.diff.beat;
-      if (this.rng.next() < 0.2) this.hop(1);
+      const relax = 1 + this.ease * this.diff.easeBeat;
+      if (this.pers.patrol) this.stayHomeUntil = now + this.rng.range(3, 9) * this.diff.beat * relax;
+      else if (this.rng.next() < this.diff.breakChance + this.ease * 0.35) this.stayHomeUntil = now + this.rng.range(2, 6) * this.diff.beat * relax;
+      if (this.rng.next() < 0.2 + this.ease * 0.2) this.hop(1);
     }
     // a short human-like beat before the next plan (admire the new plant, catch a breath)
-    const beat = (g.type === 'return' || g.type === 'shop' ? this.rng.range(0.3, 1.1) : this.rng.range(0.05, 0.3)) * this.diff.beat;
+    const beat = (g.type === 'return' || g.type === 'shop' ? this.rng.range(0.3, 1.1) : this.rng.range(0.05, 0.3)) * this.diff.beat *
+      (1 + this.ease * this.diff.easeBeat);
     this.nextDecideAt = now + beat + (status === 'failed' ? this.diff.reaction * 0.5 : 0);
   }
 
@@ -231,6 +324,7 @@ export class BotController {
 
     const c = p.carrying;
     if (c?.kind === 'plant' && this.lastCarry?.plant !== c.plant) this.lastCarry = { plant: c.plant, victim: game.players[c.fromSlot] };
+    this._practiceCarry(game, p, c, now);
     if (p.stats.steals > this.seenSteals) {
       this.seenSteals = p.stats.steals;
       const lc = this.lastCarry;
@@ -262,6 +356,41 @@ export class BotController {
       this.bestTier = Math.max(this.bestTier, tier);
     }
     this.prevCarry = c;
+  }
+
+  /** Practice-steal banter (config CHAT wins when it has the category). */
+  sayPractice(game, p, kind, vars) {
+    if (kind === 'caught') getBoard(game).chatBy.set(p.slot, -99); // allowed to answer right away
+    const lines = PRACTICE_LINES[kind]?.[p.id] || PRACTICE_LINES[kind]?.dorian || [];
+    return trySay(game, p, kind, vars, { urgent: true, rng: this.rng.next, lines });
+  }
+
+  // The practice thief: tease once the pot is up, own up when bonked, and hand the stage back.
+  _practiceCarry(game, p, c, now) {
+    const pc = this.practiceCarry;
+    if (!pc) {
+      if (c?.kind === 'plant' && this.goal?.type === 'practice') {
+        this.practiceCarry = { plant: c.plant, steals: p.stats.steals, teased: false, at: now };
+      }
+      return;
+    }
+    const victim = game.players[pc.plant.owner] || game.human;
+    if (c?.plant === pc.plant) {
+      if (!pc.teased && now - pc.at > 0.3) {
+        pc.teased = this.sayPractice(game, p, 'tease', { victim: victim?.name ?? 'you', plant: game.plantName(pc.plant.speciesId, pc.plant.mutation) });
+        if (now - pc.at > 4) pc.teased = true;
+      }
+      return;
+    }
+    // it's over: home with it, or bonked back
+    this.practiceCarry = null;
+    const b = getBoard(game);
+    b.practice.state = 'done';
+    b.humanStealUntil = Math.max(b.humanStealUntil, now + this.diff.humanStealGap);
+    if (p.stats.steals === pc.steals) {
+      this.sayPractice(game, p, 'caught', { victim: victim?.name ?? 'you' });
+      this.hop(1);
+    }
   }
 
   say(game, p, category, vars, opts = {}) {
@@ -495,9 +624,11 @@ export class BotController {
     return false;
   }
 
-  /** Speed level at which a seed carrier comfortably outruns the Starbloom monster. */
+  /** Speed level at which a seed carrier comfortably outruns the monster of the deepest biome we may farm. */
   speedNeed(game, p) {
-    const m = BIOMES[BIOMES.length - 1].monster.speed;
+    const b = Math.min(BIOMES.length - 1, this.biomeCap);
+    if (b <= 0) return 1;
+    const m = BIOMES[b].monster.speed;
     const mult = game.difficulty.botSpeedMult * PLAYER.carrySeedMult;
     return Math.max(0, Math.ceil((((m * this.pers.risk) / mult) - speedAt(0, p.rebirths)) / PLAYER.speedPerLevel));
   }
