@@ -3,7 +3,7 @@
 import { CHARACTERS, CHARACTER, DIFFICULTY, MATCH } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings, setSetting } from '../core/settings.js';
-import { load, save } from '../core/save.js';
+import { load, save, storageOK } from '../core/save.js';
 import { h, money, uiSound, reducedMotion } from './dom.js';
 import { avatarEl } from './avatars.js';
 import { ICON, LOGO_SPROUT } from './icons.js';
@@ -319,7 +319,7 @@ export function createMenus(app) {
         btn(iconLabel(ICON.gear, 'Settings'), 'btn-blue', openSettings),
         btn(iconLabel(ICON.camera, 'Photo Booth'), 'btn-blue', openPhotoBooth),
         btn(iconLabel(ICON.help, 'How to Play'), 'btn-blue', openHowTo),
-        btn(iconLabel(ICON.home, g?.match ? 'Quit to Title' : 'Save & Quit'), 'btn-red', () => app.quitToTitle())),
+        btn(iconLabel(ICON.home, g?.match || !storageOK ? 'Quit to Title' : 'Save & Quit'), 'btn-red', () => app.quitToTitle())),
       h('p', { class: 'pause-note', text: note }));
     setScreen('pause', panel);
   }

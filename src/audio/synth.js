@@ -51,18 +51,32 @@ export function kit(ac) {
   return k;
 }
 
+// Live voices are held here until they end, so `ended` can't be lost to garbage collection,
+// and a time-based sweep retires any voice whose `ended` event never arrived.
+const live = new Set();
+
+function endVoice(v) {
+  if (v.done) return;
+  v.done = true;
+  live.delete(v);
+  stats.active = live.size;
+  for (const n of v.nodes) n.disconnect();
+}
+
 /** Stop all sources at `stopAt` and disconnect every node once the voice has ended. */
 export function finish(sources, nodes, stopAt) {
   for (const s of sources) s.stop(stopAt);
-  stats.active++;
+  const v = { nodes, stopAt, done: false };
+  live.add(v);
   stats.created++;
-  let done = false;
-  sources[0].onended = () => {
-    if (done) return;
-    done = true;
-    stats.active--;
-    for (const n of nodes) n.disconnect();
-  };
+  stats.active = live.size;
+  sources[0].onended = () => endVoice(v);
+}
+
+/** Retire voices that should have ended more than half a second ago. */
+export function sweepVoices(ac) {
+  const t = ac.currentTime - 0.5;
+  for (const v of live) if (v.stopAt < t) endVoice(v);
 }
 
 export function noiseSource(ac, t) {

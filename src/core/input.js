@@ -28,6 +28,9 @@ export class Input {
       this.keys.clear();
       this.mouse.right = this.mouse.left = false;
     };
+    // only poll navigator.getGamepads() once a pad has shown up
+    this._gpSeen = false;
+    window.addEventListener('gamepadconnected', () => (this._gpSeen = true));
     window.addEventListener('keydown', this._kd);
     window.addEventListener('keyup', this._ku);
     window.addEventListener('blur', this._blur);
@@ -181,13 +184,21 @@ export class Input {
   }
 
   gamepad() {
+    if (!this._gpSeen) return null;
+    const now = performance.now();
+    if (now - (this._gpAt || -1e9) < 8) return this._gp; // one poll per frame is plenty
+    this._gpAt = now;
+    this._gp = null;
     try {
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      for (const p of pads) if (p && p.connected) return p;
+      for (const p of pads) if (p && p.connected) {
+        this._gp = p;
+        break;
+      }
     } catch {
       /* ignore */
     }
-    return null;
+    return this._gp;
   }
 
   reset() {

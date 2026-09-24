@@ -165,8 +165,9 @@ export class Floaters {
 
   update(dt) {
     this.clock += dt;
-    this.w = this.root.clientWidth || window.innerWidth;
-    this.h = this.root.clientHeight || window.innerHeight;
+    // the layer is full-viewport: read the window size (no forced layout mid-frame)
+    this.w = window.innerWidth;
+    this.h = window.innerHeight;
     const vmin = Math.min(this.w, this.h);
     const viewScale = Math.max(0.62, Math.min(1.15, vmin / 720));
     const cam = this.camera;

@@ -19,8 +19,9 @@ export class Labels {
 
   begin() {
     this.frame++;
-    this.w = this.root.clientWidth || window.innerWidth;
-    this.h = this.root.clientHeight || window.innerHeight;
+    // the layer is full-viewport: read the window size (no forced layout mid-frame)
+    this.w = window.innerWidth;
+    this.h = window.innerHeight;
   }
 
   /**
@@ -63,9 +64,12 @@ export class Labels {
     const y = (-v.y * 0.5 + 0.5) * this.h;
     const s = o.scaleWithDistance === false ? 1 : Math.max(0.55, Math.min(1.15, 26 / Math.max(8, dist)));
     const fade = dist > maxDist * 0.75 ? 1 - (dist - maxDist * 0.75) / (maxDist * 0.25) : 1;
-    it.el.style.transform = `translate(-50%,-100%) translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${s.toFixed(3)})`;
-    it.el.style.opacity = fade.toFixed(2);
-    it.el.style.zIndex = String(10000 - Math.round(dist * 10));
+    const tf = `translate(-50%,-100%) translate(${(Math.round(x * 2) / 2).toFixed(1)}px,${(Math.round(y * 2) / 2).toFixed(1)}px) scale(${s.toFixed(2)})`;
+    if (tf !== it.tf) it.el.style.transform = it.tf = tf;
+    const op = fade.toFixed(2);
+    if (op !== it.op) it.el.style.opacity = it.op = op;
+    const z = 10000 - Math.round(dist);
+    if (z !== it.z) it.el.style.zIndex = String((it.z = z));
     if (!it.visible) {
       it.el.style.display = '';
       it.visible = true;

@@ -1,7 +1,10 @@
 // App shell: boots the engine and world once, runs the title "attract mode", and starts/stops matches.
+import * as THREE from 'three';
 import { Engine } from './core/engine.js';
+import { createBanana, createBalloon } from './fx/props.js';
+import { createPlantView, createSeedView, createCarriedPlantView } from './plants/plantMeshes.js';
 import { Input } from './core/input.js';
-import { FollowCamera } from './core/camera.js';
+import { FollowCamera, reducedMotion } from './core/camera.js';
 import { bus } from './core/events.js';
 import { settings } from './core/settings.js';
 import { load, save, remove } from './core/save.js';
@@ -21,6 +24,20 @@ import { createMenus } from './ui/menus.js';
 import { createTouchControls } from './ui/touch.js';
 
 const SAVE_EVERY = 12;
+
+// A hidden set of rarely-seen objects compiled up front (see _newGame).
+function buildWarmupGroup() {
+  const g = new THREE.Group();
+  g.name = 'shader-warmup';
+  g.add(createBanana(), createBalloon());
+  for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
+    g.add(createPlantView('starlotus', m).object3d);
+    g.add(createSeedView('galaxyorchid', m).object3d);
+  }
+  g.add(createPlantView('dorianfruit', 'normal').object3d, createCarriedPlantView('lavalily', 'gold').object3d);
+  g.traverse((o) => (o.frustumCulled = false));
+  return g;
+}
 
 class App {
   constructor() {
@@ -59,6 +76,12 @@ class App {
     bus.on('shop:open', ({ player, shop }) => {
       if (player === this.human && this.state === 'playing') this.menus.openShop(shop);
     });
+    // Graphics context lost (GPU reset): pause and tell the player instead of showing a white screen.
+    bus.on('engine:contextlost', () => {
+      if (this.state === 'playing') this.pause();
+      this._showGfxNotice(true);
+    });
+    bus.on('engine:contextrestored', () => this._showGfxNotice(false));
     bus.on('player:hit', ({ target }) => {
       if (target === this.human && this.state === 'shop') this.resume();
     });
@@ -71,6 +94,29 @@ class App {
       this.menus.showEnd(ranking);
       remove('save:showdown');
     });
+  }
+
+  _showGfxNotice(on) {
+    clearTimeout(this._gfxTimer);
+    if (!on) {
+      this._gfxEl?.remove();
+      this._gfxEl = null;
+      return;
+    }
+    if (this._gfxEl) return;
+    const el = document.createElement('div');
+    el.className = 'gfx-notice panel';
+    el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:absolute;inset:0;display:grid;place-items:center;background:rgba(14,18,48,.82);color:#fff;font:700 20px/1.4 system-ui,sans-serif;text-align:center;padding:24px;z-index:9999;pointer-events:auto';
+    el.innerHTML = '<div><div>Graphics paused. Restoring…</div><button type="button" hidden style="margin-top:16px;font:inherit;padding:10px 22px;border-radius:14px;border:3px solid #10163a;background:#3fd65a;color:#10163a;cursor:pointer">Tap to reload</button></div>';
+    const btn = el.querySelector('button');
+    btn.onclick = () => {
+      this.saveNow();
+      location.reload();
+    };
+    this._gfxTimer = setTimeout(() => (btn.hidden = false), 5000);
+    this.container.appendChild(el);
+    this._gfxEl = el;
   }
 
   start() {
@@ -93,11 +139,19 @@ class App {
     }
     this.human = game.human;
     this.view = new GameView({ engine: this.engine, game, world: this.world, labels: this.labels, fx: this.fx });
-    // Build every shader now (incl. far-away monsters) so nothing hitches the first time it appears.
+    // Build every shader now (incl. far-away monsters and things that only appear later:
+    // items, mutations, carried pots) so nothing hitches the first time it appears.
     try {
       const r = this.engine.renderer;
-      if (r.compileAsync) r.compileAsync(this.engine.scene, this.engine.camera).catch(() => {});
-      else r.compile(this.engine.scene, this.engine.camera);
+      const warm = this._warmGroup || (this._warmGroup = buildWarmupGroup());
+      warm.position.set(0, -400, 0);
+      this.engine.scene.add(warm);
+      const done = () => this.engine.scene.remove(warm);
+      if (r.compileAsync) r.compileAsync(this.engine.scene, this.engine.camera).then(done, done);
+      else {
+        r.compile(this.engine.scene, this.engine.camera);
+        done();
+      }
     } catch {
       /* optional warm-up */
     }
@@ -134,7 +188,7 @@ class App {
     this.menus.hideAll();
     this.cam.snapBehind(this.human.yaw);
     this.cam.yaw = this.human.yaw;
-    this.cam.playIntro(2.4);
+    this.cam.playIntro(reducedMotion() ? 0.01 : 2.4);
     this.state = 'playing';
     this.input.reset();
     this.input.enabled = true;

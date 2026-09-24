@@ -2,6 +2,14 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
 
+export const reducedMotion = () => {
+  try {
+    return matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+};
+
 export class FollowCamera {
   constructor(camera, physics) {
     this.camera = camera;
@@ -38,6 +46,7 @@ export class FollowCamera {
   }
 
   addShake(amount) {
+    if (reducedMotion()) return;
     this.shake = Math.min(1.5, this.shake + amount);
   }
 

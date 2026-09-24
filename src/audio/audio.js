@@ -13,7 +13,7 @@ import { RARITY } from '../config.js';
 import { createMixer } from './mixer.js';
 import { MusicEngine } from './music.js';
 import { SFX, SFX_GAP, alarmLoop, stealLoop } from './sfx.js';
-import { stats as voiceStats } from './synth.js';
+import { stats as voiceStats, sweepVoices } from './synth.js';
 
 const W = typeof window !== 'undefined' ? window : null;
 const AC = W ? W.AudioContext || W.webkitAudioContext : null;
@@ -122,6 +122,7 @@ class GameAudio {
 
   _tick() {
     const ac = this.ctx;
+    if (ac && ac.state === 'running' && (this._sweepAt = (this._sweepAt || 0) + 1) % 20 === 0) sweepVoices(ac);
     if (!ac || ac.state !== 'running' || !this.music.active) return;
     this.music.scheduleUntil(ac.currentTime + LOOKAHEAD);
   }

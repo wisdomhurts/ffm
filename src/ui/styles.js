@@ -167,6 +167,8 @@ html.menu-screen .labels-layer{visibility:hidden}
 .bh-title svg{width:18px;height:18px}
 .bh-timer{display:flex;align-items:center;gap:5px;font:var(--fdw) 21px/1 var(--fd);background:rgba(10,15,40,.55);padding:4px 9px 5px 7px;border-radius:10px;font-variant-numeric:tabular-nums}
 .bh-timer svg{width:17px;height:17px}
+.board.showdown .bh-timer{flex:none}
+@media (max-width:640px),(max-height:500px){.board.showdown .bh-title span{display:none}}
 .bh-timer.urgent{color:#ff8a9c;animation:pulse .5s ease-in-out infinite alternate}
 .board-rows{position:relative;height:calc(var(--rowh)*4)}
 .brow{position:absolute;left:0;right:0;top:calc(var(--i,0)*var(--rowh));height:calc(var(--rowh) - 4px);display:flex;align-items:center;gap:7px;padding:0 9px 0 5px;border-radius:12px;
@@ -863,7 +865,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .tb-jump{width:78px;height:78px}
 }
 /* phones (landscape): short screens */
-@media (max-height:500px){
+@media (max-height:500px) and (orientation:landscape){
   .hud-tl{flex-direction:row;flex-wrap:wrap;width:250px;gap:7px;align-items:flex-start}
   .hbtn{width:38px;height:38px;border-radius:11px}
   .hbtn svg{width:18px;height:18px}
