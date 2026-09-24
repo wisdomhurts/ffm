@@ -3,7 +3,7 @@ import { ITEMS, BIOMES, PLAYER, REBIRTH, LOCK, speedAt, speedCost } from '../con
 import { bus } from '../core/events.js';
 import { h, money, setText } from './dom.js';
 import { ICON, ITEM_ICONS } from './icons.js';
-import { monsterSpeed, levelToOutrun, fmtSpeed } from './goal.js';
+import { monsterSpeed, levelToOutrun, outruns, fmtSpeed } from './goal.js';
 
 const TITLES = { gear: 'Gear Shop', speed: 'Speed Shop', rebirth: 'Rebirth Altar' };
 const SUBS = {
@@ -134,7 +134,7 @@ function speedShop(app, game, me) {
       }
       you.style.left = `${Math.min(100, (carry / maxScale) * 100)}%`;
       for (const r of rows) {
-        const ok = carry > r.ms;
+        const ok = outruns(s, r.ms);
         r.row.classList.toggle('ok', ok);
         const html = ok ? `${ICON.check}<span>Faster!</span>` : `<span>Need Lv ${Math.min(PLAYER.maxSpeedLevel, levelToOutrun(r.ms, me.rebirths))}</span>`;
         if (r.status._h !== html) r.status.innerHTML = r.status._h = html;

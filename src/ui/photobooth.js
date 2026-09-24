@@ -331,17 +331,22 @@ function sampleSkin(cv) {
     const n = cv.width;
     const box = Math.round(n * 0.06);
     let r = 0, gg = 0, b = 0, count = 0;
-    for (const fx of [0.33, 0.67]) {
-      const x0 = Math.round(n * fx - box / 2);
-      const y0 = Math.round(n * 0.6 - box / 2);
-      const d = g.getImageData(x0, y0, box, box).data;
-      for (let i = 0; i < d.length; i += 4) {
-        const l = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
-        if (l < 45 || l > 245) continue;
-        r += d[i];
-        gg += d[i + 1];
-        b += d[i + 2];
-        count++;
+    // one readback spanning both cheeks (a canvas read twice makes Chrome warn about slow readbacks)
+    const xa = Math.round(n * 0.33 - box / 2), xb = Math.round(n * 0.67 - box / 2);
+    const y0 = Math.round(n * 0.6 - box / 2);
+    const W = xb + box - xa;
+    const d = g.getImageData(xa, y0, W, box).data;
+    for (const x0 of [0, xb - xa]) {
+      for (let y = 0; y < box; y++) {
+        for (let x = x0; x < x0 + box; x++) {
+          const i = (y * W + x) * 4;
+          const l = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+          if (l < 45 || l > 245) continue;
+          r += d[i];
+          gg += d[i + 1];
+          b += d[i + 2];
+          count++;
+        }
       }
     }
     if (!count) return null;

@@ -531,6 +531,9 @@ function createRoadMeter(app, parent, me) {
 // newest-first in screen space and one that would land on a newer bubble waits its turn (the chat log
 // still shows every line). labels.js then nudges them clear of name tags.
 const BUBBLE_MS = 4200;
+// anchored just above the name tag (labels.js nudges the bubble up onto it); higher when carrying
+const BUBBLE_Y = 7.7;
+const BUBBLE_Y_CARRY = 11.4;
 const _v = new Vector3();
 
 function createChat(app, parent) {
@@ -555,7 +558,7 @@ function createChat(app, parent) {
   });
   // rough on-screen box of a bubble (the label scales with distance like labels.js does)
   function box(p, b, cam) {
-    _v.set(p.pos.x, p.pos.y + (p.carrying ? 11.6 : 8.8), p.pos.z);
+    _v.set(p.pos.x, p.pos.y + (p.carrying ? BUBBLE_Y_CARRY : BUBBLE_Y), p.pos.z);
     const d = _v.distanceTo(cam.position);
     _v.project(cam);
     if (_v.z >= 1) return null;
@@ -587,7 +590,7 @@ function createChat(app, parent) {
           continue;
         }
         if (r) placed.push(r);
-        app.labels.set('bubble' + slot, { x: p.pos.x, y: p.pos.y + (p.carrying ? 11.6 : 8.8), z: p.pos.z }, b.html, { cls: 'bubble', maxDist: 90 });
+        app.labels.set('bubble' + slot, { x: p.pos.x, y: p.pos.y + (p.carrying ? BUBBLE_Y_CARRY : BUBBLE_Y), z: p.pos.z }, b.html, { cls: 'bubble', maxDist: 90 });
       }
     },
     dispose() {

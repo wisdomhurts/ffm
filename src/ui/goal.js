@@ -9,10 +9,14 @@ import { ICON } from './icons.js';
 /** A biome monster's real speed in this match (difficulty scales it). */
 export const monsterSpeed = (game, biome) => (biome.monster ? biome.monster.speed * (game?.difficulty?.monsterSpeedMult ?? 1) : 0);
 
+/** Can you outrun a monster of speed `ms` while carrying a seed? (strictly faster; float-safe) */
+export const outruns = (speed, ms) => speed * PLAYER.carrySeedMult > ms + 1e-6;
+
 /** Lowest Speed level whose carrying speed beats `ms` (may exceed the max level). */
 export function levelToOutrun(ms, rebirths = 0) {
-  const need = Math.floor((ms / PLAYER.carrySeedMult - PLAYER.baseSpeed - rebirths * 2) / PLAYER.speedPerLevel) + 1;
-  return Math.max(0, need);
+  let L = 0;
+  while (L < 99 && !outruns(speedAt(L, rebirths), ms)) L++;
+  return L;
 }
 
 /** Pretty monster speed: 17 / 22.1 */
@@ -26,10 +30,10 @@ for (const p of PLANTS) {
 for (const k of Object.keys(avgIncome)) avgIncome[k] = avgIncome[k].reduce((a, b) => a + b, 0) / avgIncome[k].length;
 
 export function nextGoal(game, me) {
-  const carry = speedAt(me.speedLevel, me.rebirths) * PLAYER.carrySeedMult;
+  const speed = speedAt(me.speedLevel, me.rebirths);
   let reach = 0; // deepest biome you can farm without its monster catching you
   for (let i = 1; i < BIOMES.length; i++) {
-    if (carry > monsterSpeed(game, BIOMES[i])) reach = i;
+    if (outruns(speed, monsterSpeed(game, BIOMES[i]))) reach = i;
     else break;
   }
   const next = BIOMES[reach + 1];
@@ -82,11 +86,12 @@ export function createNextGoal(app, parent, tutorial) {
         key = k;
         if (g.kind === 'speed') {
           const r = RARITY[g.biome.rarity];
-          setHTML(line1, `${ICON.bolt}<span>Speed Lv ${g.level} <b class="cash">${money(g.cost)}</b></span>`);
-          setHTML(line2, `<span class="ng-arrow">→</span> <b style="--rc:${r.color}">${esc(g.biome.name)}</b>: ${esc(r.name)} seeds pay ${times(g.ratio)} more`);
+          // the copy shrinks with the screen: "Rare seeds pay 3× more" / ": 3× the cash" / just the biome
+          setHTML(line1, `${ICON.bolt}<span><span class="ng-word">Speed </span>Lv ${g.level} <b class="cash">${money(g.cost)}</b></span>`);
+          setHTML(line2, `<span class="ng-arrow">→</span> <b style="--rc:${r.color}">${esc(g.biome.name)}</b><span class="ng-more">: <span class="ng-long">${esc(r.name)} seeds<br>pay </span><b class="x">${times(g.ratio)}</b><span class="ng-long"> more</span><span class="ng-short"> the cash</span></span>`);
         } else {
           setHTML(line1, `${ICON.crown}<span>Rebirth <b class="cash">${money(g.cost)}</b></span>`);
-          setHTML(line2, `<span class="ng-arrow">→</span> ×${g.mult} income forever`);
+          setHTML(line2, `<span class="ng-arrow">→</span> <b class="x">×${g.mult}</b><span class="ng-more"> income forever</span>`);
         }
       }
       const f = Math.max(0, Math.min(1, me.cash / Math.max(1, g.cost)));

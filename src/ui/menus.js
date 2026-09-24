@@ -389,7 +389,7 @@ export function createMenus(app) {
       h('div', { class: `end-chip ${MEDAL[i] || 'plain'}${r.player === me ? ' me' : ''}`, role: 'listitem', style: `--c:${r.player.char.color};--d:${250 + i * 90}ms` },
         h('b', { class: 'ec-rank', text: String(i + 1) }),
         avatarEl(r.player.id, 'ec-ava'),
-        h('span', { class: 'ec-copy' }, h('span', { class: 'ec-name', text: r.player === me ? `${r.player.name} (you)` : r.player.name }), h('span', { class: 'ec-val', text: money(r.netWorth) })),
+        h('span', { class: 'ec-copy' }, h('span', { class: 'ec-name', text: r.player.name }), h('span', { class: 'ec-val', text: money(r.netWorth) })),
         i === 0 ? h('span', { class: 'ec-crown', html: ICON.crown }) : null)));
     let you = null;
     if (me && myRank) {
@@ -481,8 +481,8 @@ function bestPlant(game, p) {
   return best;
 }
 
-// Up to four fun awards. Someone without an award yet gets the next one if they earned it at all,
-// so one runaway leader can't sweep the lot and every kid has a shot at a trophy.
+// Up to four fun awards. Someone without an award yet gets the next one if they did at least a
+// quarter as well as the leader, so one runaway leader can't sweep the lot (two awards at most).
 function computeAwards(players) {
   const defs = [
     { key: 'steals', title: 'Master Thief', icon: ICON.eye, unit: (n) => `${n} steal${n === 1 ? '' : 's'}` },
@@ -494,7 +494,8 @@ function computeAwards(players) {
   const out = [];
   for (const d of defs) {
     const ranked = players.filter((p) => (p.stats[d.key] || 0) > 0).sort((a, b) => (b.stats[d.key] || 0) - (a.stats[d.key] || 0));
-    const pick = ranked.find((p) => count.get(p) === 0) || ranked.find((p) => count.get(p) < 2);
+    const top = ranked[0]?.stats[d.key] || 0;
+    const pick = ranked.find((p) => count.get(p) === 0 && p.stats[d.key] >= top * 0.25) || ranked.find((p) => count.get(p) < 2);
     if (!pick) continue;
     count.set(pick, count.get(pick) + 1);
     out.push({ title: d.title, icon: d.icon, player: pick, stat: d.unit(pick.stats[d.key]) });

@@ -415,6 +415,8 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .ng-l2{font:800 12px/1.25 var(--fb);color:#e2e7ff}
 .ng-l2 b{font-weight:900;color:var(--rc,#fff);color:color-mix(in srgb,var(--rc,#fff) 72%,#fff)}
 .ng-arrow{color:var(--gold);font-weight:900}
+.ng-l2 b.x{color:var(--cash)}
+.ng-short{display:none}
 .ng-bar{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(0,0,0,.35)}
 .ng-bar i{display:block;height:100%;background:linear-gradient(90deg,#3fd65a,#b4ff5e);transform-origin:0 50%;transform:scaleX(0);transition:transform .3s}
 .nextgoal.ready{box-shadow:var(--panel-sh),0 0 0 2px rgba(93,255,126,.55)}
@@ -704,7 +706,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .end-sub{display:flex;align-items:center;gap:8px;font:900 16px/1 var(--fb);background:rgba(16,22,58,.82);padding:4px 16px 4px 4px;border-radius:999px;border:2.5px solid var(--ink);animation:cardIn .5s .35s var(--spring) both}
 .end-top.win .end-sub{padding:7px 16px}
 .es-ava{--s:28px;border-width:2px}
-.end-card{position:relative;z-index:1;width:min(940px,100%);display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px 14px 14px;border-radius:24px;border:3px solid var(--ink);
+.end-card{position:relative;z-index:1;width:min(940px,100%);display:flex;flex-direction:column;align-items:center;gap:9px;padding:11px 14px 13px;border-radius:24px;border:3px solid var(--ink);
   background:linear-gradient(180deg,rgba(47,60,130,.9),rgba(27,36,82,.94));box-shadow:var(--panel-sh);animation:cardIn .5s .15s var(--spring) both}
 .end-chips{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;width:100%}
 .end-chip{position:relative;display:flex;align-items:center;gap:8px;padding:5px 16px 5px 5px;border-radius:999px;background:rgba(10,15,40,.55);box-shadow:inset 0 0 0 2px rgba(255,255,255,.08);animation:cardIn .45s var(--d) var(--spring) both;min-width:0}
@@ -717,6 +719,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .ec-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
 .ec-name{font:var(--fdw) 17px/1 var(--fd);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ec-val{font:var(--fdw) 15px/1 var(--fd);color:var(--cash)}
+.end-chip.me .ec-name::after{content:' (you)';font-size:.8em;color:var(--txt2)}
 .ec-crown{position:absolute;left:44px;top:-13px;width:24px;height:24px;color:var(--gold);transform:rotate(-14deg);filter:drop-shadow(0 2px 0 rgba(10,14,40,.5))}
 .end-you{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 16px;font:800 14px/1.2 var(--fb);color:var(--txt2)}
 .ey-k{font:900 11px/1 var(--fb);letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--c);padding:5px 9px;border-radius:8px;border:2px solid var(--ink);text-shadow:0 1px 0 rgba(0,0,0,.35)}
@@ -735,6 +738,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .aw-name b{font-weight:900}
 .aw-stat{color:var(--txt2)}
 .end-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.end-actions .btn-lg{min-height:52px;font-size:21px;padding:10px 26px 12px}
 .confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .confetti i{position:absolute;top:-24px;border-radius:2px;animation:confetti 3s linear infinite}
 
@@ -829,7 +833,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .hud:has(.tut:not(.gone):not(.hidden):not(.wait)) .hud-top{top:calc(var(--st) + 214px)}
   .alerts .alert:nth-child(n+3){display:none}
   .center-moment{top:54%}
-  .is-touch .hud-bottom .hotbar{margin-top:176px}
+  .is-touch .hud-bottom .hotbar{margin-top:186px}
   .alert{font-size:14px;padding:5px 12px 6px 5px;border-radius:15px;gap:8px}
   .alert small{font-size:12px}
   .a-ava{--s:36px}
@@ -877,6 +881,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .ec-ava{--s:32px}
   .ec-crown{left:38px}
   .ec-name{font-size:15px}
+  .end-chip.me .ec-name::after{content:none}
   .ec-val{font-size:13px}
   .end-you{font-size:12.5px;gap:4px 10px}
   .ey-v b{font-size:16px}
@@ -1022,7 +1027,13 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .end-sub{font-size:13px;padding:3px 12px 3px 3px}
   .end-top.win .end-sub{padding:4px 12px}
   .es-ava{--s:22px}
-  .end-card{width:min(860px,100%);gap:6px;padding:7px 10px 8px;border-radius:18px}
+  .end-card{width:min(860px,100%);display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"chips chips" "you act" "aw aw";align-items:center;column-gap:12px;row-gap:5px;padding:6px 10px 7px;border-radius:18px}
+  .end-chips{grid-area:chips}
+  .end-you{grid-area:you;justify-content:flex-start}
+  .awards{grid-area:aw}
+  .end-actions{grid-area:act;flex-wrap:nowrap;gap:8px}
+  .end-chip.me .ec-name::after{content:none}
+  .aw-name{display:none}
   .end-chips{flex-wrap:nowrap;gap:6px}
   .end-chip{gap:6px;padding:3px 10px 3px 3px}
   .ec-rank{width:20px;height:20px;font-size:13px}
@@ -1040,7 +1051,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .aw-title{font-size:12px}
   .aw-name{font-size:10.5px}
   .aw-stat{display:none}
-  .end-actions .btn-lg{min-height:40px;font-size:16px;padding:7px 16px 9px}
+  .end-actions .btn-lg{min-height:40px;font-size:16px;padding:6px 14px 8px;border-radius:14px}
   .pause-panel{width:min(560px,100%)}
   .pause-btns{display:grid;grid-template-columns:1fr 1fr}
   .pause-btns .btn-lg{grid-column:1/-1}
@@ -1051,7 +1062,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 /* ------------------------------------------------------------ touch + small-screen polish */
 /* tap targets: 44px minimum on touch screens (the Skip pill grows an invisible border instead) */
 .is-touch .hbtn{width:44px;height:44px}
-.is-touch .tut-skip{border:9px solid transparent;background-clip:padding-box;margin:-9px -8px;padding:6px 9px;font-size:12px;line-height:14px}
+.is-touch .tut-skip{border:9px solid transparent;border-radius:17px;background-clip:padding-box;margin:-9px -8px;padding:6px 9px;font-size:12px;line-height:14px}
 .is-touch .link{padding:15px 10px}
 .is-touch .title-small .btn,.is-touch .pb-btns .btn,.is-touch .seg-b{min-height:44px}
 .is-touch .btn-round,.is-touch .scr-head .btn-round{width:44px;height:44px}
@@ -1073,15 +1084,49 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .hud:has(.board.showdown) .hud-top{top:calc(var(--st) + 176px)}
   .hud:has(.board.showdown):has(.tut:not(.gone):not(.hidden):not(.wait)) .hud-top{top:calc(var(--st) + 226px)}
   .hud:has(.carry.show) .alerts .alert:nth-child(n+2){display:none}
+  .carry.full .cp-l2{font-size:14px}
+  /* next goal: a one-line chip under the cash ("Lv 1 $100 -> Greenhollow") */
+  .nextgoal{max-width:100%;padding:4px 10px 7px 4px;gap:5px;border-radius:13px}
+  .ng-ic{width:22px;height:22px;padding:3px}
+  .ng-k,.ng-word,.ng-more{display:none}
+  .ng-copy{flex-direction:row;align-items:center;gap:5px;white-space:nowrap}
+  .ng-l1{font-size:14px;gap:3px}
+  .ng-l1 svg{width:14px;height:14px}
+  .ng-l2{font-size:12px}
 }
-/* short phones (portrait) */
+/* short phones (portrait): one alert, no chat log, slimmer pills; the weather chip steps aside while a
+   prompt or carry pill needs the middle of the screen */
 @media (max-width:640px) and (max-height:740px){
   .chat{display:none}
   .alerts .alert:nth-child(n+2){display:none}
-  .meter{top:calc(var(--st) + 232px);bottom:calc(var(--sb) + 290px)}
+  .meter{top:calc(var(--st) + 232px);bottom:calc(var(--sb) + 322px)}
+  .hud:has(.prompt.show) .evchip,.hud:has(.carry.show) .evchip{display:none}
+  .prompt,.carry{padding-top:3px;padding-bottom:3px}
+  .pp-key,.prompt.tp .pp-key{width:36px;height:36px}
+  .pp-verb{font-size:18px}
+  .cp-arrow{width:36px;height:36px}
+  .cp-arrow svg{width:20px;height:20px}
+  .cp-l1{font-size:13px}
+  .cp-l1 b{font-size:15px}
+  .cp-l2{font-size:14px}
+  .carry.tracker .cp-l1{font-size:16px}
+  .carry.tracker .cp-l2{font-size:12px}
+  .alert{font-size:13px;padding:4px 10px 5px 4px;gap:7px}
+  .alert small{font-size:11.5px}
+  .a-ava{--s:30px}
+  .a-ic{width:30px;height:30px}
 }
 @media (max-height:500px) and (orientation:landscape){
   .cc-title{font-size:11px}
+  .tut-num,.tut-count{display:none}
+  .tut-copy b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tut-dist{white-space:normal;text-align:center;max-width:44px;line-height:1.1}
+  .nextgoal{max-width:236px;padding:5px 10px 8px 5px;gap:6px;border-radius:14px}
+  .ng-ic{width:24px;height:24px;padding:4px}
+  .ng-k,.ng-long{display:none}
+  .ng-short{display:inline}
+  .ng-l1{font-size:14px}
+  .ng-l2{font-size:11px}
   .br-val{font-size:12px}
   .hud:has(.carry.show) .alerts .alert:nth-child(n+2){display:none}
   /* photo booth editor: stage sized to the screen, zoom + actions beside it */
@@ -1105,6 +1150,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .tut{width:212px;max-width:212px}
   .hud-top{left:calc(var(--sl) + 228px);right:calc(var(--sr) + 176px);width:auto;min-width:0;max-width:none;transform:none}
   .stick-idle{left:calc(var(--sl) + 104px)}
+  .meter{top:calc(var(--st) + 200px)}
 }
 
 /* ------------------------------------------------------------ keyframes */

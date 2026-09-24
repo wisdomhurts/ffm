@@ -353,10 +353,13 @@ class App {
       const a = Math.sin(this._podiumT * 0.35) * 0.38;
       const k = Math.min(1, this._podiumT / 1.6);
       const cam = this.engine.camera;
-      const tx = Math.sin(a) * 17, ty = 7.2, tz = -Math.cos(a) * 17;
+      const tanH = Math.tan((cam.fov * Math.PI) / 360) * cam.aspect;
+      const R = Math.max(17, 9.6 / tanH); // back off on narrow screens so all four finishers fit
+      const lookY = cam.aspect < 1 ? 1.4 : 2.6; // podium sits between the title banner and the results card
+      const tx = Math.sin(a) * R, ty = 7.2 + (R - 17) * 0.2, tz = -Math.cos(a) * R;
       if (k < 1) cam.position.lerp({ x: tx, y: ty, z: tz }, 0.08 + k * 0.2);
       else cam.position.set(tx, ty, tz);
-      cam.lookAt(0, 4.6, 0);
+      cam.lookAt(0, lookY, 0);
       this.engine.setFocus(0, 0, 0);
     } else if (this.human && this.state !== 'title') {
       const p = this.human;

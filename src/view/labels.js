@@ -80,7 +80,7 @@ export class Labels {
     it.want = onScreen;
     if (!onScreen) return;
     if (it.html !== html) {
-      if (!it.html || Math.abs(it.html.length - html.length) > 6) it.dirty = true;
+      it.dirty = true; // re-measured next frame (cheap: layout is clean by then)
       it.el.innerHTML = html;
       it.html = html;
     }
@@ -132,7 +132,7 @@ export class Labels {
       const w = it.bw * it.s, h = it.bh * it.s;
       let dy = 0;
       let ok = it.noDeclutter;
-      const maxShift = 46 * it.s;
+      const maxShift = (it.pri >= 4 ? 90 : 46) * it.s;
       for (let tries = 0; !ok && tries < 4; tries++) {
         const x0 = it.sx - w / 2, x1 = it.sx + w / 2, y1 = it.sy + dy, y0 = y1 - h;
         let hit = null;
