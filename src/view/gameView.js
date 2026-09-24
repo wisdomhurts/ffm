@@ -50,6 +50,7 @@ export class GameView {
       this.root.add(av.object3d);
       this.avatars[i] = av;
       this.carryKeys[i] = null;
+      if (p === g.human) this.xray = addXray(av.object3d, p.char.color);
       getFace(p.id).then((f) => {
         if (this.disposed) return;
         av.setFace(f.face, f.skin);
@@ -119,6 +120,7 @@ export class GameView {
         coil: now < p.coilUntil,
         interacting: p.interact?.t > 0 ? p.interact.verb : null,
       });
+      if (p === human && this.xray) this.xray.setVisible(invisible >= 1);
       if (invisible > 0.05) {
         const tag = p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`;
         let carry = '';
@@ -303,11 +305,65 @@ export class GameView {
     this.engine.scene.remove(this.root);
     // modules mark geometry they share across matches with userData.shared
     this.root.traverse((o) => {
-      if (o.geometry && !o.geometry.userData?.shared) o.geometry.dispose();
+      if (o.geometry && !o.geometry.userData?.shared && !o.userData.xray) o.geometry.dispose();
     });
+    this.xray?.dispose();
     this.avatars.forEach((a) => a.dispose?.());
     this.monsterViews.forEach((m) => m.dispose?.());
   }
+}
+
+// X-ray silhouette: when a fence or wall hides the local player's avatar, draw its hidden parts as a
+// soft outline in their family colour. The body marks the stencil where it is visible; the silhouette
+// draws only where the body lost the depth test (behind something) and marks the stencil too, so
+// overlapping parts never stack into darker patches.
+function addXray(root, color) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35),
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    depthFunc: THREE.GreaterDepth,
+    toneMapped: false,
+    fog: false,
+    stencilWrite: true,
+    stencilRef: 1,
+    stencilFunc: THREE.NotEqualStencilFunc,
+    stencilZPass: THREE.ReplaceStencilOp,
+  });
+  const body = [];
+  root.traverse((o) => {
+    if (o.isMesh && o.material?.isMeshStandardMaterial) body.push(o);
+  });
+  const marked = new Set();
+  const meshes = [];
+  for (const m of body) {
+    if (!marked.has(m.material)) {
+      marked.add(m.material);
+      m.material.stencilWrite = true;
+      m.material.stencilRef = 1;
+      m.material.stencilFunc = THREE.AlwaysStencilFunc;
+      m.material.stencilZPass = THREE.ReplaceStencilOp;
+    }
+    const x = new THREE.Mesh(m.geometry, mat);
+    x.userData.xray = true;
+    x.renderOrder = 30;
+    x.castShadow = x.receiveShadow = false;
+    x.raycast = () => {};
+    m.add(x);
+    meshes.push(x);
+  }
+  let shown = true;
+  return {
+    setVisible(v) {
+      if (v === shown) return;
+      shown = v;
+      for (const x of meshes) x.visible = v;
+    },
+    dispose() {
+      mat.dispose();
+    },
+  };
 }
 
 export function rarityColor(id) {
