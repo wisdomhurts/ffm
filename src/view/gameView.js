@@ -101,6 +101,8 @@ export class GameView {
         if (c?.kind === 'seed') view = createSeedView(c.speciesId, c.mutation);
         else if (c?.kind === 'plant') view = createCarriedPlantView(c.plant.speciesId, c.plant.mutation);
         (this.carryViews ||= [])[i] = view;
+        // the pot on the local player's head draws after the x-ray so the head's outline never shows through it
+        if (view && p === human) view.object3d.traverse((o) => { if (o.isMesh && !o.material.transparent) o.renderOrder += 31; });
         av.setCarry(view ? view.object3d : null);
       }
       this.carryViews?.[i]?.update(dt, time);
@@ -320,7 +322,11 @@ export class GameView {
 function addXray(root, color) {
   const mat = new THREE.MeshBasicMaterial({
     color: new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.35),
-    transparent: true,
+    // blended but kept in the opaque pass (not transparent) so it can draw before the carried pot
+    transparent: false,
+    blending: THREE.CustomBlending,
+    blendSrc: THREE.SrcAlphaFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
     opacity: 0.7,
     depthWrite: false,
     depthFunc: THREE.GreaterDepth,
