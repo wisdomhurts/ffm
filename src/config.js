@@ -43,7 +43,7 @@ export const PLAYER = {
 };
 
 // Cost of buying speed level L (from L-1).
-export const speedCost = (L) => Math.round(80 * Math.pow(1.55, L));
+export const speedCost = (L) => (L === 1 ? 100 : Math.round(80 * Math.pow(1.55, L)));
 export const speedAt = (level, rebirths = 0) => PLAYER.baseSpeed + level * PLAYER.speedPerLevel + rebirths * 2;
 
 // Planters: first 4 unlocked. Cost to unlock planter index i (0-based).
@@ -205,31 +205,35 @@ export const CHARACTER = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
 // Family banter. {plant} {victim} {thief} {name} are substituted.
 export const CHAT = {
   dorian: {
-    steal: ['Dad tax! Thanks for the {plant}.', 'I\'ll take that {plant}, {victim}.', 'Business opportunity spotted.'],
-    robbed: ['Who took my {plant}?!', '{thief}! Bring that back!', 'Not the {plant}!'],
-    bonk: ['Dad strength!', 'Bonk!', 'Nice try, kiddo.'],
-    rare: ['Look at this {plant}!', 'Jackpot!'],
-    idle: ['Business is booming.', 'Who wants to race to Starbloom?', 'Anyone seen my Sunflower?'],
+    steal: ['Dad tax! Thanks for the {plant}.', 'I\'ll take that {plant}, {victim}.', 'Business opportunity spotted.', 'This {plant} is coming with me.', 'Consider it a loan, {victim}.'],
+    robbed: ['Who took my {plant}?!', '{thief}! Bring that back!', 'Not the {plant}!', '{thief}, we talked about this!', 'That {plant} was my retirement plan!'],
+    bonk: ['Dad strength!', 'Bonk!', 'Nice try, kiddo.', 'Rookie mistake.', 'The noodle never misses.'],
+    rare: ['Look at this {plant}!', 'Jackpot!', 'Found {a_plant}! Daddy\'s rich!'],
+    idle: ['Business is booming.', 'Who wants to race to Starbloom?', 'Anyone seen my Sunflower?', 'Remember Cabo? This is better.',
+      'Speed is money, {human}.', 'I\'m not saying I\'m the best... but I\'m the best.', 'Who ate the last churro?', 'Dad joke incoming: this garden is un-BE-LEAF-able.'],
   },
   esther: {
-    steal: ['Mom privileges. {plant} is mine.', 'Sorry {victim}, this {plant} looked lonely.', 'Borrowing this forever.'],
-    robbed: ['{thief}. Put. It. Back.', 'You did NOT just take my {plant}.', 'Locking up next time!'],
-    bonk: ['Nobody touches my garden!', 'Hands off!', 'Gotcha!'],
-    rare: ['Ooh, a {plant}!', 'So pretty!'],
-    idle: ['Nobody touches my garden.', 'Dinner\'s at 6, I\'m farming.', 'Who left a banana peel here?'],
+    steal: ['Mom privileges. {plant} is mine.', 'Sorry {victim}, this {plant} looked lonely.', 'Borrowing this forever.', 'Finders keepers, {victim}.', 'Mom always wins.'],
+    robbed: ['{thief}. Put. It. Back.', 'You did NOT just take my {plant}.', 'Locking up next time!', '{thief}, you\'re grounded!', 'I saw that, {thief}!'],
+    bonk: ['Nobody touches my garden!', 'Hands off!', 'Gotcha!', 'Don\'t make me count to three.', 'That\'s what you get!'],
+    rare: ['Ooh, {a_plant}!', 'So pretty!', 'Now THAT is a good seed.'],
+    idle: ['Nobody touches my garden.', 'Dinner\'s at 6, I\'m farming.', 'Who left a banana peel here?', 'Sunscreen, everybody!',
+      'Has anyone seen the TV remote?', 'I miss the beach already.', 'Good luck, {human}!', 'Garden looking gorgeous today.'],
   },
   maddie: {
-    steal: ['Zoom! Got your {plant}!', 'Too fast for you, {victim}!', 'Yoink!'],
-    robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!'],
-    bonk: ['Hi-yah!', 'Too slow!', 'Bonk bonk!'],
-    rare: ['I found a {plant}!!', 'Starbloom here I come!'],
-    idle: ['Zoom zoom!', 'I\'m going to Starbloom!', 'Race you!'],
+    steal: ['Zoom! Got your {plant}!', 'Too fast for you, {victim}!', 'Yoink!', 'Speedy delivery!', 'Catch me if you can, {victim}!'],
+    robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!', 'MOM! {thief} took my {plant}!', 'I\'m coming for you, {thief}!'],
+    bonk: ['Hi-yah!', 'Too slow!', 'Bonk bonk!', 'Ninja noodle!', 'Boom!'],
+    rare: ['I found {a_plant}!!', 'Starbloom here I come!', 'Best. Seed. EVER!'],
+    idle: ['Zoom zoom!', 'I\'m going to Starbloom!', 'Race you!', 'I\'m the fastest in the family.', 'Can we get ice cream after this?',
+      'Bet you can\'t catch me, {human}!', 'Speed Level: awesome.', 'This is SO fun.'],
   },
   micah: {
-    steal: ['Hehe. Your {plant} is mine now.', 'Can\'t catch me, {victim}!', 'Sneaky sneaky...'],
-    robbed: ['Hey! That was MY {plant}!', '{thief} stole my stuff!', 'Not cool!'],
-    bonk: ['Noodle attack!', 'Ha! Got you!', 'BONK!'],
-    rare: ['WHOA a {plant}!', 'This is so rare!'],
-    idle: ['Hehe.', 'Anyone want a banana?', 'I\'m not up to anything...'],
+    steal: ['Hehe. Your {plant} is mine now.', 'Can\'t catch me, {victim}!', 'Sneaky sneaky...', 'Thanks for the {plant}!', 'Ninja mode activated.'],
+    robbed: ['Hey! That was MY {plant}!', '{thief} stole my stuff!', 'Not cool!', 'Okay {thief}, it\'s WAR.', 'I was gonna steal that back anyway.'],
+    bonk: ['Noodle attack!', 'Ha! Got you!', 'BONK!', 'Critical hit!', 'You got noodled!'],
+    rare: ['WHOA, {a_plant}!', 'This is so rare!', 'Is this a secret?!'],
+    idle: ['Hehe.', 'Anyone want a banana?', 'I\'m not up to anything...', 'Nothing to see here.', 'I love this game.',
+      'Watch your garden, {human}...', 'I have a plan. A sneaky plan.', 'Is it snack time yet?'],
   },
 };

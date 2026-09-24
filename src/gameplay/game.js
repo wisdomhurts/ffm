@@ -170,7 +170,13 @@ export class Game {
   say(player, category, vars = {}) {
     const lines = CHAT[player.id]?.[category];
     if (!lines) return;
+    vars = { ...vars };
+    if (vars.plant) vars.a_plant = (/^[aeiou]/i.test(vars.plant) ? 'an ' : 'a ') + vars.plant;
+    vars.human = this.human && this.human !== player ? this.human.name : 'everyone';
+    // don't repeat the same line twice in a row
     let text = this.rng.pick(lines);
+    if (lines.length > 1 && text === player._lastLine) text = this.rng.pick(lines);
+    player._lastLine = text;
     for (const [k, v] of Object.entries(vars)) text = text.replaceAll(`{${k}}`, v);
     bus.emit('chat', { player, text });
   }
@@ -186,7 +192,8 @@ export class Game {
   }
 
   ranking() {
-    return [...this.players].sort((a, b) => this.netWorth.get(b) - this.netWorth.get(a));
+    // ties go to the local player (nobody likes starting in last place)
+    return [...this.players].sort((a, b) => this.netWorth.get(b) - this.netWorth.get(a) || (b.isHuman ? 1 : 0) - (a.isHuman ? 1 : 0));
   }
 
   // ------------------------------------------------------------------ main update

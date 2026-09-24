@@ -713,7 +713,7 @@ export function createEffects(engine, container) {
       }
       if (thief === h) {
         burst('confetti', at(thief.pos.x, thief.pos.y + 4, thief.pos.z), { count: 45 });
-        floatText('STOLEN!', at(0, 7.2, 0), { style: 'bad', size: 'xl', follow: thief.pos, duration: 1.8, rise: 2 });
+        floatText('YOINK!', at(0, 7.2, 0), { style: 'gold', size: 'xl', follow: thief.pos, duration: 1.8, rise: 2 });
         if (soldFor) floatText('+$' + fmt(soldFor), at(0, 5.6, 0), { style: 'money', size: 'l', follow: thief.pos, duration: 1.8 });
         shake(0.25);
       } else if (victim === h) {
@@ -731,7 +731,9 @@ export function createEffects(engine, container) {
       const L = lodAt(thief.pos.x, 4, thief.pos.z, involved ? 400 : 80);
       if (!L || !allowBurst()) return;
       burst('sparkle', at(thief.pos.x, thief.pos.y + 6.5, thief.pos.z), { color: '#6dfbd8', count: 10, lod: L });
-      if ((involved || L > 0.6) && allowFloat()) {
+      if (thief === h && allowFloat()) {
+        floatText('DROPPED IT!', at(thief.pos.x, thief.pos.y + 7.4, thief.pos.z), { style: 'bad', size: 'l', duration: 1.5 });
+      } else if ((involved || L > 0.6) && allowFloat()) {
         floatText('GOT IT BACK!', at(thief.pos.x, thief.pos.y + 7.4, thief.pos.z), { style: 'good', size: involved ? 'l' : 's', duration: 1.5 });
       }
     },
@@ -828,7 +830,7 @@ export function createEffects(engine, container) {
       if (!L || !allowBurst()) return;
       burst('sparks', at(g.x, 0.4, g.z), { color: '#ff2a2a', count: 40, spanZ: g.half, spanY: 5, lod: L, hot: true });
       burst('beams', at(g.x, 0, g.z), { color: '#ff3b3b', spanZ: g.half, lod: L });
-      if (mine && allowFloat()) floatText('LOCKED!', at(g.x, 7.5, g.z), { style: 'bad', size: 'l', duration: 1.5 });
+      if (mine && allowFloat()) floatText('LOCKED!', at(g.x, 7.5, g.z), { style: 'good', size: 'l', duration: 1.5 });
     },
 
     'lock:off'({ garden }) {

@@ -8,7 +8,7 @@ export class HumanController {
     this.cam = cam;
     this.frameEdges = null;
     this.game = null;
-    this._interactTapFrames = 0;
+    this._tapHold = 0;
   }
 
   // Called once per rendered frame (before game.update) to latch edge actions for this frame.
@@ -23,14 +23,15 @@ export class HumanController {
       interactTap: i.take('interactTap'),
     };
     this.frameEdges = e;
-    this._interactTapFrames = e.interactTap ? 2 : this._interactTapFrames;
+    // a quick tap on E / the Action button counts as a short hold, long enough for 0.25 s grabs
+    if (e.interactTap) this._tapHold = 0.35;
   }
 
-  getIntent(game, p) {
+  getIntent(game, p, dt = 1 / 60) {
     const it = emptyIntent();
     if (!this.input.enabled) {
       // a menu took over: drop any E-tap in flight so it can't re-fire when the menu closes
-      this._interactTapFrames = 0;
+      this._tapHold = 0;
       this.frameEdges = null;
       return it;
     }
@@ -41,7 +42,8 @@ export class HumanController {
     it.moveX = fx * a.y + rx * a.x;
     it.moveZ = fz * a.y + rz * a.x;
     // A tap on E / the action button counts as holding for a moment (instant actions fire on it).
-    it.interact = this.input.interactHeld() || this._interactTapFrames > 0;
+    it.interact = this.input.interactHeld() || this._tapHold > 0;
+    this._tapHold = Math.max(0, (this._tapHold || 0) - dt);
     const e = this.frameEdges;
     if (e) {
       it.jump = !!e.jump;
@@ -54,7 +56,6 @@ export class HumanController {
       if (e.select) it.selectSlot = (p.selectedItem + e.select + ITEMS.length) % ITEMS.length;
       // consume edges after the first substep
       this.frameEdges = null;
-      if (this._interactTapFrames > 0) this._interactTapFrames--;
     }
     return it;
   }

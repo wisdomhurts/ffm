@@ -226,7 +226,7 @@ class App {
     this.menus.hidePause();
     this.menus.closeShop();
     this.input.reset();
-    if (this.humanCtrl) this.humanCtrl._interactTapFrames = 0;
+    if (this.humanCtrl) this.humanCtrl._tapHold = 0;
     this.touch.setVisible(true);
     bus.emit('app:state', { state: 'playing' });
   }
