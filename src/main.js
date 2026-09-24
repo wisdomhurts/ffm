@@ -172,9 +172,10 @@ class App {
         p.pos.y = s.h;
         p.pos.z = 0;
       } else {
-        p.pos.x = 9.5;
+        // 4th place stands beside the podium, a little behind it
+        p.pos.x = 9.2;
         p.pos.y = 0;
-        p.pos.z = -2;
+        p.pos.z = 2.5;
       }
       p.yaw = Math.PI; // face the camera
       p.celebrateUntil = i === 0 ? g.time + 1e6 : 0;
