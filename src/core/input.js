@@ -17,6 +17,9 @@ export class Input {
 
     this._kd = (e) => {
       if (isTyping(e)) return;
+      // E held through a menu (its key state was reset) stays ignored until it is pressed again,
+      // or its auto-repeat would read as a fresh press and reopen the shop that just closed
+      if (e.repeat && e.code === 'KeyE' && !this.keys.has(e.code)) return;
       this.lastDevice = 'keyboard';
       if (!this.keys.has(e.code)) this._edge(e.code);
       this.keys.add(e.code);

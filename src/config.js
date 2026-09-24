@@ -241,7 +241,7 @@ export const CHAT = {
     robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!', 'Hey {thief}! That\'s MY {plant}!', 'I\'m coming for you, {thief}!'],
     bonk: ['Hi-yah!', 'Too slow!', 'Bonk bonk!', 'Ninja noodle!', 'Boom!'],
     rare: ['I found {a_plant}!!', 'Starbloom here I come!', 'Best. Seed. EVER!'],
-    idle: ['Zoom zoom!', 'I\'m going to Starbloom!', 'Race you!', 'I\'m the fastest in the family.', 'Can we get ice cream after this?',
+    idle: ['Zoom zoom!', 'Watch me find a Mythic!', 'Race you!', 'I\'m the fastest in the family.', 'Can we get ice cream after this?',
       'Bet you can\'t catch me, {human}!', 'Speed Level: awesome.', 'This is SO fun.'],
   },
   micah: {

@@ -8,7 +8,7 @@ import { FollowCamera, reducedMotion } from './core/camera.js';
 import { bus } from './core/events.js';
 import { settings } from './core/settings.js';
 import { load, save, remove } from './core/save.js';
-import { CHARACTERS, CHARACTER } from './config.js';
+import { CHARACTERS, CHARACTER, PLANTS } from './config.js';
 import { LAYOUT } from './gameplay/layout.js';
 import { Game } from './gameplay/game.js';
 import { HumanController } from './gameplay/humanController.js';
@@ -30,11 +30,11 @@ function buildWarmupGroup() {
   const g = new THREE.Group();
   g.name = 'shader-warmup';
   g.add(createBanana(), createBalloon());
+  // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
-    g.add(createPlantView('starlotus', m).object3d);
-    g.add(createSeedView('galaxyorchid', m).object3d);
+    for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);
+    g.add(createSeedView('galaxyorchid', m).object3d, createCarriedPlantView('lavalily', m).object3d);
   }
-  g.add(createPlantView('dorianfruit', 'normal').object3d, createCarriedPlantView('lavalily', 'gold').object3d);
   g.traverse((o) => (o.frustumCulled = false));
   return g;
 }
@@ -169,8 +169,7 @@ class App {
     this._podium = group;
     ranking.forEach((r, i) => {
       const p = r.player;
-      if (p.carrying?.kind === 'plant') g.returnPlant(p.carrying.plant, p.carrying.fromSlot, p.carrying.fromIndex);
-      p.carrying = null;
+      p.carrying = null; // stolen plants already went home in Game._endMatch
       p.stunUntil = p.invulnUntil = 0;
       p.cloakUntil = p.coilUntil = 0;
       p.vel.x = p.vel.y = p.vel.z = 0;
@@ -232,7 +231,8 @@ class App {
       const warm = this._warmGroup || (this._warmGroup = buildWarmupGroup());
       warm.position.set(0, -400, 0);
       this.engine.scene.add(warm);
-      const done = () => this.engine.scene.remove(warm);
+      // stay in the scene for two rendered frames too, so the shadow-map depth variants compile now as well
+      const done = () => requestAnimationFrame(() => requestAnimationFrame(() => this.engine.scene.remove(warm)));
       if (r.compileAsync) r.compileAsync(this.engine.scene, this.engine.camera).then(done, done);
       else {
         r.compile(this.engine.scene, this.engine.camera);

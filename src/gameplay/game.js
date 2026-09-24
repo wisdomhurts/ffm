@@ -1004,6 +1004,14 @@ export class Game {
 
   _endMatch() {
     if (this.over) return;
+    // A steal only counts once the thief gets it home: plants still in someone's arms at the buzzer go
+    // back to their owner first, so the ranking always matches the gardens on the podium.
+    for (const p of this.players) {
+      const c = p.carrying;
+      if (c?.kind !== 'plant') continue;
+      p.carrying = null;
+      this.returnPlant(c.plant, c.fromSlot, c.fromIndex);
+    }
     this._recomputeNetWorth();
     this.over = true;
     const ranking = this.ranking().map((p) => ({ player: p, netWorth: this.netWorth.get(p) }));
