@@ -45,6 +45,11 @@ export class FollowCamera {
     this._introFrom = null;
   }
 
+  _setDir(pitch) {
+    const cp = Math.cos(pitch);
+    this._dir.set(-Math.sin(this.yaw) * cp, Math.sin(pitch), -Math.cos(this.yaw) * cp);
+  }
+
   addShake(amount) {
     if (reducedMotion()) return;
     this.shake = Math.min(1.5, this.shake + amount);
@@ -65,29 +70,37 @@ export class FollowCamera {
     // Gentle auto-follow: after a moment without manual orbit, drift behind the running player.
     // Only while the player pushes forward: following a held strafe/diagonal would make them run in circles.
     if (settings.autoRotate && moving && this.time - this.lastManual > 1.4) {
-      const fwd = input ? input.axis().y : 0;
+      const ax = input ? input.axis() : { x: 0, y: 0 };
       const d = Math.atan2(Math.sin(playerYaw - this.yaw), Math.cos(playerYaw - this.yaw));
-      if (fwd > 0.2 && Math.abs(d) < 1.0) this.yaw += d * Math.min(1, dt * 0.8) * fwd;
+      // mostly-forward input only: a held diagonal would otherwise chase its own tail in circles
+      if (ax.y > 0.2 && Math.abs(ax.x) < 0.25 && Math.abs(d) < 1.0) this.yaw += d * Math.min(1, dt * 0.8) * ax.y;
     }
     this.target.set(focus.x, focus.y + 4.2, focus.z);
     if (this.smoothTarget.lengthSq() === 0) this.smoothTarget.copy(this.target);
     this.smoothTarget.lerp(this.target, 1 - Math.exp(-dt * 14));
 
-    const cp = Math.cos(this.pitch);
-    this._dir.set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
-    // Snap in immediately when something blocks the view, ease back out when it clears.
+    // Occlusion: when a fence or wall blocks the view, first try looking down over it from a bit higher
+    // (like Roblox's camera popping over low walls); only pull in if no higher angle has a clear view.
     let want = this.distance;
+    let liftGoal = 0;
     if (this.physics) {
-      let hit = this.physics.raycast(this.smoothTarget, this._dir, want);
-      if (hit < 8 && hit < want) {
-        // very close: tilt down a little to look over the obstacle instead of into the back of the head
-        const extra = Math.min(0.3, (8 - hit) * 0.06);
-        const p2 = Math.min(1.35, this.pitch + extra);
-        const c2 = Math.cos(p2);
-        this._dir.set(-Math.sin(this.yaw) * c2, Math.sin(p2), -Math.cos(this.yaw) * c2);
-        hit = this.physics.raycast(this.smoothTarget, this._dir, want);
+      const need = Math.min(want, 9) - 0.3; // a clear first 9 studs is enough; farther hits just pull in a bit
+      for (let k = 0; k <= 8; k++) {
+        const p2 = Math.min(1.3, this.pitch + k * 0.1);
+        this._setDir(p2);
+        if (this.physics.raycast(this.smoothTarget, this._dir, want) >= need) {
+          liftGoal = p2 - this.pitch;
+          break;
+        }
+        if (p2 >= 1.3) break;
       }
-      if (hit < want) want = Math.max(3, hit - 0.8);
+    }
+    this._lift = (this._lift || 0) + (liftGoal - (this._lift || 0)) * (1 - Math.exp(-dt * 7));
+    this._setDir(Math.min(1.3, this.pitch + this._lift));
+    if (this.physics) {
+      // Snap in immediately when something still blocks the view, ease back out when it clears.
+      const hit = this.physics.raycast(this.smoothTarget, this._dir, want);
+      if (hit < want) want = Math.max(2, hit - 0.8);
     }
     if (this._dist == null) this._dist = want;
     this._dist = want <= this._dist ? want : this._dist + (want - this._dist) * (1 - Math.exp(-dt * 5));

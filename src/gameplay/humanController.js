@@ -23,8 +23,13 @@ export class HumanController {
       interactTap: i.take('interactTap'),
     };
     this.frameEdges = e;
-    // a quick tap on E / the Action button counts as a short hold, long enough for 0.25 s grabs
-    if (e.interactTap) this._tapHold = 0.35;
+    // a quick tap on E / the Action button counts as a short hold, long enough for 0.25 s grabs;
+    // a new tap during that hold first reports a release so it registers as a fresh press
+    if (e.interactTap) {
+      // a fresh press always follows a release, so if we were still reporting "held" insert one
+      this._tapRelease = !!this._lastInteract;
+      this._tapHold = 0.35;
+    }
   }
 
   getIntent(game, p, dt = 1 / 60) {
@@ -42,8 +47,14 @@ export class HumanController {
     it.moveX = fx * a.y + rx * a.x;
     it.moveZ = fz * a.y + rz * a.x;
     // A tap on E / the action button counts as holding for a moment (instant actions fire on it).
-    it.interact = this.input.interactHeld() || this._tapHold > 0;
-    this._tapHold = Math.max(0, (this._tapHold || 0) - dt);
+    if (this._tapRelease) {
+      this._tapRelease = false;
+      it.interact = false;
+    } else {
+      it.interact = this.input.interactHeld() || this._tapHold > 0;
+      this._tapHold = Math.max(0, (this._tapHold || 0) - dt);
+    }
+    this._lastInteract = it.interact;
     const e = this.frameEdges;
     if (e) {
       it.jump = !!e.jump;

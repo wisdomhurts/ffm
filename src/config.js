@@ -238,7 +238,7 @@ export const CHAT = {
     tease: ['Slow-mo mode! Catch me, {victim}!', 'Your {plant} is MINE! Unless you bonk me, {victim}!', 'Hehe, try and catch me {victim}!'],
     caught: ['Nooo, you got me!', 'Okay, THAT was a good bonk!', 'No fair, you\'re quick!'],
     steal: ['Zoom! Got your {plant}!', 'Too fast for you, {victim}!', 'Yoink!', 'Speedy delivery!', 'Catch me if you can, {victim}!'],
-    robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!', 'MOM! {thief} took my {plant}!', 'I\'m coming for you, {thief}!'],
+    robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!', 'Hey {thief}! That\'s MY {plant}!', 'I\'m coming for you, {thief}!'],
     bonk: ['Hi-yah!', 'Too slow!', 'Bonk bonk!', 'Ninja noodle!', 'Boom!'],
     rare: ['I found {a_plant}!!', 'Starbloom here I come!', 'Best. Seed. EVER!'],
     idle: ['Zoom zoom!', 'I\'m going to Starbloom!', 'Race you!', 'I\'m the fastest in the family.', 'Can we get ice cream after this?',

@@ -133,101 +133,69 @@ export class PhysicsWorld {
     }
   }
 
-  // Follow-camera ray from the target (the player's head) along unit dir d for length L; returns the distance
-  // to pull the camera in to, or L. Per box, camera extents: camMinY/camMaxY (default minY/maxY; a box with
-  // camMaxY below maxY is a fence or post whose collider is extended upwards so nobody can hop over it; a
-  // camera-only box puts minY/maxY out of reach). Two rules, with boxes padded by a lens radius:
-  //  - occlusion: the sight line passes through the box, so the player would be hidden behind it. Posts and
-  //    small decor (thin, tag 'deco'/'canopy') don't count; a fence only counts below its visible top plus a
-  //    margin, and not when it is too close to get the camera in front of it (then it looks over it instead).
-  //  - clearance: the camera would end up inside the padded box, or (fences) just behind it, filling the view.
-  // Boxes that pulled the camera in last frame hold on to it with wider margins (hysteresis), so a player
-  // weaving next to a fence doesn't make the camera flip back and forth.
+  // Follow-camera sight test, stateless so the camera can probe several angles per frame.
+  // Returns the distance along unit dir d from o (the player's head) to the first camera-solid box, or L.
+  // Camera-solid: cliffs, fences and gate posts up to their VISIBLE top (camMaxY), shop counters, the road
+  // arch, signs and big decor. Planters, invisible boundary walls and lasers never block. Thin decor
+  // (poles, trunks) and camera-only canopies never count as hiding the player, but the lens is kept out of them.
   raycast(o, d, L) {
-    const pad = 1.1; // lens clearance around boxes
-    const behind = 3; // a camera this close behind a fence is pulled in front of it
-    const minCam = 3.5; // closer than this the camera cannot be placed in front of an obstacle
-    let tExit = 0;
-    // slab test: entry distance along the ray (tExit = exit), 0 when starting inside, Infinity on a miss
-    const slab = (x0, x1, y0, y1, z0, z1) => {
-      let tmin = 0, tmax = Infinity;
-      for (let k = 0; k < 3; k++) {
-        const oa = k === 0 ? o.x : k === 1 ? o.y : o.z;
-        const da = k === 0 ? d.x : k === 1 ? d.y : d.z;
-        const mn = k === 0 ? x0 : k === 1 ? y0 : z0;
-        const mx = k === 0 ? x1 : k === 1 ? y1 : z1;
-        if (Math.abs(da) < 1e-9) {
-          if (oa < mn || oa > mx) return Infinity;
-        } else {
-          let t1 = (mn - oa) / da, t2 = (mx - oa) / da;
-          if (t1 > t2) [t1, t2] = [t2, t1];
-          if (t1 > tmin) tmin = t1;
-          if (t2 < tmax) tmax = t2;
-          if (tmin > tmax) return Infinity;
-        }
-      }
-      tExit = tmax;
-      return tmin;
-    };
-    const held = this._camHeld || (this._camHeld = new Set());
-    const hits = this._camHits || (this._camHits = new Set());
-    const near = this._camNear || (this._camNear = []); // padded boxes the ray crosses: box, entry, exit
-    hits.clear();
-    near.length = 0;
+    const lens = 0.35;
     let best = L;
-    const minX = Math.min(o.x, o.x + d.x * L) - pad, maxX = Math.max(o.x, o.x + d.x * L) + pad;
-    const minZ = Math.min(o.z, o.z + d.z * L) - pad, maxZ = Math.max(o.z, o.z + d.z * L) + pad;
+    const minX = Math.min(o.x, o.x + d.x * L) - 1, maxX = Math.max(o.x, o.x + d.x * L) + 1;
+    const minZ = Math.min(o.z, o.z + d.z * L) - 1, maxZ = Math.max(o.z, o.z + d.z * L) + 1;
     const list = this.query(minX, maxX, minZ, maxZ, this._tmp3 || (this._tmp3 = []));
+    const thin = this._camThin || (this._camThin = []);
+    thin.length = 0;
     for (const b of list) {
-      // the camera passes through planters, the invisible boundary walls, lasers and low decor
       if (b.tag === 'planter' || b.tag === 'wall' || b.tag === 'laser') continue;
-      if (b.tag === 'deco' && b.maxY < 6) continue;
       const y0 = b.camMinY ?? b.minY;
       const top = Math.min(b.maxY, b.camMaxY ?? b.maxY);
-      const extended = top < b.maxY; // fence, gate post or camera-only box
-      const fence = extended && b.tag === 'fence' && Math.max(b.maxX - b.minX, b.maxZ - b.minZ) > 3; // see-over wall
-      const thin = !fence && (extended || b.tag === 'deco' || b.tag === 'canopy'); // posts, poles, canopies
-      const tPad = slab(b.minX - pad, b.maxX + pad, y0 - pad, top + pad, b.minZ - pad, b.maxZ + pad);
-      if (tPad === Infinity) continue;
-      const hold = held.has(b);
-      const tPadExit = tExit + (extended ? behind + (hold ? 1.5 : 0) : 0);
-      // a post or pole closer than minCam can't be kept behind the camera: rather look past it than sit in it
-      const clearable = tPad > 0 && (!thin || tPad >= minCam);
-      if (clearable) near.push(b, tPad, tPadExit);
-      if (tPad >= best) continue;
-      let t = Infinity;
-      if (!thin) {
-        const m = fence ? 0.5 : 0;
-        const tCore = slab(b.minX, b.maxX, y0, top + m, b.minZ, b.maxZ);
-        // a held box keeps the camera until the sight line clears it by a wider margin
-        const tReal = hold ? Math.min(tCore, slab(b.minX - 0.6, b.maxX + 0.6, y0, top + m + 0.7, b.minZ - 0.6, b.maxZ + 0.6)) : tCore;
-        const tFace = tCore < Infinity ? tCore : tReal;
-        if (tReal > 0 && tReal < L && (!fence || tFace >= minCam - (hold ? 0.8 : 0))) {
-          // in front of a fence the lens only needs clearance along the ray, not the sideways padding
-          t = fence ? Math.max(tPad, tFace - 0.5) : tPad > 0 ? tPad : tReal;
-        }
+      if (top <= y0) continue;
+      const w = Math.min(b.maxX - b.minX, b.maxZ - b.minZ);
+      if (b.tag === 'canopy' || (b.tag === 'deco' && (w < 2 || top < 3))) {
+        thin.push(b);
+        continue;
       }
-      if (t === Infinity && clearable && L >= tPad && L <= tPadExit) t = tPad;
-      if (t === Infinity) continue;
-      hits.add(b);
-      if (t < best) best = t;
+      const t = segEntry(o, d, b.minX - lens, b.maxX + lens, y0 - lens, top + lens, b.minZ - lens, b.maxZ + lens);
+      if (t > 0 && t < best) best = t; // t === 0: the head is inside the padded box, ignore it
     }
-    // once pulled in, the camera must not land in (or just behind) another padded box, e.g. a gate post
-    // at the end of the fence it was pulled in front of
-    for (let pass = 0; pass < 3 && best < L; pass++) {
-      const cam = best - 0.8;
+    // keep the lens out of thin decor and canopies: stop in front of any the camera would sit inside
+    for (let pass = 0; pass < 3; pass++) {
+      const t = best - 0.6;
+      const px = o.x + d.x * t, py = o.y + d.y * t, pz = o.z + d.z * t;
       let moved = false;
-      for (let i = 0; i < near.length; i += 3) {
-        if (near[i + 1] < best && cam >= near[i + 1] && cam <= near[i + 2]) {
-          best = near[i + 1];
-          hits.add(near[i]);
-          moved = true;
+      for (const b of thin) {
+        const y0 = b.camMinY ?? b.minY;
+        const top = Math.min(b.maxY, b.camMaxY ?? b.maxY);
+        const P = 0.6;
+        if (px > b.minX - P && px < b.maxX + P && py > y0 - P && py < top + P && pz > b.minZ - P && pz < b.maxZ + P) {
+          const e = segEntry(o, d, b.minX - P, b.maxX + P, y0 - P, top + P, b.minZ - P, b.maxZ + P);
+          if (e > 0.5 && e < best) {
+            best = e;
+            moved = true;
+          }
         }
       }
       if (!moved) break;
     }
-    this._camHits = held;
-    this._camHeld = hits;
     return best;
   }
+}
+
+// Entry distance of the ray o + t*d into an axis-aligned box (0 if o starts inside, Infinity on a miss).
+function segEntry(o, d, x0, x1, y0, y1, z0, z1) {
+  let tmin = 0, tmax = Infinity;
+  const O = [o.x, o.y, o.z], D = [d.x, d.y, d.z], MN = [x0, y0, z0], MX = [x1, y1, z1];
+  for (let k = 0; k < 3; k++) {
+    if (Math.abs(D[k]) < 1e-9) {
+      if (O[k] < MN[k] || O[k] > MX[k]) return Infinity;
+    } else {
+      let t1 = (MN[k] - O[k]) / D[k], t2 = (MX[k] - O[k]) / D[k];
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return Infinity;
+    }
+  }
+  return tmin;
 }

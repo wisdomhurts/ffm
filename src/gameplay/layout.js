@@ -99,8 +99,9 @@ function staticColliders(gardens) {
   for (const b of boxes) if (b.tag === 'fence') b.camMaxY = 6.6;
   // Shop counters
   // counters are solid up to the awning so nobody hops behind them
-  box(-36, -24, -60, -57, 9, 0, 'shop');
-  box(24, 36, -60, -57, 9, 0, 'shop');
+  box(-36, -24, -66, -57, 9, 0, 'shop');
+  box(24, 36, -66, -57, 9, 0, 'shop');
+  for (const b of boxes) if (b.tag === 'shop') b.camMaxY = 4.2;
   return boxes;
 }
 

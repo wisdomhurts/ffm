@@ -79,10 +79,17 @@ class App {
     });
     // Graphics context lost (GPU reset): pause and tell the player instead of showing a white screen.
     bus.on('engine:contextlost', () => {
+      if (this.state === 'shop') {
+        this.menus.closeShop();
+        this.state = 'playing';
+      }
       if (this.state === 'playing') this.pause();
       this._showGfxNotice(true);
     });
-    bus.on('engine:contextrestored', () => this._showGfxNotice(false));
+    bus.on('engine:contextrestored', () => {
+      this._showGfxNotice(false);
+      if (this.state === 'paused') this.resume();
+    });
     bus.on('player:hit', ({ target }) => {
       if (target === this.human && this.state === 'shop') this.resume();
     });
@@ -243,7 +250,7 @@ class App {
     this._newGame({ humanId: null, mode: 'endless', difficulty: 'normal' });
     // give the bots a head start so the title screen looks lively
     for (let i = 0; i < 40 * 4; i++) this.game.update(1 / 40);
-    this._warmup = 40 * 16; // the rest of the head start is spread over the first title frames
+    this._warmup = 0;
     this.state = 'title';
     this.touch.setVisible(false);
     this.audio.setMusicMode('title');
@@ -300,12 +307,15 @@ class App {
 
   resume() {
     if (this.state !== 'paused' && this.state !== 'shop') return;
+    if (this._gfxEl) return; // graphics are lost: stay paused until they come back
     this.state = 'playing';
     this.game.paused = false;
     this.menus.hidePause();
     this.menus.closeShop();
     this.input.reset();
     if (this.humanCtrl) this.humanCtrl._tapHold = 0;
+    // a button still held from the menu (gamepad B, keyboard E) must be released before it acts again
+    if (this.human) this.human.prevInteract = true;
     this.touch.setVisible(true);
     bus.emit('app:state', { state: 'playing' });
   }

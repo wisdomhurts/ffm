@@ -201,7 +201,8 @@ export class GameView {
       const pile = Math.floor(gd.cashPile);
       const mineG = gd.owner === human;
       const padD = Math.hypot(Lg.collectPad.x - focus.x, Lg.collectPad.z - focus.z);
-      if (mineG || !human || (pile > 0 && padD < 30)) {
+      const onPad = mineG && padD < Lg.collectPad.r + 0.5;
+      if (!onPad && (mineG || !human || (pile > 0 && padD < 30))) {
         L.set('cp' + gd.slot, { x: Lg.collectPad.x, y: 1.8, z: Lg.collectPad.z }, `<div class="cp-amt">$${fmt(pile)}</div><div class="cp-lbl">COLLECT</div>`, { cls: 'padlbl collect' + (mineG ? ' mine' : ''), maxDist: 60 });
       }
       const locked = g.isLocked(gd);

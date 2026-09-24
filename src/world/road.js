@@ -809,6 +809,8 @@ export function buildRoad(ctx) {
         face(cx, cy, cz, -nx, -nz, w, h, atlas.uvRect(i * 2));
         face(cx + nx * 0.17, cy, cz + nz * 0.17, nx, nz, w, h, atlas.uvRect(i * 2 + 1));
         posts.box(cx + nx * 0.085, cy, cz + nz * 0.085, w + 0.3, h + 0.3, 0.14, '#1b2440', { ry: ang, ao: 0 });
+        // camera-only box so the follow camera never ends up inside a plaque near the pods
+        ctx.colliders.push({ minX: cx - 1.6, maxX: cx + 1.6, minY: 1e4, maxY: 1e4, camMinY: cy - h / 2 - 0.3, camMaxY: cy + h / 2 + 0.3, minZ: cz - 0.5, maxZ: cz + 0.5, tag: 'canopy' });
       }
     });
     const g = new THREE.BufferGeometry();

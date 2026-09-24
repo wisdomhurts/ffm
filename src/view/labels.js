@@ -59,6 +59,7 @@ export class Labels {
     if (!it) {
       const el = document.createElement('div');
       el.className = 'lbl ' + (o.cls || '');
+      el.style.display = 'none'; // shown by end() once placed
       this.root.appendChild(el);
       it = { el, html: null, cls: o.cls || '', seen: 0, visible: false, bw: 80, bh: 28, dirty: true, pri: priorityOf(o.cls || '') };
       this.items.set(key, it);

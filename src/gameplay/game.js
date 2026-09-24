@@ -173,10 +173,12 @@ export class Game {
     vars = { ...vars };
     if (vars.plant) vars.a_plant = (/^[aeiou]/i.test(vars.plant) ? 'an ' : 'a ') + vars.plant;
     vars.human = this.human && this.human !== player ? this.human.name : 'everyone';
-    // don't repeat the same line twice in a row
-    let text = this.rng.pick(lines);
-    if (lines.length > 1 && text === player._lastLine) text = this.rng.pick(lines);
-    player._lastLine = text;
+    // don't repeat any of this bot's recent lines
+    const recent = (player._recentLines ||= []);
+    const fresh = lines.filter((l) => !recent.includes(l));
+    let text = this.rng.pick(fresh.length ? fresh : lines);
+    recent.push(text);
+    if (recent.length > 6) recent.shift();
     for (const [k, v] of Object.entries(vars)) text = text.replaceAll(`{${k}}`, v);
     bus.emit('chat', { player, text });
   }
@@ -204,7 +206,7 @@ export class Game {
     // fixed substeps keep physics stable
     const steps = Math.ceil(dt / (1 / 60));
     const h = dt / steps;
-    for (let i = 0; i < steps; i++) this._step(h);
+    for (let i = 0; i < steps && !this.over && !this.paused; i++) this._step(h);
   }
 
   _step(dt) {
@@ -1001,6 +1003,7 @@ export class Game {
   // ------------------------------------------------------------------ match
 
   _endMatch() {
+    if (this.over) return;
     this._recomputeNetWorth();
     this.over = true;
     const ranking = this.ranking().map((p) => ({ player: p, netWorth: this.netWorth.get(p) }));
