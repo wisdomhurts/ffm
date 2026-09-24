@@ -365,13 +365,16 @@ class App {
       const k = Math.min(1, this._podiumT / 1.6);
       const cam = this.engine.camera;
       const tanH = Math.tan((cam.fov * Math.PI) / 360) * cam.aspect;
-      const R = Math.max(17, 9.6 / tanH); // back off on narrow screens so all four finishers fit
+      // The finishers span x -7.2 (2nd) to 10.4 (4th, beside 3rd place). On narrow screens orbit the middle
+      // of that line and back off far enough for all of it; wide screens keep the winner centred.
+      const cx = 1.6 * Math.min(1, Math.max(0, (1 - tanH) / 0.5));
+      const R = Math.max(17, (10.4 - cx + 1.2) / tanH);
       const lookY = cam.aspect < 1 ? 1.4 : 2.6; // podium sits between the title banner and the results card
-      const tx = Math.sin(a) * R, ty = 7.2 + (R - 17) * 0.2, tz = -Math.cos(a) * R;
+      const tx = cx + Math.sin(a) * R, ty = 7.2 + (R - 17) * 0.2, tz = -Math.cos(a) * R;
       if (k < 1) cam.position.lerp({ x: tx, y: ty, z: tz }, 0.08 + k * 0.2);
       else cam.position.set(tx, ty, tz);
-      cam.lookAt(0, lookY, 0);
-      this.engine.setFocus(0, 0, 0);
+      cam.lookAt(cx, lookY, 0);
+      this.engine.setFocus(cx, 0, 0);
     } else if (this.human && this.state !== 'title') {
       const p = this.human;
       const moving = Math.hypot(p.vel.x, p.vel.z) > 2;
