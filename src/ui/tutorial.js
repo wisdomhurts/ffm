@@ -22,6 +22,8 @@ const STEPS = [
 ];
 
 const REVEAL_DELAY = 1.0; // seconds after the intro camera lands
+// How close counts as "there" (the arrow hides): pads need you ON them, prompts appear from further away.
+const ARRIVE = { grab: 4.5, plant: 6, collect: 1.6, speed: 5, steal: 4, lock: 1.4 };
 
 export function createTutorial(app, parent) {
   const game = app.game;
@@ -217,7 +219,7 @@ export function createTutorial(app, parent) {
       acc = 0;
       const t = target();
       const g = t ? guidePoint(me.pos, t, game.physics?.boxes) : null;
-      const show = !!g && g.dist > 7;
+      const show = !!g && g.dist > (ARRIVE[STEPS[current]?.id] ?? 7);
       toggle(el, 'has-arrow', show);
       if (show) {
         const a = screenAngle(me.pos, g, app.cam.yaw);
