@@ -75,11 +75,23 @@ export class FollowCamera {
 
     const cp = Math.cos(this.pitch);
     this._dir.set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
-    let dist = this.distance;
+    // Snap in immediately when something blocks the view, ease back out when it clears.
+    let want = this.distance;
     if (this.physics) {
-      const hit = this.physics.raycast(this.smoothTarget, this._dir, dist);
-      if (hit < dist) dist = Math.max(3, hit - 0.8);
+      let hit = this.physics.raycast(this.smoothTarget, this._dir, want);
+      if (hit < 8 && hit < want) {
+        // very close: tilt down a little to look over the obstacle instead of into the back of the head
+        const extra = Math.min(0.3, (8 - hit) * 0.06);
+        const p2 = Math.min(1.35, this.pitch + extra);
+        const c2 = Math.cos(p2);
+        this._dir.set(-Math.sin(this.yaw) * c2, Math.sin(p2), -Math.cos(this.yaw) * c2);
+        hit = this.physics.raycast(this.smoothTarget, this._dir, want);
+      }
+      if (hit < want) want = Math.max(3, hit - 0.8);
     }
+    if (this._dist == null) this._dist = want;
+    this._dist = want <= this._dist ? want : this._dist + (want - this._dist) * (1 - Math.exp(-dt * 5));
+    const dist = this._dist;
     this._pos.copy(this.smoothTarget).addScaledVector(this._dir, dist);
     if (this._pos.y < 1) this._pos.y = 1;
     if (this.introT != null && this.introT < 1) {

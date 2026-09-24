@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Engine } from './core/engine.js';
 import { createBanana, createBalloon } from './fx/props.js';
-import { createPlantView, createSeedView, createCarriedPlantView } from './plants/plantMeshes.js';
+import { createPlantView, createSeedView, createCarriedPlantView, setPlantQuality } from './plants/plantMeshes.js';
 import { Input } from './core/input.js';
 import { FollowCamera, reducedMotion } from './core/camera.js';
 import { bus } from './core/events.js';
@@ -44,6 +44,7 @@ class App {
     injectStyles();
     this.container = document.getElementById('app') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'app' });
     this.engine = new Engine(this.container);
+    setPlantQuality(this.engine.qualityId);
     this.root = document.createElement('div');
     this.root.id = 'ui';
     this.container.appendChild(this.root);
