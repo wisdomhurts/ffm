@@ -21,12 +21,16 @@ const BIOME_INC = BIOMES.map((b) => {
   return list.reduce((a, x) => a + x.income, 0) / list.length;
 });
 
-/** How much a seed is worth to this bot: the more relaxed it plays, the less it cares about rarity and mutations. */
+/**
+ * How much a seed is worth to this bot. Chill bots barely notice lucky and mutated seeds (they grab
+ * what's handy), and the more relaxed a bot plays the less it cares.
+ */
 function wantInc(bot, p, speciesId, mutation, biome) {
   const inc = seedIncome(p, speciesId, mutation);
-  const e = bot.ease;
-  if (e <= 0 || biome < 0) return inc;
-  return inc + (Math.min(inc, BIOME_INC[biome] * REBIRTH.incomeMult(p.rebirths)) - inc) * e;
+  const k = bot.diff.shiny * (1 - bot.ease);
+  if (k >= 1 || biome < 0) return inc;
+  const base = Math.min(inc, BIOME_INC[biome] * REBIRTH.incomeMult(p.rebirths));
+  return base + (inc - base) * k;
 }
 
 function bestFarm(bot, game, p, info) {
@@ -137,9 +141,12 @@ function bestSteal(bot, game, p, info) {
 function bestGround(bot, game, p, info) {
   const spd = runSpeed(game, p), cs = carrySeedSpeed(game, p);
   const home = bot.home.inside;
+  const drops = getBoard(game).humanDrops;
   let best = null;
   for (const gi of game.ground) {
     if (gi.kind !== 'seed') continue;
+    // the human's own lost seed: give them a fair chance to pick it back up
+    if (drops.has(gi.uid) && game.time - drops.get(gi.uid) < bot.diff.humanDropGrace) continue;
     const d = hyp(gi.x - p.pos.x, gi.z - p.pos.z);
     if (d > 70) continue;
     const bi = game.biomeAt(gi.z);
@@ -187,7 +194,8 @@ function bestMug(bot, game, p, info, farm) {
 function shopPlan(bot, game, p, info) {
   const pers = bot.pers;
   const avail = p.cash + info.g.cashPile;
-  const late = game.match && game.timeLeft() < 75; // showdown: spending now only lowers net worth
+  // showdown: spending now only lowers net worth (the savvy stop shopping; Chill bots never think of it)
+  const late = game.match && game.timeLeft() < bot.diff.endgame;
   if (late) return null;
   const plan = { speed: false, items: [], rebirth: false, cost: 0 };
   if (game.mode !== 'showdown' && avail >= REBIRTH.threshold(p.rebirths) && bot.wantsRebirth(game, p)) {
@@ -235,7 +243,7 @@ export function chooseGoal(bot, game, p) {
 
   // 2. home economy
   const avail = p.cash + info.g.cashPile;
-  if (info.nextLocked >= 0 && info.free === 0 && avail >= PLANTERS.unlockCost[info.nextLocked] * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < 60)) {
+  if (info.nextLocked >= 0 && info.free === 0 && avail >= PLANTERS.unlockCost[info.nextLocked] * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < bot.diff.endgame * 0.8)) {
     cands.push([ref * 1.9 + 0.01, () => new UnlockGoal(info.nextLocked, ref * 1.9)]);
   }
   const plan = shopPlan(bot, game, p, info);

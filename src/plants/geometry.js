@@ -397,6 +397,9 @@ export class Builder {
   }
 }
 
+const _bind = new THREE.Matrix4();
+const IDENTITY = new THREE.Matrix4();
+
 export class Template {
   constructor(groups, box, meta) {
     this.groups = groups;
@@ -406,6 +409,46 @@ export class Template {
     this.meta = meta;
     this.tris = 0;
     for (const g of groups) for (const m of g.meshes) this.tris += m.geometry.attributes.position.count / 3;
+    this.skin = groups.length > 1 ? this._buildSkin() : null;
+  }
+
+  /**
+   * Multi-part templates are drawn as ONE skinned mesh per material: each animation group becomes a bone
+   * (the same part node the animations already move), so a plant with a nodding head, snapping jaws or
+   * flapping wings costs 1-2 draw calls (and 1 shadow draw) instead of one per part and material.
+   */
+  _buildSkin() {
+    const channels = new Map(); // material -> {lists, info}
+    const boneInverses = [];
+    this.groups.forEach((g, gi) => {
+      _bind.makeRotationY(g.yaw).setPosition(g.pivot);
+      boneInverses.push(_bind.clone().invert());
+      for (const m of g.meshes) {
+        const geo = m.geometry.clone().applyMatrix4(_bind);
+        const n = geo.attributes.position.count;
+        const si = new Uint16Array(n * 4);
+        const sw = new Float32Array(n * 4);
+        for (let i = 0; i < n; i++) {
+          si[i * 4] = gi;
+          sw[i * 4] = 1;
+        }
+        geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+        geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+        let c = channels.get(m.material);
+        if (!c) channels.set(m.material, (c = { list: [], mesh: m }));
+        c.list.push(geo);
+      }
+    });
+    const meshes = [];
+    for (const { list, mesh } of channels.values()) {
+      const geo = list.length === 1 ? list[0] : mergeGeometries(list, false);
+      geo.userData.shared = true;
+      meshes.push({ geometry: geo, material: mesh.material, shadow: mesh.shadow, renderOrder: mesh.renderOrder });
+    }
+    // Culling sphere with room for the animated parts (skinned meshes would otherwise compute it per instance).
+    const sphere = this.box.getBoundingSphere(new THREE.Sphere());
+    sphere.radius *= 1.25;
+    return { meshes, boneInverses, sphere };
   }
 
   /** Cheap instance: new Object3Ds, shared geometry + materials. Returns {root, parts:{name:Object3D}, dispose()} */
@@ -414,6 +457,8 @@ export class Template {
     const parts = {};
     // Only plant bodies cast shadows, and only when the renderer draws shadows at all.
     const shadows = plantQuality() !== 'low';
+    const skin = this.skin;
+    const bones = [];
     for (const g of this.groups) {
       const node = new THREE.Group();
       node.name = g.name;
@@ -422,18 +467,40 @@ export class Template {
       node.rotation.y = g.yaw;
       node.userData.base = g.pivot;
       node.userData.yaw = g.yaw;
-      for (const m of g.meshes) {
-        const mesh = new THREE.Mesh(m.geometry, m.material);
-        mesh.castShadow = m.shadow && shadows;
-        mesh.receiveShadow = false;
-        mesh.renderOrder = m.renderOrder;
-        mesh.matrixAutoUpdate = false;
-        node.add(mesh);
+      if (!skin) {
+        for (const m of g.meshes) {
+          const mesh = new THREE.Mesh(m.geometry, m.material);
+          mesh.castShadow = m.shadow && shadows;
+          mesh.receiveShadow = false;
+          mesh.renderOrder = m.renderOrder;
+          mesh.matrixAutoUpdate = false;
+          node.add(mesh);
+        }
       }
       root.add(node);
       parts[g.name] = node;
+      bones.push(node);
     }
-    return { root, parts, dispose() {} };
+    if (!skin) return { root, parts, dispose() {} };
+    const skeleton = new THREE.Skeleton(bones, skin.boneInverses);
+    for (const m of skin.meshes) {
+      const mesh = new THREE.SkinnedMesh(m.geometry, m.material);
+      mesh.bind(skeleton, IDENTITY);
+      mesh.boundingSphere = skin.sphere;
+      mesh.castShadow = m.shadow && shadows;
+      mesh.receiveShadow = false;
+      mesh.renderOrder = m.renderOrder;
+      mesh.matrixAutoUpdate = false;
+      root.add(mesh);
+    }
+    return {
+      root,
+      parts,
+      // Frees the per-instance bone texture (the view calls this when it leaves the scene; it is rebuilt if re-used).
+      dispose() {
+        skeleton.dispose();
+      },
+    };
   }
 }
 

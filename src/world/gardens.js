@@ -2,6 +2,7 @@
 // beams, planter boxes (crated when locked), COLLECT / LOCK pads, a growing cash pile, owner billboard.
 import * as THREE from 'three';
 import { CHARACTERS, PLANTERS } from '../config.js';
+import { bus } from '../core/events.js';
 import { Merger, makeRand, makeCanvas, canvasTexture, drawTexture, chunkyText, roundRect, uTime, withColors, signMaterial, mergedGeometry, onDisplayFont } from './kit.js';
 import { lawnTexture, soilTexture, collectTexture, lockTexture } from './textures.js';
 import { bush, flower } from './props.js';
@@ -207,6 +208,12 @@ export function buildGardens(ctx) {
   const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
   const apis = [];
   const animating = new Set();
+  // Planters just bought through the game ("slot:index"): only these pop their crate off with an animation.
+  // Any other change of state (first sync, save restore, test setups) snaps the crate on/off instantly.
+  const liveUnlocks = new Set();
+  bus.on('planter:unlocked', (e) => {
+    if (e?.player) liveUnlocks.add(e.player.slot + ':' + e.index);
+  });
 
   layout.gardens.forEach((L, slot) => {
     const char = CHARACTERS[slot];
@@ -311,11 +318,10 @@ export function buildGardens(ctx) {
         setUnlocked(v) {
           v = !!v;
           if (st.synced && v === st.unlocked) return;
-          const wasSynced = st.synced;
+          const live = liveUnlocks.delete(slot + ':' + i) && v && st.synced;
           st.synced = true;
-          if (v === st.unlocked && wasSynced) return;
           st.unlocked = v;
-          if (v && wasSynced) {
+          if (live) {
             st.anim = 0;
             animating.add(st);
           } else {
@@ -355,8 +361,9 @@ export function buildGardens(ctx) {
     wood.block(GX, 0, legZ2, 0.46, boardY + 0.4, 0.46, '#8a5a34', { ao: 0.3 });
     wood.block(GX, 8.9, gpN, 0.46, boardY - 8.5, 0.46, '#8a5a34', { ao: 0 });
     acc.box(GX, boardY + boardH / 2, S.z + 0.2, 0.5, boardH + 0.5, boardW + 0.5, WH, { ao: 0.12 });
-    // camera-only blocker for the board (above head height, over the fence line)
-    ctx.colliders.push({ minX: GX - 0.3, maxX: GX + 0.3, minY: boardY - 0.25, maxY: boardY + boardH + 0.25, minZ: L.gate.maxZ, maxZ: S.z + 0.2 + boardW / 2 + 0.25, tag: 'sign' });
+    // camera-only blocker for the board (above head height, over the fence line), see-over like the fence
+    const boardTop = boardY + boardH + 0.25;
+    ctx.colliders.push({ minX: GX - 0.3, maxX: GX + 0.3, minY: boardY - 0.25, maxY: boardTop, camMaxY: boardTop, minZ: L.gate.maxZ, maxZ: S.z + 0.2 + boardW / 2 + 0.25, tag: 'sign' });
     const signCanvas = makeCanvas(512, 440);
     const signTex = canvasTexture(signCanvas, { clamp: true });
     const signMat = signMaterial(signTex, 0.25);

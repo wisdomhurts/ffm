@@ -198,8 +198,10 @@ export class BotController {
     this.humanLast = hs.last && now > 30;
     if (d.biomeLead < 50) this.biomeCap = hs.deep + d.biomeLead;
     if (d.paceCap > 0 && now > 40) {
-      const mine = game.netWorth.get(p) || 0;
-      this.ease = clamp((mine / (Math.max(hs.net, 400) * d.paceCap) - 1) / 0.4, 0, 1);
+      // ahead on net worth, or on income (where net worth is heading)
+      const rNet = (game.netWorth.get(p) || 0) / (Math.max(hs.net, 400) * d.paceCap);
+      const rInc = game.gardenIncome(game.gardens[p.slot]) / (Math.max(hs.inc, 8) * d.paceCap);
+      this.ease = clamp((Math.max(rNet, rInc) - 1) / 0.4, 0, 1);
       // well ahead: farm a biome shallower than we otherwise would
       if (this.ease > 0.4) this.biomeCap = Math.max(0, Math.min(this.biomeCap, hs.deep + d.biomeLead - 1));
       this.tempo = 1 - this.ease * d.easeTempo;

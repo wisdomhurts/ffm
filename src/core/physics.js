@@ -133,31 +133,54 @@ export class PhysicsWorld {
     }
   }
 
-  // Ray (origin o, unit dir d, length L) against boxes; returns hit distance or L.
-  // Boxes may carry `camMaxY`: the camera only collides with them up to that height (the visual top of a
-  // fence whose collider is extended upwards so nobody can hop over it).
+  // Ray (origin o, unit dir d, length L) against boxes; returns hit distance or L. Used by the follow camera:
+  // boxes are padded by a lens radius so the camera also keeps clear of posts and walls it would pass right
+  // beside. A box with `camMaxY` (a fence or gate post whose collider is extended upwards so nobody can hop
+  // over it) is a see-over obstacle: the camera collides with it only up to that visual height, and only
+  // when it would otherwise end up inside it or just behind it. When the obstacle is near the player and the
+  // camera far beyond it, the camera stays out and looks over it, so walking along fences never pulls it in.
   raycast(o, d, L) {
+    const pad = 1.1;
+    const behind = 3; // how far past a see-over obstacle the camera may not sit
+    let tExit = 0;
+    // slab test: entry distance along the ray (tExit = exit), 0 when starting inside, Infinity on a miss
+    const slab = (x0, x1, y0, y1, z0, z1, far) => {
+      let tmin = 0, tmax = far;
+      for (let k = 0; k < 3; k++) {
+        const oa = k === 0 ? o.x : k === 1 ? o.y : o.z;
+        const da = k === 0 ? d.x : k === 1 ? d.y : d.z;
+        const mn = k === 0 ? x0 : k === 1 ? y0 : z0;
+        const mx = k === 0 ? x1 : k === 1 ? y1 : z1;
+        if (Math.abs(da) < 1e-9) {
+          if (oa < mn || oa > mx) return Infinity;
+        } else {
+          let t1 = (mn - oa) / da, t2 = (mx - oa) / da;
+          if (t1 > t2) [t1, t2] = [t2, t1];
+          if (t1 > tmin) tmin = t1;
+          if (t2 < tmax) tmax = t2;
+          if (tmin > tmax) return Infinity;
+        }
+      }
+      tExit = tmax;
+      return tmin;
+    };
     let best = L;
-    const minX = Math.min(o.x, o.x + d.x * L), maxX = Math.max(o.x, o.x + d.x * L);
-    const minZ = Math.min(o.z, o.z + d.z * L), maxZ = Math.max(o.z, o.z + d.z * L);
+    const minX = Math.min(o.x, o.x + d.x * L) - pad, maxX = Math.max(o.x, o.x + d.x * L) + pad;
+    const minZ = Math.min(o.z, o.z + d.z * L) - pad, maxZ = Math.max(o.z, o.z + d.z * L) + pad;
     const list = this.query(minX, maxX, minZ, maxZ, this._tmp3 || (this._tmp3 = []));
     for (const b of list) {
       // the camera may pass through low/invisible blockers (planters, boundary walls, lasers, small decor)
       if (b.tag === 'planter' || b.tag === 'wall' || b.tag === 'laser' || b.tag === 'deco') continue;
-      const top = Math.min(b.maxY, b.camMaxY ?? b.maxY);
-      let tmin = 0, tmax = best;
-      for (const [oa, da, mn, mx] of [[o.x, d.x, b.minX, b.maxX], [o.y, d.y, b.minY, top], [o.z, d.z, b.minZ, b.maxZ]]) {
-        if (Math.abs(da) < 1e-9) {
-          if (oa < mn || oa > mx) { tmin = Infinity; break; }
-        } else {
-          let t1 = (mn - oa) / da, t2 = (mx - oa) / da;
-          if (t1 > t2) [t1, t2] = [t2, t1];
-          tmin = Math.max(tmin, t1);
-          tmax = Math.min(tmax, t2);
-          if (tmin > tmax) { tmin = Infinity; break; }
-        }
+      const seeOver = b.camMaxY != null;
+      const top = seeOver ? Math.min(b.maxY, b.camMaxY) : b.maxY;
+      let t = slab(b.minX - pad, b.maxX + pad, b.minY - pad, top + pad, b.minZ - pad, b.maxZ + pad, Infinity);
+      // starting inside the padding (e.g. jumping right under a sign board): only the box itself counts
+      if (t === 0) {
+        t = slab(b.minX, b.maxX, b.minY, top, b.minZ, b.maxZ, Infinity);
+        if (t === 0) continue;
       }
-      if (tmin < best) best = tmin;
+      if (seeOver && L > tExit + behind) continue;
+      if (t < best) best = t;
     }
     return best;
   }

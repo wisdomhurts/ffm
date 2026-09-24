@@ -22,6 +22,7 @@ export function getBoard(game) {
       lastStealOn: new Map(), // victim slot -> time a bot last started stealing from them
       // the human's progress (see updateHuman)
       human: null,
+      humanDrops: new Map(), // ground seed uid -> time the human dropped it (bonked, caught by a monster)
       practice: { state: 'idle', slot: -1, at: 0, retryAt: 0 },
     };
     boards.set(game, b);
@@ -32,7 +33,7 @@ export function getBoard(game) {
 /**
  * What the bots know about the human's progress, refreshed a few times per second.
  *   deep     deepest Seed Road biome the human has grabbed a seed in (0 = Sunny Field)
- *   net      human net worth; lead = best bot net worth / human net worth
+ *   net/inc  human net worth and garden income; lead = best bot net worth / human net worth
  *   last     the human is in last place
  *   movedAt  last time the human moved (AFK detection)
  * Null in attract mode (no human).
@@ -43,7 +44,7 @@ export function updateHuman(game) {
   if (!h) return null;
   let s = b.human;
   if (!s) {
-    s = b.human = { deep: resumeDepth(game, h), carrying: h.carrying, net: 0, lead: 1, last: false, rank: 1, at: -1, x: h.pos.x, z: h.pos.z, movedAt: game.time };
+    s = b.human = { deep: resumeDepth(game, h), carrying: h.carrying, net: 0, inc: 0, lead: 1, last: false, rank: 1, at: -1, x: h.pos.x, z: h.pos.z, movedAt: game.time };
   }
   if (game.time - s.at < HUMAN_TICK) return s;
   s.at = game.time;
@@ -53,6 +54,14 @@ export function updateHuman(game) {
     const bi = game.biomeAt(h.pos.z);
     if (bi > s.deep) s.deep = bi;
   }
+  if (!c && s.carrying?.kind === 'seed') {
+    // lost it on the way home? remember the seed so the bots let the human pick it back up
+    for (const gi of game.ground) {
+      if (gi.kind === 'seed' && game.time - gi.droppedAt < HUMAN_TICK + 0.1 && gi.speciesId === s.carrying.speciesId &&
+        Math.hypot(gi.x - h.pos.x, gi.z - h.pos.z) < 12) b.humanDrops.set(gi.uid, gi.droppedAt);
+    }
+    if (b.humanDrops.size > 16) b.humanDrops.delete(b.humanDrops.keys().next().value);
+  }
   s.carrying = c;
   if (Math.hypot(h.pos.x - s.x, h.pos.z - s.z) > 1.5) {
     s.x = h.pos.x;
@@ -61,6 +70,7 @@ export function updateHuman(game) {
   }
   const nw = game.netWorth;
   s.net = nw.get(h) || 0;
+  s.inc = game.gardenIncome(game.gardens[h.slot]);
   let best = 0, below = 0;
   for (const p of game.players) {
     if (p === h) continue;

@@ -40,11 +40,13 @@ export async function getFace(id) {
 
 // Where the photo sits on the canvas. `scale` = photo size relative to the canvas,
 // `eyeY` = canvas height fraction where the photo's eye line lands.
-// FLAT is a straight 1:1 copy (UI previews); HEAD frames the face on an avatar's head front
-// (a little bigger so it reads from the gameplay camera, eyes just under the middle).
+// FLAT is a straight 1:1 copy (UI previews). HEAD frames the face on an avatar's head front: that
+// texture wraps over the rounded top/bottom edges, and only v ~0.16..0.84 is the flat front
+// (avatar.js HEAD). Brows (~0.26), eyes (0.37), mouth (~0.66) and the chin fade (~0.87) all land
+// on the flat, so no feature curls over an edge; the forehead above runs up under the hair.
 export const FACE_LAYOUT = {
   flat: { scale: 1, eyeY: 0.42 },
-  head: { scale: 1.1, eyeY: 0.38 },
+  head: { scale: 1.18, eyeY: 0.37 },
 };
 
 // The feathered face region, in photo coordinates (an egg: narrower at the chin).

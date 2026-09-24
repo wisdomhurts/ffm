@@ -4,6 +4,7 @@
 //   view=family|lineup|lineup34|monsters|all|close:<id>|close34:<id>|side:<id>|back:<id>|game[:dist]|game34|behind|monster:<type>|faces
 //   state=idle|walk|run|sprint|jump|fall|carry|swing|stunned|celebrate|steal|grab|invisible|coil|mix|cycle
 //   swing=<0..1> (frozen swing phase)   mstate=patrol|chase|stunned|attack   freeze=1   t=<seconds>
+//   settle=<seconds> (animation simulated before the shot, default 1)
 // Build: node build.mjs --entry src/characters/dev/gallery.js --out <dir>
 import * as THREE from 'three';
 import { Engine } from '../../core/engine.js';
@@ -111,6 +112,8 @@ function avatarState(name, time, i) {
     case 'carry': s.carrying = 'plant'; s.speed = 12; break;
     case 'carryidle': s.carrying = 'seed'; break;
     case 'swing': s.swing = opts.swing != null ? opts.swing : (time % 1.1) / 0.35 <= 1 ? (time % 1.1) / 0.35 : -1; break;
+    // one swing from the back at t = 2.2 s, then the ready hold and the holster (use settle=<seconds>)
+    case 'draw': s.swing = time >= 2.2 && time <= 2.55 ? (time - 2.2) / 0.35 : -1; s.speed = +opts.speed || 0; break;
     case 'stunned': s.stunned = true; break;
     case 'celebrate': s.celebrating = true; break;
     case 'steal': s.interacting = 'Steal'; break;
@@ -176,6 +179,11 @@ function setCamera(view) {
     case 'back':
       camera.position.set(ax + 3, 5.5, -8);
       camera.lookAt(ax, 3, 0);
+      break;
+    case 'backr':
+      // behind the right (noodle) shoulder, like the follow camera slightly off to the side
+      camera.position.set(ax - 4, 6, -8.5);
+      camera.lookAt(ax, 3.3, 0);
       break;
     case 'game': {
       // gameplay follow-camera distance (~20 studs, pitch 0.42) looking at the family from the front
@@ -250,7 +258,8 @@ function apply(o = {}) {
   // settle poses: simulate a second of animation at 60 fps, then (optionally) freeze
   engine.timeScale = 1;
   simTime = opts.t;
-  for (let i = 0; i < 60; i++) step(1 / 60);
+  const n = Math.round((+opts.settle || 1) * 60);
+  for (let i = 0; i < n; i++) step(1 / 60);
   setCamera(opts.view);
   engine.timeScale = opts.freeze ? 0 : 1;
   engine.frame(0);

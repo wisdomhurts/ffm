@@ -22,12 +22,12 @@ const ARM_TOP = 0.15; // shoulder pivot sits this far below the top of the arm
 const SHOULDER_Y = TORSO_H - ARM_TOP;
 const HEAD = { w: 2.2, h: 2.12, d: 1.95, r: 0.4, bulge: 0.08 };
 const ADULT_SCALE = WORLD.playerHeight / (LEG_H + TORSO_H + HEAD.h);
-const KID = { scale: 0.82, head: 1.08 };
+const KID = { scale: 0.82, head: 1.14 }; // big heads on small bodies: kids' faces read as well as adults'
 const NOODLE_SEG = 1.5; // the noodle is 3 segments = 4.5 studs
 const NOODLE_CURVE = [0.07, -0.07, -0.07]; // gentle permanent bend per segment
 // Slung across the back (torso space): grip end up over the right shoulder, tip down at the left hip,
 // a little off the back so the swinging arms and long hair don't cut through it.
-const SLING = { tilt: Math.PI / 4, y: 1.0, z: -0.95 };
+const SLING = { tilt: Math.PI / 4, y: 1.25, z: -0.95 };
 const GLOW = 0.2; // soft self-illumination so characters pop against the world
 const TAU = Math.PI * 2;
 
@@ -125,10 +125,10 @@ function buildHair(style, longLen) {
     P.push(part(box(W + 0.16, longLen, 0.5, 2, 0.22), [0, hh + 0.1 - longLen / 2, -hd - 0.06], [-0.06, 0, 0], STRANDS));
   } else if (style === 'short-thick') {
     P.push(part(box(W + 0.26, 0.88, D + 0.3, 3, 0.4), [0, hh - 0.02, -0.05], [0, 0, 0], STRANDS));
-    // chunky bangs that stop above the eyebrows
+    // chunky bangs that stop just above the eyebrows
     const xs = [-0.88, -0.44, 0, 0.44, 0.88];
-    const drop = [0.3, 0.37, 0.34, 0.38, 0.28];
-    xs.forEach((x, i) => P.push(part(box(0.54, 0.64, 0.34, 1, 0.14), [x, hh - drop[i], hd + 0.05], [-0.18, 0, (i - 2) * -0.07], STRANDS)));
+    const drop = [0.2, 0.27, 0.24, 0.28, 0.18];
+    xs.forEach((x, i) => P.push(part(box(0.54, 0.6, 0.34, 1, 0.14), [x, hh - drop[i], hd + 0.05], [-0.18, 0, (i - 2) * -0.07], STRANDS)));
     for (const s of [-1, 1]) P.push(part(box(0.34, 1.1, D - 0.15, 2, 0.15), [s * (hw + 0.1), hh - 0.57, -0.12], [0, 0, 0], STRANDS));
     P.push(part(box(W + 0.24, 1.35, 0.42, 2, 0.17), [0, hh - 0.62, -hd - 0.1], [0, 0, 0], STRANDS));
   }
@@ -288,7 +288,9 @@ const smooth = (a, b, x) => {
 const READY = { armRx: -0.55, armRz: -0.12, wrist: 2.3 };
 const DRAW_U = 0.2; // swing phase where the noodle leaves the back and lands in the fist
 const READY_HOLD = 1.4; // seconds it stays in hand after the last swing
-const HOLSTER = { time: 0.34, swap: 0.5, armRx: -2.95, armRz: -0.32, wrist: 0.05 };
+// Holster: the arm swings up out to the side while the noodle turns back first (so it never
+// sweeps across the face), then it drops onto the back at `swap`.
+const HOLSTER = { time: 0.34, swap: 0.5, armRx: -2.75, armRz: -0.6, wrist: 0.05 };
 // Noodle whack keyframes (u = 0..1 over the 0.35 s swing): wind up overhead, snap forward, follow through.
 const SW_T = [0, 0.3, 0.5, 0.68, 1];
 const SW_EASE = [(t) => 1 - (1 - t) * (1 - t), (t) => t * t * t, (t) => 1 - (1 - t) * (1 - t), (t) => t * t * (3 - 2 * t)];
@@ -536,6 +538,8 @@ export function createAvatar(char, faceImage, skinHex) {
   const HEAD_TOP_Y = TORSO_H + HEAD.h * hs; // above the hips
   // raise the shoulders when carrying so the hands reach the item above the head
   const CARRY_LIFT = Math.max(0, HEAD_TOP_Y - (SHOULDER_Y + 2 - ARM_TOP) + 0.05);
+  // ...and splay them into a V around bigger (kid) heads instead of through the face
+  const CARRY_SPLAY = 0.1 + (hs - 1) * 1.4;
 
   // ---- animation state
   const W = { move: 0, air: 0, carry: 0, stun: 0, celeb: 0, steal: 0, reach: 0, coil: 0, ready: 0 };
@@ -656,8 +660,9 @@ export function createAvatar(char, faceImage, skinHex) {
     P.torsoZ = 0;
     const still = 1 - W.move;
     P.headX = Math.sin(t * 0.9) * 0.03;
-    P.headY = Math.sin(t * 0.43) * 0.16 * still;
-    P.headZ = Math.sin(t * 0.61) * 0.035 * still;
+    // keep the idle look-around small: a flat photo face turned away stops reading as a face
+    P.headY = Math.sin(t * 0.43) * 0.07 * still;
+    P.headZ = Math.sin(t * 0.61) * 0.025 * still;
     P.armRx = Math.sin(t * 1.1) * 0.035;
     P.armLx = -P.armRx;
     P.armRz = -0.07 - br * 0.025;
@@ -741,8 +746,8 @@ export function createAvatar(char, faceImage, skinHex) {
       const cb = Math.sin(phase * 2) * 0.05 * wm;
       P.armRx = lerp(P.armRx, -3.06 + cb, wc);
       P.armLx = lerp(P.armLx, -3.06 - cb, wc);
-      P.armRz = lerp(P.armRz, -0.1, wc);
-      P.armLz = lerp(P.armLz, 0.1, wc);
+      P.armRz = lerp(P.armRz, -CARRY_SPLAY, wc);
+      P.armLz = lerp(P.armLz, CARRY_SPLAY, wc);
       P.lift = CARRY_LIFT * wc;
       P.torsoX -= 0.04 * wc;
     }
@@ -783,10 +788,11 @@ export function createAvatar(char, faceImage, skinHex) {
 
     // --- put the noodle back: up and over the right shoulder, then the arm drops
     if (holster >= 0) {
-      const k = holster < HOLSTER.swap ? smooth(0, HOLSTER.swap, holster) : 1 - smooth(HOLSTER.swap, 1, holster);
+      const up = holster < HOLSTER.swap;
+      const k = up ? smooth(0, HOLSTER.swap, holster) : 1 - smooth(HOLSTER.swap, 1, holster);
       P.armRx = lerp(P.armRx, HOLSTER.armRx, k);
       P.armRz = lerp(P.armRz, HOLSTER.armRz, k);
-      P.wrist = lerp(P.wrist, HOLSTER.wrist, k);
+      P.wrist = lerp(P.wrist, HOLSTER.wrist, up ? smooth(0, HOLSTER.swap * 0.6, holster) : k);
     }
 
     // --- noodle whack overlay
