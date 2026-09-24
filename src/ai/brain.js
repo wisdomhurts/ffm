@@ -195,7 +195,7 @@ function shopPlan(bot, game, p, info) {
     plan.cost = REBIRTH.threshold(p.rebirths);
     return plan;
   }
-  plan.speed = bot.wantsMoreSpeed(game, p, pers.speedEager * bot.diff.eager, avail);
+  plan.speed = bot.wantsMoreSpeed(game, p, pers.speedEager * bot.diff.eager * (1 + bot.ease), avail);
   const reserve = plan.speed ? speedCost(p.speedLevel + 1) : 0;
   plan.cost = reserve;
   for (const [id, want] of Object.entries(pers.items)) {
@@ -235,7 +235,7 @@ export function chooseGoal(bot, game, p) {
 
   // 2. home economy
   const avail = p.cash + info.g.cashPile;
-  if (info.nextLocked >= 0 && info.free === 0 && avail >= PLANTERS.unlockCost[info.nextLocked] * pers.planterEager * bot.diff.eager && !(game.match && game.timeLeft() < 60)) {
+  if (info.nextLocked >= 0 && info.free === 0 && avail >= PLANTERS.unlockCost[info.nextLocked] * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < 60)) {
     cands.push([ref * 1.9 + 0.01, () => new UnlockGoal(info.nextLocked, ref * 1.9)]);
   }
   const plan = shopPlan(bot, game, p, info);
