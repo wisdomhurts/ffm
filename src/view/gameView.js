@@ -165,7 +165,7 @@ export class GameView {
             `${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${pl.stealer != null ? '<div class="pl-steal">BEING STOLEN!</div>' : ''}`,
             { cls: 'plantlbl' + (grown ? ' grown' : ''), maxDist: 55 });
         } else if (!pl.unlocked && gd.owner === human) {
-          L.set('pt' + k, { x: pl.x, y: 3, z: pl.z }, `<div class="pl-lock">🔒 $${fmt(PLANTERS.unlockCost[pl.index])}</div>`, { cls: 'plantlbl locked', maxDist: 40 });
+          L.set('pt' + k, { x: pl.x, y: 3, z: pl.z }, `<div class="pl-lock"><i class="ic-lock"></i> $${fmt(PLANTERS.unlockCost[pl.index])}</div>`, { cls: 'plantlbl locked', maxDist: 40 });
         }
       });
       // collect pad + lock pad labels

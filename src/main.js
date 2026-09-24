@@ -63,6 +63,7 @@ class App {
     bus.on('match:end', ({ ranking }) => {
       if (!this.human) return;
       this.state = 'ended';
+      bus.emit('app:state', { state: 'ended' });
       this.touch.setVisible(false);
       this.menus.showEnd(ranking);
       remove('save:showdown');

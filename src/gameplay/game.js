@@ -1009,9 +1009,11 @@ export function fmt(n) {
   if (n < 1000) return String(n);
   const units = [['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]];
   for (const [u, v] of units) {
-    if (n >= v) {
+    if (n >= v * 0.9995) {
       const x = n / v;
-      return (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)).replace(/\.?0+$/, '') + u;
+      const str = x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
+      // trim trailing zeros after the decimal point only (640K must stay 640K)
+      return (str.includes('.') ? str.replace(/0+$/, '').replace(/\.$/, '') : str) + u;
     }
   }
   return String(n);

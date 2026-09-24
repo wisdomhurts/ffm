@@ -1,18 +1,564 @@
-// PLACEHOLDER HUD. Contract: createHUD(app) -> { update(dt), dispose() }
-// app = {engine, input, game, human, cam, labels, fx, audio, root (the #ui element), startGame, quitToTitle, pause, resume}
-import { fmt } from '../gameplay/game.js';
+// In-game HUD. Contract: createHUD(app) -> { update(dt, t), dispose() }
+// Reads app.game / app.human every frame (DOM writes are throttled and change-detected) and listens to `bus`.
+import { ITEMS, BIOMES, RARITY, PLANT, speedAt, WORLD, ROAD_END_Z, biomeIndexAtZ } from '../config.js';
+import { bus } from '../core/events.js';
+import { settings } from '../core/settings.js';
+import { load, save } from '../core/save.js';
+import { LAYOUT } from '../gameplay/layout.js';
+import { rarityColor } from '../view/gameView.js';
+import { h, esc, setText, setHTML, setStyle, toggle, money, clock, noFocus, screenAngle, uiSound, setMuted } from './dom.js';
+import { avatarEl } from './avatars.js';
+import { ICON, ITEM_ICONS, EVENT_ICON } from './icons.js';
+import { createAlerts } from './alerts.js';
+import { wireNotifications } from './notify.js';
+import { createTutorial } from './tutorial.js';
+import { isTouch, onTouchChange } from './device.js';
+
 export function createHUD(app) {
-  const el = document.createElement('div');
-  el.style.cssText = 'position:absolute;left:12px;top:12px;color:#fff;font:700 18px system-ui;text-shadow:0 2px 0 #000';
-  app.root.appendChild(el);
+  const game = app.game;
+  const me = app.human;
+  const root = h('div', { class: 'hud', 'data-state': app.state || 'playing' });
+  app.root.appendChild(root);
+
+  const vignette = h('div', { class: 'vignette' });
+  const tl = h('div', { class: 'hud-tl' });
+  const tr = h('div', { class: 'hud-tr' });
+  const top = h('div', { class: 'hud-top' });
+  const bottom = h('div', { class: 'hud-bottom' });
+  root.append(vignette, tl, tr, top, bottom);
+
+  const parts = [];
+  parts.push(createMenuButtons(app, tl));
+  parts.push(createStats(app, tl, me));
+  const tutorial = me ? createTutorial(app, tl) : null;
+  if (tutorial) parts.push(tutorial);
+  parts.push(createBoard(app, tr, me));
+  parts.push(createEventChip(app, top));
+  const alerts = createAlerts(top, root);
+  const unwire = me ? wireNotifications(app, alerts) : () => {};
+  if (me) {
+    parts.push(createRoadMeter(app, root, me));
+    parts.push(createPrompt(app, bottom, me));
+    parts.push(createCarry(app, bottom, me));
+    parts.push(createHotbar(app, bottom, me));
+  }
+  parts.push(createChat(app, root));
+  parts.push(createKeyHints(app, root));
+  parts.push(createMatchClock(app, alerts));
+
+  let vAcc = 0;
   return {
-    update() {
-      const p = app.game.human;
-      if (!p) return;
-      const it = p.interact;
-      el.textContent = `$${fmt(p.cash)}  speed L${p.speedLevel}  ${it.key ? '[E] ' + it.verb + ' ' + it.label : ''}`;
+    alerts,
+    update(dt, t) {
+      if (!app.game) return;
+      if (root.dataset.state !== app.state) root.dataset.state = app.state;
+      for (const p of parts) p.update?.(dt, t);
+      vAcc += dt;
+      if (me && vAcc > 0.15) {
+        vAcc = 0;
+        // red edge glow while someone is robbing the local player
+        let danger = game.gardens[me.slot].planters.some((pl) => pl.stealer != null);
+        if (!danger) danger = game.players.some((p) => p !== me && p.carrying?.kind === 'plant' && p.carrying.fromSlot === me.slot);
+        toggle(vignette, 'on', danger && app.state === 'playing');
+      }
     },
     dispose() {
+      unwire();
+      for (const p of parts) p.dispose?.();
+      alerts.dispose();
+      root.remove();
+    },
+  };
+}
+
+// ------------------------------------------------------------------ top-left buttons
+
+function createMenuButtons(app, parent) {
+  const pause = noFocus(h('button', { class: 'hbtn', type: 'button', 'aria-label': 'Pause menu', title: 'Menu (Esc)', html: ICON.pause }));
+  const mute = noFocus(h('button', { class: 'hbtn', type: 'button', 'aria-label': 'Mute', title: 'Sound on/off' }));
+  const paint = () => {
+    const m = !!settings.muted;
+    mute.innerHTML = m ? ICON.soundOff : ICON.soundOn;
+    mute.setAttribute('aria-pressed', String(m));
+    mute.classList.toggle('off', m);
+  };
+  paint();
+  pause.addEventListener('click', () => {
+    uiSound(app, 'click');
+    app.pause();
+  });
+  mute.addEventListener('click', () => {
+    setMuted(app, !settings.muted);
+    paint();
+  });
+  const off = bus.on('settings:changed', ({ key }) => (key === 'muted' || key === 'music' || key === 'sfx') && paint());
+  parent.appendChild(h('div', { class: 'hud-btns' }, pause, mute));
+  return { dispose: off };
+}
+
+// ------------------------------------------------------------------ cash / income / speed
+
+function createStats(app, parent, me) {
+  const game = app.game;
+  const cash = h('span', { class: 'st-val' });
+  const inc = h('span', { class: 'st-inc' });
+  const speed = h('span', { class: 'chip ch-speed' });
+  const stars = h('span', { class: 'chip ch-stars' });
+  const fx = h('span', { class: 'chip ch-fx' });
+  const pops = h('span', { class: 'st-pops' });
+  const cashRow = h('div', { class: 'st-cash' }, h('span', { class: 'st-coin', html: ICON.coin }), cash, pops);
+  const el = h('div', { class: 'stats' }, cashRow, h('div', { class: 'st-sub' }, inc, h('div', { class: 'st-chips' }, speed, stars, fx)));
+  parent.appendChild(el);
+  if (!me) {
+    el.hidden = true;
+    return {};
+  }
+  let shown = me.cash;
+  let last = me.cash;
+  let acc = 1;
+  const garden = game.gardens[me.slot];
+
+  function pop(delta) {
+    const up = delta > 0;
+    const p = h('span', { class: 'st-pop ' + (up ? 'up' : 'down'), text: (up ? '+' : '-') + money(Math.abs(delta)) });
+    pops.appendChild(p);
+    p.addEventListener('animationend', () => p.remove());
+    if (pops.children.length > 4) pops.firstChild.remove();
+    if (up) {
+      cashRow.classList.remove('bump');
+      void cashRow.offsetWidth;
+      cashRow.classList.add('bump');
+    }
+  }
+
+  return {
+    update(dt) {
+      const c = me.cash;
+      const d = c - last;
+      if (Math.abs(d) >= 1) {
+        pop(d);
+        last = c;
+      } else if (d < 0) last = c;
+      shown += (c - shown) * Math.min(1, dt * 7);
+      if (Math.abs(c - shown) < 1) shown = c;
+      setText(cash, money(shown));
+      acc += dt;
+      if (acc < 0.25) return;
+      acc = 0;
+      const now = game.time;
+      setText(inc, `+${money(game.gardenIncome(garden))}/s`);
+      const sp = speedAt(me.speedLevel, me.rebirths) * (now < me.coilUntil ? 1.5 : 1);
+      setHTML(speed, `${ICON.bolt}<span>Lv ${me.speedLevel}</span><em>${Math.round(sp)} studs/s</em>`);
+      toggle(speed, 'boost', now < me.coilUntil);
+      stars.hidden = !me.rebirths;
+      if (me.rebirths) setHTML(stars, `${ICON.star}<span>${me.rebirths}</span>`);
+      const cloak = now < me.cloakUntil;
+      const coil = now < me.coilUntil;
+      fx.hidden = !cloak && !coil;
+      if (cloak) setHTML(fx, `${ITEM_ICONS.cloak}<span>${Math.ceil(me.cloakUntil - now)}s</span>`);
+      else if (coil) setHTML(fx, `${ITEM_ICONS.coil}<span>${Math.ceil(me.coilUntil - now)}s</span>`);
+    },
+  };
+}
+
+// ------------------------------------------------------------------ leaderboard
+
+function createBoard(app, parent, me) {
+  const game = app.game;
+  const head = h('div', { class: 'board-head' });
+  const title = h('span', { class: 'bh-title' });
+  const timer = h('span', { class: 'bh-timer' });
+  head.append(title, timer);
+  const list = h('div', { class: 'board-rows', role: 'list' });
+  const el = h('div', { class: 'board' + (game.match ? ' showdown' : '') }, head, list);
+  parent.appendChild(el);
+  setHTML(title, game.match ? `${ICON.trophy}<span>Showdown</span>` : `${ICON.family}<span>Family</span>`);
+  timer.hidden = !game.match;
+
+  const rows = game.players.map((p) => {
+    const rank = h('b', { class: 'br-rank' });
+    const val = h('span', { class: 'br-val' });
+    const star = h('span', { class: 'br-star' });
+    const flag = h('span', { class: 'br-flag', title: 'Carrying a stolen plant' });
+    const row = h('div', { class: 'brow' + (p === me ? ' me' : ''), role: 'listitem', style: `--c:${p.char.color}` },
+      rank, avatarEl(p.id, 'br-ava'), h('span', { class: 'br-name', text: p.name }), star, flag, val);
+    list.appendChild(row);
+    return { p, row, rank, val, star, flag };
+  });
+
+  let acc = 1;
+  return {
+    update(dt) {
+      acc += dt;
+      if (acc < 0.25) return;
+      acc = 0;
+      const order = game.ranking();
+      for (const r of rows) {
+        const i = order.indexOf(r.p);
+        setStyle(r.row, '--i', String(i));
+        setText(r.rank, String(i + 1));
+        toggle(r.row, 'first', i === 0);
+        setText(r.val, money(game.netWorth.get(r.p) || 0));
+        setHTML(r.star, r.p.rebirths ? ICON.star + r.p.rebirths : '');
+        toggle(r.flag, 'on', r.p.carrying?.kind === 'plant');
+      }
+      if (game.match) {
+        const left = game.timeLeft();
+        setHTML(timer, `${ICON.timer}<span>${clock(left)}</span>`);
+        toggle(timer, 'urgent', left <= 30);
+      }
+    },
+  };
+}
+
+// Showdown milestones: one-minute warning and a final countdown.
+function createMatchClock(app, alerts) {
+  const game = app.game;
+  if (!game.match) return {};
+  let lastSec = Math.ceil(game.timeLeft());
+  return {
+    update() {
+      const s = Math.ceil(game.timeLeft());
+      if (s === lastSec) return;
+      if (lastSec > 60 && s <= 60) alerts.announce({ title: '1 MINUTE LEFT!', sub: 'Grab, steal and COLLECT!', icon: ICON.timer, cls: 'an-warn', ms: 2600 });
+      else if (s <= 10 && s >= 1 && s < lastSec) alerts.announce({ title: String(s), cls: 'an-count', ms: 900 });
+      lastSec = s;
+    },
+  };
+}
+
+// ------------------------------------------------------------------ weather event chip
+
+function createEventChip(app, parent) {
+  const game = app.game;
+  const icon = h('span', { class: 'ev-ic' });
+  const name = h('b', { class: 'ev-name' });
+  const desc = h('span', { class: 'ev-desc' });
+  const time = h('span', { class: 'ev-time' });
+  const bar = h('i');
+  const el = h('div', { class: 'evchip' }, icon, h('div', { class: 'ev-copy' }, name, desc), time, h('div', { class: 'ev-bar' }, bar));
+  el.hidden = true;
+  parent.appendChild(el);
+  let type = null;
+  let acc = 1;
+  return {
+    update(dt) {
+      acc += dt;
+      if (acc < 0.2) return;
+      acc = 0;
+      const ev = game.event;
+      if (!ev) {
+        if (type) {
+          el.hidden = true;
+          type = null;
+        }
+        return;
+      }
+      if (type !== ev.type) {
+        type = ev.type;
+        el.hidden = false;
+        el.className = 'evchip ev-' + ev.type;
+        icon.innerHTML = EVENT_ICON[ev.type] || ICON.sun;
+        setText(name, ev.def.name);
+        setText(desc, ev.def.desc);
+      }
+      const left = Math.max(0, ev.endsAt - game.time);
+      setText(time, clock(left));
+      setStyle(bar, 'transform', `scaleX(${(left / (ev.endsAt - ev.startedAt)).toFixed(3)})`);
+    },
+  };
+}
+
+// ------------------------------------------------------------------ proximity prompt
+
+const RING_C = 2 * Math.PI * 21;
+
+function createPrompt(app, parent, me) {
+  const key = h('span', { class: 'pp-k' });
+  const ring = h('span', {
+    class: 'pp-ring',
+    html: `<svg viewBox="0 0 50 50" aria-hidden="true"><circle class="bg" cx="25" cy="25" r="21"/><circle class="fg" cx="25" cy="25" r="21" stroke-dasharray="${RING_C.toFixed(1)}" stroke-dashoffset="${RING_C.toFixed(1)}"/></svg>`,
+  });
+  const fg = ring.querySelector('.fg');
+  const verb = h('span', { class: 'pp-verb' });
+  const how = h('span', { class: 'pp-how' });
+  const label = h('span', { class: 'pp-label' });
+  const el = h('div', { class: 'prompt', 'aria-live': 'polite' },
+    h('span', { class: 'pp-key' }, ring, key),
+    h('span', { class: 'pp-copy' }, h('span', { class: 'pp-top' }, verb, how), label));
+  parent.appendChild(el);
+  let lastKey = null;
+  let lastF = -1;
+  return {
+    update() {
+      const it = me.interact;
+      const show = !!it?.key && app.state === 'playing';
+      toggle(el, 'show', show);
+      if (!show) {
+        lastKey = null;
+        return;
+      }
+      if (it.key !== lastKey) {
+        lastKey = it.key;
+        el.classList.remove('in');
+        void el.offsetWidth;
+        el.classList.add('in');
+      }
+      const dev = app.input.lastDevice;
+      setText(key, dev === 'gamepad' ? 'B' : dev === 'touch' || isTouch() ? '' : 'E');
+      toggle(el, 'touch', dev === 'touch' || (isTouch() && dev !== 'keyboard' && dev !== 'gamepad'));
+      setText(verb, it.verb || 'Use');
+      const hold = it.hold > 0.3;
+      setText(how, hold ? 'HOLD' : '');
+      setText(label, it.label || '');
+      setStyle(el, '--rc', it.rarity ? rarityColor(it.rarity) : '#ffffff');
+      toggle(el, 'steal', it.verb === 'Steal');
+      toggle(el, 'secret', it.rarity === 'secret');
+      const f = hold ? Math.min(1, it.t / it.hold) : 0;
+      if (Math.abs(f - lastF) > 0.004) {
+        lastF = f;
+        fg.style.strokeDashoffset = (RING_C * (1 - f)).toFixed(1);
+      }
+      toggle(el, 'holding', f > 0);
+    },
+  };
+}
+
+// ------------------------------------------------------------------ carry pill + thief tracker
+
+function createCarry(app, parent, me) {
+  const game = app.game;
+  const mk = (cls) => {
+    const arrow = h('span', { class: 'cp-arrow', html: ICON.arrow });
+    const l1 = h('span', { class: 'cp-l1' });
+    const l2 = h('span', { class: 'cp-l2' });
+    const el = h('div', { class: 'carry ' + cls }, arrow, h('span', { class: 'cp-copy' }, l1, l2));
+    parent.appendChild(el);
+    return { el, arrow, l1, l2 };
+  };
+  const carry = mk('mine');
+  const track = mk('tracker');
+  const home = LAYOUT.gardens[me.slot].inside;
+  const set = (w, target, l1, l2) => {
+    setHTML(w.l1, l1);
+    setHTML(w.l2, l2);
+    const a = screenAngle(me.pos, target, app.cam?.yaw || 0);
+    setStyle(w.arrow, 'transform', `rotate(${a.toFixed(2)}rad)`);
+  };
+  let acc = 1;
+  return {
+    update(dt) {
+      acc += dt;
+      if (acc < 0.066) return;
+      acc = 0;
+      const playing = app.state === 'playing';
+      const c = me.carrying;
+      toggle(carry.el, 'show', !!c && playing);
+      if (c && playing) {
+        const sid = c.kind === 'seed' ? c.speciesId : c.plant.speciesId;
+        const mut = c.kind === 'seed' ? c.mutation : c.plant.mutation;
+        const name = `<b style="--rc:${rarityColor(PLANT[sid].rarity)}">${esc(game.plantName(sid, mut))}</b>`;
+        const d = Math.round(Math.hypot(home.x - me.pos.x, home.z - me.pos.z));
+        toggle(carry.el, 'stolen', c.kind === 'plant');
+        set(carry, home, c.kind === 'plant' ? `STOLEN ${name}` : `Carrying ${name}`, `Bring it HOME! <em>${d} studs</em>`);
+      }
+      let thief = null;
+      for (const p of game.players) if (p !== me && p.carrying?.kind === 'plant' && p.carrying.fromSlot === me.slot) thief = p;
+      toggle(track.el, 'show', !!thief && playing);
+      if (thief && playing) {
+        const d = Math.round(Math.hypot(thief.pos.x - me.pos.x, thief.pos.z - me.pos.z));
+        setStyle(track.el, '--c', thief.char.color);
+        set(track, thief.pos, `STOP <b class="who" style="--c:${thief.char.color}">${esc(thief.name.toUpperCase())}</b>!`, `They have your ${esc(game.plantName(thief.carrying.plant.speciesId, thief.carrying.plant.mutation))} <em>${d} studs</em>`);
+      }
+    },
+  };
+}
+
+// ------------------------------------------------------------------ hotbar
+
+function createHotbar(app, parent, me) {
+  const game = app.game;
+  const tip = h('div', { class: 'hb-tip' });
+  const slots = ITEMS.map((it, i) => {
+    const count = h('span', { class: 'hb-n' });
+    const timer = h('span', { class: 'hb-timer' });
+    const b = noFocus(h('button', { class: 'slot', type: 'button', 'aria-label': `${it.name} (key ${it.key})`, title: `${it.name}: ${it.desc}` },
+      h('span', { class: 'hb-k', text: it.key }), h('span', { class: 'hb-ic', html: ITEM_ICONS[it.id] }), count, timer));
+    b.addEventListener('click', () => {
+      app.input.tap('item', i);
+      b.classList.remove('press');
+      void b.offsetWidth;
+      b.classList.add('press');
+    });
+    return { b, count, timer, it };
+  });
+  const bar = h('div', { class: 'hotbar', role: 'toolbar', 'aria-label': 'Items' }, slots.map((s) => s.b));
+  parent.append(tip, bar);
+  let sel = -1;
+  let tipTimer = 0;
+  let acc = 1;
+  return {
+    update(dt) {
+      if (tipTimer > 0) {
+        tipTimer -= dt;
+        if (tipTimer <= 0) tip.classList.remove('show');
+      }
+      acc += dt;
+      if (acc < 0.1) return;
+      acc = 0;
+      const now = game.time;
+      if (me.selectedItem !== sel) {
+        if (sel !== -1) {
+          const it = ITEMS[me.selectedItem];
+          tip.innerHTML = `<b>${esc(it.name)}</b> ${esc(it.desc)}`;
+          tip.classList.add('show');
+          tipTimer = 2.2;
+        }
+        sel = me.selectedItem;
+      }
+      slots.forEach((s, i) => {
+        const n = me.items[s.it.id] || 0;
+        setText(s.count, n > 99 ? '99+' : String(n));
+        toggle(s.b, 'sel', i === sel);
+        toggle(s.b, 'empty', n <= 0);
+        let f = 0;
+        if (s.it.id === 'coil' && now < me.coilUntil) f = (me.coilUntil - now) / s.it.duration;
+        if (s.it.id === 'cloak' && now < me.cloakUntil) f = (me.cloakUntil - now) / s.it.duration;
+        toggle(s.b, 'active', f > 0);
+        setStyle(s.timer, 'transform', `scaleX(${Math.max(0, Math.min(1, f)).toFixed(3)})`);
+      });
+    },
+  };
+}
+
+// ------------------------------------------------------------------ road meter
+
+function createRoadMeter(app, parent, me) {
+  const game = app.game;
+  const start = WORLD.road.startZ;
+  const len = ROAD_END_Z - start;
+  const segs = BIOMES.map((b) => h('div', { class: 'm-seg', style: `--bg:${b.ground};--rc:${RARITY[b.rarity].color}`, title: b.name }));
+  const track = h('div', { class: 'm-track' }, [...segs].reverse());
+  const where = h('div', { class: 'm-where' });
+  const markers = game.players.map((p) => {
+    const m = h('div', { class: 'm-mk' + (p === me ? ' me' : ''), style: `--c:${p.char.color}` }, avatarEl(p.id, 'm-ava'));
+    return { p, m };
+  });
+  const mine = markers.find((x) => x.p === me).m;
+  mine.appendChild(where);
+  const lane = h('div', { class: 'm-lane' }, track, markers.filter((x) => x.p !== me).map((x) => x.m), mine);
+  const el = h('div', { class: 'meter', 'aria-hidden': 'true' }, h('div', { class: 'm-top', html: ICON.star }), lane, h('div', { class: 'm-home', html: ICON.home }));
+  parent.appendChild(el);
+  let acc = 1;
+  let lastBiome = -2;
+  return {
+    update(dt) {
+      acc += dt;
+      if (acc < 0.1) return;
+      acc = 0;
+      for (const { p, m } of markers) {
+        const z = p.pos.z;
+        const home = z < start;
+        const f = home ? 0 : Math.max(0, Math.min(1, (z - start) / len));
+        setStyle(m, '--f', f.toFixed(4));
+        toggle(m, 'home', home);
+        toggle(m, 'hide', p.invisible(game.time) && p !== me);
+        setStyle(m, '--k', String(p.slot));
+      }
+      const bi = biomeIndexAtZ(me.pos.z);
+      if (bi !== lastBiome) {
+        lastBiome = bi;
+        const b = BIOMES[bi];
+        setHTML(where, b ? `${esc(b.name)}<em style="color:${RARITY[b.rarity].color}">${RARITY[b.rarity].name}</em>` : 'Home');
+        segs.forEach((s, i) => toggle(s, 'cur', i === bi));
+      }
+    },
+  };
+}
+
+// ------------------------------------------------------------------ chat log + speech bubbles
+
+function createChat(app, parent) {
+  const game = app.game;
+  const el = h('div', { class: 'chat', 'aria-live': 'polite' });
+  parent.appendChild(el);
+  const bubbles = new Map(); // slot -> {html, until}
+  const timers = new Set();
+  const off = bus.on('chat', ({ player, text }) => {
+    if (!player) return;
+    const line = h('div', { class: 'cl' }, h('b', { style: `--c:${player.char.color}`, text: player.name + ': ' }), h('span', { text }));
+    el.appendChild(line);
+    while (el.children.length > 5) el.firstChild.remove();
+    const id = setTimeout(() => {
+      timers.delete(id);
+      line.remove();
+    }, 9000);
+    timers.add(id);
+    if (!player.isHuman) bubbles.set(player.slot, { html: `<div class="bb">${esc(text)}</div>`, until: performance.now() + 4200 });
+  });
+  return {
+    update() {
+      if (!bubbles.size) return;
+      const now = performance.now();
+      for (const [slot, b] of bubbles) {
+        if (now > b.until) {
+          bubbles.delete(slot);
+          continue;
+        }
+        const p = game.players[slot];
+        if (p.invisible(game.time)) continue;
+        app.labels.set('bubble' + slot, { x: p.pos.x, y: p.pos.y + (p.carrying ? 11.6 : 8.8), z: p.pos.z }, b.html, { cls: 'bubble', maxDist: 90 });
+      }
+    },
+    dispose() {
+      off();
+      for (const id of timers) clearTimeout(id);
+      el.remove();
+    },
+  };
+}
+
+// ------------------------------------------------------------------ desktop key hints
+
+function createKeyHints(app, parent) {
+  if (load('ui:hints-off', false) || settings.tips === false) return {};
+  const k = (s) => `<kbd>${s}</kbd>`;
+  const kb = [
+    [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'],
+    [k('Click') + k('F'), 'Bonk'], [k('1') + '-' + k('5'), 'Items'], [k('Right-drag'), 'Camera'], [k('Esc'), 'Menu'],
+  ];
+  const gp = [
+    [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('X'), 'Bonk'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],
+  ];
+  const body = h('div', { class: 'kh-body' });
+  const close = noFocus(h('button', { class: 'kh-x', type: 'button', 'aria-label': 'Hide key hints', html: ICON.close }));
+  const el = h('div', { class: 'keyhints' }, close, body);
+  parent.appendChild(el);
+  let mode = '';
+  const paint = () => {
+    const pad = app.input.lastDevice === 'gamepad';
+    const m = pad ? 'pad' : 'kb';
+    if (m === mode) return;
+    mode = m;
+    body.innerHTML = (pad ? gp : kb).map(([a, b]) => `<div class="kh-row"><span class="kh-k">${a}</span><span>${b}</span></div>`).join('');
+  };
+  paint();
+  close.addEventListener('click', () => {
+    save('ui:hints-off', true);
+    el.remove();
+  });
+  const offTouch = onTouchChange(() => el.remove());
+  let acc = 0;
+  return {
+    update(dt) {
+      acc += dt;
+      if (acc > 1) {
+        acc = 0;
+        paint();
+      }
+    },
+    dispose() {
+      offTouch();
       el.remove();
     },
   };

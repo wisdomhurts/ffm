@@ -11,6 +11,7 @@ const DEFAULTS = {
   invertY: false,
   autoRotate: true,
   tips: true,
+  muted: false,
 };
 
 export const settings = { ...DEFAULTS, ...(load('settings', {}) || {}) };
