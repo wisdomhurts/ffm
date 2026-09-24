@@ -1127,7 +1127,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .cc-title{font-size:11px}
   .tut-num,.tut-count{display:none}
   .tut-copy b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tut-dist{white-space:normal;text-align:center;max-width:40px;line-height:1.1}
+  .tut-dist{white-space:normal;text-align:center;width:min-content;line-height:1.1}
   .is-touch .tut-skip{padding:4px 6px;font-size:11px}
   .nextgoal{max-width:236px;padding:5px 10px 8px 5px;gap:6px;border-radius:14px}
   .ng-ic{width:24px;height:24px;padding:4px}

@@ -303,23 +303,28 @@ const smooth = (a, b, x) => {
 const READY = { armRx: -0.55, armRz: -0.12, wrist: 2.3 };
 const DRAW_U = 0.2; // swing phase where the noodle leaves the back and lands in the fist
 const READY_HOLD = 1.4; // seconds it stays in hand after the last swing
-// Holster (h = 0..1 over `time` seconds, keys spread evenly, Catmull-Rom through them): the fist lifts
-// the noodle up out to the side (clear of the face and hair), over the top and back over the right
-// shoulder, where the arm (twisted by ry) lays it along the back just where it's slung (`letGo`, per
-// sling, fitted offline). At `swap` the hand lets go, the noodle settles into its slung pose over
-// `slide` seconds and the arm carries on round, down behind and back to the side.
+// Holster (h = 0..1 over `time` seconds; six keys spread evenly, Catmull-Rom through them): the fist
+// swings the noodle out to the side and up over the right shoulder (well clear of the face and hair) and
+// lays it down behind the back; at `swap` (key 3) the hand lets go and the noodle settles into its slung
+// pose over `slide` seconds while the arm carries on round, down behind and back to the side.
+// wristZ tilts the noodle sideways in the fist. Keys per sling (short / long hair), fitted offline against
+// the head and hair shapes.
 const HOLSTER = {
   time: 0.45,
   swap: 0.6,
-  slide: 0.1,
-  armRx: [READY.armRx, -2.1, -3.4, 0, -5.3, -TAU],
-  armRy: [0, 0, 0.2, 0, 0.3, 0],
-  armRz: [READY.armRz, -0.8, -0.6, 0, -0.55, -0.07],
-  wrist: [READY.wrist, 2.9, 2.4, 0, 1.3, READY.wrist],
-};
-const LET_GO = {
-  short: { armRx: -4.35, armRy: 0.91, armRz: 0.36, wrist: 1.13 },
-  long: { armRx: -4.5, armRy: 0.86, armRz: 0.12, wrist: 1.35 },
+  slide: 0.14,
+  short: {
+    armRx: [READY.armRx, -1.39, -3.06, -3.98, -5.0, -TAU],
+    armRz: [READY.armRz, -0.75, -0.77, -0.24, -0.8, -0.07],
+    wrist: [READY.wrist, 2.1, 1.45, 0.67, 0.67, READY.wrist],
+    wristZ: [0, -0.26, -0.28, -0.28, -0.28, 0],
+  },
+  long: {
+    armRx: [READY.armRx, -0.82, -3.86, -4.81, -5.5, -TAU],
+    armRz: [READY.armRz, -0.68, -0.92, -0.75, -0.9, -0.07],
+    wrist: [READY.wrist, 2.01, 1.18, 1.03, 1.03, READY.wrist],
+    wristZ: [0, -0.24, -0.31, -0.69, -0.69, 0],
+  },
 };
 // the equivalent of angle a nearest to ref (so blends take the short way round)
 const near = (a, ref) => a + TAU * Math.round((ref - a) / TAU);
@@ -599,7 +604,7 @@ export function createAvatar(char, faceImage, skinHex) {
 
   // ---- animation state
   const W = { move: 0, air: 0, carry: 0, stun: 0, celeb: 0, steal: 0, reach: 0, coil: 0, ready: 0 };
-  const P = { rigY: 0, rigRX: 0, rigRZ: 0, rigYaw: 0, torsoX: 0, torsoY: 0, torsoZ: 0, headX: 0, headY: 0, headZ: 0, armRx: 0, armRy: 0, armRz: 0, armLx: 0, armLz: 0, legRx: 0, legLx: 0, wrist: READY.wrist, lift: 0 };
+  const P = { rigY: 0, rigRX: 0, rigRZ: 0, rigYaw: 0, torsoX: 0, torsoY: 0, torsoZ: 0, headX: 0, headY: 0, headZ: 0, armRx: 0, armRz: 0, armLx: 0, armLz: 0, legRx: 0, legLx: 0, wrist: READY.wrist, wristZ: 0, lift: 0 };
   let clock = Math.random() * 10;
   let phase = Math.random() * TAU;
   let prevArm = 0;
@@ -609,9 +614,7 @@ export function createAvatar(char, faceImage, skinHex) {
   let holster = -1; // 0..1 while putting it back over the shoulder
   let holsterArm = 0; // holster pose weight (fades out if a swing or a pickup interrupts it)
   let holsterAt = 0; // 0..1 along the holster keys
-  const letGo = LET_GO[longHair ? 'long' : 'short'];
-  const HK = {};
-  for (const k of ['armRx', 'armRy', 'armRz', 'wrist']) HK[k] = HOLSTER[k].map((v, i) => (i === 3 ? letGo[k] : v));
+  const HK = HOLSTER[longHair ? 'long' : 'short'];
   let slide = 2; // 0..1 while the let-go noodle settles onto the back (2 = at rest)
   let handScale = 0;
   let slingScale = 1;
@@ -868,13 +871,13 @@ export function createAvatar(char, faceImage, skinHex) {
     }
 
     // --- put the noodle back: up out to the side, over the top and down behind the shoulder
-    P.armRy = 0;
+    P.wristZ = 0;
     if (holsterArm > 0.001) {
       const rx = holsterKey(HK.armRx, holsterAt);
       P.armRx = lerp(near(P.armRx, rx), rx, holsterArm);
-      P.armRy = holsterKey(HK.armRy, holsterAt) * holsterArm;
       P.armRz = lerp(P.armRz, holsterKey(HK.armRz, holsterAt), holsterArm);
       P.wrist = lerp(P.wrist, holsterKey(HK.wrist, holsterAt), holsterArm);
+      P.wristZ = holsterKey(HK.wristZ, holsterAt) * holsterArm;
     }
 
     // --- noodle whack overlay
@@ -898,11 +901,11 @@ export function createAvatar(char, faceImage, skinHex) {
     head.rotation.set(P.headX, P.headY, P.headZ);
     armR.position.y = SHOULDER_Y + P.lift;
     armL.position.y = SHOULDER_Y + P.lift;
-    armR.rotation.set(P.armRx, P.armRy, P.armRz);
+    armR.rotation.set(P.armRx, 0, P.armRz);
     armL.rotation.set(P.armLx, 0, P.armLz);
     legR.hip.rotation.x = P.legRx;
     legL.hip.rotation.x = P.legLx;
-    wrist.rotation.x = P.wrist;
+    wrist.rotation.set(P.wrist, 0, P.wristZ);
     if (skirt) {
       skirt.rotation.x = -P.torsoX * 0.6 + Math.sin(phase * 2) * 0.035 * wm;
       const flare = 1 + Math.abs(Math.sin(phase)) * 0.06 * wm + wa * 0.08;
