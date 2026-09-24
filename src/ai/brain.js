@@ -126,6 +126,8 @@ function bestSteal(bot, game, p, info) {
       if (victim.isHuman) u *= diff.humanStealMult * (bot.humanLast ? diff.lastStealMult : 1);
       if (others) u *= 0.25;
       if (bot.revenge === victim && now < bot.revengeUntil) u *= 1.6;
+      // a rival running away with the match (ahead of a struggling human) is everyone's favourite target
+      if (!victim.isHuman && bot.diff.paceCap > 0 && victim.controller?.ahead > 1) u *= Math.min(2, victim.controller.ahead);
       // spread the misery: someone who was just robbed is a less tempting target
       if (now - (board.lastStealOn.get(g.slot) ?? -99) < 60) u *= 0.4;
       const safe = u * P;

@@ -77,6 +77,7 @@ export class BotController {
     this.tempo = 1;
     this.biomeCap = 99;
     this.humanLast = false;
+    this.ahead = 0;
     this.practiceCarry = null;
   }
 
@@ -194,10 +195,11 @@ export class BotController {
     this.tempo = 1;
     this.biomeCap = 99;
     this.humanLast = false;
+    this.ahead = 0;
     if (!hs) return;
     this.humanLast = hs.last && now > 30;
     // ahead of the human on net worth, or on income (where net worth is heading)
-    const ahead = Math.max(Math.max(game.netWorth.get(p) || 0, 400) / Math.max(hs.net, 400),
+    const ahead = this.ahead = Math.max(Math.max(game.netWorth.get(p) || 0, 400) / Math.max(hs.net, 400),
       Math.max(game.gardenIncome(game.gardens[p.slot]), 8) / Math.max(hs.inc, 8));
     if (d.paceCap > 0 && now > 20) {
       this.ease = clamp((ahead / d.paceCap - 1) / 0.4, 0, 1);
