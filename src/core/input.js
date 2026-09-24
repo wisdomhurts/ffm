@@ -32,7 +32,15 @@ export class Input {
     window.addEventListener('blur', this._blur);
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Browsers synthesize mouse events after touches; ignore them so a camera drag never bonks.
+    this._lastTouch = -1e9;
+    window.addEventListener('touchstart', () => {
+      this._lastTouch = performance.now();
+      this.lastDevice = 'touch';
+    }, { passive: true, capture: true });
+    const fromTouch = () => performance.now() - this._lastTouch < 900;
     canvas.addEventListener('mousedown', (e) => {
+      if (fromTouch()) return;
       this.lastDevice = 'keyboard';
       if (e.button === 2) this.mouse.right = true;
       if (e.button === 0) {
@@ -42,6 +50,7 @@ export class Input {
       }
     });
     window.addEventListener('mouseup', (e) => {
+      if (fromTouch()) return;
       if (e.button === 2) this.mouse.right = false;
       if (e.button === 0) {
         // quick left click (no drag) = bonk; left drag = orbit camera
@@ -50,6 +59,7 @@ export class Input {
       }
     });
     window.addEventListener('mousemove', (e) => {
+      if (fromTouch()) return;
       this.mouse.x = e.clientX;
       this.mouse.y = e.clientY;
       if (this.mouse.right || this.mouse.left || document.pointerLockElement === canvas) {

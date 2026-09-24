@@ -115,6 +115,7 @@ class App {
     this.menus.hideAll();
     this.cam.snapBehind(this.human.yaw);
     this.cam.yaw = this.human.yaw;
+    this.cam.playIntro(2.4);
     this.state = 'playing';
     this.input.reset();
     this.input.enabled = true;

@@ -30,6 +30,13 @@ export class FollowCamera {
     this.yaw = playerYaw;
   }
 
+  // Swoop in from a high overview to the follow position over `duration` seconds.
+  playIntro(duration = 2.4) {
+    this.introDur = duration;
+    this.introT = 0;
+    this._introFrom = null;
+  }
+
   addShake(amount) {
     this.shake = Math.min(1.5, this.shake + amount);
   }
@@ -65,6 +72,18 @@ export class FollowCamera {
     }
     this._pos.copy(this.smoothTarget).addScaledVector(this._dir, dist);
     if (this._pos.y < 1) this._pos.y = 1;
+    if (this.introT != null && this.introT < 1) {
+      if (!this._introFrom) {
+        this._introFrom = new THREE.Vector3(focus.x * 0.4, 70, focus.z - 50);
+        this._introLook = new THREE.Vector3(focus.x * 0.6, 0, focus.z * 0.6 + 10);
+      }
+      this.introT = Math.min(1, this.introT + dt / this.introDur);
+      const k = this.introT < 0.5 ? 4 * this.introT ** 3 : 1 - Math.pow(-2 * this.introT + 2, 3) / 2;
+      this.camera.position.lerpVectors(this._introFrom, this._pos, k);
+      const look = this._introLook.clone().lerp(this.smoothTarget, k);
+      this.camera.lookAt(look);
+      return;
+    }
     if (this.shake > 0) {
       const s = this.shake * 0.6;
       this._pos.x += (Math.random() - 0.5) * s;
