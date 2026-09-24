@@ -151,7 +151,9 @@ export class GameView {
           }
           this.plantViews.set(k, rec);
         }
-        if (rec.view) {
+        if (rec.view && Math.hypot(pl.x - camera.position.x, pl.z - camera.position.z) > 200) {
+          rec.view.object3d.visible = false;
+        } else if (rec.view) {
           const p01 = plant.growTotal > 0 ? 1 - plant.growLeft / plant.growTotal : 1;
           rec.view.setGrowth(Math.max(0, Math.min(1, p01)));
           rec.view.update(dt, time);
@@ -194,14 +196,20 @@ export class GameView {
       signs?.setCashPile?.(gd.cashPile);
     });
 
-    // pods
+    // pods (small props: skip drawing/animating the far ones; special seeds have beams visible from afar)
+    const cx = camera.position.x, cz = camera.position.z;
     g.pods.forEach((pod, i) => {
       const rec = this.podViews[i];
       const key = pod.seed ? pod.seed.speciesId + ':' + pod.seed.mutation : null;
+      const cd = Math.hypot(pod.x - cx, pod.z - cz);
+      const special = pod.seed && (pod.seed.mutation !== 'normal' || pod.seed.lucky || RARITY[PLANT[pod.seed.speciesId].rarity].tier >= 5);
+      const visible = cd < (special ? 300 : 170);
+      rec.view.object3d.visible = visible;
       if (rec.key !== key) {
         rec.key = key;
         rec.view.setSeed(pod.seed ? createSeedView(pod.seed.speciesId, pod.seed.mutation) : null);
       }
+      if (!visible) return;
       rec.view.update(dt, time);
       if (pod.seed) {
         const sp = PLANT[pod.seed.speciesId];
@@ -261,6 +269,8 @@ export class GameView {
     // monsters
     g.monsters.forEach((m, i) => {
       const v = this.monsterViews[i];
+      v.object3d.visible = Math.hypot(m.x - camera.position.x, m.z - camera.position.z) < 260;
+      if (!v.object3d.visible) return;
       v.object3d.position.set(m.x, m.y, m.z);
       v.object3d.rotation.y = m.yaw;
       v.update(dt, { time, speed: Math.hypot(m.vx, m.vz), state: now < m.stunUntil ? 'stunned' : m.state, attackAge: now - m.attackAt });
