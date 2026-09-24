@@ -1,46 +1,596 @@
-// PLACEHOLDER bot brain (to be replaced by the full personality AI).
-// Contract: new BotController(personality) ; getIntent(game, player, dt) -> Intent
+// Bot brains for the three family members you play against (and all four in the title attract mode).
+// Contract: new BotController(personality, difficultyId) ; getIntent(game, player, dt) -> Intent
+//
+// Layers:
+//   perception (every tick)  threats to my garden, stat changes that deserve a chat line
+//   brain (every ~0.6-1.2 s) utility scores for farm / steal / defend / shop / ... -> a Goal (brain.js)
+//   goal (every tick)        a small state machine that drives the motor and interactions (goals.js)
+//   motor (every tick)       routes, braking, dodging monsters and peels, un-sticking (motor.js)
+// Personalities: tycoon (Dorian), guardian (Esther), speedster (Maddie), thief (Micah).
+import { PLAYER, BIOMES, REBIRTH, speedCost, speedAt } from '../config.js';
 import { emptyIntent } from '../gameplay/player.js';
+import { gardenContains } from '../gameplay/layout.js';
+import { makeRng } from '../core/rng.js';
+import { PERSONALITIES, difficultyTuning } from './personalities.js';
+import { Motor } from './motor.js';
+import { getNav } from './nav.js';
+import { chooseGoal } from './brain.js';
+import { planDodge } from './dodge.js';
+import { ReturnGoal } from './goals.js';
+import { getBoard, trySay, releaseClaims } from './blackboard.js';
+import { hyp, yawTo, wrapAngle, balloonYaw, tierOf, gardenInfo, carrySeedSpeed } from './util.js';
 
 export class BotController {
-  constructor(personality = 'tycoon') {
-    this.personality = personality;
+  /**
+   * @param {'tycoon'|'guardian'|'speedster'|'thief'} personality
+   * @param {'chill'|'normal'|'chaos'} [difficultyId] defaults to the game's difficulty
+   * @param {{seed?: number}} [opts]
+   */
+  constructor(personality = 'tycoon', difficultyId = null, opts = {}) {
+    this.personality = PERSONALITIES[personality] ? personality : 'tycoon';
+    this.pers = PERSONALITIES[this.personality];
+    this.difficultyId = difficultyId;
+    this.diff = difficultyTuning(difficultyId || 'normal');
+    this.rng = makeRng(opts.seed ?? (Math.random() * 2 ** 32) >>> 0);
+    this.motor = new Motor(this);
     this.goal = null;
+    this.game = null;
+    this.p = null;
+    this.nextDecideAt = 0;
+    this.threat = null;
+    this.info = null;
+    this.podBlock = new Map();
+    this.lastStealAt = -999;
+    this.stealAbortedAt = -999;
+    this.revenge = null;
+    this.revengeUntil = 0;
+    this.stayHomeUntil = 0;
+    this.sepIgnore = null;
+    this.hopsLeft = 0;
+    this.hopAt = 0;
+    this.balloonAt = 0;
+    this.bananaAt = 0;
+    this.kitAt = 0;
+    this.coilAt = 0;
+    this.peelSeen = new Map();
+    this.lurkBlock = new Map();
+    this.biomeFail = [];
+    this.mugReadyAt = 0;
+    this.lastShopAt = -99;
+    this.lastCollectAt = -99;
+    this._avoid = { x: 0, z: 0, jump: false };
+    this.dodgeAt = 0;
+    this.dodgeOn = false;
+    this.dodgeDir = { x: 0, z: -1 };
+    this.dodgeState = { prev: null };
   }
 
-  getIntent(game, p) {
-    const it = emptyIntent();
-    const home = game.layout.gardens[p.slot];
-    let tx, tz;
-    if (p.carrying) {
-      tx = home.inside.x;
-      tz = home.inside.z;
-      if (Math.abs(p.pos.x) < 22 && p.pos.z > 40) {
-        tx = 0;
-        tz = 30;
-      }
-    } else {
-      const pod = game.pods.filter((q) => q.seed && q.biome === 0).sort((a, b) => Math.abs(a.z - p.pos.z) - Math.abs(b.z - p.pos.z))[0];
-      if (!pod) return it;
-      const inGarden = game.gardenAt(p.pos.x, p.pos.z);
-      if (inGarden) {
-        tx = home.outside.x;
-        tz = home.outside.z;
-      } else if (p.pos.z < 55 && Math.abs(p.pos.x) > 15) {
-        tx = 0;
-        tz = 58;
-      } else {
-        tx = pod.x;
-        tz = pod.z;
-        if ((p.pos.x - pod.x) ** 2 + (p.pos.z - pod.z) ** 2 < 16) it.interact = true;
-      }
+  _bind(game, p) {
+    this.game = game;
+    this.p = p;
+    if (!this.difficultyId) this.diff = difficultyTuning(game.difficultyId);
+    this.home = game.layout.gardens[p.slot];
+    this.lane = this.pers.lane;
+    this.shopJitter = this.rng.range(-3, 3);
+    this.seenSteals = p.stats.steals;
+    this.seenBonks = p.stats.bonks;
+    this.bestTier = 0;
+    this.prevCarry = p.carrying;
+    this.goal = null;
+    this.motor.stop();
+    // stagger the first decisions so the bots do not move in lockstep
+    this.nextDecideAt = game.time + this.rng.range(0.1, 0.9);
+    getNav(game);
+  }
+
+  getIntent(game, p, dt) {
+    if (this.game !== game || this.p !== p) this._bind(game, p);
+    // one intent object per bot, reset every tick (the game only reads it during this step)
+    const it = this._it || (this._it = emptyIntent());
+    it.moveX = 0;
+    it.moveZ = 0;
+    it.jump = false;
+    it.interact = false;
+    it.bonk = false;
+    it.useItem = null;
+    it.selectSlot = null;
+    it.aimYaw = null;
+    const now = game.time;
+    this._perceive(game, p, now);
+    if (p.carrying && this.goal?.type !== 'return') this._setGoal(new ReturnGoal(), game, p);
+    if (!p.carrying) {
+      const urgent = this.threat && !this.threat.handled && now >= this.threat.reactAt;
+      if (urgent) this.threat.handled = true;
+      if (urgent || now >= this.nextDecideAt) this._decide(game, p, now);
     }
-    const dx = tx - p.pos.x, dz = tz - p.pos.z;
-    const d = Math.hypot(dx, dz);
-    if (d > 0.5) {
-      it.moveX = dx / d;
-      it.moveZ = dz / d;
+    if (this.goal) {
+      const status = this.goal.update(this, game, p, it, dt);
+      if (status !== 'running') this._finish(game, p, status);
     }
+    this._hops(game, p, it);
     return it;
+  }
+
+  /** Debug snapshot (used by the headless sims). */
+  get debugState() {
+    return { goal: this.goal?.type ?? null, phase: this.goal?.phase ?? '', stuck: this.motor.stuckEvents, moving: this.motor.wantsMove };
+  }
+
+  // ---------------------------------------------------------------- brain plumbing
+
+  _decide(game, p, now) {
+    this.nextDecideAt = now + this.diff.decide * this.rng.range(0.8, 1.25);
+    const cand = chooseGoal(this, game, p);
+    // an idle line now and then, only after a quiet spell for this bot
+    const quiet = now - (getBoard(game).chatBy.get(p.slot) ?? -99);
+    if (quiet > 45 && this.rng.next() < 0.025 * this.pers.chatty) this.say(game, p, 'idle', {});
+    const cur = this.goal;
+    if (!cand) return;
+    if (!cur) return this._setGoal(cand, game, p);
+    if (cand.sig === cur.sig) {
+      cur.u = cand.u;
+      return;
+    }
+    if (cand.type === 'defend') {
+      if (cur.type !== 'defend' && cur.type !== 'return') this._setGoal(cand, game, p);
+      return;
+    }
+    if (!cur.interruptible) return;
+    if (cand.u > cur.u * 1.35 + 1e-4) this._setGoal(cand, game, p);
+  }
+
+  _setGoal(goal, game, p) {
+    if (this.goal) this.goal.end(this, game, p);
+    this.goal = goal;
+    this.motor.stop();
+    // each trip wanders a little differently up the road
+    this.lane = this.pers.lane + this.rng.range(-2.5, 2.5) * this.pers.wander;
+    goal.begin(this, game, p);
+  }
+
+  _finish(game, p, status) {
+    const g = this.goal;
+    const now = game.time;
+    g.end(this, game, p);
+    this.goal = null;
+    this.motor.stop();
+    if (status === 'failed') {
+      if (g.type === 'defend' && this.threat?.q === g.q) this.threat.gaveUp = true;
+      if (g.type === 'farm') this.podBlock.set(g.pod.id, now + 12);
+      if (g.type === 'steal') this.lastStealAt = Math.max(this.lastStealAt, now - this.pers.stealGap * 0.6);
+    }
+    if (g.type === 'shop') this.lastShopAt = now;
+    if (g.type === 'collect') this.lastCollectAt = now;
+    if (g.type === 'mug') this.mugReadyAt = now + 25;
+    if (g.type === 'lurk') this.lurkBlock.set(g.vslot, now + 40);
+    if (g.type === 'return' && status === 'done') {
+      // back home with a seed: guardians hang around, others sometimes take a breather
+      if (this.pers.patrol) this.stayHomeUntil = now + this.rng.range(3, 9) * this.diff.beat;
+      else if (this.rng.next() < this.diff.breakChance) this.stayHomeUntil = now + this.rng.range(2, 6) * this.diff.beat;
+      if (this.rng.next() < 0.2) this.hop(1);
+    }
+    // a short human-like beat before the next plan (admire the new plant, catch a breath)
+    const beat = (g.type === 'return' || g.type === 'shop' ? this.rng.range(0.3, 1.1) : this.rng.range(0.05, 0.3)) * this.diff.beat;
+    this.nextDecideAt = now + beat + (status === 'failed' ? this.diff.reaction * 0.5 : 0);
+  }
+
+  // ---------------------------------------------------------------- perception + chat
+
+  _perceive(game, p, now) {
+    const g = game.gardens[p.slot];
+    let q = null, kind = null;
+    for (const pl of g.planters) {
+      if (pl.stealer != null && pl.stealer !== p.slot) {
+        q = game.players[pl.stealer];
+        kind = 'stealing';
+        break;
+      }
+    }
+    if (!q) {
+      for (const o of game.players) {
+        if (o !== p && o.carrying?.kind === 'plant' && o.carrying.fromSlot === p.slot) {
+          q = o;
+          kind = 'carrying';
+          break;
+        }
+      }
+    }
+    if (q) {
+      if (!this.threat || this.threat.q !== q) {
+        const d = hyp(q.pos.x - p.pos.x, q.pos.z - p.pos.z);
+        this.threat = { q, kind, seenAt: now, reactAt: now + this.diff.reaction * this.rng.range(0.8, 1.5) + (d > 80 ? 0.4 : 0), handled: false };
+      }
+      this.threat.kind = kind;
+      if (kind === 'carrying' && this.threat.plantUid !== q.carrying.plant.uid) {
+        const plant = q.carrying.plant;
+        this.threat.plantUid = plant.uid;
+        this.revenge = q;
+        this.revengeUntil = now + 150;
+        this.say(game, p, 'robbed', { plant: game.plantName(plant.speciesId, plant.mutation), thief: q.name }, { urgent: true });
+      }
+    } else this.threat = null;
+
+    const c = p.carrying;
+    if (c?.kind === 'plant' && this.lastCarry?.plant !== c.plant) this.lastCarry = { plant: c.plant, victim: game.players[c.fromSlot] };
+    if (p.stats.steals > this.seenSteals) {
+      this.seenSteals = p.stats.steals;
+      const lc = this.lastCarry;
+      if (lc) this.say(game, p, 'steal', { plant: game.plantName(lc.plant.speciesId, lc.plant.mutation), victim: lc.victim.name }, { urgent: true });
+      this.hop(2);
+    }
+    if (p.stats.bonks > this.seenBonks) {
+      this.seenBonks = p.stats.bonks;
+      this.say(game, p, 'bonk', {}, { chance: 0.7 });
+    }
+    // lost a seed to a monster on the road: that biome feels scarier for a while
+    if (!c && this.prevCarry?.kind === 'seed') {
+      for (const m of game.monsters) {
+        if (now - m.attackAt < 0.1 && hyp(m.x - p.pos.x, m.z - p.pos.z) < 8) {
+          const f = this.biomeFail[m.biome] || (this.biomeFail[m.biome] = { n: 0, at: now });
+          f.n = f.n * Math.pow(0.5, (now - f.at) / 60) + 1;
+          f.at = now;
+          break;
+        }
+      }
+    }
+    if (c?.kind === 'seed' && !this.prevCarry) {
+      const tier = tierOf(c.speciesId);
+      if (tier >= Math.max(3, this.bestTier + 1) || (c.mutation !== 'normal' && tier >= 1) || tier >= 5) {
+        this.say(game, p, 'rare', { plant: game.plantName(c.speciesId, c.mutation) }, { chance: 0.85 });
+        this.hop(1);
+      }
+      this.bestTier = Math.max(this.bestTier, tier);
+    }
+    this.prevCarry = c;
+  }
+
+  say(game, p, category, vars, opts = {}) {
+    const chance = (opts.chance ?? 1) * Math.min(1, this.pers.chatty);
+    return trySay(game, p, category, vars, { ...opts, chance, rng: this.rng.next });
+  }
+
+  // ---------------------------------------------------------------- small action helpers
+
+  /** Tap interact (instant actions fire on the press edge). */
+  press(it, p) {
+    it.interact = !p.prevInteract;
+  }
+
+  hop(n) {
+    this.hopsLeft = Math.max(this.hopsLeft, n);
+  }
+
+  _hops(game, p, it) {
+    if (this.hopsLeft <= 0 || game.time < this.hopAt || !p.onGround || game.time < p.stunUntil) return;
+    if (p.interact.t > 0) return; // don't hop off a planter mid-steal
+    it.jump = true;
+    this.hopsLeft--;
+    this.hopAt = game.time + 0.55;
+  }
+
+  /** Swing the pool noodle at a player or monster when it makes sense. Misses by difficulty. */
+  tryBonk(game, p, target, it) {
+    const now = game.time;
+    if (p.carrying || now < p.bonkReadyAt || now < p.stunUntil) return false;
+    const isPlayer = !!target.pos;
+    const tx = isPlayer ? target.pos.x : target.x, tz = isPlayer ? target.pos.z : target.z;
+    if (isPlayer && (now < target.invulnUntil - 0.05 || target.invisible(now) || Math.abs(target.pos.y - p.pos.y) > 4)) return false;
+    const d = hyp(tx - p.pos.x, tz - p.pos.z);
+    const R = PLAYER.bonk.range + (isPlayer ? 0 : 1.5);
+    if (d > R + 2.5) {
+      this.bonkRoll = null;
+      return false;
+    }
+    if (!this.bonkRoll) {
+      let acc = this.diff.bonkAccuracy;
+      if (isPlayer && target.isHuman && this.diff.id === 'chill') acc *= 0.85;
+      this.bonkRoll = { good: this.rng.next() < acc, at: now + this.diff.reaction * this.rng.range(0.1, 0.5) };
+    }
+    if (now < this.bonkRoll.at) return false;
+    const aim = yawTo(p.pos.x, p.pos.z, tx, tz);
+    if (this.bonkRoll.good) {
+      if (d > R - 1.3) return false;
+      if (Math.abs(wrapAngle(p.yaw - aim)) > 0.35) {
+        it.moveX = 0;
+        it.moveZ = 0;
+        it.aimYaw = aim;
+      }
+    } else if (d <= R + 0.4) {
+      // too close to whiff by distance: swing wide instead
+      it.moveX = 0;
+      it.moveZ = 0;
+      it.aimYaw = aim + (this.rng.next() < 0.5 ? 1 : -1) * 1.45;
+    }
+    it.bonk = true;
+    this.bonkRoll = null;
+    return true;
+  }
+
+  /** Throw a water balloon at q (leading the target). */
+  tryBalloon(game, p, q, it, d) {
+    const now = game.time;
+    if ((p.items.balloon || 0) <= 0 || now < this.balloonAt || d < 7 || d > 27) return false;
+    if (now < q.invulnUntil || q.invisible(now)) return false;
+    this.balloonAt = now + 1.2;
+    if (q.isHuman && this.rng.next() > this.diff.humanBalloon) {
+      this.balloonAt = now + 3;
+      return false;
+    }
+    if (!getNav(game).los(p.pos.x, p.pos.z, q.pos.x, q.pos.z)) return false;
+    const err = (this.rng.next() + this.rng.next() - 1) * this.diff.aimError * 1.6;
+    it.moveX = 0;
+    it.moveZ = 0;
+    it.aimYaw = balloonYaw(p, q) + err;
+    it.useItem = 'balloon';
+    this.balloonAt = now + 2.4;
+    return true;
+  }
+
+  /** While carrying: shake off pursuers with peels, balloons and coils. */
+  escapeKit(game, p, it) {
+    const now = game.time;
+    if (now < this.kitAt || now < p.stunUntil) return;
+    this.kitAt = now + 0.12;
+    let pur = null, pd = Infinity;
+    for (const q of game.players) {
+      if (q === p || q.carrying || q.invisible(now) || now < q.stunUntil) continue;
+      const rx = p.pos.x - q.pos.x, rz = p.pos.z - q.pos.z;
+      const d = hyp(rx, rz);
+      if (d > 26) continue;
+      const closing = (q.vel.x * rx + q.vel.z * rz) / (d || 1);
+      const hunting = q.controller?.goal?.q === p;
+      if (!hunting && closing < 6) continue;
+      if (d < pd) {
+        pd = d;
+        pur = q;
+      }
+    }
+    if (pur) {
+      if ((p.items.banana || 0) > 0 && pd > 2.2 && pd < 12 && now > this.bananaAt && Math.hypot(p.vel.x, p.vel.z) > 5) {
+        it.useItem = 'banana';
+        this.bananaAt = now + 2.5;
+        return;
+      }
+      if (this.tryBalloon(game, p, pur, it, pd)) return;
+      if ((p.items.coil || 0) > 0 && now > p.coilUntil && pd < 14) {
+        it.useItem = 'coil';
+        return;
+      }
+    }
+    if ((p.items.coil || 0) > 0 && now > p.coilUntil) {
+      const mySpeed = p.maxSpeed(now, game.difficulty.botSpeedMult);
+      for (const m of game.monsters) {
+        if (m.target === p.slot && m.def.speed > mySpeed * 0.92 && hyp(m.x - p.pos.x, m.z - p.pos.z) < 30) {
+          it.useItem = 'coil';
+          return;
+        }
+      }
+    }
+  }
+
+  /** Speedster pops a coil for long road trips when she has spares. */
+  maybeCoil(game, p, it) {
+    const now = game.time;
+    if (now < this.coilAt) return;
+    this.coilAt = now + 2;
+    if (this.personality === 'speedster' && (p.items.coil || 0) >= 2 && now > p.coilUntil && this.rng.next() < 0.3) it.useItem = 'coil';
+  }
+
+  /** Micah's big heist: go invisible when the owner is around and the plant is worth it. */
+  maybeCloak(game, p, it, g, pl) {
+    const now = game.time;
+    if (this.personality !== 'thief' || (p.items.cloak || 0) <= 0 || p.invisible(now) || !pl.plant) return;
+    const o = g.owner;
+    const ownerNear = gardenContains(g.L, o.pos.x, o.pos.z) || hyp(o.pos.x - g.L.outside.x, o.pos.z - g.L.outside.z) < 50;
+    const inc = game.plantIncome(pl.plant, p);
+    const info = this.info || gardenInfo(game, p.slot);
+    if (ownerNear && inc >= Math.max(10, info.bestInc * 0.8)) it.useItem = 'cloak';
+  }
+
+  /** A road monster near the pod that we can't comfortably outrun with a seed (bonk it first). */
+  guardMonster(game, p, pod) {
+    const now = game.time;
+    if (p.bonkReadyAt > now + 0.6) return null;
+    const s = carrySeedSpeed(game, p) * (now < p.coilUntil - 3 ? 1.5 : 1);
+    let best = null, bd = Infinity;
+    for (const m of game.monsters) {
+      if (m.biome !== pod.biome || now < m.stunUntil - 0.3) continue;
+      if (m.def.speed < s * 0.9) continue;
+      const d = hyp(m.x - pod.x, m.z - pod.z);
+      if (d > m.def.aggro + 8) continue;
+      if (d < bd) {
+        bd = d;
+        best = m;
+      }
+    }
+    return best;
+  }
+
+  /** The garden owner is right on top of us (abort a steal). */
+  ownerCloseIn(game, p, owner) {
+    const now = game.time;
+    if (owner.invisible(now) || now < owner.stunUntil || owner.carrying) return false;
+    const rx = p.pos.x - owner.pos.x, rz = p.pos.z - owner.pos.z;
+    const d = hyp(rx, rz);
+    const lim = this.personality === 'thief' ? 7 : 10;
+    if (d > lim) return false;
+    const closing = (owner.vel.x * rx + owner.vel.z * rz) / (d || 1);
+    return closing > 3 || d < 4.5;
+  }
+
+  isThreat(game, p, q) {
+    if (q.carrying?.kind === 'plant' && q.carrying.fromSlot === p.slot) return true;
+    for (const pl of game.gardens[p.slot].planters) if (pl.stealer === q.slot) return true;
+    return false;
+  }
+
+  canDefend(game, p, q) {
+    if (p.carrying || q.invisible(game.time) || this.threat?.gaveUp) return false;
+    const d = hyp(q.pos.x - p.pos.x, q.pos.z - p.pos.z);
+    return d <= this.pers.defendRange * (q.isHuman ? this.diff.humanChaseMult : 1);
+  }
+
+  /**
+   * Errands before leaving home: sell to make room, bank cash, lock the gate.
+   * `need`: cash the coming job requires (a trip home to collect is made only when it's needed).
+   */
+  departureErrands(game, p, { room = false, need = 0 } = {}) {
+    const steps = [];
+    const L = this.home;
+    const dHome = hyp(p.pos.x - L.inside.x, p.pos.z - L.inside.z);
+    const near = dHome < 28 || gardenContains(L, p.pos.x, p.pos.z);
+    const pile = game.gardens[p.slot].cashPile;
+    if (room) steps.push({ kind: 'sell' });
+    if (((near || room) && pile >= 15) || (need > p.cash && pile >= 1)) steps.push({ kind: 'collect' });
+    if ((near || room) && this.wantsLock(game, p)) steps.push({ kind: 'lock' });
+    return steps;
+  }
+
+  wantsLock(game, p) {
+    const g = game.gardens[p.slot];
+    const now = game.time;
+    if (game.isLocked(g) || now < g.lockReadyAt) return false;
+    const info = this.info || gardenInfo(game, p.slot);
+    if (info.grown === 0) return false;
+    if (this.pers.lockChance >= 1) return true;
+    let rivals = 0;
+    for (const q of game.players) if (q !== p && hyp(q.pos.x - g.L.center.x, q.pos.z - g.L.center.z) < 60) rivals++;
+    return rivals > 0 && this.rng.next() < this.pers.lockChance;
+  }
+
+  /** At home and a rival is sniffing around the gate: lock up (mostly Esther). */
+  wantsLockNow(game, p) {
+    const g = game.gardens[p.slot];
+    const now = game.time;
+    if (game.isLocked(g) || now < g.lockReadyAt) return false;
+    const pad = this.home.lockPad;
+    if (hyp(pad.x - p.pos.x, pad.z - p.pos.z) > 22) return false;
+    const info = this.info || gardenInfo(game, p.slot);
+    if (info.grown < 2) return false;
+    const o = this.home.outside;
+    for (const q of game.players) {
+      if (q === p || q.carrying || q.invisible(now)) continue;
+      if (hyp(q.pos.x - o.x, q.pos.z - o.z) < 20) return this.pers.lockChance >= 1 || this.rng.next() < this.pers.lockChance * 0.25;
+    }
+    return false;
+  }
+
+  /** Speed level at which a seed carrier comfortably outruns the Starbloom monster. */
+  speedNeed(game, p) {
+    const m = BIOMES[BIOMES.length - 1].monster.speed;
+    const mult = game.difficulty.botSpeedMult * PLAYER.carrySeedMult;
+    return Math.max(0, Math.ceil((((m * this.pers.risk) / mult) - speedAt(0, p.rebirths)) / PLAYER.speedPerLevel));
+  }
+
+  wantsMoreSpeed(game, p, eager, avail = p.cash) {
+    if (p.speedLevel >= PLAYER.maxSpeedLevel) return false;
+    const cost = speedCost(p.speedLevel + 1);
+    if (avail < cost * eager) return false;
+    const need = this.speedNeed(game, p);
+    if (game.mode !== 'showdown' && this.wantsRebirth(game, p) && p.speedLevel >= need &&
+      (game.netWorth.get(p) || 0) > REBIRTH.threshold(p.rebirths) * 0.25) return false;
+    if (p.speedLevel >= need + 2 && avail < cost * 4) return false;
+    return true;
+  }
+
+  wantsRebirth(game) {
+    return game.mode !== 'showdown';
+  }
+
+  onStealStart(game, p, owner) {
+    const now = game.time;
+    const board = getBoard(game);
+    this.lastStealAt = now;
+    board.lastStealOn.set(owner.slot, now);
+    if (owner.isHuman) board.humanStealUntil = now + this.diff.humanStealGap * this.rng.range(0.8, 1.3);
+  }
+
+  /** Someone worth looking at while idling (a curious glance). */
+  watchTarget(game, p) {
+    let best = null, bd = 30;
+    for (const q of game.players) {
+      if (q === p || q.invisible(game.time)) continue;
+      const d = hyp(q.pos.x - p.pos.x, q.pos.z - p.pos.z);
+      if (d < bd) {
+        bd = d;
+        best = q;
+      }
+    }
+    return best;
+  }
+
+  /** 1 = no bad memories of this biome; halves-ish with each recent monster catch. */
+  biomeConfidence(b, now) {
+    const f = this.biomeFail[b];
+    if (!f) return 1;
+    return Math.pow(0.55, f.n * Math.pow(0.5, (now - f.at) / 60));
+  }
+
+  noticesPeel(gi) {
+    let v = this.peelSeen.get(gi.uid);
+    if (v === undefined) {
+      v = this.rng.next() < this.diff.peelNotice;
+      this.peelSeen.set(gi.uid, v);
+      if (this.peelSeen.size > 64) this.peelSeen.delete(this.peelSeen.keys().next().value);
+    }
+    return v;
+  }
+
+  /**
+   * Steering nudges added to the route direction (dx,dz): sidestep or hop noticed banana peels,
+   * keep a little space from other players. (Monster dodging is roadDodge.)
+   */
+  avoidance(game, p, dx, dz) {
+    const out = this._avoid;
+    out.x = 0;
+    out.z = 0;
+    out.jump = false;
+    const px = p.pos.x, pz = p.pos.z;
+    const spd = hyp(p.vel.x, p.vel.z);
+    for (const gi of game.ground) {
+      if (gi.kind !== 'banana' || gi.owner === p.slot) continue;
+      const rx = gi.x - px, rz = gi.z - pz;
+      const along = rx * dx + rz * dz;
+      if (along < -0.5 || along > 9) continue;
+      const lat = rx * dz - rz * dx;
+      if (Math.abs(lat) > 2.9) continue;
+      if (!this.noticesPeel(gi)) continue;
+      if (spd > 11 && Math.abs(lat) < 1.9 && along > 2.1 && along < 2.6 + spd * 0.04 && p.onGround) {
+        out.jump = true;
+        continue;
+      }
+      const w = ((2.9 - Math.abs(lat)) / 2.9) * 1.6;
+      const side = lat >= 0 ? -1 : 1; // move away from the side the peel is on
+      out.x += dz * side * w;
+      out.z += -dx * side * w;
+    }
+    for (const q of game.players) {
+      if (q === p || q === this.sepIgnore) continue;
+      const rx = px - q.pos.x, rz = pz - q.pos.z;
+      const d = hyp(rx, rz);
+      if (d > 3.4 || d < 1e-3) continue;
+      const w = ((3.4 - d) / 3.4) * 0.8;
+      out.x += (rx / d) * w;
+      out.z += (rz / d) * w;
+    }
+    return out;
+  }
+
+  /** Heading that slips past the road monsters while carrying a seed (see dodge.js), or null. */
+  roadDodge(game, p, fx, fz) {
+    const now = game.time;
+    if (now >= this.dodgeAt) {
+      this.dodgeAt = now + 0.1;
+      this.dodgeOn = planDodge(game, p, fx, fz, this.dodgeDir, this.dodgeState);
+    }
+    return this.dodgeOn ? this.dodgeDir : null;
+  }
+
+  /** Forget per-game state (called by the sims between matches; optional in the app). */
+  dispose() {
+    if (this.game && this.p) releaseClaims(this.game, this.p.slot);
+    this.game = null;
+    this.p = null;
+    this.goal = null;
   }
 }
