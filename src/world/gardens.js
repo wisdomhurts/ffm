@@ -50,7 +50,7 @@ function laserMaterial() {
         float shimmer = 0.72 + 0.28 * sin(along * 70.0 - uTime * 24.0 + vBeam * 1.7) * sin(along * 19.0 + uTime * 7.0 + vBeam);
         float flick = 0.88 + 0.12 * sin(uTime * 37.0 + vBeam * 3.0);
         float tip = smoothstep(uGrow, uGrow - 0.03, along);
-        vec3 col = vec3(1.0, 0.08, 0.1) * halo * shimmer * 1.3 + vec3(1.0, 0.55, 0.5) * core * 1.3;
+        vec3 col = vec3(1.0, 0.06, 0.1) * halo * shimmer * 1.3 + vec3(1.0, 0.42, 0.45) * core * 1.25;
         gl_FragColor = vec4(col * flick * tip * uAlpha, 1.0);
       }`,
     transparent: true,
