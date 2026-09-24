@@ -465,16 +465,6 @@ function decorateEmberroot(ctx, B, s, r) {
   }
   // lava falls down the face into the channel
   for (let z = z0 + 18; z < z1 - 10; z += r.range(30, 45)) B.lavaFalls.push({ x: s * 23.7, z, w: r.range(2.5, 4), h: H + 1 });
-  // glowing cracks zig-zagging up the lower face
-  for (let z = z0 + 4; z < z1; z += r.range(5, 9)) {
-    let y = r.range(0.3, 1.2), zz = z;
-    for (let k = 0; k < 4 && y < H * 0.22; k++) {
-      const len = r.range(1.0, 1.8), a = r.range(-0.8, 0.8);
-      glow.box(s * 23.74, y + Math.cos(a) * len / 2, zz + Math.sin(a) * len / 2, 0.06, len, 0.16, k % 2 ? '#ffb347' : '#ff6a1a', { rx: -a, ao: 0 });
-      y += Math.cos(a) * len;
-      zz += Math.sin(a) * len;
-    }
-  }
 }
 
 function crystal(m, x, y, z, h, w, col, r) {

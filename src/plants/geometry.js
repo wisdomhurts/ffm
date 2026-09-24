@@ -10,7 +10,11 @@ const TAU = Math.PI * 2;
 const geoCache = new Map();
 export function cachedGeo(key, make) {
   let g = geoCache.get(key);
-  if (!g) geoCache.set(key, (g = make()));
+  if (!g) {
+    g = make();
+    g.userData.shared = true; // cached for the whole session: owners must not dispose it
+    geoCache.set(key, g);
+  }
   return g;
 }
 
@@ -373,6 +377,7 @@ export class Builder {
       for (const [ch, list] of Object.entries(g.parts)) {
         if (!list.length) continue;
         const geo = list.length === 1 ? list[0] : mergeGeometries(list, false);
+        geo.userData.shared = true;
         geo.computeBoundingSphere();
         geo.computeBoundingBox();
         const bb = geo.boundingBox.clone().translate(g.pivot);

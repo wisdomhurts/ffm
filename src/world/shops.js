@@ -164,15 +164,14 @@ export function buildShops(ctx) {
       chunkyText(g, 'GEAR SHOP', W / 2, H / 2 + 6, { size: 140, fill: '#ffffff', stroke: '#1b2440', strokeW: 22, maxW: W - 120 });
     });
     const sign = signMesh(tex, 11, 2.75);
-    sign.position.set(S.x, 11.6, zf + 1.7);
-    sign.rotation.x = -0.08;
+    sign.position.set(S.x, 12.3, zf + 1.7);
     const back = sign.clone();
-    back.position.z -= 0.12;
-    back.rotation.set(0.08, Math.PI, 0);
-    m.box(S.x, 11.6, zf + 1.64, 11.2, 2.9, 0.08, '#1b2440', { ao: 0 });
+    back.position.z -= 0.14;
+    back.rotation.set(0, Math.PI, 0);
+    m.box(S.x, 12.3, zf + 1.63, 11.1, 2.8, 0.1, '#1b2440', { ao: 0 });
     group.add(sign, back);
-    m.block(S.x - 4, 9.4, zf + 1.4, 0.3, 1.4, 0.3, '#6b4424');
-    m.block(S.x + 4, 9.4, zf + 1.4, 0.3, 1.4, 0.3, '#6b4424');
+    m.block(S.x - 4, 9.4, zf + 1.63, 0.3, 1.6, 0.3, '#6b4424');
+    m.block(S.x + 4, 9.4, zf + 1.63, 0.3, 1.6, 0.3, '#6b4424');
   }
 
   // ================================================================ SPEED SHOP
@@ -335,7 +334,7 @@ export function buildShops(ctx) {
     back.position.z = zc - 0.2;
     back.rotation.y = Math.PI;
     group.add(sign, back);
-    m.block(S.x, 12.4, zc + 0.2, 12.6, 3.9, 0.5, '#2a1060', { ao: 0 });
+    m.block(S.x, 12.85, zc + 0.2, 12.2, 3.1, 0.5, '#2a1060', { ao: 0 });
   }
 
   group.add(m.build(mats.stud, { name: 'shops', castShadow: quality.shadows }));

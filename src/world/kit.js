@@ -28,19 +28,6 @@ export function setTextureQuality(renderer, quality) {
   ctx.anisotropy = Math.min(max, quality.decorDensity >= 1 ? 8 : quality.decorDensity >= 0.7 ? 2 : 1);
 }
 
-// ------------------------------------------------------------------ colours
-
-const _col = new THREE.Color();
-export function col(hex) {
-  return new THREE.Color(hex);
-}
-export function shade(hex, k) {
-  return new THREE.Color(hex).multiplyScalar(k);
-}
-export function mix(a, b, t) {
-  return new THREE.Color(a).lerp(new THREE.Color(b), t);
-}
-
 // ------------------------------------------------------------------ primitives
 
 // Unit primitives (indexed where three builds them indexed). Box: 1x1x1 centred.
@@ -67,12 +54,6 @@ export function prim(name) {
     case 'halftorus': g = new THREE.TorusGeometry(0.4, 0.1, 5, n || 8, Math.PI); break;
     case 'plane': g = new THREE.PlaneGeometry(1, 1); break;
     case 'planeup': g = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2); break;
-    case 'wedge': {
-      // triangular prism: ramp rising towards +z
-      const s = new THREE.Shape([new THREE.Vector2(-0.5, -0.5), new THREE.Vector2(0.5, -0.5), new THREE.Vector2(-0.5, 0.5)]);
-      g = new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5).rotateY(-Math.PI / 2);
-      break;
-    }
     default: throw new Error('unknown prim ' + name);
   }
   g.deleteAttribute('uv1');
@@ -83,11 +64,8 @@ export function prim(name) {
 
 // ------------------------------------------------------------------ merger
 
-const _m = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
-const _p = new THREE.Vector3();
-const _s = new THREE.Vector3();
 const _n3 = new THREE.Matrix3();
 const _v = new THREE.Vector3();
 const _n = new THREE.Vector3();
@@ -331,21 +309,6 @@ export function drawTexture(w, h, draw, opts) {
   return canvasTexture(c, opts);
 }
 
-// Value noise for canvas painting.
-export function noise2(seed = 1) {
-  const r = makeRand(seed);
-  const P = new Float32Array(256 * 256);
-  for (let i = 0; i < P.length; i++) P[i] = r();
-  const at = (x, y) => P[(y & 255) * 256 + (x & 255)];
-  return (x, y) => {
-    const xi = Math.floor(x), yi = Math.floor(y);
-    const xf = x - xi, yf = y - yi;
-    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
-    const a = at(xi, yi), b = at(xi + 1, yi), c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
-    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-  };
-}
-
 // Sprinkle soft blobs (tileable when wrap=true).
 export function blobs(g, w, h, n, rand, { rMin = 4, rMax = 12, colors = ['rgba(0,0,0,0.1)'], wrap = true, shape = 'circle' } = {}) {
   for (let i = 0; i < n; i++) {
@@ -446,12 +409,3 @@ export function fogShader({ uniforms = {}, vertex, fragment, transparent = false
   });
 }
 
-// GLSL snippet: value noise + fbm
-export const GLSL_NOISE = `
-  float h21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
-  float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
-    return mix(mix(h21(i),h21(i+vec2(1,0)),u.x), mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),u.x), u.y); }
-  float fbm(vec2 p){ float a=.5, s=0.; for(int i=0;i<4;i++){ s+=a*vnoise(p); p*=2.03; a*=.5; } return s; }
-`;
-
-export { _col };

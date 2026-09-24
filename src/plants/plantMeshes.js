@@ -6,7 +6,8 @@
 //      origin = bottom of the seed (so it sits above a head / floats above the ground)
 //   createCarriedPlantView(speciesId, mutation) -> { object3d, update(dt, time) } // potted grown plant held overhead (origin = pot bottom, ~3 studs)
 //   createPodView(biomeIndex) -> { object3d, setSeed(view|null), update(dt,time) } // the stand a road seed sits on
-// Extras: views also expose {speciesId, rarity, tier, mutation}; createPlantView takes an optional {facing} yaw;
+// Extras: views also expose {speciesId, rarity, tier, mutation}; plant views expose topY (plant height above the soil)
+// and createPlantView takes an optional {facing} yaw;
 // plantTemplate()/seedTemplate()/plantScale() are exported for tools and the dev gallery (src/plants/dev/gallery.js).
 //
 // Performance: every species/mutation/stage is baked once into a Template (merged, vertex-coloured geometry
@@ -255,6 +256,10 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
     rarity: sp.rarity,
     tier,
     mutation: mut,
+    /** Current height of the plant top above the soil (studs), e.g. for placing its label. */
+    get topY() {
+      return tpl ? tpl.height * baseScale * growScale : 1;
+    },
     setGrowth(p) {
       p = Math.max(0, Math.min(1, p || 0));
       const st = p >= 1 ? 3 : p >= 0.66 ? 2 : p >= 0.33 ? 1 : 0;

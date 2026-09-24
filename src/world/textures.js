@@ -1,5 +1,5 @@
 // Procedural canvas textures for the world (no image files). Cached: each is painted once.
-import { drawTexture, makeCanvas, canvasTexture, makeRand, noise2, blobs, roundRect, chunkyText } from './kit.js';
+import { drawTexture, makeCanvas, canvasTexture, makeRand, blobs, roundRect, chunkyText } from './kit.js';
 
 const cache = new Map();
 const once = (key, fn) => {
@@ -230,21 +230,6 @@ export function lawnTexture() {
   }));
 }
 
-/** Wood planks (grey detail). Planks run along u. */
-export function woodDetail() {
-  return once('wood', () => drawTexture(128, 128, (g, w, h) => {
-    const n = tileNoise(61, 3);
-    pixels(g, w, h, (x, y) => {
-      const grain = Math.sin(y * 0.9 + n(x, y, w, h) * 12) * 0.5 + 0.5;
-      const v = 210 + grain * 30 + (n(x, y, w, h) - 0.5) * 30;
-      return [v, v, v];
-    });
-    g.fillStyle = 'rgba(0,0,0,0.3)';
-    for (let i = 0; i < 4; i++) g.fillRect(0, i * 32, w, 2);
-    const r = makeRand(9);
-    for (let i = 0; i < 4; i++) g.fillRect(r() * w, i * 32, 2, 32);
-  }));
-}
 
 // ------------------------------------------------------------------ road surfaces (coloured, with a path)
 
@@ -667,22 +652,3 @@ export function lockTexture() {
   }, { clamp: true }));
 }
 
-/** A banknote face for the cash bricks. */
-export function cashTexture() {
-  return once('cash', () => drawTexture(128, 64, (g, W, H) => {
-    g.fillStyle = '#5fbf5a';
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = '#86d97c';
-    g.fillRect(6, 6, W - 12, H - 12);
-    g.fillStyle = '#3f9a3c';
-    g.beginPath();
-    g.ellipse(W / 2, H / 2, 18, 20, 0, 0, Math.PI * 2);
-    g.fill();
-    chunkyText(g, '$', W / 2, H / 2 + 2, { size: 34, fill: '#dfffd8', stroke: '#2d7a2a', strokeW: 5, shadow: false });
-    // paper band
-    g.fillStyle = '#fff6d6';
-    g.fillRect(W * 0.18, 0, 12, H);
-    g.fillStyle = '#e0c060';
-    g.fillRect(W * 0.18 + 2, 0, 2, H);
-  }, { clamp: true }));
-}

@@ -56,8 +56,8 @@ export function oceanMaterial({ cx, cz, hx, hz, shoreD, mainlandZ }) {
         col = mix(col, uShallow, smoothstep(0.55, 1.0, sh));
         col *= 0.88 + 0.24 * w;
         // sun sparkles on the crests
-        float crest = smoothstep(0.64, 0.74, w + 0.08 * sin(p.x * 0.4 + t * 1.3) * sin(p.y * 0.35 - t));
-        col = mix(col, vec3(0.9, 1.0, 1.0), crest * 0.35);
+        float crest = smoothstep(0.66, 0.76, w + 0.06 * sin(p.x * 0.4 + t * 1.3) * sin(p.y * 0.35 - t));
+        col = mix(col, vec3(0.92, 1.0, 1.0), crest * 0.22);
         // shoreline foam: a solid lip plus rolling bands
         float lip = 1.0 - smoothstep(0.0, 1.6 + n2, d);
         float band = smoothstep(0.35, 0.0, abs(d - 2.2 - 1.6 * sin(t * 0.9 + n * 5.0))) * (1.0 - smoothstep(0.0, 6.0, d));
