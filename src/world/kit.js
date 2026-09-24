@@ -25,7 +25,7 @@ export function makeRand(seed = 1) {
 const ctx = { anisotropy: 4 };
 export function setTextureQuality(renderer, quality) {
   const max = renderer.capabilities.getMaxAnisotropy?.() || 1;
-  ctx.anisotropy = Math.min(max, quality.decorDensity >= 1 ? 8 : quality.decorDensity >= 0.7 ? 4 : 2);
+  ctx.anisotropy = Math.min(max, quality.decorDensity >= 1 ? 8 : quality.decorDensity >= 0.7 ? 2 : 1);
 }
 
 // ------------------------------------------------------------------ colours

@@ -281,9 +281,9 @@ export function buildPlaza(ctx) {
   const floorMesh = floor.build(mats.stud, { name: 'plaza-floor' });
   floorMesh.renderOrder = 2;
   add(floorMesh);
-  add(props.build(mats.stud, { name: 'plaza-props', castShadow: quality.shadows }));
+  add(props.build(mats.flat, { name: 'plaza-props', castShadow: quality.shadows }));
   add(glow.build(mats.glow, { name: 'plaza-glow', receiveShadow: false }));
-  add(beach.build(mats.stud, { name: 'beach-props' }));
+  add(beach.build(mats.flat, { name: 'beach-props' }));
 
   // flickering torch flames (instanced)
   const flameGeo = new THREE.ConeGeometry(0.42, 1.5, 7).translate(0, 0.6, 0);

@@ -236,7 +236,7 @@ function decorateField(ctx, B, s, r) {
       blades.add('box', m4, k % 2 ? '#ffffff' : '#ff8a8a', { ao: 0.1 });
     }
     blades.prim('cyl:10', 0, 0, -0.4, 1.8, 1.2, 1.8, '#6b4424', { rx: Math.PI / 2 });
-    const mesh = blades.build(ctx.mats.stud, { castShadow: false });
+    const mesh = blades.build(ctx.mats.flat, { castShadow: false });
     mesh.matrixAutoUpdate = true;
     mesh.position.set(wx - 3.9, H + 14, wz);
     mesh.rotation.y = -Math.PI / 2;
@@ -746,7 +746,7 @@ export function buildRoad(ctx) {
     const top = B.topM.build(st.ground === 'sand' ? mats.sand : st.ground === 'grass' ? mats.grass : mats.rockTop, { name: 'plateau-' + b.id });
     if (top) top.renderOrder = 2;
     add(top);
-    add(B.props.build(mats.stud, { name: 'props-' + b.id }));
+    add(B.props.build(mats.flat, { name: 'props-' + b.id }));
     add(B.glowLit.build(mats.glowLit, { name: 'glowlit-' + b.id }));
     add(B.glow.build(mats.glow, { name: 'glow-' + b.id, receiveShadow: false }));
     biomes.push({ group, minZ: R.minZ, maxZ: R.maxZ, spin: B.spin, bob: B.bob });
@@ -783,7 +783,7 @@ export function buildRoad(ctx) {
     const mk = new THREE.Mesh(g, signMaterial(atlas.tex, 0.35));
     mk.name = 'distance-markers';
     root.add(mk);
-    root.add(posts.build(mats.stud, { name: 'marker-posts' }));
+    root.add(posts.build(mats.flat, { name: 'marker-posts' }));
   }
 
   return {

@@ -26,6 +26,7 @@ function createMaterials() {
   const rock = new THREE.MeshLambertMaterial({ vertexColors: true, map: rockDetail() });
   const grass = new THREE.MeshLambertMaterial({ vertexColors: true, map: grassDetail() });
   const sand = new THREE.MeshLambertMaterial({ vertexColors: true, map: sandDetail() });
+  const flat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const glow = new THREE.MeshBasicMaterial({ vertexColors: true });
   // Lit, but also self-illuminated by its own vertex colour (crystals, glowing mushrooms, ember rocks).
   const glowLit = new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -33,7 +34,7 @@ function createMaterials() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += vColor.rgb * 0.7;');
   };
   glowLit.customProgramCacheKey = () => 'world-glowlit';
-  return { stud, rock, rockTop: rock, grass, sand, glow, glowLit };
+  return { stud, flat, rock, rockTop: rock, grass, sand, glow, glowLit };
 }
 
 export function buildWorld(engine, layout, quality = engine.quality) {

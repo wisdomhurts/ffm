@@ -149,8 +149,8 @@ export function buildGardens(ctx) {
   const collectMat = new THREE.MeshBasicMaterial({ map: collectTexture() });
   const padGeo = (rad) => new THREE.CircleGeometry(rad, 28).rotateX(-Math.PI / 2);
 
-  const crateMesh = new THREE.InstancedMesh(crateGeometry(), mats.stud, layout.gardens.length * 10);
-  const lockMesh = new THREE.InstancedMesh(padlockGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, map: mats.stud.map, emissive: 0x3a2800 }), layout.gardens.length * 10);
+  const crateMesh = new THREE.InstancedMesh(crateGeometry(), mats.flat, layout.gardens.length * 10);
+  const lockMesh = new THREE.InstancedMesh(padlockGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x3a2800 }), layout.gardens.length * 10);
   crateMesh.castShadow = quality.shadows;
   crateMesh.receiveShadow = true;
   crateMesh.name = 'crates';
@@ -163,9 +163,9 @@ export function buildGardens(ctx) {
     m.box(0.3, 0.215, 0, 0.22, 0.01, 0.3, '#2f8a2c', { ao: 0 });
     m.box(-0.3, 0.215, 0, 0.22, 0.01, 0.3, '#2f8a2c', { ao: 0 });
   });
-  const brickMesh = new THREE.InstancedMesh(brickGeo, mats.stud, layout.gardens.length * MAX_BRICKS);
+  const brickMesh = new THREE.InstancedMesh(brickGeo, mats.flat, layout.gardens.length * MAX_BRICKS);
   const coinGeo = mergedGeometry((m) => m.cyl(0, -0.05, 0, 0.34, 0.1, '#ffb81c', { seg: 12, topFace: '#ffe066', ao: 0 }));
-  const coinMesh = new THREE.InstancedMesh(coinGeo, new THREE.MeshLambertMaterial({ vertexColors: true, map: mats.stud.map, emissive: 0x5a3a00 }), layout.gardens.length * MAX_COINS);
+  const coinMesh = new THREE.InstancedMesh(coinGeo, new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x5a3a00 }), layout.gardens.length * MAX_COINS);
   brickMesh.name = 'cash';
   crateMesh.frustumCulled = lockMesh.frustumCulled = brickMesh.frustumCulled = coinMesh.frustumCulled = false;
   brickMesh.castShadow = coinMesh.castShadow = quality.shadows;
@@ -353,7 +353,7 @@ export function buildGardens(ctx) {
     const cdB = new THREE.Mesh(cdGeo, cdMat);
     cdB.position.set(GX + inw * 0.13, 0, 0);
     cdB.rotation.y = inw * Math.PI / 2;
-    const cdBox = new THREE.Mesh(mergedGeometry((m) => m.box(0, 0, 0, 0.2, 1.5, 2.7, '#2c3440', { ao: 0 })), mats.stud);
+    const cdBox = new THREE.Mesh(mergedGeometry((m) => m.box(0, 0, 0, 0.2, 1.5, 2.7, '#2c3440', { ao: 0 })), mats.flat);
     cdBox.position.set(GX, 0, 0);
     cdGroup.add(cdBox, cdF, cdB);
     cdGroup.position.set(0, 10.6, gpS);
@@ -565,7 +565,7 @@ export function buildGardens(ctx) {
   lawnMesh.renderOrder = 1;
   add(lawnMesh);
   add(soil.build(soilMat, { name: 'garden-soil' }));
-  add(wood.build(mats.stud, { name: 'garden-wood', castShadow: quality.shadows }));
+  add(wood.build(mats.flat, { name: 'garden-wood', castShadow: quality.shadows }));
 
   return {
     gardens: apis,

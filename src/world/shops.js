@@ -146,7 +146,7 @@ export function buildShops(ctx) {
     m.box(S.x, 8.4, zf + 2.95, 13, 0.4, 0.3, '#ff4f7a', { ao: 0 });
     // item stands on the counter
     const geos = itemGeometries();
-    const itemMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: mats.stud.map, emissive: 0x181818 });
+    const itemMat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x181818 });
     geos.forEach((geo, i) => {
       const x = x0 + 1.6 + i * 2.2;
       m.cyl(x, 4.0, -58.4, 0.9, 0.25, '#ffffff', { seg: 14, ao: 0 });
@@ -269,7 +269,7 @@ export function buildShops(ctx) {
       }
       c.cyl(0, -0.05, 0, 1.32, 0.22, '#ffe08a', { seg: 16, ao: 0 });
     });
-    crown = new THREE.Mesh(crownGeo, new THREE.MeshLambertMaterial({ vertexColors: true, map: mats.stud.map, emissive: 0x5a3a00 }));
+    crown = new THREE.Mesh(crownGeo, new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x5a3a00 }));
     crown.position.set(S.x, 9.2, zc);
     crown.castShadow = quality.shadows;
     group.add(crown);
