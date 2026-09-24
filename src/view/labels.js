@@ -92,8 +92,8 @@ export class Labels {
     it.dist = dist;
   }
 
-  _show(it, dy, alpha) {
-    const tf = `translate(-50%,-100%) translate(${(Math.round(it.sx * 2) / 2).toFixed(1)}px,${(Math.round((it.sy + dy) * 2) / 2).toFixed(1)}px) scale(${it.s.toFixed(2)})`;
+  _show(it, dy, alpha, dx = 0) {
+    const tf = `translate(-50%,-100%) translate(${(Math.round((it.sx + dx) * 2) / 2).toFixed(1)}px,${(Math.round((it.sy + dy) * 2) / 2).toFixed(1)}px) scale(${it.s.toFixed(2)})`;
     if (tf !== it.tf) it.el.style.transform = it.tf = tf;
     const op = alpha.toFixed(2);
     if (op !== it.op) it.el.style.opacity = it.op = op;
@@ -129,20 +129,20 @@ export class Labels {
     vis.sort((a, b) => b.pri - a.pri || a.dist - b.dist);
     const placed = this._placed;
     placed.length = 0;
+    const hitAt = (x0, y0, x1, y1) => {
+      for (const r of placed) if (x0 < r[2] - 2 && x1 > r[0] + 2 && y0 < r[3] - 2 && y1 > r[1] + 2) return r;
+      return null;
+    };
     for (const it of vis) {
       const w = it.bw * it.s, h = it.bh * it.s;
+      let dx = 0;
       let dy = 0;
       let ok = it.noDeclutter;
-      const maxShift = (it.pri >= 4 ? 90 : 46) * it.s;
-      for (let tries = 0; !ok && tries < 4; tries++) {
-        const x0 = it.sx - w / 2, x1 = it.sx + w / 2, y1 = it.sy + dy, y0 = y1 - h;
-        let hit = null;
-        for (const r of placed) {
-          if (x0 < r[2] - 2 && x1 > r[0] + 2 && y0 < r[3] - 2 && y1 > r[1] + 2) {
-            hit = r;
-            break;
-          }
-        }
+      const important = it.pri >= 4;
+      const maxShift = (important ? 160 : 46) * it.s;
+      for (let tries = 0; !ok && tries < 6; tries++) {
+        const y1 = it.sy + dy;
+        const hit = hitAt(it.sx - w / 2, y1 - h, it.sx + w / 2, y1);
         if (!hit) {
           ok = true;
           break;
@@ -151,13 +151,28 @@ export class Labels {
         if (-dy + shift > maxShift) break;
         dy -= shift;
       }
+      if (!ok && important) {
+        // no room above: step sideways at the original height, just clear of whatever is in the way
+        dy = 0;
+        let best = Infinity;
+        for (const r of placed) {
+          for (const cx of [r[0] - 2 - (it.sx + w / 2), r[2] + 2 - (it.sx - w / 2)]) {
+            if (Math.abs(cx) >= best || Math.abs(cx) > w * 1.1) continue;
+            if (!hitAt(it.sx + cx - w / 2, it.sy - h, it.sx + cx + w / 2, it.sy)) {
+              best = Math.abs(cx);
+              dx = cx;
+              ok = true;
+            }
+          }
+        }
+      }
       if (!ok && it.pri <= 3) {
         this._hide(it);
         continue;
       }
-      if (!ok) dy = 0; // important labels stay put even if they overlap
-      placed.push([it.sx - w / 2, it.sy + dy - h, it.sx + w / 2, it.sy + dy]);
-      this._show(it, dy, it.fade);
+      if (!ok) dx = dy = 0; // important labels stay put even if they overlap
+      placed.push([it.sx + dx - w / 2, it.sy + dy - h, it.sx + dx + w / 2, it.sy + dy]);
+      this._show(it, dy, it.fade, dx);
     }
   }
 
