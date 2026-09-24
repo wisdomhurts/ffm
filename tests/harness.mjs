@@ -32,8 +32,8 @@ export async function launch({ mobile = false, width = 1280, height = 720 } = {}
 // file: 'family.html' (with photos) or 'index.html'
 export async function openGame(page, file = 'family.html') {
   const f = path.join(DIST, fs.existsSync(path.join(DIST, file)) ? file : 'index.html');
-  await page.goto('file://' + f);
-  await page.waitForFunction(() => window.__app && window.__app.game, null, { timeout: 30000 });
+  await page.goto('file://' + f, { timeout: 300000 });
+  await page.waitForFunction(() => window.__app && window.__app.game, null, { timeout: 300000 });
 }
 
 export async function shot(page, name) {
@@ -96,4 +96,16 @@ export async function fastForward(page, seconds, step = 1 / 30) {
     const g = window.__app.game;
     for (let t = 0; t < s; t += st) g.update(st);
   }, [seconds, step]);
+}
+
+// Deterministic stepping: stop the rAF loop and advance whole frames (sim + render) by hand.
+// Use this instead of wall-clock sleeps so tests pass on slow/loaded machines.
+export async function manualFrames(page) {
+  await page.evaluate(() => window.__app.engine.stop());
+}
+
+export async function stepFrames(page, n = 1, dt = 1 / 30) {
+  await page.evaluate(([n, dt]) => {
+    for (let i = 0; i < n; i++) window.__app.engine.frame(dt);
+  }, [n, dt]);
 }
