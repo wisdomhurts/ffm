@@ -1,6 +1,6 @@
 // State shared by all bots of one Game: chat rate limits, who is going for which pod / garden,
 // fairness timers so the rivals share targets instead of dogpiling the human, and a read of the
-// human's progress (deepest biome, net worth, rank) that the rubber band keys off.
+// human's progress (deepest biome, net worth, last place) that the rubber band keys off.
 import { CHAT, PLANT, RARITY, BIOMES, PLAYER, speedAt } from '../config.js';
 import { bus } from '../core/events.js';
 
@@ -23,7 +23,7 @@ export function getBoard(game) {
       // the human's progress (see updateHuman)
       human: null,
       humanDrops: new Map(), // ground seed uid -> time the human dropped it (bonked, caught by a monster)
-      practice: { state: 'idle', slot: -1, at: 0, retryAt: 0 },
+      practice: { state: 'idle', slot: -1, at: 0, checkAt: 0, index: -1 }, // see bot.js _practice
     };
     boards.set(game, b);
   }
@@ -33,7 +33,7 @@ export function getBoard(game) {
 /**
  * What the bots know about the human's progress, refreshed a few times per second.
  *   deep     deepest Seed Road biome the human has grabbed a seed in (0 = Sunny Field)
- *   net/inc  human net worth and garden income; lead = best bot net worth / human net worth
+ *   net/inc  human net worth and garden income
  *   last     the human is in last place
  *   movedAt  last time the human moved (AFK detection)
  * Null in attract mode (no human).
@@ -44,7 +44,7 @@ export function updateHuman(game) {
   if (!h) return null;
   let s = b.human;
   if (!s) {
-    s = b.human = { deep: resumeDepth(game, h), carrying: h.carrying, net: 0, inc: 0, lead: 1, last: false, rank: 1, at: -1, x: h.pos.x, z: h.pos.z, movedAt: game.time };
+    s = b.human = { deep: resumeDepth(game, h), carrying: h.carrying, net: 0, inc: 0, last: false, at: -1, x: h.pos.x, z: h.pos.z, movedAt: game.time };
   }
   if (game.time - s.at < HUMAN_TICK) return s;
   s.at = game.time;
@@ -71,16 +71,9 @@ export function updateHuman(game) {
   const nw = game.netWorth;
   s.net = nw.get(h) || 0;
   s.inc = game.gardenIncome(game.gardens[h.slot]);
-  let best = 0, below = 0;
-  for (const p of game.players) {
-    if (p === h) continue;
-    const v = nw.get(p) || 0;
-    if (v > best) best = v;
-    if (v > s.net) below++;
-  }
-  s.rank = below + 1;
-  s.last = below === game.players.length - 1;
-  s.lead = best / Math.max(1, s.net);
+  let above = 0;
+  for (const p of game.players) if (p !== h && (nw.get(p) || 0) > s.net) above++;
+  s.last = above === game.players.length - 1;
   return s;
 }
 

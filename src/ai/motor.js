@@ -160,8 +160,8 @@ export class Motor {
     this.arrived = false;
 
     // speed planning: brake for the target and for sharp corners
-    // tempo < 1: a bot well ahead of the human jogs on errands (never when chasing or carrying)
-    let v = vmax * (o.speed ?? 1) * (o.chase || p.carrying ? 1 : this.bot.tempo ?? 1);
+    // tempo < 1: a bot well ahead of the human jogs on errands (not when chasing, carrying or already strolling)
+    let v = vmax * (o.speed ?? (o.chase || p.carrying ? 1 : this.bot.tempo ?? 1));
     if (!o.chase) {
       if (this.idx === last) v = Math.min(v, Math.sqrt(2 * BRAKE * Math.max(0, d - arrive * 0.6)) + 1.5);
       else {
@@ -264,7 +264,7 @@ export class Motor {
       }
     }
     if (st.t < 0.6) return;
-    const blocked = st.vint > 2.5 && st.moved < st.vint * 0.35;
+    const blocked = st.vint > 1.2 && st.moved < st.vint * 0.35; // low bar: strolling bots get stuck too
     st.t = 0;
     st.moved = 0;
     st.vint = 0;

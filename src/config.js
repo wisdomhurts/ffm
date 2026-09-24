@@ -168,15 +168,18 @@ export const EVENTS = {
 
 export const MATCH = { showdownSeconds: 480 };
 
-// Bot rubber band (read by ai/): biomeLead = how many biomes past the human's deepest seed grab the
-// bots may farm; paceCap = a bot richer than paceCap x the human's net worth eases off (0 = never);
-// practiceSteal = one slow, telegraphed steal that teaches a new player to chase and bonk
-// (after: earliest match second; unrobbedOnly: only if nobody has robbed the human yet).
+// Bot rubber band (read by ai/, tuned with the headless kid sim): biomeLead = how many biomes past the
+// human's deepest seed grab a bot may farm (only while it trails the human; level or ahead it stays a
+// biome shallower); paceCap = once a bot's net worth or income passes paceCap x the human's it eases
+// off (jogs on errands, farms shallower, ignores shiny seeds; 0 = never; the bots' routing and seed
+// picks out-earn a new player, hence the low values); practiceSteal = one slow, telegraphed steal that
+// teaches a new player to chase and bonk (after: earliest match second; unrobbedOnly: only if nobody
+// has robbed the human yet).
 export const DIFFICULTY = {
   chill: { name: 'Chill', botSpeedMult: 0.85, stealRate: 0.35, reaction: 0.9, bonkAccuracy: 0.5, monsterSpeedMult: 0.85, monsterAggroMult: 0.8,
-    biomeLead: 0, paceCap: 0.65, practiceSteal: { after: 75, unrobbedOnly: false } },
+    biomeLead: 0, paceCap: 0.4, practiceSteal: { after: 75, unrobbedOnly: false } },
   normal: { name: 'Normal', botSpeedMult: 1.0, stealRate: 1.0, reaction: 0.5, bonkAccuracy: 0.75, monsterSpeedMult: 1, monsterAggroMult: 1,
-    biomeLead: 1, paceCap: 1.4, practiceSteal: { after: 240, unrobbedOnly: true } },
+    biomeLead: 1, paceCap: 0.33, practiceSteal: { after: 240, unrobbedOnly: true } },
   chaos: { name: 'Chaos', botSpeedMult: 1.1, stealRate: 1.8, reaction: 0.25, bonkAccuracy: 0.92, monsterSpeedMult: 1.05, monsterAggroMult: 1.1,
     biomeLead: 99, paceCap: 0, practiceSteal: null },
 };
@@ -212,6 +215,8 @@ export const CHARACTER = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
 // Family banter. {plant} {victim} {thief} {name} are substituted.
 export const CHAT = {
   dorian: {
+    tease: ['Come and get it, {victim}! Dad\'s not THAT fast!', 'Your {plant} is going on a little trip, {victim}!', 'Hehe, try and catch me {victim}!'],
+    caught: ['Okay, okay, you got me!', 'Nice bonk! You\'re a natural.', 'Ha! Fair and square.'],
     steal: ['Dad tax! Thanks for the {plant}.', 'I\'ll take that {plant}, {victim}.', 'Business opportunity spotted.', 'This {plant} is coming with me.', 'Consider it a loan, {victim}.'],
     robbed: ['Who took my {plant}?!', '{thief}! Bring that back!', 'Not the {plant}!', '{thief}, we talked about this!', 'That {plant} was my retirement plan!'],
     bonk: ['Dad strength!', 'Bonk!', 'Nice try, kiddo.', 'Rookie mistake.', 'The noodle never misses.'],
@@ -220,6 +225,8 @@ export const CHAT = {
       'Speed is money, {human}.', 'I\'m not saying I\'m the best... but I\'m the best.', 'Who ate the last churro?', 'Dad joke incoming: this garden is un-BE-LEAF-able.'],
   },
   esther: {
+    tease: ['Borrowing your {plant}! Catch me if you can, {victim}!', 'Run, {victim}, run! Bonk me to get it back!', 'Hehe, try and catch me {victim}!'],
+    caught: ['You got me! Good job, sweetie!', 'That\'s how you guard a garden!', 'Nice bonk!'],
     steal: ['Mom privileges. {plant} is mine.', 'Sorry {victim}, this {plant} looked lonely.', 'Borrowing this forever.', 'Finders keepers, {victim}.', 'Mom always wins.'],
     robbed: ['{thief}. Put. It. Back.', 'You did NOT just take my {plant}.', 'Locking up next time!', '{thief}, you\'re grounded!', 'I saw that, {thief}!'],
     bonk: ['Nobody touches my garden!', 'Hands off!', 'Gotcha!', 'Don\'t make me count to three.', 'That\'s what you get!'],
@@ -228,6 +235,8 @@ export const CHAT = {
       'Has anyone seen the TV remote?', 'I miss the beach already.', 'Good luck, {human}!', 'Garden looking gorgeous today.'],
   },
   maddie: {
+    tease: ['Slow-mo mode! Catch me, {victim}!', 'Your {plant} is MINE! Unless you bonk me, {victim}!', 'Hehe, try and catch me {victim}!'],
+    caught: ['Nooo, you got me!', 'Okay, THAT was a good bonk!', 'No fair, you\'re quick!'],
     steal: ['Zoom! Got your {plant}!', 'Too fast for you, {victim}!', 'Yoink!', 'Speedy delivery!', 'Catch me if you can, {victim}!'],
     robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!', 'MOM! {thief} took my {plant}!', 'I\'m coming for you, {thief}!'],
     bonk: ['Hi-yah!', 'Too slow!', 'Bonk bonk!', 'Ninja noodle!', 'Boom!'],
@@ -236,6 +245,8 @@ export const CHAT = {
       'Bet you can\'t catch me, {human}!', 'Speed Level: awesome.', 'This is SO fun.'],
   },
   micah: {
+    tease: ['Sneaky sneaky... catch me, {victim}!', 'Bonk me if you can, {victim}!', 'Hehe, try and catch me {victim}!'],
+    caught: ['Aww, you caught me!', 'Okay you win this time!', 'Nice noodle!'],
     steal: ['Hehe. Your {plant} is mine now.', 'Can\'t catch me, {victim}!', 'Sneaky sneaky...', 'Thanks for the {plant}!', 'Ninja mode activated.'],
     robbed: ['Hey! That was MY {plant}!', '{thief} stole my stuff!', 'Not cool!', 'Okay {thief}, it\'s WAR.', 'I was gonna steal that back anyway.'],
     bonk: ['Noodle attack!', 'Ha! Got you!', 'BONK!', 'Critical hit!', 'You got noodled!'],

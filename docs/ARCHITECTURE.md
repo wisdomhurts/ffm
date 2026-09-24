@@ -97,6 +97,8 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `event:start` / `event:end` | event |
 | `match:end` | ranking: [{player, netWorth}] |
 | `chat` | player, text |
+| `practice:steal` | stage ('start'/'carry'/'caught'/'escaped'), thief, victim, plant (the friendly teaching steal on Chill) |
+| `bonk:blocked` | player (pressed bonk while carrying) |
 | `shop:open` | player, shop: 'gear'/'speed'/'rebirth' |
 
 App: `game:start {game, human, resumed}`, `game:dispose {game}`, `app:state {state: 'title'|'playing'|'paused'|'shop'|'ended'}`,

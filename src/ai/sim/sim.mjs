@@ -115,7 +115,8 @@ export function runSim({ minutes = 15, difficulty = 'normal', human = 'none', se
         if (dbg) s.goals[dbg.goal || 'none'] = (s.goals[dbg.goal || 'none'] || 0) + 0.5;
         const lp = lastPos.get(p);
         const moved = Math.hypot(p.pos.x - lp.x, p.pos.z - lp.z);
-        if (moved > 0.6) {
+        // standing still on purpose restarts the clock: only "trying to move but not moving" counts
+        if (moved > 0.6 || !dbg?.moving) {
           lp.x = p.pos.x;
           lp.z = p.pos.z;
           lp.t = game.time;

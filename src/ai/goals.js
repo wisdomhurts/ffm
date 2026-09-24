@@ -4,6 +4,7 @@ import { PLAYER, PLANTERS, ITEM } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { hyp, gardenInfo, planterSpot, podSpot, podGuards, yawTo, seedIncome, runSpeed, carrySeedSpeed, wrapAngle } from './util.js';
 import { getBoard, claimPod, releaseClaims } from './blackboard.js';
+import { practiceEvent } from './practice.js';
 
 export class Goal {
   constructor(type, u = 0) {
@@ -418,6 +419,7 @@ export class PracticeStealGoal extends Goal {
     if (this.bonked) {
       pr.state = 'done';
       bot.sayPractice(game, p, 'caught', { victim: game.players[this.vslot].name });
+      practiceEvent('caught', p, game.players[this.vslot], game.gardens[this.vslot].planters[this.index].plant);
     } else {
       pr.state = 'idle';
       pr.checkAt = game.time + 12;
@@ -501,6 +503,7 @@ export class PracticeStealGoal extends Goal {
     if (!this.announced) {
       this.announced = true;
       bot.onStealStart(game, p, owner);
+      practiceEvent('start', p, owner, pl.plant);
     }
     return 'running';
   }
@@ -796,7 +799,13 @@ export class PatrolGoal extends Goal {
     const L = bot.home;
     if (!this.point || (bot.motor.arrived && now > this.waitUntil)) {
       const rng = bot.rng;
-      if (bot.pers.patrol) {
+      if (!this.point && (bot.ease > 0.4 || bot.coast > 0) && rng.next() < 0.35) {
+        // relaxed (well ahead of the human): hang out in the plaza for a bit, by the fountain or the road gate
+        const a = rng.range(0, Math.PI * 2);
+        this.point = rng.next() < 0.6 ? { x: Math.sin(a) * rng.range(9, 14), z: Math.cos(a) * rng.range(9, 14) } : { x: rng.range(-9, 9), z: rng.range(40, 48) };
+        this.hangout = true;
+        this.duration = Math.max(this.duration, 12);
+      } else if (bot.pers.patrol) {
         // pace along the outside of the gate, watching the aisle
         this.point = { x: L.outside.x - L.inward * rng.range(0, 5), z: L.center.z + rng.range(-7, 7) };
       } else {
@@ -816,7 +825,9 @@ export class PatrolGoal extends Goal {
         this.arrivedOnce = true;
         this.waitUntil = now + bot.rng.range(0.8, 2.6);
         this.lookBase = bot.pers.patrol ? yawTo(p.pos.x, p.pos.z, 0, L.center.z) : bot.rng.range(-Math.PI, Math.PI);
-        if (bot.rng.next() < 0.15) bot.hop(1);
+        if (this.hangout && bot.rng.next() < 0.4) bot.emoteNext = 'celebrate'; // a little happy dance
+        else if (bot.rng.next() < 0.15) bot.hop(1);
+        if (this.hangout) this.waitUntil = now + 99; // stay put until the break is over
       }
       const watch = bot.watchTarget(game, p);
       it.aimYaw = watch ? yawTo(p.pos.x, p.pos.z, watch.pos.x, watch.pos.z) : wrapAngle(this.lookBase + Math.sin(now * 0.8 + p.slot) * 0.7);

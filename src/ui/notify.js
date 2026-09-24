@@ -33,6 +33,20 @@ export function wireNotifications(app, alerts) {
     });
   });
   on('steal:cancel', ({ thief }) => alerts.remove('steal' + thief.slot));
+  // The friendly "practice steal" on Chill: coach the kid through chasing and bonking.
+  on('practice:steal', ({ stage, thief, victim }) => {
+    if (victim !== me) return;
+    const key = isTouch() ? 'the noodle button' : 'F or click';
+    if (stage === 'carry') {
+      alerts.show({
+        key: 'practice', kind: 'info', face: thief.id, duration: 7000,
+        html: `Practice time! Chase ${who(thief, true)}<small>Get close and BONK them (${key}) to get your plant back.</small>`,
+      });
+    } else if (stage === 'caught') {
+      alerts.remove('practice');
+      alerts.show({ kind: 'good', face: thief.id, duration: 3800, html: `Great bonk!<small>That's how you protect your garden. Use LOCK when you leave, too.</small>` });
+    } else if (stage === 'escaped') alerts.remove('practice');
+  });
   on('steal:grabbed', ({ thief, victim, plant }) => {
     alerts.remove('steal' + thief.slot);
     if (victim === me) {

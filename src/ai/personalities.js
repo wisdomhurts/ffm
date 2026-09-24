@@ -63,27 +63,29 @@ export function difficultyTuning(id) {
   const T = {
     // riskPad: extra speed margin before trying a biome; eager: multiplier on purchase thresholds;
     // beat: pause between plans; breakChance: chance to hang around home after a trip;
-    // lastStealMult/lastDecide: comeback help while the human is last; easeBeat/easeTempo: how much a
-    // relaxed bot (well ahead of the human) slows down; endgame: Showdown seconds left when it stops spending;
+    // lastStealMult/lastDecide: comeback help while the human is last; easeBeat/easeBreak/easeTempo: how
+    // much a relaxed bot (ahead of the human, see bot.js _pace) lingers and jogs; coastAt: ahead this many
+    // times the human's net worth or income, stop upgrading and buying; catchUp: below this ratio a bot
+    // may use the full biomeLead; endgame: Showdown seconds left when it stops spending;
     // shiny: how much it values lucky/mutated seeds over the biome's usual (0 = grabs what's handy);
     // humanDropGrace: seconds the bots leave a seed the human dropped for the human to pick back up
     chill: {
       humanStealMult: 0.7, humanStealGap: 170, humanGrace: 240, humanMinGrown: 2,
       humanMug: 0, humanChaseMult: 0.45, humanBalloon: 0.25, peelNotice: 0.3, aimError: 0.3,
       riskPad: 0.25, eager: 2.2, beat: 2.2, breakChance: 0.4,
-      lastStealMult: 0.15, lastDecide: 1.4, easeBeat: 2.5, easeTempo: 0.3, endgame: 0, shiny: 0.1, humanDropGrace: 99, catchUp: 0.9,
+      lastStealMult: 0.15, lastDecide: 1.4, easeBeat: 0.5, easeBreak: 0.1, easeTempo: 0.35, endgame: 0, coastAt: 1.1, shiny: 0.1, humanDropGrace: 99, catchUp: 0.9,
     },
     normal: {
-      humanStealMult: 1.5, humanStealGap: 60, humanGrace: 110, humanMinGrown: 1,
-      humanMug: 0.4, humanChaseMult: 1, humanBalloon: 0.8, peelNotice: 0.6, aimError: 0.14,
+      humanStealMult: 0.7, humanStealGap: 150, humanGrace: 110, humanMinGrown: 1,
+      humanMug: 0.2, humanChaseMult: 1, humanBalloon: 0.8, peelNotice: 0.6, aimError: 0.14,
       riskPad: 0.15, eager: 1.6, beat: 1.4, breakChance: 0.2,
-      lastStealMult: 0.4, lastDecide: 1.2, easeBeat: 2, easeTempo: 0.25, endgame: 40, shiny: 0.6, humanDropGrace: 8, catchUp: 0.6,
+      lastStealMult: 0.3, lastDecide: 1.2, easeBeat: 0.5, easeBreak: 0.1, easeTempo: 0.35, endgame: 20, coastAt: 1.4, shiny: 0.2, humanDropGrace: 12, catchUp: 0.6,
     },
     chaos: {
       humanStealMult: 1.3, humanStealGap: 28, humanGrace: 50, humanMinGrown: 1,
       humanMug: 1, humanChaseMult: 1.3, humanBalloon: 1, peelNotice: 0.88, aimError: 0.06,
       riskPad: 0.05, eager: 1.0, beat: 0.8, breakChance: 0.08,
-      lastStealMult: 1, lastDecide: 1, easeBeat: 0, easeTempo: 0, endgame: 75, shiny: 1, humanDropGrace: 0, catchUp: 0,
+      lastStealMult: 1, lastDecide: 1, easeBeat: 0, easeBreak: 0, easeTempo: 0, endgame: 75, coastAt: 99, shiny: 1, humanDropGrace: 0, catchUp: 0,
     },
   }[DIFFICULTY[id] ? id : 'normal'];
   return {

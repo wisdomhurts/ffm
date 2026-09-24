@@ -33,6 +33,18 @@ function wantInc(bot, p, speciesId, mutation, biome) {
   return base + (inc - base) * k;
 }
 
+/**
+ * What planting this seed adds (in wanted income), or -1 when it's not worth it. A full garden only
+ * takes upgrades; a bot held back to the human's biomes upgrades in smaller steps so it keeps farming.
+ */
+function seedGain(bot, info, real, want) {
+  if (info.free > 0) return want;
+  if (bot.coast > 0.5) return -1; // coasting: fill empty planters, no upgrades
+  const thr = bot.biomeCap < BIOMES.length - 1 ? 1.25 : 1.5;
+  if (!info.weakest || real < info.weakestInc * thr) return -1;
+  return (real - info.weakestInc) * (want / real);
+}
+
 function bestFarm(bot, game, p, info) {
   const now = game.time;
   const pers = bot.pers;
@@ -44,13 +56,11 @@ function bestFarm(bot, game, p, info) {
   for (const pod of game.pods) {
     const seed = pod.seed;
     if (!seed || pod.biome > bot.biomeCap) continue;
+    const real = seedIncome(p, seed.speciesId, seed.mutation);
     const inc = wantInc(bot, p, seed.speciesId, seed.mutation, pod.biome);
-    let gain, needRoom = false;
-    if (info.free > 0) gain = inc;
-    else if (info.weakest && inc >= info.weakestInc * 1.5) {
-      gain = inc - info.weakestInc;
-      needRoom = true;
-    } else continue;
+    const gain = seedGain(bot, info, real, inc);
+    if (gain < 0) continue;
+    const needRoom = info.free === 0;
     let P = runSafety(game, p, pod.biome, pers.risk + bot.diff.riskPad, hasCoil) * bot.biomeConfidence(pod.biome, now);
     if (P < 0.2) continue;
     // two guards near the pod: we can bonk one, the other gets us
@@ -151,9 +161,8 @@ function bestGround(bot, game, p, info) {
     if (d > 70) continue;
     const bi = game.biomeAt(gi.z);
     if (bi > bot.biomeCap) continue;
-    const inc = wantInc(bot, p, gi.speciesId, gi.mutation, Math.max(0, bi));
-    if (info.free === 0 && inc < info.weakestInc * 1.5) continue;
-    const gain = info.free > 0 ? inc : inc - info.weakestInc;
+    const gain = seedGain(bot, info, seedIncome(p, gi.speciesId, gi.mutation), wantInc(bot, p, gi.speciesId, gi.mutation, Math.max(0, bi)));
+    if (gain < 0) continue;
     // someone else is closer to it?
     let rival = false;
     for (const q of game.players) if (q !== p && !q.carrying && hyp(gi.x - q.pos.x, gi.z - q.pos.z) < d - 4) rival = true;
@@ -203,7 +212,7 @@ function shopPlan(bot, game, p, info) {
     plan.cost = REBIRTH.threshold(p.rebirths);
     return plan;
   }
-  plan.speed = bot.wantsMoreSpeed(game, p, pers.speedEager * bot.diff.eager * (1 + bot.ease), avail);
+  plan.speed = bot.coast < 0.5 && bot.wantsMoreSpeed(game, p, pers.speedEager * bot.diff.eager * (1 + bot.ease), avail);
   const reserve = plan.speed ? speedCost(p.speedLevel + 1) : 0;
   plan.cost = reserve;
   for (const [id, want] of Object.entries(pers.items)) {
@@ -243,7 +252,7 @@ export function chooseGoal(bot, game, p) {
 
   // 2. home economy
   const avail = p.cash + info.g.cashPile;
-  if (info.nextLocked >= 0 && info.free === 0 && avail >= PLANTERS.unlockCost[info.nextLocked] * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < bot.diff.endgame * 0.8)) {
+  if (info.nextLocked >= 0 && info.free === 0 && bot.coast < 0.5 && avail >= PLANTERS.unlockCost[info.nextLocked] * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < bot.diff.endgame * 0.8)) {
     cands.push([ref * 1.9 + 0.01, () => new UnlockGoal(info.nextLocked, ref * 1.9)]);
   }
   const plan = shopPlan(bot, game, p, info);

@@ -2,6 +2,7 @@
 // Chill: once per match. Normal: once, and only if nobody has robbed the human by ~4 minutes.
 // The human must be playing (not AFK), close to home (so the chase is fair) and have a plant to spare.
 import { load } from '../core/save.js';
+import { bus } from '../core/events.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { getBoard } from './blackboard.js';
 import { hyp } from './util.js';
@@ -19,6 +20,14 @@ function finishedTutorial(game, h) {
     tutorialDone = !!load('tutorial:done', false);
   }
   return tutorialDone || (h.stats.steals > 0 && h.speedLevel > 0 && h.stats.collected > 0);
+}
+
+/**
+ * Optional hook for the UI/tutorial: bus 'practice:steal' {stage, thief, victim, plant} with stage
+ * 'start' (holding the steal), 'carry' (strolling home with it), 'caught' (bonked) or 'escaped' (got home).
+ */
+export function practiceEvent(stage, thief, victim, plant) {
+  bus.emit('practice:steal', { stage, thief, victim, plant });
 }
 
 /** The human's lowest-value grown plant when a practice steal should start now, else null. */
