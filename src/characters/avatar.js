@@ -29,10 +29,11 @@ const NOODLE_CURVE = [0.07, -0.07, -0.07]; // gentle permanent bend per segment
 // Slung across the back (torso space): grip end up over the right shoulder, tip down at the left hip,
 // a little off the back so the swinging arms don't cut through it. Long hair falls down the back, so
 // there it lies over the hair instead: further back (more for big kid heads), a little lower, and leaning
-// in with the hair (pitch) so the tip still sits by the hip. twist: share of the steal's look-around done
-// with the shoulders (long hair swings with the head).
-const SLING = { tilt: Math.PI / 4, y: 1.25, z: -0.95, pitch: 0, twist: 0 };
-const SLING_LONG = { y: 1.05, z: -1.55, pitch: -0.17, twist: 0.6 };
+// in with the hair (pitch) so the tip still sits by the hip. As long hair swings with the head, the sneaky
+// steal then looks round more with the shoulders (twist: share of the look-around) and keeps the chin
+// lower (chin: head tilt against the crouch).
+const SLING = { tilt: Math.PI / 4, y: 1.25, z: -0.95, pitch: 0, twist: 0, chin: -0.32 };
+const SLING_LONG = { y: 1.05, z: -1.55, pitch: -0.08, twist: 0.75, chin: -0.1 };
 const LONG_TUCK = 0.12; // long hair leans in towards the back by this angle (radians)
 const GLOW = 0.2; // soft self-illumination so characters pop against the world
 const TAU = Math.PI * 2;
@@ -306,28 +307,31 @@ const READY_HOLD = 1.4; // seconds it stays in hand after the last swing
 // Holster (h = 0..1 over `time` seconds; six keys spread evenly, Catmull-Rom through them): the fist
 // swings the noodle out to the side and up over the right shoulder (well clear of the face and hair) and
 // lays it down behind the back; at `swap` (key 3) the hand lets go and the noodle settles into its slung
-// pose over `slide` seconds while the arm carries on round, down behind and back to the side.
-// wristZ tilts the noodle sideways in the fist. Keys per sling (short / long hair), fitted offline against
-// the head and hair shapes.
+// pose over `slide` seconds, on a small `arc` (y, z) away from the back, while the arm carries on round,
+// down behind and back to the side. wristZ tilts the noodle sideways in the fist. One key set per sling
+// (short / long hair), fitted offline so the noodle keeps clear of the head, hair and body all the way.
 const HOLSTER = {
   time: 0.45,
   swap: 0.6,
   slide: 0.14,
   short: {
-    armRx: [READY.armRx, -1.39, -3.06, -3.98, -5.0, -TAU],
-    armRz: [READY.armRz, -0.75, -0.77, -0.24, -0.8, -0.07],
-    wrist: [READY.wrist, 2.1, 1.45, 0.67, 0.67, READY.wrist],
-    wristZ: [0, -0.26, -0.28, -0.28, -0.28, 0],
+    arc: [-0.2, -0.3],
+    armRx: [READY.armRx, -1.81, -4.23, -4.7, -5.71, -TAU],
+    armRz: [READY.armRz, -0.92, -0.95, -0.8, -1.36, -0.07],
+    wrist: [READY.wrist, 2.27, 1.67, 1.56, 1.67, READY.wrist],
+    wristZ: [0, -0.01, -0.71, -0.89, -0.06, 0],
   },
   long: {
-    armRx: [READY.armRx, -0.82, -3.86, -4.81, -5.5, -TAU],
-    armRz: [READY.armRz, -0.68, -0.92, -0.75, -0.9, -0.07],
-    wrist: [READY.wrist, 2.01, 1.18, 1.03, 1.03, READY.wrist],
-    wristZ: [0, -0.24, -0.31, -0.69, -0.69, 0],
+    arc: [0.25, -0.45],
+    armRx: [READY.armRx, -0.55, -3.42, -4.81, -5.37, -TAU],
+    armRz: [READY.armRz, -0.31, -1.51, -0.74, -1.08, -0.07],
+    wrist: [READY.wrist, 2.1, 2.06, 1.53, 2.2, READY.wrist],
+    wristZ: [0, -0.01, -0.09, -0.96, -0.47, 0],
   },
 };
 // the equivalent of angle a nearest to ref (so blends take the short way round)
 const near = (a, ref) => a + TAU * Math.round((ref - a) / TAU);
+// Catmull-Rom through evenly spaced keys, e = 0..1
 function holsterKey(arr, e) {
   const n = arr.length - 1;
   const x = clamp01(e) * n;
@@ -687,12 +691,10 @@ export function createAvatar(char, faceImage, skinHex) {
       lastSwing = clock;
       holster = -1;
       if (!inHand && u >= DRAW_U) inHand = snap = true;
-    } else if (inHand) {
-      if (s.carrying || s.interacting || s.celebrating || s.stunned) {
-        inHand = false; // hands needed: pop it back onto the back
-        holster = -1;
-      } else if (holster < 0 && clock - lastSwing > READY_HOLD) holster = 0;
-    }
+    } else if (s.carrying || s.interacting || s.celebrating || s.stunned) {
+      inHand = false; // hands needed: pop it back onto the back (or cut the holster's follow-through)
+      holster = -1;
+    } else if (inHand && holster < 0 && clock - lastSwing > READY_HOLD) holster = 0;
     let letting = false;
     if (holster >= 0) {
       holster += dt / HOLSTER.time;
@@ -816,11 +818,9 @@ export function createAvatar(char, faceImage, skinHex) {
       P.armLx = lerp(P.armLx, -1.4 - wig, ws);
       P.armRz = lerp(P.armRz, 0.26, ws);
       P.armLz = lerp(P.armLz, -0.26, ws);
-      // long hair swings with the head and the noodle lies across it: look round with the shoulders
-      // too and keep the chin down a little, so the hair never sweeps through the noodle
       const peek = Math.sin(t * 2.4) * 0.55;
       P.torsoY = lerp(P.torsoY, peek * slung.twist, ws);
-      P.headX = lerp(P.headX, longHair ? -0.2 : -0.32, ws);
+      P.headX = lerp(P.headX, slung.chin, ws);
       P.headY = lerp(P.headY, peek * (1 - slung.twist), ws);
     }
 
@@ -934,7 +934,10 @@ export function createAvatar(char, faceImage, skinHex) {
     }
     if (slide <= 1) {
       const e = smooth(0, 1, slide);
+      // ...on a little arc away from the back, clear of the hair and the swinging legs
       sling.position.lerpVectors(slideFrom.p, slingRest.p, e);
+      sling.position.y += Math.sin(Math.PI * e) * HK.arc[0];
+      sling.position.z += Math.sin(Math.PI * e) * HK.arc[1];
       sling.quaternion.slerpQuaternions(slideFrom.q, slingRest.q, e);
       slide = slide >= 1 ? 2 : Math.min(1, slide + dt / HOLSTER.slide);
     }
