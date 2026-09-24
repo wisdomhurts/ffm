@@ -193,7 +193,7 @@ export function createTouchControls(app) {
         }
         setText(actVerb, it.verb || 'Use');
         setStyle(act, '--rc', it.rarity ? rarityColor(it.rarity) : '#ffffff');
-        const f = it.hold > 0.3 ? Math.min(1, it.t / it.hold) : 0;
+        const f = it.hold > 0 ? Math.min(1, it.t / it.hold) : 0;
         setStyle(actFg, 'strokeDashoffset', (RING_C * (1 - f)).toFixed(1));
       } else lastKey = null;
       toggle(bonk, 'dim', !!me.carrying);

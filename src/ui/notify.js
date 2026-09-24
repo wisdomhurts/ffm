@@ -4,7 +4,8 @@ import { PLANT, RARITY, MUTATIONS, ITEM, speedAt, REBIRTH } from '../config.js';
 import { rarityColor } from '../view/gameView.js';
 import { esc, money } from './dom.js';
 import { who } from './alerts.js';
-import { ICON, EVENT_ICON, ITEM_ICONS } from './icons.js';
+import { ICON, EVENT_ICON, ITEM_ICONS, NOODLE } from './icons.js';
+import { isTouch } from './device.js';
 
 export function wireNotifications(app, alerts) {
   const game = app.game;
@@ -102,7 +103,21 @@ export function wireNotifications(app, alerts) {
   });
   on('garden:full', ({ player }) => {
     if (player !== me) return;
-    alerts.show({ key: 'full', kind: 'warn', icon: ICON.sprout, duration: 3600, html: 'Your garden is full!<small>Unlock a planter, or hold E on a grown plant to sell it.</small>' });
+    alerts.show({ key: 'full', kind: 'warn', icon: ICON.sprout, duration: 3600, html: `Your garden is full!<small>Hold ${isTouch() ? 'Action' : 'E'} on a grown plant to sell it, or drop the seed.</small>` });
+  });
+  // pressing Bonk with full hands: the noodle is busy, so tell them to run (throttled)
+  let blockedAt = -Infinity;
+  on('bonk:blocked', ({ player }) => {
+    if (player !== me) return;
+    const now = performance.now();
+    if (now - blockedAt < 2500) return;
+    blockedAt = now;
+    alerts.toast('Hands full! RUN!<small>You can\'t bonk while carrying.</small>', 'warn', { key: 'blocked', icon: NOODLE, duration: 1800 });
+    try {
+      app.audio?.play?.('error');
+    } catch {
+      /* sound is optional */
+    }
   });
   on('purchase:fail', ({ player, cost }) => {
     if (player !== me) return;

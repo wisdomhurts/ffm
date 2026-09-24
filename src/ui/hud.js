@@ -1,10 +1,11 @@
 // In-game HUD. Contract: createHUD(app) -> { update(dt, t), dispose() }
 // Reads app.game / app.human every frame (DOM writes are throttled and change-detected) and listens to `bus`.
+import { Vector3 } from 'three';
 import { ITEMS, BIOMES, RARITY, PLANT, speedAt, WORLD, ROAD_END_Z, biomeIndexAtZ } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings } from '../core/settings.js';
 import { load, save } from '../core/save.js';
-import { LAYOUT } from '../gameplay/layout.js';
+import { LAYOUT, gardenContains } from '../gameplay/layout.js';
 import { rarityColor } from '../view/gameView.js';
 import { h, esc, setText, setHTML, setStyle, toggle, money, clock, noFocus, screenAngle, uiSound, setMuted } from './dom.js';
 import { avatarEl } from './avatars.js';
@@ -12,6 +13,8 @@ import { ICON, ITEM_ICONS, EVENT_ICON } from './icons.js';
 import { createAlerts } from './alerts.js';
 import { wireNotifications } from './notify.js';
 import { createTutorial } from './tutorial.js';
+import { createNextGoal } from './goal.js';
+import { guidePoint } from './route.js';
 import { isTouch, onTouchChange } from './device.js';
 
 export function createHUD(app) {
@@ -32,6 +35,7 @@ export function createHUD(app) {
   parts.push(createStats(app, tl, me));
   const tutorial = me ? createTutorial(app, tl) : null;
   if (tutorial) parts.push(tutorial);
+  if (me) parts.push(createNextGoal(app, tl, tutorial));
   parts.push(createBoard(app, tr, me));
   parts.push(createEventChip(app, top));
   const alerts = createAlerts(top, root);
@@ -46,12 +50,19 @@ export function createHUD(app) {
   parts.push(createKeyHints(app, root));
   parts.push(createMatchClock(app, alerts));
 
+  // Stay hidden while the intro camera swoops down, then fade in as it lands.
+  let intro = true;
+  root.classList.add('intro');
   let vAcc = 0;
   return {
     alerts,
     update(dt, t) {
       if (!app.game) return;
       if (root.dataset.state !== app.state) root.dataset.state = app.state;
+      if (intro && (app.cam?.introT ?? 1) >= 1) {
+        intro = false;
+        root.classList.remove('intro');
+      }
       for (const p of parts) p.update?.(dt, t);
       vAcc += dt;
       if (me && vAcc > 0.15) {
@@ -308,8 +319,9 @@ function createPrompt(app, parent, me) {
       setText(key, dev === 'gamepad' ? 'B' : dev === 'touch' || isTouch() ? '' : 'E');
       toggle(el, 'touch', dev === 'touch' || (isTouch() && dev !== 'keyboard' && dev !== 'gamepad'));
       setText(verb, it.verb || 'Use');
-      const hold = it.hold > 0.3;
-      setText(how, hold ? 'HOLD' : '');
+      // every hold gets the ring (even the quick 0.25 s grab); only real holds get the HOLD tag
+      const hold = it.hold > 0;
+      setText(how, it.hold > 0.3 ? 'HOLD' : '');
       setText(label, it.label || '');
       setStyle(el, '--rc', it.rarity ? rarityColor(it.rarity) : '#ffffff');
       toggle(el, 'steal', it.verb === 'Steal');
@@ -338,13 +350,11 @@ function createCarry(app, parent, me) {
   };
   const carry = mk('mine');
   const track = mk('tracker');
-  const home = LAYOUT.gardens[me.slot].inside;
-  const set = (w, target, l1, l2) => {
-    setHTML(w.l1, l1);
-    setHTML(w.l2, l2);
-    const a = screenAngle(me.pos, target, app.cam?.yaw || 0);
-    setStyle(w.arrow, 'transform', `rotate(${a.toFixed(2)}rad)`);
-  };
+  const L = LAYOUT.gardens[me.slot];
+  const garden = game.gardens[me.slot];
+  // arrows follow a route around fences (via gates and the road arch); the distance is the walking distance
+  const guide = (target) => guidePoint(me.pos, target, game.physics?.boxes);
+  const aim = (w, g) => setStyle(w.arrow, 'transform', `rotate(${screenAngle(me.pos, g, app.cam?.yaw || 0).toFixed(2)}rad)`);
   let acc = 1;
   return {
     update(dt) {
@@ -358,17 +368,27 @@ function createCarry(app, parent, me) {
         const sid = c.kind === 'seed' ? c.speciesId : c.plant.speciesId;
         const mut = c.kind === 'seed' ? c.mutation : c.plant.mutation;
         const name = `<b style="--rc:${rarityColor(PLANT[sid].rarity)}">${esc(game.plantName(sid, mut))}</b>`;
-        const d = Math.round(Math.hypot(home.x - me.pos.x, home.z - me.pos.z));
+        // standing in your own garden with no free planter: say what to do instead of "bring it home"
+        const full = c.kind === 'seed' && gardenContains(L, me.pos.x, me.pos.z) && !garden.planters.some((pl) => pl.unlocked && !pl.plant);
         toggle(carry.el, 'stolen', c.kind === 'plant');
-        set(carry, home, c.kind === 'plant' ? `STOLEN ${name}` : `Carrying ${name}`, `Bring it HOME! <em>${d} studs</em>`);
+        toggle(carry.el, 'full', full);
+        setHTML(carry.l1, c.kind === 'plant' ? `STOLEN ${name}` : `Carrying ${name}`);
+        if (full) setHTML(carry.l2, 'Garden full! Sell a grown plant or drop the seed');
+        else {
+          const g = guide(L.inside);
+          aim(carry, g);
+          setHTML(carry.l2, `Bring it HOME! <em>${Math.round(g.dist)} studs</em>`);
+        }
       }
       let thief = null;
       for (const p of game.players) if (p !== me && p.carrying?.kind === 'plant' && p.carrying.fromSlot === me.slot) thief = p;
       toggle(track.el, 'show', !!thief && playing);
       if (thief && playing) {
-        const d = Math.round(Math.hypot(thief.pos.x - me.pos.x, thief.pos.z - me.pos.z));
+        const g = guide(thief.pos);
+        aim(track, g);
         setStyle(track.el, '--c', thief.char.color);
-        set(track, thief.pos, `STOP <b class="who" style="--c:${thief.char.color}">${esc(thief.name.toUpperCase())}</b>!`, `They have your ${esc(game.plantName(thief.carrying.plant.speciesId, thief.carrying.plant.mutation))} <em>${d} studs</em>`);
+        setHTML(track.l1, `STOP <b class="who" style="--c:${thief.char.color}">${esc(thief.name.toUpperCase())}</b>!`);
+        setHTML(track.l2, `They have your ${esc(game.plantName(thief.carrying.plant.speciesId, thief.carrying.plant.mutation))} <em>${Math.round(g.dist)} studs</em>`);
       }
     },
   };
@@ -478,12 +498,19 @@ function createRoadMeter(app, parent, me) {
 
 // ------------------------------------------------------------------ chat log + speech bubbles
 
+// Speech bubbles are world labels. Family members often stand together, so bubbles are placed
+// newest-first in screen space and one that would land on a newer bubble waits its turn (the chat log
+// still shows every line). labels.js then nudges them clear of name tags.
+const BUBBLE_MS = 4200;
+const _v = new Vector3();
+
 function createChat(app, parent) {
   const game = app.game;
   const el = h('div', { class: 'chat', 'aria-live': 'polite' });
   parent.appendChild(el);
-  const bubbles = new Map(); // slot -> {html, until}
+  const bubbles = new Map(); // slot -> {html, until, at, chars}
   const timers = new Set();
+  const placed = [];
   const off = bus.on('chat', ({ player, text }) => {
     if (!player) return;
     const line = h('div', { class: 'cl' }, h('b', { style: `--c:${player.char.color}`, text: player.name + ': ' }), h('span', { text }));
@@ -494,19 +521,43 @@ function createChat(app, parent) {
       line.remove();
     }, 9000);
     timers.add(id);
-    if (!player.isHuman) bubbles.set(player.slot, { html: `<div class="bb">${esc(text)}</div>`, until: performance.now() + 4200 });
+    const now = performance.now();
+    if (!player.isHuman) bubbles.set(player.slot, { html: `<div class="bb">${esc(text)}</div>`, at: now, until: now + BUBBLE_MS, chars: String(text).length });
   });
+  // rough on-screen box of a bubble (the label scales with distance like labels.js does)
+  function box(p, b, cam) {
+    _v.set(p.pos.x, p.pos.y + (p.carrying ? 11.6 : 8.8), p.pos.z);
+    const d = _v.distanceTo(cam.position);
+    _v.project(cam);
+    if (_v.z >= 1) return null;
+    const s = Math.max(0.55, Math.min(1.15, 26 / Math.max(8, d)));
+    const w = Math.min(160, b.chars * 7 + 24) * s;
+    const lines = Math.ceil((b.chars * 7) / 136);
+    const hgt = (lines * 16 + 26) * s;
+    const x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
+    return [x - w / 2, y - hgt, x + w / 2, y];
+  }
   return {
     update() {
       if (!bubbles.size) return;
       const now = performance.now();
-      for (const [slot, b] of bubbles) {
+      const cam = app.engine?.camera;
+      const order = [...bubbles.entries()].sort((a, b) => b[1].at - a[1].at);
+      placed.length = 0;
+      for (const [slot, b] of order) {
         if (now > b.until) {
           bubbles.delete(slot);
           continue;
         }
         const p = game.players[slot];
         if (p.invisible(game.time)) continue;
+        const r = cam ? box(p, b, cam) : null;
+        if (r && placed.some((q) => r[0] < q[2] && r[2] > q[0] && r[1] < q[3] && r[3] > q[1])) {
+          b.until = Math.max(b.until, now + 2000); // wait for the newer bubble, then get a moment on screen
+          if (now - b.at > BUBBLE_MS * 2.2) bubbles.delete(slot);
+          continue;
+        }
+        if (r) placed.push(r);
         app.labels.set('bubble' + slot, { x: p.pos.x, y: p.pos.y + (p.carrying ? 11.6 : 8.8), z: p.pos.z }, b.html, { cls: 'bubble', maxDist: 90 });
       }
     },

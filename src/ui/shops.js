@@ -3,6 +3,7 @@ import { ITEMS, BIOMES, PLAYER, REBIRTH, LOCK, speedAt, speedCost } from '../con
 import { bus } from '../core/events.js';
 import { h, money, setText } from './dom.js';
 import { ICON, ITEM_ICONS } from './icons.js';
+import { monsterSpeed, levelToOutrun, fmtSpeed } from './goal.js';
 
 const TITLES = { gear: 'Gear Shop', speed: 'Speed Shop', rebirth: 'Rebirth Altar' };
 const SUBS = {
@@ -87,17 +88,18 @@ function speedShop(app, game, me) {
   const now = h('span', { class: 'sp-now' });
   const next = h('span', { class: 'sp-next' });
   const train = h('button', { class: 'btn btn-green btn-xl sp-train', type: 'button', 'data-autofocus': '' });
-  const monsters = BIOMES.map((b, i) => ({ b, i })).filter((x) => x.b.monster);
-  const maxScale = Math.max(...monsters.map((m) => m.b.monster.speed)) + 8;
+  // monster speeds as they really are in this match (difficulty scales them)
+  const monsters = BIOMES.map((b, i) => ({ b, i, ms: monsterSpeed(game, b) })).filter((x) => x.b.monster);
+  const maxScale = Math.max(...monsters.map((m) => m.ms)) + 8;
   const you = h('span', { class: 'sr-you' }, h('span', { text: 'YOU' }));
   const track = h('div', { class: 'sr-track' },
-    monsters.map(({ b }) => h('span', { class: 'sr-tick', style: `left:${(b.monster.speed / maxScale) * 100}%;--c:${b.ground}` })), you);
-  const rows = monsters.map(({ b }) => {
+    monsters.map(({ b, ms }) => h('span', { class: 'sr-tick', style: `left:${(ms / maxScale) * 100}%;--c:${b.ground}` })), you);
+  const rows = monsters.map(({ b, ms }) => {
     const status = h('span', { class: 'sr-st' });
     const row = h('div', { class: 'sr-row', style: `--c:${b.ground}` },
       h('span', { class: 'sr-dot' }), h('span', { class: 'sr-biome', text: b.name }), h('span', { class: 'sr-mon', text: b.monster.name }),
-      h('span', { class: 'sr-spd', text: `${b.monster.speed}` }), status);
-    return { b, row, status };
+      h('span', { class: 'sr-spd', text: fmtSpeed(ms) }), status);
+    return { b, ms, row, status };
   });
   train.addEventListener('click', () => {
     if (game.buySpeed(me)) bump(lvl, 'bump');
@@ -132,14 +134,10 @@ function speedShop(app, game, me) {
       }
       you.style.left = `${Math.min(100, (carry / maxScale) * 100)}%`;
       for (const r of rows) {
-        const ms = r.b.monster.speed;
-        const ok = carry > ms;
+        const ok = carry > r.ms;
         r.row.classList.toggle('ok', ok);
-        if (ok) r.status.innerHTML = `${ICON.check}<span>Faster!</span>`;
-        else {
-          const need = Math.ceil((ms / PLAYER.carrySeedMult + 0.01 - PLAYER.baseSpeed - me.rebirths * 2) / PLAYER.speedPerLevel);
-          r.status.innerHTML = `<span>Need Lv ${Math.min(PLAYER.maxSpeedLevel, need)}</span>`;
-        }
+        const html = ok ? `${ICON.check}<span>Faster!</span>` : `<span>Need Lv ${Math.min(PLAYER.maxSpeedLevel, levelToOutrun(r.ms, me.rebirths))}</span>`;
+        if (r.status._h !== html) r.status.innerHTML = r.status._h = html;
       }
     },
   };

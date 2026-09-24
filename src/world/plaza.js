@@ -23,6 +23,8 @@ export function buildPlaza(ctx) {
   const glow = new Merger();
   const beach = new Merger();
   const solid = (x, z, hw, hd, maxY, tag = 'deco') => ctx.colliders.push({ minX: x - hw, maxX: x + hw, minY: 0, maxY, minZ: z - hd, maxZ: z + hd, tag });
+  // camera-only box around a palm crown / umbrella (out of the players' reach, so physics and bots ignore it)
+  const canopy = (x, z, hw, y0, y1) => ctx.colliders.push({ minX: x - hw, maxX: x + hw, minY: 1e4, maxY: 1e4, camMinY: y0, camMaxY: y1, minZ: z - hw, maxZ: z + hw, tag: 'canopy' });
   const flames = [];
   const lights = []; // [x, z, radius]: warm pools of light under lamps and torches at night
 
@@ -70,11 +72,12 @@ export function buildPlaza(ctx) {
     const lean = r.range(0.12, 0.3);
     // lean away from the aisle so fronds frame the plaza
     const yaw = Math.atan2(x < 0 ? -1 : 1, z > 30 ? 0.6 : z < -40 ? -0.6 : r.range(-0.4, 0.4));
-    palm(props, x, z, r, { h: r.range(10, 13.5), lean, yaw });
+    const [cx, cy, cz] = palm(props, x, z, r, { h: r.range(10, 13.5), lean, yaw });
     solid(x, z, 0.75, 0.75, 14);
+    canopy(cx, cz, 3.4, cy - 2.6, cy + 1.2);
   }
   // lamps along the garden corridors and the shop promenade
-  for (const [x, z] of [[-27, 0], [27, 0], [-27, 42], [27, 42], [-27, -42], [27, -42], [-45, -45], [45, -45]]) {
+  for (const [x, z] of [[-27, 0], [27, 0], [-27, 42], [27, 42], [-27, -42], [27, -42], [-45, -49], [45, -49]]) {
     lamp(props, glow, x, z, { light: '#fff0b8' });
     solid(x, z, 0.55, 0.55, 9);
     lights.push([x, z, 4.4]);
@@ -114,12 +117,14 @@ export function buildPlaza(ctx) {
     lounger(props, x - 1.6, z - 0.5, 0, '#ffffff');
     lounger(props, x + 1.6, z - 0.5, 0, '#3fb6ff');
     solid(x, z, 0.4, 0.4, 7);
+    canopy(x, z, 3.4, 5.0, 7.6);
   }
   for (const [x, z] of [[54, -57], [63, -57]]) {
     palapa(props, x, z, r);
     lounger(props, x - 1.6, z + 0.5, Math.PI, '#ff7eb6');
     lounger(props, x + 1.6, z + 0.5, Math.PI, '#ffd23f');
     solid(x, z, 0.4, 0.4, 7);
+    canopy(x, z, 3.4, 5.0, 7.6);
   }
   // tiki bar hut (south-west)
   {
@@ -129,6 +134,7 @@ export function buildPlaza(ctx) {
       solid(x + dx, z + dz, 0.45, 0.45, 6);
     }
     props.prim('cone:4', x, 6.6, z, 13.5, 3.4, 11.5, '#d9a95a', { ry: Math.PI / 4, ao: 0.35 });
+    canopy(x, z, 5.2, 4.9, 8.3);
     props.block(x, 5.1, z, 9.4, 0.4, 7.4, '#b88444');
     // counter
     props.block(x, 0, z + 2.2, 7.6, 2.4, 1.4, '#8a6038', { ao: 0.3 });
@@ -196,7 +202,8 @@ export function buildPlaza(ctx) {
     if (pz > 52) return;
     if (r() < 0.12 * dens + 0.08) {
       const d = r.range(2.5, 6.5);
-      palm(beach, px + nx * d, pz + nz * d, r, { y: -1.0, h: r.range(9, 14), lean: r.range(0.2, 0.45), yaw: Math.atan2(nx, nz) + r.range(-0.5, 0.5) });
+      const [cx, cy, cz] = palm(beach, px + nx * d, pz + nz * d, r, { y: -1.0, h: r.range(9, 14), lean: r.range(0.2, 0.45), yaw: Math.atan2(nx, nz) + r.range(-0.5, 0.5) });
+      canopy(cx, cz, 3.4, cy - 2.6, cy + 1.2);
     }
     if (r() < 0.3 * dens) rock(beach, px + nx * r.range(8, 12), WATER_Y - 0.2, pz + nz * r.range(8, 12), r.range(1.2, 3), r, r.pick(['#8e8a86', '#a39a90', '#7d7a78']));
     if (r() < 0.18 * dens) bush(beach, px + nx * r.range(1.2, 3), -1.0, pz + nz * r.range(1.2, 3), 0.9, r);
@@ -204,6 +211,7 @@ export function buildPlaza(ctx) {
   // south beach life: palapas, loungers, towels, a sand castle and a lifeguard tower
   for (const [x, z] of [[-48, -71.5], [-28, -72], [30, -71.5], [52, -72]]) {
     palapa(beach, x, z, r, { y: -1 });
+    canopy(x, z, 3.4, 4.0, 6.6);
     lounger(beach, x - 1.8, z - 1.5, Math.PI, r.pick(['#ffffff', '#3fb6ff', '#ff7eb6']), { y: -1 });
     lounger(beach, x + 1.8, z - 1.5, Math.PI, r.pick(['#ffd23f', '#1ec8a5', '#ffffff']), { y: -1 });
   }

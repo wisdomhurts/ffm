@@ -1,10 +1,10 @@
 // Menus. Contract: createMenus(app) -> { showTitle(), showSelect(mode), showPause(), hidePause(), showEnd(ranking),
 //   openShop(shop), closeShop(), hideAll(), isBlocking() }  (+ extras: openSettings(), openPhotoBooth(), openHowTo())
-import { CHARACTERS, CHARACTER, DIFFICULTY, MATCH } from '../config.js';
+import { CHARACTERS, CHARACTER, DIFFICULTY, MATCH, PLANT, RARITY } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings, setSetting } from '../core/settings.js';
 import { load, save, storageOK } from '../core/save.js';
-import { h, money, uiSound, reducedMotion } from './dom.js';
+import { h, esc, money, uiSound, reducedMotion } from './dom.js';
 import { avatarEl } from './avatars.js';
 import { ICON, LOGO_SPROUT } from './icons.js';
 import { buildShop } from './shops.js';
@@ -362,6 +362,8 @@ export function createMenus(app) {
   }
 
   // ------------------------------------------------------------------ end of a Showdown
+  // main.js stages the real 3D podium (top three on gold/silver/bronze blocks, the winner dancing) at the
+  // spawn pad, so this screen keeps the middle clear: a title banner up top and a lower-third results card.
 
   function showEnd(ranking) {
     closeAllModals(true);
@@ -371,27 +373,37 @@ export function createMenus(app) {
     const list = (ranking || []).map((r) => (r.player ? r : { player: r, netWorth: g?.netWorth?.get(r) || 0 }));
     if (!list.length) return;
     const winner = list[0].player;
-    const title = winner === me ? 'YOU WIN!' : `${winner.name.toUpperCase()} WINS!`;
-    const place = (r, i) => h('div', { class: `pod pod-${i + 1}${r.player === me ? ' me' : ''}`, style: `--c:${r.player.char.color};--d:${[300, 0, 500][i] ?? 600}ms` },
-      i === 0 ? h('span', { class: 'pod-crown', html: ICON.crown }) : null,
-      avatarEl(r.player.id, 'pod-ava'),
-      h('span', { class: 'pod-name', text: r.player.name }),
-      h('span', { class: 'pod-val', text: money(r.netWorth) }),
-      h('div', { class: 'pod-block' }, h('span', { text: String(i + 1) })));
-    const podium = h('div', { class: 'podium' }, [1, 0, 2].filter((i) => list[i]).map((i) => place(list[i], i)));
-    const rest = list.slice(3).map((r, i) => h('div', { class: 'end-rest' + (r.player === me ? ' me' : ''), style: `--c:${r.player.char.color}` },
-      h('b', { text: `${i + 4}` }), avatarEl(r.player.id, 'er-ava'), h('span', { text: r.player.name }), h('span', { class: 'cash', text: money(r.netWorth) })));
-    const awards = h('div', { class: 'awards' }, computeAwards(list.map((r) => r.player)).map((a, i) =>
-      h('div', { class: 'award', style: `--c:${a.player.char.color};--d:${900 + i * 120}ms` },
+    const myRank = me ? list.findIndex((r) => r.player === me) + 1 : 0;
+    const won = winner === me;
+    const title = won ? 'YOU WIN!' : myRank ? `${ordinal(myRank)} place!` : `${winner.name.toUpperCase()} WINS!`;
+    const sub = won ? 'The crown is yours!' : `${winner.name} takes the crown!`;
+    const MEDAL = ['gold', 'silver', 'bronze'];
+    const chips = h('div', { class: 'end-chips', role: 'list' }, list.map((r, i) =>
+      h('div', { class: `end-chip ${MEDAL[i] || 'plain'}${r.player === me ? ' me' : ''}`, role: 'listitem', style: `--c:${r.player.char.color};--d:${250 + i * 90}ms` },
+        h('b', { class: 'ec-rank', text: String(i + 1) }),
+        avatarEl(r.player.id, 'ec-ava'),
+        h('span', { class: 'ec-copy' }, h('span', { class: 'ec-name', text: r.player === me ? `${r.player.name} (you)` : r.player.name }), h('span', { class: 'ec-val', text: money(r.netWorth) })),
+        i === 0 ? h('span', { class: 'ec-crown', html: ICON.crown }) : null)));
+    let you = null;
+    if (me && myRank) {
+      const best = bestPlant(g, me);
+      you = h('div', { class: 'end-you', style: `--c:${me.char.color}` },
+        h('span', { class: 'ey-k', text: 'Your result' }),
+        h('span', { class: 'ey-v' }, h('b', { text: `#${myRank}` }), ' of ', String(list.length)),
+        h('span', { class: 'ey-v' }, 'Net worth ', h('b', { class: 'cash', text: money(list[myRank - 1].netWorth) })),
+        h('span', { class: 'ey-v ey-best', html: best ? `Best plant <b style="--rc:${best.color}">${esc(best.name)}</b> <em>${money(best.income)}/s</em>` : 'No plants yet' }));
+    }
+    const awardList = computeAwards(list.map((r) => r.player));
+    const awards = awardList.length ? h('div', { class: 'awards' }, awardList.map((a, i) =>
+      h('div', { class: 'award', style: `--c:${a.player.char.color};--d:${700 + i * 120}ms` },
         h('span', { class: 'aw-pic' }, avatarEl(a.player.id, 'aw-ava'), h('span', { class: 'aw-ic', html: a.icon })),
         h('span', { class: 'aw-copy' },
           h('span', { class: 'aw-title', text: a.title }),
-          h('span', { class: 'aw-name', text: a.player.name }),
-          h('span', { class: 'aw-stat', text: a.stat })))));
+          h('span', { class: 'aw-name' }, h('b', { text: a.player.name }), h('span', { class: 'aw-stat', text: ` · ${a.stat}` })))))) : null;
     const confetti = h('div', { class: 'confetti', 'aria-hidden': 'true' });
     if (!reducedMotion()) {
       const colors = ['#ffd23f', '#ff4f9a', '#3d9bff', '#4cd964', '#9b5cff', '#1ec8a5', '#ff7a3d'];
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < (won ? 70 : 36); i++) {
         confetti.appendChild(h('i', {
           style: `left:${(Math.random() * 100).toFixed(1)}%;background:${colors[i % colors.length]};--r:${(Math.random() * 720 - 360).toFixed(0)}deg;` +
             `--x:${(Math.random() * 120 - 60).toFixed(0)}px;animation-delay:${(Math.random() * 2.5).toFixed(2)}s;animation-duration:${(2.6 + Math.random() * 2.2).toFixed(2)}s;` +
@@ -404,11 +416,13 @@ export function createMenus(app) {
       startGame({ charId: me.id, mode: g?.mode || 'showdown', difficulty: g?.difficultyId || settings.difficulty, fresh: true });
     };
     setScreen('end', confetti,
-      h('div', { class: 'end-wrap' },
-        h('div', { class: 'end-kicker', text: 'Family Showdown results' }),
-        h('h1', { class: 'end-title' + (winner === me ? ' win' : ''), text: title }),
-        podium,
-        rest.length ? h('div', { class: 'end-rests' }, rest) : null,
+      h('div', { class: 'end-top' + (won ? ' win' : '') },
+        h('div', { class: 'end-kicker', html: `${ICON.trophy}<span>Family Showdown</span>` }),
+        h('h1', { class: 'end-title', text: title }),
+        h('div', { class: 'end-sub' }, won ? null : avatarEl(winner.id, 'es-ava'), h('span', { text: sub }))),
+      h('div', { class: 'end-card' },
+        chips,
+        you,
         awards,
         h('div', { class: 'end-actions' },
           btn(iconLabel(ICON.reset, 'Play Again'), 'btn-green btn-lg', again, { 'data-autofocus': '' }),
@@ -447,6 +461,21 @@ export function createMenus(app) {
   };
 }
 
+const ordinal = (n) => n + (n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th');
+
+// The best-paying plant in a player's garden at the final whistle.
+function bestPlant(game, p) {
+  let best = null;
+  for (const pl of game?.gardens?.[p.slot]?.planters || []) {
+    if (!pl.plant) continue;
+    const income = game.plantIncome(pl.plant, p);
+    if (!best || income > best.income) best = { income, name: game.plantName(pl.plant.speciesId, pl.plant.mutation), color: RARITY[PLANT[pl.plant.speciesId].rarity].color };
+  }
+  return best;
+}
+
+// Up to four fun awards. Someone without an award yet gets the next one if they earned it at all,
+// so one runaway leader can't sweep the lot and every kid has a shot at a trophy.
 function computeAwards(players) {
   const defs = [
     { key: 'steals', title: 'Master Thief', icon: ICON.eye, unit: (n) => `${n} steal${n === 1 ? '' : 's'}` },
@@ -454,13 +483,14 @@ function computeAwards(players) {
     { key: 'bonks', title: 'Bonk Champion', icon: ICON.target, unit: (n) => `${n} bonk${n === 1 ? '' : 's'}` },
     { key: 'collected', title: 'Money Bags', icon: ICON.coin, unit: (n) => `${money(n)} collected` },
   ];
+  const count = new Map(players.map((p) => [p, 0]));
   const out = [];
   for (const d of defs) {
-    let best = null;
-    for (const p of players) if (!best || (p.stats[d.key] || 0) > (best.stats[d.key] || 0)) best = p;
-    const n = best?.stats[d.key] || 0;
-    if (best && n > 0) out.push({ title: d.title, icon: d.icon, player: best, stat: d.unit(n) });
+    const ranked = players.filter((p) => (p.stats[d.key] || 0) > 0).sort((a, b) => (b.stats[d.key] || 0) - (a.stats[d.key] || 0));
+    const pick = ranked.find((p) => count.get(p) === 0) || ranked.find((p) => count.get(p) < 2);
+    if (!pick) continue;
+    count.set(pick, count.get(pick) + 1);
+    out.push({ title: d.title, icon: d.icon, player: pick, stat: d.unit(pick.stats[d.key]) });
   }
   return out;
 }
-

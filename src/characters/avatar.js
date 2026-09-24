@@ -1,5 +1,6 @@
 // R6-style family avatar: blocky plastic body, oversized rounded head with the family member's
-// photo face, hair accessory, Cabo-sunset outfit, pool noodle, and procedural animation.
+// photo face, hair accessory, Cabo-sunset outfit, pool noodle (slung on the back, drawn to swing),
+// and procedural animation. Nothing is ever posed in front of the face.
 // Contract: createAvatar(charDef, faceImage, skinHex) -> Avatar
 //   avatar.object3d      THREE.Group, origin at the feet, facing +Z
 //   avatar.headTop       THREE.Object3D positioned just above the head (name tags, carried items)
@@ -74,7 +75,8 @@ const STRANDS = [0, 0, 0.5, 1];
 
 // A shell slightly larger than the head, keeping only the triangles above hairline(x, z).
 function scalpShell(offset, hairline) {
-  const g = new RoundedBoxGeometry(HEAD.w + offset * 2, HEAD.h + offset * 2, HEAD.d + offset * 2, 4, HEAD.r + offset);
+  // fine segments so the cut along the hairline doesn't leave a saw-tooth edge on the rounded corners
+  const g = new RoundedBoxGeometry(HEAD.w + offset * 2, HEAD.h + offset * 2, HEAD.d + offset * 2, 8, HEAD.r + offset);
   const src = { position: g.attributes.position, normal: g.attributes.normal, uv: g.attributes.uv };
   const keep = [];
   const p = src.position;
@@ -296,7 +298,7 @@ const SW_T = [0, 0.3, 0.5, 0.68, 1];
 const SW_EASE = [(t) => 1 - (1 - t) * (1 - t), (t) => t * t * t, (t) => 1 - (1 - t) * (1 - t), (t) => t * t * (3 - 2 * t)];
 const SW = {
   armRx: [READY.armRx, -3.3, -1.55, -0.95, READY.armRx],
-  armRz: [READY.armRz, -0.25, 0.05, 0.1, READY.armRz],
+  armRz: [READY.armRz, -0.45, 0.05, 0.1, READY.armRz], // wind up out to the side, clear of the face
   wrist: [READY.wrist, 1.5, 3.1, 2.85, READY.wrist],
   torsoY: [0, 0.38, -0.36, -0.26, 0],
   torsoX: [0, -0.14, 0.2, 0.15, 0],
@@ -551,6 +553,8 @@ export function createAvatar(char, faceImage, skinHex) {
   let inHand = false;
   let lastSwing = -10;
   let holster = -1; // 0..1 while putting it back over the shoulder
+  let holsterArm = 0; // holster pose weights (fade out if a swing or a pickup interrupts it)
+  let holsterWrist = 0;
   let handScale = 0;
   let slingScale = 1;
   let bend = 0;
@@ -635,6 +639,14 @@ export function createAvatar(char, faceImage, skinHex) {
         snap = true;
       }
       if (holster >= 1) holster = -1;
+    }
+    if (holster >= 0) {
+      const up = holster < HOLSTER.swap;
+      holsterArm = up ? smooth(0, HOLSTER.swap, holster) : 1 - smooth(HOLSTER.swap, 1, holster);
+      holsterWrist = up ? smooth(0, HOLSTER.swap * 0.6, holster) : holsterArm;
+    } else {
+      holsterArm = damp(holsterArm, 0, 22, dt);
+      holsterWrist = damp(holsterWrist, 0, 22, dt);
     }
     if (snap) {
       handScale = inHand ? 1 : 0;
@@ -787,12 +799,10 @@ export function createAvatar(char, faceImage, skinHex) {
     }
 
     // --- put the noodle back: up and over the right shoulder, then the arm drops
-    if (holster >= 0) {
-      const up = holster < HOLSTER.swap;
-      const k = up ? smooth(0, HOLSTER.swap, holster) : 1 - smooth(HOLSTER.swap, 1, holster);
-      P.armRx = lerp(P.armRx, HOLSTER.armRx, k);
-      P.armRz = lerp(P.armRz, HOLSTER.armRz, k);
-      P.wrist = lerp(P.wrist, HOLSTER.wrist, up ? smooth(0, HOLSTER.swap * 0.6, holster) : k);
+    if (holsterArm > 0.001) {
+      P.armRx = lerp(P.armRx, HOLSTER.armRx, holsterArm);
+      P.armRz = lerp(P.armRz, HOLSTER.armRz, holsterArm);
+      P.wrist = lerp(P.wrist, HOLSTER.wrist, holsterWrist);
     }
 
     // --- noodle whack overlay

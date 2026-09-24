@@ -19,7 +19,7 @@ const CONTROLS = [
 ];
 
 const TIPS = [
-  'Road monsters only chase players carrying something. Bonk them to stun them!',
+  'Road monsters only chase players carrying something. Bonk monsters BEFORE you grab. You can\'t swing while carrying.',
   'Bonk a thief to make them drop your plant. It flies straight home.',
   'Banana peels and water balloons make runners drop what they carry.',
   `You start with ${PLANTERS.startUnlocked} planters. Walk up to a locked one to unlock more.`,
@@ -42,7 +42,7 @@ export function buildHowTo() {
   const weather = h('div', { class: 'ht-weather' }, EVENTS.types.map((e) =>
     h('div', { class: `ht-ev ev-${e.id}` }, h('span', { class: 'bi', html: EVENT_ICON[e.id] }), h('b', { text: e.name }), h('span', { text: `${Math.round(e.chance * 100)}% of new seeds turn ${MUTATIONS[e.mutation].name}!` }))));
   const items = h('div', { class: 'ht-items' },
-    h('div', { class: 'ht-item' }, h('span', { class: 'hi-ic', html: NOODLE }), h('span', {}, h('b', { text: 'Pool noodle' }), ' Always in your hands. Bonk!')),
+    h('div', { class: 'ht-item' }, h('span', { class: 'hi-ic', html: NOODLE }), h('span', {}, h('b', { text: 'Pool noodle' }), ' Bonk with empty hands. You can\'t swing while carrying.')),
     ...Object.entries(ITEM_ICONS).map(([id, ic]) => h('div', { class: 'ht-item' }, h('span', { class: 'hi-ic', html: ic }), h('span', { text: itemLine(id) }))));
   return h('div', { class: 'ht-body' },
     h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.help }), h('h2', { text: 'How to Play' })),

@@ -197,7 +197,7 @@ export class BotController {
     if (!hs) return;
     this.humanLast = hs.last && now > 30;
     if (d.biomeLead < 50) this.biomeCap = hs.deep + d.biomeLead;
-    if (d.paceCap > 0 && now > 40) {
+    if (d.paceCap > 0 && now > 20) {
       // ahead on net worth, or on income (where net worth is heading)
       const rNet = (game.netWorth.get(p) || 0) / (Math.max(hs.net, 400) * d.paceCap);
       const rInc = game.gardenIncome(game.gardens[p.slot]) / (Math.max(hs.inc, 8) * d.paceCap);

@@ -536,12 +536,13 @@ export function attachFxTo(obj) {
   if (o.isScene) ensureScene(o);
 }
 
-/** Debug / QA: live effect counts per batch for every scene. */
+/** Debug / QA (also window.__plantFxStats): live rigs and effect instances drawn per batch, summed over scenes. */
 export function fxStats() {
   const out = { rigs: rigs.size };
   for (const [, s] of scenes) for (const k of KIND_NAMES) out[k] = (out[k] || 0) + s.batches[k].n;
   return out;
 }
+if (typeof window !== 'undefined') window.__plantFxStats = fxStats;
 
 // ------------------------------------------------------------------ rigs (one per view)
 

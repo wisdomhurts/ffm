@@ -410,7 +410,7 @@ function patch(mat, { rainbow = false, rim = 0, rimRainbow = false, glowPulse = 
   mat.defines = mat.defines || {};
   if (rainbow) mat.defines.PLANT_RAINBOW = '';
   if (rim > 0 || rimRainbow) mat.defines.PLANT_RIM = rim.toFixed(3);
-  if (rimRainbow) mat.defines.PLANT_RIM_RAINBOW = '';
+  if (rimRainbow) mat.defines.PLANT_RIM_RAINBOW = (rimRainbow === true ? 1.6 : rimRainbow).toFixed(3);
   if (glowPulse) mat.defines.PLANT_PULSE = '';
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = U.time;
@@ -430,10 +430,16 @@ vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
 float plantKeep = step(9.5, vGlow);
 float plantGlow = vGlow - plantKeep * 10.0;
 #ifdef PLANT_RAINBOW
+// Rainbow keeps the species' own colours and adds a slow iridescent hue wash plus a brighter band that
+// sweeps up the plant (and a rainbow rim, below), so a rainbow cactus still reads as a cactus.
+vec3 plantRb = plantHue(fract(uTime * 0.1 + vWPos.y * 0.22 + (vWPos.x + vWPos.z) * 0.035));
+float plantBand = pow(0.5 + 0.5 * sin(vWPos.y * 2.4 - uTime * 2.2 + (vWPos.x - vWPos.z) * 0.45), 4.0) * (1.0 - plantKeep);
 if (plantKeep < 0.5) {
-  float l = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-  vec3 rb = plantHue(fract(uTime * 0.22 + vWPos.y * 0.3 + (vWPos.x + vWPos.z) * 0.021));
-  diffuseColor.rgb = rb * rb * (0.4 + 1.1 * sqrt(l));
+  // hue-shift toward the rainbow at the base colour's own brightness, so stripes / spots / shading survive
+  vec3 lw = vec3(0.299, 0.587, 0.114);
+  float l = dot(diffuseColor.rgb, lw);
+  vec3 iri = min(plantRb * (0.04 + l * 1.25) / max(0.2, dot(plantRb, lw)), vec3(1.0));
+  diffuseColor.rgb = mix(diffuseColor.rgb, iri, 0.45 + 0.3 * plantBand);
 }
 #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -442,12 +448,15 @@ totalEmissiveRadiance += diffuseColor.rgb * plantGlow * (0.8 + 0.2 * sin(uTime *
 #else
 totalEmissiveRadiance += diffuseColor.rgb * plantGlow;
 #endif
+#ifdef PLANT_RAINBOW
+totalEmissiveRadiance += plantRb * plantBand * 0.3;
+#endif
 #ifdef PLANT_RIM
 {
   float ndv = abs(dot(normal, normalize(vViewPosition)));
   float rim = pow(1.0 - ndv, 3.0);
   #ifdef PLANT_RIM_RAINBOW
-  totalEmissiveRadiance += plantHue(fract(uTime * 0.3 + vWPos.y * 0.2 + vWPos.x * 0.05)) * rim * 1.6;
+  totalEmissiveRadiance += plantHue(fract(uTime * 0.3 + vWPos.y * 0.2 + vWPos.x * 0.05)) * rim * PLANT_RIM_RAINBOW;
   #else
   totalEmissiveRadiance += (diffuseColor.rgb * 0.7 + vec3(0.05)) * rim * PLANT_RIM;
   #endif
@@ -507,7 +516,7 @@ export function plantMat(kind, mutation = 'normal', secret = false) {
       }), { rim: 0.8, rimRainbow });
     }
     return patch(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), {
-      rainbow: mutation === 'rainbow', rim: mutation === 'rainbow' ? 0.4 : 0.28, rimRainbow,
+      rainbow: mutation === 'rainbow', rim: 0.28, rimRainbow: rimRainbow || (mutation === 'rainbow' && 1.1),
     });
   });
 }

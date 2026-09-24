@@ -1,7 +1,7 @@
 // Dev gallery for the plant module: every species grown, growth stages, mutations, seeds per rarity,
 // every biome's pod with a seed, and carried pots. Build:
 //   node build.mjs --entry src/plants/dev/gallery.js --out <dir>
-// window.__gallery.view(name) jumps the camera to a section: all | grid | grid2 | stages | mut | seeds | pods | carry | secret
+// window.__gallery.view(name) jumps the camera to a section: all | grid | grid2 | stages | mut | seeds | pods | carry | secret | rainbow | tiers
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { PLANTS, RARITIES, RARITY } from '../../config.js';
@@ -181,6 +181,19 @@ if (want('carry')) {
   views.push(s);
 }
 
+// Rainbow mutation keeps species identity (z = 56): normal vs rainbow pairs
+if (want('rainbow')) ['daisy', 'cactus', 'mushroom'].forEach((sid, i) => {
+  ['normal', 'rainbow'].forEach((m, j) => addPlant(sid, m, 1, 16 - i * 13 - j * 6, 56, `${PLANTS.find((p) => p.id === sid).name}<br>${m}`));
+});
+
+// Size by rarity (z = 72): one row, commons on the left, secrets on the right; labels show the grown height.
+const TIER_ROW = ['daisy', 'sunflower', 'clover', 'tater', 'aloe', 'flytrap', 'glowcap', 'phoenixfern', 'lavalily', 'moonmelon', 'starlotus', 'micahmelon', 'dorianfruit'];
+if (want('tiers')) TIER_ROW.forEach((sid, i) => {
+  const sp = PLANTS.find((p) => p.id === sid);
+  const v = addPlant(sid, 'normal', 1, 33.6 - i * 5.6, 72);
+  label(`${sp.name}<br><span style="color:${rcol(sp.rarity)}">${RARITY[sp.rarity].name}</span><br>${v.topY.toFixed(2)}`, [33.6 - i * 5.6, 1.2 + v.topY + 1.2, 72]);
+});
+
 // Secret showcase (z = 40)
 if (want('secret')) ['dorianfruit', 'estherlotus', 'maddiemarigold', 'micahmelon'].forEach((sid, i) => addPlant(sid, 'normal', 1, 12 - i * 8, 40, PLANTS.find((p) => p.id === sid).name));
 
@@ -215,6 +228,10 @@ const PRESETS = {
   podsR: [[-12, 6.5, -68], [-12, 2.2, -56]],
   carry: [[-4, 11, -88], [-4, 5, -70]],
   secret: [[0, 11, 24], [0, 3, 40]],
+  rainbow: [[-3, 11, 36], [-3, 2.8, 56]],
+  tiers: [[0, 4.5, 31], [0, 3.6, 72]],
+  tiersL: [[21, 5, 56], [21, 3, 72]],
+  tiersR: [[-21, 5, 56], [-21, 3.2, 72]],
   far: [[0, 40, -60], [0, 2, 3]],
 };
 function view(name) {

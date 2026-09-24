@@ -114,6 +114,8 @@ function avatarState(name, time, i) {
     case 'swing': s.swing = opts.swing != null ? opts.swing : (time % 1.1) / 0.35 <= 1 ? (time % 1.1) / 0.35 : -1; break;
     // one swing from the back at t = 2.2 s, then the ready hold and the holster (use settle=<seconds>)
     case 'draw': s.swing = time >= 2.2 && time <= 2.55 ? (time - 2.2) / 0.35 : -1; s.speed = +opts.speed || 0; break;
+    // ...and a second swing at 4.05 s that interrupts the holster
+    case 'redraw': s.swing = time >= 2.2 && time <= 2.55 ? (time - 2.2) / 0.35 : time >= 4.05 && time <= 4.4 ? (time - 4.05) / 0.35 : -1; break;
     case 'stunned': s.stunned = true; break;
     case 'celebrate': s.celebrating = true; break;
     case 'steal': s.interacting = 'Steal'; break;
