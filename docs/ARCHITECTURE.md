@@ -112,7 +112,9 @@ The placeholder file for each module documents its exact exported API at the top
 * `characters/avatar.js` → `createAvatar(charDef, faceImage, skinHex)`; `characters/monsters.js` → `createMonster(type)`.
 * `plants/plantMeshes.js` → `createPlantView`, `createSeedView`, `createCarriedPlantView`, `createPodView`.
 * `fx/effects.js` → `createEffects(engine, container)` (+ `attach(game)`); `fx/props.js` → `createBanana`, `createBalloon`, `createNoodle`.
-* `audio/audio.js` → `audio` singleton.
+* `audio/audio.js` → `audio` singleton (`unlock, attach, setMusicMode, play, update, setMuted`). Named sounds for
+  `audio.play(name, opts)`: UI `click`, `hover`, `error`, `shopBell`, `confetti`; gameplay `coins {amount}`,
+  `grab {tier, mutation}`, `purchase`, `speedUp`, `unlock`, `rebirth`, `event {type}`; pass `{x, z}` for positional sounds.
 * `ui/*` → `injectStyles()`, `createHUD(app)`, `createMenus(app)`, `createTouchControls(app)`.
 * `ai/bot.js` → `new BotController(personality, difficultyId)` with `getIntent(game, player, dt)`.
 
