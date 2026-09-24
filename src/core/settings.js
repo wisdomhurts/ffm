@@ -6,7 +6,7 @@ const DEFAULTS = {
   music: 0.6,
   sfx: 0.8,
   quality: 'auto', // 'low' | 'medium' | 'high' | 'auto'
-  difficulty: 'normal', // 'chill' | 'normal' | 'chaos'
+  difficulty: 'chill', // 'chill' | 'normal' | 'chaos' (Chill is kindest for a first game)
   camSensitivity: 1,
   invertY: false,
   autoRotate: true,

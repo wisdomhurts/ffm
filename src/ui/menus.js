@@ -13,8 +13,8 @@ import { buildPhotoBooth } from './photobooth.js';
 import { buildHowTo } from './howto.js';
 
 const DIFF_DESC = {
-  chill: 'Relaxed family: they steal less and run a bit slower.',
-  normal: 'A fair fight. Guard your garden!',
+  chill: 'Best for your first game: the family goes easy on you.',
+  normal: 'A real contest. Guard your garden!',
   chaos: 'Fast, sneaky and bonk-happy. Good luck!',
 };
 
