@@ -101,6 +101,15 @@ export class Engine {
     let next = cur;
     if (avg > 1 / 40) next = Math.max(0.75, cur - 0.25);
     else if (avg < 1 / 55) next = Math.min(max, cur + 0.25);
+    // last resort on slow devices: turn real-time shadows off (one-time shader rebuild)
+    if (avg > 1 / 32 && cur <= 0.76 && this.renderer.shadowMap.enabled && (this._slowStreak = (this._slowStreak || 0) + 1) >= 2) {
+      this.renderer.shadowMap.enabled = false;
+      this.sun.castShadow = false;
+      this.scene.traverse((o) => {
+        const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+        for (const m of mats) m.needsUpdate = true;
+      });
+    } else if (avg <= 1 / 32) this._slowStreak = 0;
     if (Math.abs(next - cur) > 0.01) {
       this.pixelRatio = next;
       this.renderer.setPixelRatio(next);
