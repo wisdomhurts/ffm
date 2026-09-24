@@ -94,16 +94,29 @@ export function seedTemplate(speciesId, mutation = 'normal') {
   return t;
 }
 
-// Display scale so every grown plant fills its 4.8-stud planter nicely: taller/wider rarities get more room.
-const FIT = [[4.9, 2.2], [4.9, 2.2], [4.9, 2.2], [5.0, 2.2], [5.1, 2.25], [5.5, 2.35], [5.9, 2.45]];
+// Display scale: every grown plant fills its 4.8-stud planter, and rarer plants stand taller. Per rarity tier:
+// hmax = tallest it may get, rmax = radius that fits the planter nicely, hmin = height it should reach (Epic+ tower
+// over the commons), kmax = scale cap. A squat species may spill over the planter edge a little (up to R_HARD)
+// to reach hmin; beyond that its model itself is built taller (melon pedestal, tater leaf crown, lotus stem...).
+const FIT = [
+  { hmax: 4.9, rmax: 2.2, hmin: 0, kmax: 1.45 },
+  { hmax: 4.9, rmax: 2.2, hmin: 4.2, kmax: 1.45 },
+  { hmax: 4.9, rmax: 2.2, hmin: 4.3, kmax: 1.45 },
+  { hmax: 5.4, rmax: 2.3, hmin: 4.9, kmax: 1.6 },
+  { hmax: 6.0, rmax: 2.4, hmin: 5.4, kmax: 1.9 },
+  { hmax: 6.6, rmax: 2.5, hmin: 6.0, kmax: 1.9 },
+  { hmax: 7.1, rmax: 2.6, hmin: 6.5, kmax: 1.9 },
+];
+const R_HARD = 2.75;
 const fitCache = new Map();
 export function plantScale(speciesId) {
   const sp = speciesOf(speciesId);
   let k = fitCache.get(sp.id);
   if (k == null) {
     const t = plantTemplate(sp.id, 'normal', 3);
-    const [hmax, rmax] = FIT[tierOf(sp)];
-    k = Math.max(1.05, Math.min(1.45, hmax / t.height, rmax / t.radius));
+    const f = FIT[tierOf(sp)];
+    const kr = Math.max(f.rmax / t.radius, Math.min(R_HARD / t.radius, f.hmin / t.height));
+    k = Math.max(1.05, Math.min(f.kmax, f.hmax / t.height, kr));
     fitCache.set(sp.id, k);
   }
   return k;

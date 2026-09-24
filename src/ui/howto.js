@@ -2,13 +2,16 @@
 import { RARITIES, BIOMES, MUTATIONS, EVENTS, PLANTERS, LOCK } from '../config.js';
 import { h } from './dom.js';
 import { ICON, ITEM_ICONS, NOODLE, EVENT_ICON } from './icons.js';
+import { isTouch } from './device.js';
 
-const LOOP = [
+const act = () => (isTouch() ? 'Action' : 'E');
+
+const LOOP = () => [
   [ICON.sprout, 'Grab a seed', 'Run up the Seed Road. Further = rarer.'],
   [ICON.home, 'Run it home', 'Walk into your garden. It plants itself.'],
   [ICON.coin, 'Collect cash', 'Grown plants pay every second. Step on COLLECT.'],
   [ICON.bolt, 'Get faster', 'Train at the Speed Shop to reach rarer biomes.'],
-  [ICON.eye, 'Steal!', "Hold E on a family member's grown plant, then run home."],
+  [ICON.eye, 'Steal!', `Hold ${act()} on a family member's grown plant, then run home.`],
   [ICON.lock, 'Lock up', `Step on LOCK: nobody else gets in for ${LOCK.duration}s.`],
 ];
 
@@ -18,20 +21,22 @@ const CONTROLS = [
   [ICON.gamepad, 'Gamepad', [['Left stick', 'Move'], ['Right stick', 'Camera'], ['A', 'Jump'], ['B', 'Grab / hold to Steal'], ['X', 'Bonk'], ['Y', 'Use item'], ['LB / RB', 'Pick item'], ['Start', 'Menu']]],
 ];
 
-const TIPS = [
+const TIPS = () => [
   'Road monsters only chase players carrying something. Bonk monsters BEFORE you grab. You can\'t swing while carrying.',
   'Bonk a thief to make them drop your plant. It flies straight home.',
   'Banana peels and water balloons make runners drop what they carry.',
   `You start with ${PLANTERS.startUnlocked} planters. Walk up to a locked one to unlock more.`,
-  'Garden full? Hold E on a grown plant to sell it for 90 seconds of income.',
+  `Garden full? Hold ${act()} on a grown plant to sell it for 90 seconds of income.`,
   'Rebirth at the altar for a permanent income boost and a crown star.',
 ];
 
 export function buildHowTo() {
   const sec = (title, icon, ...kids) => h('section', { class: 'ht-sec' }, h('h3', { html: `<span class="bi">${icon}</span>${title}` }), ...kids);
-  const loop = h('ol', { class: 'ht-loop' }, LOOP.map(([ic, t, d], i) =>
+  const loop = h('ol', { class: 'ht-loop' }, LOOP().map(([ic, t, d], i) =>
     h('li', { style: `--d:${i * 60}ms` }, h('span', { class: 'hl-n', text: String(i + 1) }), h('span', { class: 'hl-ic', html: ic }), h('b', { text: t }), h('span', { text: d }))));
-  const controls = h('div', { class: 'ht-controls' }, CONTROLS.map(([ic, name, rows]) =>
+  // touch players see their own controls first
+  const ctl = isTouch() ? [CONTROLS[1], CONTROLS[0], CONTROLS[2]] : CONTROLS;
+  const controls = h('div', { class: 'ht-controls' }, ctl.map(([ic, name, rows]) =>
     h('div', { class: 'ht-ctl' }, h('h4', { html: `<span class="bi">${ic}</span>${name}` }),
       h('dl', {}, rows.map(([k, v]) => [h('dt', {}, h('kbd', { text: k })), h('dd', { text: v })])))));
   const biomeFor = (r) => (r.id === 'secret' ? 'Starbloom (super rare)' : BIOMES.find((b) => b.rarity === r.id)?.name || '');
@@ -52,7 +57,7 @@ export function buildHowTo() {
     sec('Mutations', ICON.diamond, h('p', { class: 'ht-p', text: 'Some seeds spawn mutated and pay extra.' }), muts),
     sec('Weather', ICON.sun, h('p', { class: 'ht-p', text: 'Every few minutes the sky changes for 60 seconds.' }), weather),
     sec('Items', ICON.shop, items),
-    sec('Tips', ICON.target, h('ul', { class: 'ht-tips' }, TIPS.map((t) => h('li', { text: t })))));
+    sec('Tips', ICON.target, h('ul', { class: 'ht-tips' }, TIPS().map((t) => h('li', { text: t })))));
 }
 
 function itemLine(id) {

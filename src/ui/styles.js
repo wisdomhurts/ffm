@@ -286,8 +286,8 @@ html.menu-screen .labels-layer{visibility:hidden}
 .pp-ring .fg{stroke:var(--rc);stroke-linecap:round}
 .pp-k{width:36px;height:36px;border-radius:50%;background:#fff;color:var(--ink);font:var(--fdw) 21px/37px var(--fd);text-align:center;box-shadow:0 3px 0 rgba(0,0,0,.35)}
 .pp-k:empty{display:none}
-.prompt.touch .pp-k{display:none}
-.prompt.touch .pp-key{width:40px;height:40px}
+.prompt.tp .pp-k{display:none}
+.prompt.tp .pp-key{width:40px;height:40px}
 .pp-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
 .pp-top{display:flex;align-items:center;gap:7px}
 .pp-verb{font:var(--fdw) 23px/1 var(--fd);letter-spacing:.02em;text-shadow:0 2px 0 rgba(0,0,0,.4)}
@@ -531,10 +531,13 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .modal-panel.shop{width:min(820px,100%)}
 .modal-panel.settings{width:min(620px,100%)}
 .modal-panel.shop-speed,.modal-panel.shop-rebirth{width:min(640px,100%)}
-.modal-x{position:absolute;right:12px;top:12px;z-index:3;width:44px;height:44px;padding:10px;border-radius:50%;border:3px solid var(--ink);color:#fff;cursor:pointer;
+/* the X sticks to the top of the scrolling panel, so it never scrolls out of reach */
+.modal-x{position:sticky;top:0;float:right;margin:-6px -10px -44px 8px;z-index:3;width:44px;height:44px;padding:10px;border-radius:50%;border:3px solid var(--ink);color:#fff;cursor:pointer;
   background:linear-gradient(180deg,#ff6b80,#dc2548);box-shadow:inset 0 2px 0 rgba(255,255,255,.3),0 4px 0 var(--ink);transition:transform .14s var(--spring)}
 .modal-x:hover{transform:rotate(90deg) scale(1.05)}
 .mh{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding-right:52px}
+.modal-done{display:flex;justify-content:center;margin-top:16px}
+.modal-done .btn{min-width:min(260px,100%)}
 .mh h2{margin:0;font:var(--fdw) 30px/1 var(--fd);letter-spacing:.02em;text-shadow:var(--o1)}
 .mh-ic{width:46px;height:46px;flex:none;border-radius:14px;padding:9px;display:grid;place-items:center;background:linear-gradient(180deg,#5cb8ff,#2a6fe6);border:3px solid var(--ink);--ico-hole:#2a6fe6}
 
@@ -1043,6 +1046,65 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .pause-btns .btn-lg{grid-column:1/-1}
   .pause-me{display:none}
   .modal-panel{max-height:100%}
+}
+
+/* ------------------------------------------------------------ touch + small-screen polish */
+/* tap targets: 44px minimum on touch screens (the Skip pill grows an invisible border instead) */
+.is-touch .hbtn{width:44px;height:44px}
+.is-touch .tut-skip{border:9px solid transparent;background-clip:padding-box;margin:-9px -8px;padding:6px 9px;font-size:12px;line-height:14px}
+.is-touch .link{padding:15px 10px}
+.is-touch .title-small .btn,.is-touch .pb-btns .btn,.is-touch .seg-b{min-height:44px}
+.is-touch .btn-round,.is-touch .scr-head .btn-round{width:44px;height:44px}
+.is-touch .gc-key{display:none}
+/* readable minimums */
+.tut-dist{font-size:11px}
+.pp-how{font-size:11px}
+.sr-you span{font-size:10.5px;letter-spacing:0}
+/* touch tablets: keep the road meter clear of the Action button */
+@media (min-width:761px) and (min-height:501px){.is-touch .meter{bottom:calc(var(--sb) + 284px)}}
+@media (max-width:640px){
+  .br-val{font-size:12px}
+  /* leave the right-hand column to the road meter */
+  .hud-top{width:calc(100% - 84px);left:calc(50% - 26px)}
+  .set-row .seg{display:flex;width:100%}
+  .set-row .seg-b{flex:1;padding-left:6px;padding-right:6px}
+  /* the Showdown board is a row taller */
+  .hud:has(.board.showdown) .tut{top:calc(var(--st) + 162px)}
+  .hud:has(.board.showdown) .hud-top{top:calc(var(--st) + 176px)}
+  .hud:has(.board.showdown):has(.tut:not(.gone):not(.hidden):not(.wait)) .hud-top{top:calc(var(--st) + 226px)}
+  .hud:has(.carry.show) .alerts .alert:nth-child(n+2){display:none}
+}
+/* short phones (portrait) */
+@media (max-width:640px) and (max-height:740px){
+  .chat{display:none}
+  .alerts .alert:nth-child(n+2){display:none}
+  .meter{top:calc(var(--st) + 232px);bottom:calc(var(--sb) + 290px)}
+}
+@media (max-height:500px) and (orientation:landscape){
+  .cc-title{font-size:11px}
+  .br-val{font-size:12px}
+  .hud:has(.carry.show) .alerts .alert:nth-child(n+2){display:none}
+  /* photo booth editor: stage sized to the screen, zoom + actions beside it */
+  .pb-editor{display:grid;grid-template-columns:auto minmax(0,1fr);grid-auto-rows:auto;column-gap:16px;row-gap:8px;align-items:start}
+  .pb-editor > .mh{grid-column:1/-1;margin:0}
+  .pb-work{display:contents}
+  .pb-stage{grid-column:1;grid-row:2/span 4;width:calc(100vh - 120px);max-width:none}
+  .pb-side{grid-column:2;grid-row:2;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px}
+  .pb-prev{width:76px;height:76px}
+  .pb-prev-wrap span{display:none}
+  .pb-tips{font-size:12px;line-height:1.4}
+  .pb-zoom{grid-column:2;grid-row:3;margin:0;justify-content:flex-start}
+  #ui .pb-zoom input[type=range]{width:100%}
+  .pb-editor > .pb-msg{grid-column:2;margin:0}
+  .pb-actions{grid-column:2;justify-content:flex-start;flex-wrap:wrap}
+}
+/* very short landscape phones (e.g. 667x375) */
+@media (max-height:400px) and (orientation:landscape){
+  .alerts .alert:nth-child(n+2){display:none}
+  .hud-tl{width:222px}
+  .tut{width:212px;max-width:212px}
+  .hud-top{left:calc(var(--sl) + 228px);right:calc(var(--sr) + 176px);width:auto;min-width:0;max-width:none;transform:none}
+  .stick-idle{left:calc(var(--sl) + 104px)}
 }
 
 /* ------------------------------------------------------------ keyframes */

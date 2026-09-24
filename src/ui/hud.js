@@ -17,6 +17,35 @@ import { createNextGoal } from './goal.js';
 import { guidePoint } from './route.js';
 import { isTouch, onTouchChange } from './device.js';
 
+// HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
+// finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
+// `when` 'down' fires on press (hotbar), 'up' on release over the button (pause/mute). Keyboard
+// activation (Enter/Space, a click with detail 0) still works.
+function onPress(el, fn, when = 'down') {
+  let armed = null;
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    if (when === 'down') fn(e);
+    else {
+      armed = e.pointerId;
+      el.setPointerCapture?.(e.pointerId);
+    }
+  });
+  if (when === 'up') {
+    el.addEventListener('pointerup', (e) => {
+      if (e.pointerId !== armed) return;
+      armed = null;
+      const r = el.getBoundingClientRect();
+      if (e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) fn(e);
+    });
+    el.addEventListener('pointercancel', () => (armed = null));
+  }
+  el.addEventListener('click', (e) => {
+    if (e.detail === 0) fn(e);
+  });
+}
+
 export function createHUD(app) {
   const game = app.game;
   const me = app.human;
@@ -94,14 +123,14 @@ function createMenuButtons(app, parent) {
     mute.classList.toggle('off', m);
   };
   paint();
-  pause.addEventListener('click', () => {
+  onPress(pause, () => {
     uiSound(app, 'click');
     app.pause();
-  });
-  mute.addEventListener('click', () => {
+  }, 'up');
+  onPress(mute, () => {
     setMuted(app, !settings.muted);
     paint();
-  });
+  }, 'up');
   const off = bus.on('settings:changed', ({ key }) => (key === 'muted' || key === 'music' || key === 'sfx') && paint());
   parent.appendChild(h('div', { class: 'hud-btns' }, pause, mute));
   return { dispose: off };
@@ -317,7 +346,7 @@ function createPrompt(app, parent, me) {
       }
       const dev = app.input.lastDevice;
       setText(key, dev === 'gamepad' ? 'B' : dev === 'touch' || isTouch() ? '' : 'E');
-      toggle(el, 'touch', dev === 'touch' || (isTouch() && dev !== 'keyboard' && dev !== 'gamepad'));
+      toggle(el, 'tp', dev === 'touch' || (isTouch() && dev !== 'keyboard' && dev !== 'gamepad'));
       setText(verb, it.verb || 'Use');
       // every hold gets the ring (even the quick 0.25 s grab); only real holds get the HOLD tag
       const hold = it.hold > 0;
@@ -404,7 +433,7 @@ function createHotbar(app, parent, me) {
     const timer = h('span', { class: 'hb-timer' });
     const b = noFocus(h('button', { class: 'slot', type: 'button', 'aria-label': `${it.name} (key ${it.key})`, title: `${it.name}: ${it.desc}` },
       h('span', { class: 'hb-k', text: it.key }), h('span', { class: 'hb-ic', html: ITEM_ICONS[it.id] }), count, timer));
-    b.addEventListener('click', () => {
+    onPress(b, () => {
       app.input.tap('item', i);
       b.classList.remove('press');
       void b.offsetWidth;

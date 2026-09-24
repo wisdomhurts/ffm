@@ -107,6 +107,9 @@ function rock(b, p, s, c = '#8d8a86', seed = 1, o = {}) {
   b.add(P.blob(seed, 0.22, 0), { p, s: [s, s * 0.7, s], c, c2: shade(c, 0.15), gy: [-1, 1], r: [0, seed, 0], cf: o.cf });
 }
 
+// Lotus bloom height: the bloom rises well above its pads (Esther's secret lotus the tallest).
+const lotusStem = (o) => (o.sid === 'estherlotus' ? 2.05 : 1.8);
+
 // ------------------------------------------------------------------ seed shape (seed views + stage 0)
 
 const SEED_PROFILE = [[0, 0], [0.28, 0.05], [0.44, 0.24], [0.47, 0.5], [0.38, 0.8], [0.2, 1.02], [0, 1.12]];
@@ -526,7 +529,7 @@ export const LOOKS = {
       const lf = mixCol(o.c1, '#4fc23a', 0.7), spud = o.c0;
       const sc = o.bud ? 0.75 : 1;
       // bushy potato top: round leaves in clusters on short stems, behind the spud
-      const clusters = [[0, 2.1, -0.45], [-0.8, 1.6, -0.3], [0.8, 1.7, -0.35], [-0.5, 1.35, 0.25], [0.5, 1.3, 0.2]];
+      const clusters = [[0, 2.75, -0.45], [-0.78, 2.1, -0.3], [0.78, 2.25, -0.35], [-0.5, 1.7, 0.2], [0.5, 1.62, 0.15]];
       clusters.forEach(([x, y, z], i) => {
         y *= sc;
         stem(b, [[x * 0.15, 0.05, z * 0.3 - 0.2], [x * 0.6, y * 0.55, z * 0.7 - 0.1], [x, y, z]], 0.07, 0.05, shade(lf, -0.25), { segs: 3, radial: 4 });
@@ -537,9 +540,9 @@ export const LOOKS = {
         b.add(P.sphere(5, 3), { p: [x, y + 0.02, z], s: [0.5 * sc, 0.3 * sc, 0.5 * sc], c: shade(lf, -0.15), c2: lf, gy: [-1, 1] });
       });
       if (!o.bud) {
-        smallFlower(b, [0, 2.36, -0.4], 0.28, '#f1e3ff', '#ffd23f', 5, 0.3);
-        smallFlower(b, [-0.8, 1.86, -0.3], 0.26, '#ffffff', '#ffd23f', 5, 0.5, -0.5);
-        smallFlower(b, [0.82, 1.96, -0.35], 0.26, '#e6d0ff', '#ffd23f', 5, 0.5, 0.6);
+        smallFlower(b, [0, 3.01, -0.4], 0.3, '#f1e3ff', '#ffd23f', 5, 0.3);
+        smallFlower(b, [-0.78, 2.36, -0.3], 0.27, '#ffffff', '#ffd23f', 5, 0.5, -0.5);
+        smallFlower(b, [0.8, 2.51, -0.35], 0.27, '#e6d0ff', '#ffd23f', 5, 0.5, 0.6);
       }
       const spots = (x, y, z, i) => (hash(i * 1.7) > 0.84 ? shade(spud, -0.3) : null);
       b.add(P.blob(9, 0.12, 0), { p: [-0.95, 0.12, 0.5], r: [0.3, 0.5, 0.4], s: [0.34, 0.26, 0.3], c: spud, cf: spots });
@@ -696,8 +699,8 @@ export const LOOKS = {
     lookAll: true,
     leaf: () => '#8f7fd0',
     fx: (o) => [
-      { kind: 'halo', p: [0, 2.2, 0], size: 4.2, color: o.c0, opacity: 0.35 },
-      { kind: 'sparkle', mode: 'rise', color: o.c0, count: 10, rx: 1.3, h: 3.6, y0: 0, size: 0.16, star: false },
+      { kind: 'halo', p: [0, 2.5, 0], size: 4.2, color: o.c0, opacity: 0.35 },
+      { kind: 'sparkle', mode: 'rise', color: o.c0, count: 10, rx: 1.3, h: 3.8, y0: 0, size: 0.16, star: false },
     ],
     build(b, o) {
       const glow = o.c0, dark = o.c1;
@@ -724,7 +727,7 @@ export const LOOKS = {
         }
         if (fx) face(b, fx, [x + Math.sin(lean * 0.5) * h * 0.45, h * 0.45, z + r * 0.35 + Math.sin(lean) * h * 0.45], r * 0.7, r * 0.5);
       };
-      shroom(0, 0, 2.4, 1.05, o.bud ? 'sleepy' : 'happy', 0);
+      shroom(0, 0, 2.75, 1.05, o.bud ? 'sleepy' : 'happy', 0);
       shroom(-1.0, 0.3, 1.5, 0.62, 'sleepy', -0.25);
       shroom(0.95, 0.4, 1.15, 0.52, 'joy', 0.3);
       shroom(0.45, -0.85, 0.7, 0.32, null, 0.2);
@@ -826,8 +829,8 @@ export const LOOKS = {
     glowy: true,
     leaf: (o) => o.c0,
     fx: (o) => [
-      { kind: 'halo', p: [0, 2.2, 0], size: 4.8, color: o.c0, opacity: 0.35 },
-      { kind: 'sparkle', mode: 'rise', color: o.c1, count: 14, rx: 1.5, h: 4.6, y0: 0.3, size: 0.18, star: false },
+      { kind: 'halo', p: [0, 2.4, 0], size: 4.8, color: o.c0, opacity: 0.35 },
+      { kind: 'sparkle', mode: 'rise', color: o.c1, count: 14, rx: 1.5, h: 5.0, y0: 0.3, size: 0.18, star: false },
     ],
     build(b, o) {
       const fire = o.c0, gold = o.c1;
@@ -836,10 +839,10 @@ export const LOOKS = {
       const n = 9;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * TAU + 0.1;
-        blade(b, { p: [Math.sin(a) * 0.2, 0.15, Math.cos(a) * 0.2], a, up: 1.05 + hash(i + 11) * 0.3, len: (2.3 + hash(i + 2) * 0.6) * sc, wid: 0.82 * sc, shape: 'feather', serrate: 0.4, segL: 8, bend: -0.5, cup: 0.15, c: '#b3180e', c2: fire, glow: 0.3, glow2: 0.75, cf: (x, y, z, i2) => (y > 0.8 ? [gold, 0.9] : null) });
+        blade(b, { p: [Math.sin(a) * 0.2, 0.15, Math.cos(a) * 0.2], a, up: 1.17 + hash(i + 11) * 0.3, len: (2.3 + hash(i + 2) * 0.6) * sc, wid: 0.82 * sc, shape: 'feather', serrate: 0.4, segL: 8, bend: -0.5, cup: 0.15, c: '#b3180e', c2: fire, glow: 0.3, glow2: 0.75, cf: (x, y, z, i2) => (y > 0.8 ? [gold, 0.9] : null) });
       }
       b.use('crest', [0, 0.3, 0]);
-      const H = o.bud ? 1.8 : 3.0;
+      const H = o.bud ? 1.8 : 3.5;
       for (let k = 0; k < 3; k++) {
         blade(b, { p: [0, 0.3, 0], a: (k / 3) * PI, up: PI / 2, len: H * (k === 0 ? 1 : 0.85), wid: 0.75, shape: 'flame', cup: 0.35, bend: 0.12, c: '#e0341a', c2: gold, glow: 0.6, glow2: 1 });
       }
@@ -860,15 +863,15 @@ export const LOOKS = {
 
   lotus: {
     leaf: () => '#2f9e6a',
-    fx: (o) => [{ kind: 'halo', p: [0, 2.2, 0], size: 4.2, color: o.c0, opacity: 0.3 }],
+    fx: (o) => [{ kind: 'halo', p: [0, lotusStem(o) + 0.85, 0], size: 4.2, color: o.c0, opacity: 0.3 }],
     build(b, o) {
       const p0 = o.c0, p1 = o.c1;
       const esther = o.sid === 'estherlotus';
       const pad = cachedGeo('lilyPad', () => new THREE.CylinderGeometry(1, 1, 0.08, 20, 1, false, 0.35, TAU - 0.7));
-      b.add(pad, { p: [0, 0.05, 0], r: [0, 0.4, 0], s: [1.9, 1, 1.9], c: '#2f8e5a', cf: (x, y, z) => (y > 0.03 ? (Math.hypot(x, z) > 0.7 ? '#4fc48a' : '#3fae72') : null) });
-      b.add(pad, { p: [1.2, 0.12, -1.0], r: [0, 2.4, 0], s: [0.9, 1, 0.9], c: '#3fae72' });
+      b.add(pad, { p: [0, 0.05, 0], r: [0, 0.4, 0], s: [1.75, 1, 1.75], c: '#2f8e5a', cf: (x, y, z) => (y > 0.03 ? (Math.hypot(x, z) > 0.7 ? '#4fc48a' : '#3fae72') : null) });
+      b.add(pad, { p: [1.1, 0.12, -0.92], r: [0, 2.4, 0], s: [0.85, 1, 0.85], c: '#3fae72' });
       const sc = o.bud ? 0.75 : 1;
-      const B = 1.35 * sc;
+      const B = lotusStem(o) * sc;
       stem(b, [[0, 0, 0], [0.05, B * 0.5, 0], [0, B, 0]], 0.13, 0.11, '#3f9e5a');
       if (o.bud) return bud(b, [0, B, 0], 0.62, p1, { tip: p0, glow: 0.2 });
       b.use('bloom', [0, B, 0]);
@@ -901,8 +904,8 @@ export const LOOKS = {
     sprout: 'vine',
     leaf: (o) => (o.sid === 'micahmelon' ? '#3f8f4a' : '#4a9f86'),
     fx: (o) => (o.sid === 'micahmelon' ? [] : [
-      { kind: 'halo', p: [0, 1.3, 0.1], size: 4.0, color: o.c0, opacity: 0.35 },
-      { kind: 'sparkle', mode: 'orbit', color: '#fff6c0', count: 6, rx: 1.7, h: 1.0, y0: 1.0, size: 0.32, star: true },
+      { kind: 'halo', p: [0, 2.3, 0.1], size: 4.0, color: o.c0, opacity: 0.35 },
+      { kind: 'sparkle', mode: 'orbit', color: '#fff6c0', count: 6, rx: 1.7, h: 1.0, y0: 2.0, size: 0.32, star: true },
     ]),
     build(b, o) {
       const micah = o.sid === 'micahmelon';
@@ -914,7 +917,14 @@ export const LOOKS = {
       b.add(P.torus(0.1, 3, 10, 4.6), { p: [1.4, 0.3, 0.45], r: [0.5, 0.3, 0], s: 0.22, c: lf });
       b.add(P.torus(0.1, 3, 10, 4.6), { p: [-1.5, 0.35, 0.2], r: [0.3, -0.6, 0.5], s: 0.2, c: lf });
       const R = (o.bud ? 0.55 : micah ? 1.2 : 1.12);
-      const cy = R * 0.95 + 0.05;
+      // leafy pedestal: a stout stalk and a saucer of broad leaves the melon sits in
+      const P0 = o.bud ? 0.55 : micah ? 1.35 : 1.15;
+      const cy = R * 0.95 + 0.05 + P0;
+      stem(b, [[0, 0, 0.05], [0.05, P0 * 0.5, 0.08], [0, P0 + 0.2, 0.1]], 0.26 * (R / 1.12), 0.2 * (R / 1.12), shade(lf, -0.2), { radial: 7, segs: 4 });
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU + 0.35;
+        blade(b, { p: [Math.sin(a) * 0.18, P0 + 0.02, 0.1 + Math.cos(a) * 0.18], a, up: 0.32, len: 1.05 * (R / 1.12), wid: 0.78 * (R / 1.12), shape: 'round', notch: 0.2, c: shade(lf, -0.2), c2: shade(lf, 0.2), bend: 0.45, cup: 0.35 });
+      }
       b.use('moon', [0, cy, 0.1], { look: true });
       if (micah) {
         const dark = shade(o.c0, -0.55);
@@ -935,8 +945,12 @@ export const LOOKS = {
           b.add(P.disc(8), { p: [p[0] + n[0] * 0.035, p[1] + n[1] * 0.035, p[2] + n[2] * 0.035], q, s: cr * R, c: mixCol(o.c0, o.c1, 0.7), glow: 0.1 });
         });
       }
-      stem(b, [[0, cy + R * 0.95, 0.05], [0.05, cy + R + 0.25, 0.0], [0.25, cy + R + 0.35, -0.05]], 0.07, 0.05, shade(lf, -0.2));
-      blade(b, { p: [0.05, cy + R + 0.22, 0.0], a: 1.4, up: 0.6, len: 0.5, wid: 0.42, shape: 'round', c: lf, c2: shade(lf, 0.2) });
+      // sprouting crown: a curly stem with three leaves
+      const top = cy + R;
+      stem(b, [[0, top - 0.08, 0.05], [0.05, top + 0.3, 0.0], [0.2, top + 0.58, -0.05]], 0.08, 0.05, shade(lf, -0.2));
+      [[1.3, 0.6, 0.62], [-1.6, 0.5, 0.55], [3.1, 0.75, 0.5]].forEach(([a, up, len]) =>
+        blade(b, { p: [0.05, top + 0.22, 0.0], a, up, len, wid: len * 0.82, shape: 'round', c: lf, c2: shade(lf, 0.2), bend: -0.1, cup: 0.2 }));
+      b.add(P.torus(0.12, 3, 10, 4.6), { p: [0.3, top + 0.7, -0.05], r: [0, 0.3, 0.5], s: 0.16, c: shade(lf, -0.1) });
       sphereFace(b, o.bud ? 'sleepy' : micah ? 'sneaky' : 'sleepy', [0, cy, 0.1], R, R * 0.92, 0.18);
       if (micah && !o.bud) {
         b.use('body');
@@ -995,19 +1009,20 @@ export const LOOKS = {
       const pink = o.c0, green = o.c1;
       const cg = shade(green, -0.3);
       const tri = { radial: 3, segs: 7, c2: shade(green, 0.05), gy: [0, 2.5] };
-      stem(b, [[0, 0, 0], [-0.25, 0.8, 0], [-0.85, 1.45, 0.1], [-1.35, 1.25, 0.35]], 0.24, 0.17, cg, tri);
-      stem(b, [[0, 0, 0], [0.3, 0.7, -0.1], [0.95, 1.25, -0.15], [1.4, 1.05, 0.2]], 0.24, 0.17, cg, tri);
-      stem(b, [[0, 0, 0], [0.05, 0.8, -0.1], [0, 1.4, 0.0]], 0.28, 0.24, cg, tri);
+      stem(b, [[0, 0, 0], [-0.25, 0.8, 0], [-0.8, 1.45, 0.1], [-1.2, 1.3, 0.35]], 0.24, 0.17, cg, tri);
+      stem(b, [[0, 0, 0], [0.3, 0.7, -0.1], [0.9, 1.25, -0.15], [1.25, 1.1, 0.2]], 0.24, 0.17, cg, tri);
+      const TR = o.bud ? 1.4 : 2.2; // central column
+      stem(b, [[0, 0, 0], [0.05, TR * 0.55, -0.1], [0, TR, 0.0]], 0.28, 0.24, cg, { ...tri, gy: [0, TR + 1.1] });
       if (!o.bud) {
-        b.frame(fm([-1.35, 1.3, 0.4], 1.0, -0.6));
+        b.frame(fm([-1.2, 1.35, 0.4], 1.0, -0.6));
         ring(b, 8, { r0: 0.1, up: 0.55, len: 0.7, wid: 0.34, shape: 'point', segL: 3, c: '#fff6e8', c2: '#ffffff', cup: 0.3, bend: -0.2, glow: 0.15 });
         ring(b, 6, { r0: 0.06, up: 1.0, len: 0.5, wid: 0.3, shape: 'point', segL: 2, c: '#fffbd0', c2: '#ffffff', cup: 0.3, off: 0.4, glow: 0.2 });
         b.add(P.sphere(5, 3), { p: [0, 0.12, 0], s: 0.1, c: '#ffe066', glow: 0.5 });
         b.frame(null);
       }
       const R = o.bud ? 0.55 : 0.92;
-      const cy = 1.3 + R * 1.05;
-      b.use('fruit', [0, 1.4, 0.05]);
+      const cy = TR - 0.1 + R * 1.05;
+      b.use('fruit', [0, TR, 0.05]);
       b.add(P.sphere(12, 9), { p: [0, cy, 0.05], s: [R, R * 1.18, R], c: shade(pink, -0.1), c2: shade(pink, 0.12), gy: [-1, 1] });
       const rows = [[0.55, 7, 0.5], [1.1, 8, 0.0], [1.75, 7, 0.3], [2.35, 6, 0.1]];
       rows.forEach(([ph, n, off]) => {
@@ -1029,11 +1044,11 @@ export const LOOKS = {
 
   marigold: {
     leaf: () => '#2f7a32',
-    fx: (o) => [{ kind: 'sparkle', mode: 'orbit', color: o.c1, count: 8, rx: 1.5, h: 1.6, y0: 2.2, size: 0.3, star: true }],
+    fx: (o) => [{ kind: 'sparkle', mode: 'orbit', color: o.c1, count: 8, rx: 1.5, h: 1.6, y0: 2.55, size: 0.3, star: true }],
     build(b, o) {
       const orange = o.c0, magic = o.c1;
-      const H = 2.55;
-      stem(b, [[0, 0, 0], [0.06, 0.9, 0.0], [-0.04, 1.8, 0.05], [0, H, 0.12]], 0.1, 0.08, '#3a8a36');
+      const H = 2.9;
+      stem(b, [[0, 0, 0], [0.06, 1.0, 0.0], [-0.04, 2.0, 0.05], [0, H, 0.12]], 0.11, 0.08, '#3a8a36');
       [[0.4, 0.4, 1.1], [0.7, 2.6, 1.0], [1.2, 1.3, 0.85], [1.6, 4.1, 0.8], [2.0, 5.5, 0.6]].forEach(([y, a, l]) =>
         blade(b, { p: [0, y, 0], a, up: 0.5, len: l, wid: 0.42, shape: 'feather', serrate: 0.5, segL: 6, c: '#2f7a32', c2: '#5aa84a', bend: -0.3, cup: 0.1 }));
       if (o.bud) return bud(b, [0, H, 0.12], 0.5, orange, { tip: magic });

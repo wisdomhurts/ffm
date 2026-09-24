@@ -139,7 +139,13 @@ export function createMenus(app) {
     const m = openModal(pb.el, { cls: 'booth', label: 'Photo Booth' });
     m.dispose = pb.dispose;
   };
-  const openHowTo = () => openModal(buildHowTo(), { cls: 'howto', label: 'How to play' });
+  // a big Done button at the bottom of long panels (the X is at the top, a long scroll away)
+  const doneRow = (onDone) => h('div', { class: 'modal-done' }, btn(iconLabel(ICON.check, 'Done'), 'btn-green btn-lg', onDone));
+  const openHowTo = () => {
+    const body = buildHowTo();
+    const m = openModal(body, { cls: 'howto', label: 'How to play' });
+    body.appendChild(doneRow(() => m.close()));
+  };
 
   // ------------------------------------------------------------------ title
 
@@ -342,6 +348,7 @@ export function createMenus(app) {
     app.touch?.setVisible(false);
     bus.emit('app:state', { state: 'shop' });
     const shop = buildShop(app, kind, () => shopModal?.close());
+    shop.el.appendChild(doneRow(() => shopModal?.close()));
     const m = openModal(shop.el, {
       cls: 'shop shop-' + kind, label: shop.title, kind: 'shop',
       onClose: () => {

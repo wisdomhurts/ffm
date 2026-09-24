@@ -26,7 +26,7 @@ export function buildPlaza(ctx) {
   // camera-only box around a palm crown / umbrella (out of the players' reach, so physics and bots ignore it)
   const canopy = (x, z, hw, y0, y1) => ctx.colliders.push({ minX: x - hw, maxX: x + hw, minY: 1e4, maxY: 1e4, camMinY: y0, camMaxY: y1, minZ: z - hw, maxZ: z + hw, tag: 'canopy' });
   const flames = [];
-  const lights = []; // [x, z, radius]: warm pools of light under lamps and torches at night
+  const lights = []; // [x, z, pool radius, halo y, halo size]: lamp and torch light at night
 
   // ---------------------------------------------------------------- baseplate + paths
   const I = ISLAND;
@@ -80,7 +80,7 @@ export function buildPlaza(ctx) {
   for (const [x, z] of [[-27, 0], [27, 0], [-27, 42], [27, 42], [-27, -42], [27, -42], [-45, -49], [45, -49]]) {
     lamp(props, glow, x, z, { light: '#fff0b8' });
     solid(x, z, 0.55, 0.55, 9);
-    lights.push([x, z, 4.4]);
+    lights.push([x, z, 4.4, 7.6, 3.4]);
   }
   // tiki torches on each garden's fence line, beside the gate (inside the fence collider)
   for (const g of layout.gardens) flames.push(tikiTorch(props, g.gate.x, g.center.z - 9.2));
@@ -88,7 +88,7 @@ export function buildPlaza(ctx) {
     flames.push(tikiTorch(props, x, z, { h: 5.4 }));
     solid(x, z, 0.35, 0.35, 6);
   }
-  for (const [x, , z] of flames) lights.push([x, z, 3.6]);
+  for (const [x, y, z] of flames) lights.push([x, z, 3.6, y + 0.6, 2.8]);
 
   // fountain (north-west strip) with a golden seed statue
   const F = { x: -46, z: 53 };
@@ -300,15 +300,21 @@ export function buildPlaza(ctx) {
   group.add(pools);
   add(beach.build(mats.flat, { name: 'beach-props' }));
 
-  // flickering torch flames (instanced)
-  const flameGeo = new THREE.ConeGeometry(0.42, 1.5, 7).translate(0, 0.6, 0);
-  const flameCol = new THREE.Color(0xffa630), innerCol = new THREE.Color(0xfff2a0);
-  const flameMat = new THREE.MeshBasicMaterial({ color: flameCol });
-  const innerMat = new THREE.MeshBasicMaterial({ color: innerCol });
+  // flickering torch flames (one instanced cone, hot yellow at the base fading to orange at the tip)
+  const flameGeo = new THREE.ConeGeometry(0.42, 1.5, 7, 3).translate(0, 0.6, 0);
+  {
+    const P = flameGeo.attributes.position, col = new Float32Array(P.count * 3);
+    const base = new THREE.Color(0xfff2a0), tip = new THREE.Color(0xff7a1a), c = new THREE.Color();
+    for (let i = 0; i < P.count; i++) {
+      c.copy(base).lerp(tip, THREE.MathUtils.clamp((P.getY(i) + 0.15) / 1.5, 0, 1) ** 0.8);
+      c.toArray(col, i * 3);
+    }
+    flameGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  }
+  const flameMat = new THREE.MeshBasicMaterial({ vertexColors: true });
   const flameMesh = new THREE.InstancedMesh(flameGeo, flameMat, flames.length);
-  const innerMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(0.24, 0.9, 6).translate(0, 0.4, 0), innerMat, flames.length);
   flameMesh.name = 'flames';
-  group.add(flameMesh, innerMesh);
+  group.add(flameMesh);
   const fm = new THREE.Matrix4(), fq = new THREE.Quaternion(), fp = new THREE.Vector3(), fs = new THREE.Vector3(), fe = new THREE.Euler();
 
   let lastNight = -1;
@@ -319,8 +325,7 @@ export function buildPlaza(ctx) {
       if (night !== lastNight) {
         lastNight = night;
         bulbMat.color.setScalar(1 + 1.6 * night);
-        flameMat.color.copy(flameCol).multiplyScalar(1 + 1.3 * night);
-        innerMat.color.copy(innerCol).multiplyScalar(1 + 1.3 * night);
+        flameMat.color.setScalar(1 + 1.3 * night);
         pools.visible = night > 0.01;
       }
       if (pools.visible) pools.material.opacity = 0.35 * night * (0.93 + 0.07 * Math.sin(t * 9));
@@ -333,18 +338,15 @@ export function buildPlaza(ctx) {
         fs.set(1, k, 1);
         fm.compose(fp, fq, fs);
         flameMesh.setMatrixAt(i, fm);
-        fs.set(1, k * 1.1, 1);
-        fm.compose(fp, fq, fs);
-        innerMesh.setMatrixAt(i, fm);
       }
       flameMesh.instanceMatrix.needsUpdate = true;
-      innerMesh.instanceMatrix.needsUpdate = true;
       curtain.material.opacity = 0.38 + Math.sin(t * 6) * 0.06;
     },
   };
 }
 
-// Additive warm discs on the ground under the lamps and torches (one draw call, only shown at night).
+// Additive warm light at night, one draw call: discs on the ground under the lamps and torches, plus a soft
+// halo (three crossed quads) around each bulb and flame.
 function lightPools(list) {
   const tex = drawTexture(64, 64, (g, w, h) => {
     const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
@@ -357,7 +359,11 @@ function lightPools(list) {
   }, { srgb: false, clamp: true });
   const m = new Merger({ uv: 'geo' });
   const disc = new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2);
-  for (const [x, z, rad] of list) m.add(disc, trs(x, 0.14, z, rad, 1, rad), '#ffffff', { ao: 0 });
+  const quad = new THREE.PlaneGeometry(1, 1);
+  for (const [x, z, rad, hy, hs] of list) {
+    m.add(disc, trs(x, 0.14, z, rad, 1, rad), '#ffffff', { ao: 0 });
+    for (let k = 0; k < 3; k++) m.add(quad, trs(x, hy, z, hs, hs, 1, 0, (k * Math.PI) / 3), '#ffffff', { ao: 0 });
+  }
   const mat = new THREE.MeshBasicMaterial({
     map: tex,
     color: 0xffe8a0,
@@ -368,6 +374,7 @@ function lightPools(list) {
     polygonOffset: true,
     polygonOffsetFactor: -4,
     polygonOffsetUnits: -4,
+    side: THREE.DoubleSide,
   });
   const mesh = m.build(mat, { name: 'light-pools', receiveShadow: false });
   mesh.renderOrder = 9;
