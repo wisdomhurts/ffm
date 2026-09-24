@@ -1,0 +1,17 @@
+{
+  "name": "steal-a-seed-family",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Steal A Seed! Family Edition: a Roblox-style browser game starring the family.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch --serve",
+    "test": "node tests/smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright": "1.56.1",
+    "three": "0.186.0"
+  }
+}
