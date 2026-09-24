@@ -8,7 +8,7 @@ import { PLAYER, speedAt, ITEMS } from '../config.js';
  * interact is held (true while the button is down).
  */
 export function emptyIntent() {
-  return { moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null };
+  return { moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null };
 }
 
 export class Player {

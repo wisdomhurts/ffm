@@ -120,15 +120,15 @@ export const BIOMES = [
   { id: 'field', name: 'Sunny Field', rarity: 'common', ground: '#7bd35a', wall: '#5aa843', sky: '#8fd3ff', fog: '#bfe7ff',
     monster: null },
   { id: 'greenhollow', name: 'Greenhollow', rarity: 'uncommon', ground: '#3f9e4d', wall: '#2e6b35', sky: '#9fe0c0', fog: '#bfe8d0',
-    monster: { id: 'stump', name: 'Grumpy Stump', speed: 14, aggro: 26, count: 2 } },
+    monster: { id: 'stump', name: 'Grumpy Stump', speed: 14, aggro: 22, count: 2 } },
   { id: 'dustbowl', name: 'Dustbowl', rarity: 'rare', ground: '#e8c27a', wall: '#c9894a', sky: '#ffd9a0', fog: '#f5dcb0',
-    monster: { id: 'crab', name: 'Cactus Crab', speed: 20, aggro: 28, count: 2 } },
+    monster: { id: 'crab', name: 'Cactus Crab', speed: 20, aggro: 24, count: 2 } },
   { id: 'tanglemire', name: 'Tanglemire', rarity: 'epic', ground: '#4b5d3a', wall: '#3a2f4f', sky: '#a58fc9', fog: '#8f86a8',
-    monster: { id: 'snapper', name: 'Swamp Snapper', speed: 26, aggro: 30, count: 3 } },
+    monster: { id: 'snapper', name: 'Swamp Snapper', speed: 26, aggro: 26, count: 2 } },
   { id: 'emberroot', name: 'Emberroot', rarity: 'legendary', ground: '#5a2a22', wall: '#2b1210', sky: '#ff8a5c', fog: '#c2553a',
-    monster: { id: 'lavasprout', name: 'Lava Sprout', speed: 32, aggro: 32, count: 3 } },
+    monster: { id: 'lavasprout', name: 'Lava Sprout', speed: 32, aggro: 28, count: 3 } },
   { id: 'starbloom', name: 'Starbloom', rarity: 'mythic', ground: '#2a2f6b', wall: '#15173d', sky: '#1b1446', fog: '#2a2360',
-    monster: { id: 'lurker', name: 'Star Lurker', speed: 38, aggro: 34, count: 3 } },
+    monster: { id: 'lurker', name: 'Star Lurker', speed: 38, aggro: 30, count: 3 } },
 ];
 export const ROAD_END_Z = WORLD.road.startZ + BIOMES.length * WORLD.road.biomeLength;
 export const biomeIndexAtZ = (z) => {
@@ -169,9 +169,9 @@ export const EVENTS = {
 export const MATCH = { showdownSeconds: 480 };
 
 export const DIFFICULTY = {
-  chill: { name: 'Chill', botSpeedMult: 0.85, stealRate: 0.35, reaction: 0.9, bonkAccuracy: 0.5 },
-  normal: { name: 'Normal', botSpeedMult: 1.0, stealRate: 1.0, reaction: 0.5, bonkAccuracy: 0.75 },
-  chaos: { name: 'Chaos', botSpeedMult: 1.1, stealRate: 1.8, reaction: 0.25, bonkAccuracy: 0.92 },
+  chill: { name: 'Chill', botSpeedMult: 0.85, stealRate: 0.35, reaction: 0.9, bonkAccuracy: 0.5, monsterSpeedMult: 0.85, monsterAggroMult: 0.8 },
+  normal: { name: 'Normal', botSpeedMult: 1.0, stealRate: 1.0, reaction: 0.5, bonkAccuracy: 0.75, monsterSpeedMult: 1, monsterAggroMult: 1 },
+  chaos: { name: 'Chaos', botSpeedMult: 1.1, stealRate: 1.8, reaction: 0.25, bonkAccuracy: 0.92, monsterSpeedMult: 1.05, monsterAggroMult: 1.1 },
 };
 
 export const CHARACTERS = [

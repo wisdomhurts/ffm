@@ -270,6 +270,7 @@ export class Game {
     } else if (it.aimYaw != null && !stunned) {
       p.yaw = it.aimYaw;
     }
+    if (it.emote === 'celebrate' && this.time >= p.celebrateUntil) p.celebrateUntil = this.time + 1.5;
     if (it.jump && p.onGround && !stunned) {
       p.vel.y = WORLD.jumpVelocity;
       p.onGround = false;
@@ -303,8 +304,15 @@ export class Game {
 
   /** Returns the thing this player can interact with right now, or null.
    *  {key, verb, label, hold, action(), target} */
+  // Carrying a seed into your own garden with no free planter: only offer Sell prompts so you can make room.
+  _ownGardenFull(p) {
+    const g = this.gardens[p.slot];
+    return gardenContains(g.L, p.pos.x, p.pos.z) && !g.planters.some((pl) => pl.unlocked && !pl.plant);
+  }
+
   findInteraction(p) {
-    if (p.carrying || this.time < p.stunUntil) return null;
+    const swapping = p.carrying?.kind === 'seed' && this._ownGardenFull(p);
+    if (this.time < p.stunUntil || (p.carrying && !swapping)) return null;
     const pos = p.pos;
     let best = null;
     let bestD = Infinity;
@@ -315,7 +323,7 @@ export class Game {
       }
     };
     // dropped seeds
-    for (const gi of this.ground) {
+    if (!swapping) for (const gi of this.ground) {
       if (gi.kind !== 'seed') continue;
       const d2 = dist2(pos, gi);
       if (d2 < 4.5 * 4.5) {
@@ -326,7 +334,7 @@ export class Game {
       }
     }
     // road pods
-    if (pos.z > LAYOUT.roadGate.z - 2) {
+    if (!swapping && pos.z > LAYOUT.roadGate.z - 2) {
       for (const pod of this.pods) {
         if (!pod.seed) continue;
         const d2 = dist2(pos, pod);
@@ -354,13 +362,14 @@ export class Game {
             consider(d2, { key: 'sell' + pl.index, verb: 'Sell', label: `${this.plantName(pl.plant.speciesId, pl.plant.mutation)} (+$${fmt(value)})`,
               hold: PLAYER.sellHold, rarity: PLANT[pl.plant.speciesId].rarity, target: pl, action: () => this.sellPlant(p, pl) });
           }
-        } else if (pl.plant && pl.plant.growLeft <= 0) {
+        } else if (!swapping && pl.plant && pl.plant.growLeft <= 0) {
           consider(d2, { key: 'steal' + g.slot + '_' + pl.index, verb: 'Steal', label: this.plantName(pl.plant.speciesId, pl.plant.mutation),
             hold: PLAYER.stealHold, rarity: PLANT[pl.plant.speciesId].rarity, target: pl, garden: g, action: () => this.stealPlant(p, g, pl) });
         }
       }
     }
     // shops (human-facing prompts; bots call the buy methods directly)
+    if (swapping) return best;
     const sh = LAYOUT.shops;
     if (dist2(pos, sh.gear) < sh.gear.r ** 2) consider(dist2(pos, sh.gear) + 1, { key: 'shop:gear', verb: 'Open', label: 'Gear Shop', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'gear' }) });
     if (dist2(pos, sh.speed) < sh.speed.r ** 2) {
@@ -483,9 +492,10 @@ export class Game {
     const g = this.gardens[p.slot];
     if (Math.abs(p.pos.y) > 2) return;
     const L = g.L;
-    if (dist2(p.pos, L.collectPad) < L.collectPad.r ** 2 && g.cashPile >= 1) {
+    if (dist2(p.pos, L.collectPad) < L.collectPad.r ** 2 && g.cashPile >= 1 && (g.cashPile >= 25 || this.time - (g.collectedAt ?? -9) > 0.5)) {
       const amount = Math.floor(g.cashPile);
       g.cashPile -= amount;
+      g.collectedAt = this.time;
       p.cash += amount;
       p.stats.collected += amount;
       bus.emit('cash:collected', { player: p, amount, x: L.collectPad.x, z: L.collectPad.z });
@@ -779,7 +789,8 @@ export class Game {
         q.pos.z > r.minZ - 6 && q.pos.z < r.maxZ + 6 && q.pos.z >= LAYOUT.roadGate.z;
       if (target && (!valid(target) || dist2(target.pos, m) > (m.def.aggro * 1.8) ** 2)) target = null;
       if (!target) {
-        let bd = m.def.aggro * m.def.aggro;
+        const aggro = m.def.aggro * (this.difficulty.monsterAggroMult ?? 1);
+        let bd = aggro * aggro;
         for (const q of this.players) {
           if (!valid(q)) continue;
           const d = dist2(q.pos, m);
@@ -796,7 +807,7 @@ export class Game {
       if (target) {
         tx = target.pos.x;
         tz = target.pos.z;
-        spd = m.def.speed;
+        spd = m.def.speed * (this.difficulty.monsterSpeedMult ?? 1);
       } else {
         if (now > m.wanderAt || dist2(m, m.wander) < 4) {
           m.wander = { x: this.rng.range(-halfW, halfW), z: this.rng.range(r.minZ + 12, r.maxZ - 12) };

@@ -39,8 +39,8 @@ export function planDodge(game, p, fx, fz, out, state) {
     mz[n] = m.z;
     mvx[n] = m.vx;
     mvz[n] = m.vz;
-    mSpd[n] = m.def.speed;
-    mAggro[n] = m.def.aggro;
+    mSpd[n] = m.def.speed * (game.difficulty.monsterSpeedMult ?? 1);
+    mAggro[n] = m.def.aggro * (game.difficulty.monsterAggroMult ?? 1);
     mStun[n] = Math.max(0, m.stunUntil - now);
     mMinZ[n] = r.minZ;
     mMaxZ[n] = r.maxZ;
