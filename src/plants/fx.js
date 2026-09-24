@@ -376,7 +376,6 @@ class Batch {
       this.buf = obj.instanceMatrix;
     } else {
       const geo = new THREE.InstancedBufferGeometry().copy(spec.geo());
-      geo.userData.fxBatch = true;
       this.stride = spec.stride;
       this.arr = new Float32Array(cap * spec.stride);
       const buf = new THREE.InstancedInterleavedBuffer(this.arr, spec.stride, 1).setUsage(THREE.DynamicDrawUsage);

@@ -196,14 +196,18 @@ export class BotController {
     this.humanLast = false;
     if (!hs) return;
     this.humanLast = hs.last && now > 30;
-    if (d.biomeLead < 50) this.biomeCap = hs.deep + d.biomeLead;
+    // ahead of the human on net worth, or on income (where net worth is heading)
+    const ahead = Math.max(Math.max(game.netWorth.get(p) || 0, 400) / Math.max(hs.net, 400),
+      Math.max(game.gardenIncome(game.gardens[p.slot]), 8) / Math.max(hs.inc, 8));
     if (d.paceCap > 0 && now > 20) {
-      // ahead on net worth, or on income (where net worth is heading)
-      const ahead = Math.max((game.netWorth.get(p) || 0) / Math.max(hs.net, 400), game.gardenIncome(game.gardens[p.slot]) / Math.max(hs.inc, 8));
       this.ease = clamp((ahead / d.paceCap - 1) / 0.4, 0, 1);
-      // the biome lead is for catching up: once ahead, farm a biome shallower than we otherwise would
-      if (ahead > 1 || this.ease > 0.4) this.biomeCap = Math.max(0, Math.min(this.biomeCap, hs.deep + d.biomeLead - 1));
       this.tempo = 1 - this.ease * d.easeTempo;
+    }
+    // the biome lead is only for catching up: unless well behind the human farm a biome shallower,
+    // and well ahead another one shallower still
+    if (d.biomeLead < 50) {
+      const drop = (ahead >= d.catchUp ? 1 : 0) + (this.ease > 0.5 ? 1 : 0);
+      this.biomeCap = Math.max(0, hs.deep + d.biomeLead - drop);
     }
   }
 

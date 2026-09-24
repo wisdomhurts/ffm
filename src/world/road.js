@@ -155,8 +155,8 @@ function markerAtlas(values) {
       g.lineWidth = 10;
       g.strokeStyle = '#1b2440';
       g.stroke();
-      houseIcon(g, x + 58, y + 54, 26, '#ffe07a');
-      chunkyText(g, 'HOME', x + 150, y + 56, { size: 56, fill: '#ffffff', stroke: '#1b2440', strokeW: 10, shadow: false, maxW: 150 });
+      houseIcon(g, x + 50, y + 56, 24, '#ffe07a');
+      chunkyText(g, 'HOME', x + 158, y + 58, { size: 52, fill: '#ffffff', stroke: '#1b2440', strokeW: 10, shadow: false, maxW: 136 });
       chunkyText(g, `${v} STUDS`, x + cw / 2, y + 118, { size: 38, fill: '#1b2440', stroke: '#ffffff', strokeW: 6, shadow: false, maxW: cw - 44 });
     });
   }, { clamp: true });

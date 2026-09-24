@@ -1,17 +1,20 @@
 // Plant art: planted plants (4 growth stages), seeds, carried pots and the road seed stands.
 // Contract:
 //   createPlantView(speciesId, mutation) -> { object3d, setGrowth(p 0..1), update(dt, time) }
-//      object3d origin = soil surface; fully grown plant roughly 3-5 studs tall.
+//      object3d origin = soil surface; fully grown plant roughly 4-6.5 studs tall (rarer = taller).
 //   createSeedView(speciesId, mutation)  -> { object3d, update(dt, time) }   // glowing seed (~1.5 studs) for pods, ground and carrying
 //      origin = bottom of the seed (so it sits above a head / floats above the ground)
 //   createCarriedPlantView(speciesId, mutation) -> { object3d, update(dt, time) } // potted grown plant held overhead (origin = pot bottom, ~3 studs)
 //   createPodView(biomeIndex) -> { object3d, setSeed(view|null), update(dt,time) } // the stand a road seed sits on
 // Extras: views also expose {speciesId, rarity, tier, mutation}; plant views expose topY (plant height above the soil)
 // and createPlantView takes an optional {facing} yaw;
-// plantTemplate()/seedTemplate()/plantScale() are exported for tools and the dev gallery (src/plants/dev/gallery.js).
+// plantTemplate()/seedTemplate()/plantScale() are exported for tools and the dev gallery (src/plants/dev/gallery.js);
+// setPlantQuality('low'|'medium'|'high') optionally overrides the quality read from window.__app.engine (LOD and
+// shadows), and fxStats() reports live effect counts (also window.__plantFxStats).
 //
 // Performance: every species/mutation/stage is baked once into a Template (merged, vertex-coloured geometry
-// per animation group + shared materials). Views are cheap Object3D trees pointing at shared data. Rarity and
+// per animation group, skinned into one mesh per material, + shared materials). Views are cheap Object3D trees
+// pointing at shared data, so a plant body is 1-2 draw calls. Rarity and
 // mutation effects (sparkles, auras, beams, glows, halos, crowns) are NOT meshes in the view: each view owns an
 // FxRig whose items are drawn by a handful of scene-wide instanced batches (see fx.js), and all glow, rainbow and
 // sparkle animation runs in shaders from one shared time uniform, so update() is O(1).
@@ -21,10 +24,10 @@ import { Builder, P } from './geometry.js';
 import { LOOKS, buildSeedling, seedBody } from './species.js';
 import { U, camPos } from './materials.js';
 import { FxRig } from './fx.js';
+import { podTemplate, potTemplate } from './pods.js';
 
 export { setPlantQuality } from './materials.js';
 export { fxStats } from './fx.js';
-import { podTemplate, potTemplate } from './pods.js';
 
 const TAU = Math.PI * 2;
 const speciesOf = (id) => PLANT[id] || PLANTS[0];
@@ -100,8 +103,8 @@ export function seedTemplate(speciesId, mutation = 'normal') {
 // to reach hmin; beyond that its model itself is built taller (melon pedestal, tater leaf crown, lotus stem...).
 const FIT = [
   { hmax: 4.9, rmax: 2.2, hmin: 0, kmax: 1.45 },
-  { hmax: 4.9, rmax: 2.2, hmin: 4.2, kmax: 1.45 },
-  { hmax: 4.9, rmax: 2.2, hmin: 4.3, kmax: 1.45 },
+  { hmax: 4.9, rmax: 2.2, hmin: 4.2, kmax: 1.6 },
+  { hmax: 4.9, rmax: 2.2, hmin: 4.3, kmax: 1.6 },
   { hmax: 5.4, rmax: 2.3, hmin: 4.9, kmax: 1.6 },
   { hmax: 6.0, rmax: 2.4, hmin: 5.4, kmax: 1.9 },
   { hmax: 6.6, rmax: 2.5, hmin: 6.0, kmax: 1.9 },

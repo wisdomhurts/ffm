@@ -920,11 +920,14 @@ export const LOOKS = {
       // leafy pedestal: a stout stalk and a saucer of broad leaves the melon sits in
       const P0 = o.bud ? 0.55 : micah ? 1.35 : 1.15;
       const cy = R * 0.95 + 0.05 + P0;
-      stem(b, [[0, 0, 0.05], [0.05, P0 * 0.5, 0.08], [0, P0 + 0.2, 0.1]], 0.26 * (R / 1.12), 0.2 * (R / 1.12), shade(lf, -0.2), { radial: 7, segs: 4 });
+      const ks = R / 1.12;
+      stem(b, [[0, 0, 0.05], [0.05, P0 * 0.5, 0.08], [0, P0 + 0.2, 0.1]], 0.32 * ks, 0.24 * ks, shade(lf, -0.2), { radial: 7, segs: 4 });
       for (let i = 0; i < 7; i++) {
         const a = (i / 7) * TAU + 0.35;
-        blade(b, { p: [Math.sin(a) * 0.18, P0 + 0.02, 0.1 + Math.cos(a) * 0.18], a, up: 0.32, len: 1.05 * (R / 1.12), wid: 0.78 * (R / 1.12), shape: 'round', notch: 0.2, c: shade(lf, -0.2), c2: shade(lf, 0.2), bend: 0.45, cup: 0.35 });
+        blade(b, { p: [Math.sin(a) * 0.2, P0 - 0.06, 0.1 + Math.cos(a) * 0.2], a, up: 0.22, len: 1.45 * ks, wid: 0.95 * ks, shape: 'round', notch: 0.2, c: shade(lf, -0.2), c2: shade(lf, 0.25), bend: 0.55, cup: 0.35 });
       }
+      blade(b, { p: [0.05, P0 * 0.45, 0.12], a: 0.9, up: 0.5, len: 0.55, wid: 0.45, shape: 'round', c: shade(lf, -0.1), c2: shade(lf, 0.2), bend: -0.1 });
+      blade(b, { p: [0.0, P0 * 0.3, 0.1], a: -2.2, up: 0.45, len: 0.5, wid: 0.42, shape: 'round', c: shade(lf, -0.1), c2: shade(lf, 0.2), bend: -0.1 });
       b.use('moon', [0, cy, 0.1], { look: true });
       if (micah) {
         const dark = shade(o.c0, -0.55);

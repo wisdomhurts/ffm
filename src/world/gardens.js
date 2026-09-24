@@ -361,9 +361,8 @@ export function buildGardens(ctx) {
     wood.block(GX, 0, legZ2, 0.46, boardY + 0.4, 0.46, '#8a5a34', { ao: 0.3 });
     wood.block(GX, 8.9, gpN, 0.46, boardY - 8.5, 0.46, '#8a5a34', { ao: 0 });
     acc.box(GX, boardY + boardH / 2, S.z + 0.2, 0.5, boardH + 0.5, boardW + 0.5, WH, { ao: 0.12 });
-    // camera-only blocker for the board (above head height, over the fence line), see-over like the fence
-    const boardTop = boardY + boardH + 0.25;
-    ctx.colliders.push({ minX: GX - 0.3, maxX: GX + 0.3, minY: boardY - 0.25, maxY: boardTop, camMaxY: boardTop, minZ: L.gate.maxZ, maxZ: S.z + 0.2 + boardW / 2 + 0.25, tag: 'sign' });
+    // camera blocker for the board: above head height and over the fence line, so it never touches a player
+    ctx.colliders.push({ minX: GX - 0.3, maxX: GX + 0.3, minY: boardY - 0.25, maxY: boardY + boardH + 0.25, minZ: L.gate.maxZ, maxZ: S.z + 0.2 + boardW / 2 + 0.25, tag: 'sign' });
     const signCanvas = makeCanvas(512, 440);
     const signTex = canvasTexture(signCanvas, { clamp: true });
     const signMat = signMaterial(signTex, 0.25);

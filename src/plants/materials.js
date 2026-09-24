@@ -260,72 +260,6 @@ export function faceAtlas() {
   });
 }
 
-// Soft round glow (white; tinted by material colour).
-export function radialTex() {
-  return once('radial', () => {
-    const c = canvas(64, 64);
-    const g = c.getContext('2d');
-    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,255,255,1)');
-    gr.addColorStop(0.25, 'rgba(255,255,255,0.7)');
-    gr.addColorStop(0.6, 'rgba(255,255,255,0.18)');
-    gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 64, 64);
-    return tex(c, false);
-  });
-}
-
-// Hollow halo: dim centre so the object inside keeps its colours, bright soft rim.
-export function haloTex() {
-  return once('halo', () => {
-    const c = canvas(64, 64);
-    const g = c.getContext('2d');
-    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,255,255,0.25)');
-    gr.addColorStop(0.3, 'rgba(255,255,255,0.45)');
-    gr.addColorStop(0.5, 'rgba(255,255,255,0.4)');
-    gr.addColorStop(0.75, 'rgba(255,255,255,0.12)');
-    gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 64, 64);
-    return tex(c, false);
-  });
-}
-
-// Glowing ring with a soft inner fill (for rarity rings on the soil).
-export function ringTex() {
-  return once('ring', () => {
-    const c = canvas(128, 128);
-    const g = c.getContext('2d');
-    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    gr.addColorStop(0, 'rgba(255,255,255,0.22)');
-    gr.addColorStop(0.55, 'rgba(255,255,255,0.3)');
-    gr.addColorStop(0.72, 'rgba(255,255,255,1)');
-    gr.addColorStop(0.8, 'rgba(255,255,255,0.8)');
-    gr.addColorStop(0.9, 'rgba(255,255,255,0.15)');
-    gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 128, 128);
-    return tex(c, false);
-  });
-}
-
-// Dark radial pool (secret "void" under the plant).
-export function voidTex() {
-  return once('void', () => {
-    const c = canvas(64, 64);
-    const g = c.getContext('2d');
-    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(10,4,24,0.95)');
-    gr.addColorStop(0.6, 'rgba(20,8,44,0.75)');
-    gr.addColorStop(1, 'rgba(20,8,44,0)');
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 64, 64);
-    return tex(c);
-  });
-}
-
 // Galaxy petals: deep space gradient along the petal with nebula clouds and stars.
 export function galaxyTex() {
   return once('galaxy', () => {
@@ -439,7 +373,8 @@ if (plantKeep < 0.5) {
   vec3 lw = vec3(0.299, 0.587, 0.114);
   float l = dot(diffuseColor.rgb, lw);
   vec3 iri = min(plantRb * (0.04 + l * 1.25) / max(0.2, dot(plantRb, lw)), vec3(1.0));
-  diffuseColor.rgb = mix(diffuseColor.rgb, iri, 0.45 + 0.3 * plantBand);
+  // pale species need a stronger wash to read as rainbow; dark ones keep more of their own colour
+  diffuseColor.rgb = mix(diffuseColor.rgb, iri, 0.38 + 0.3 * l + 0.3 * plantBand);
 }
 #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -518,16 +453,5 @@ export function plantMat(kind, mutation = 'normal', secret = false) {
     return patch(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), {
       rainbow: mutation === 'rainbow', rim: 0.28, rimRainbow: rimRainbow || (mutation === 'rainbow' && 1.1),
     });
-  });
-}
-
-// Plain unlit additive sprite/disc materials for halos and glows.
-export function glowMat(color, { opacity = 1, texture = 'radial', blending = THREE.AdditiveBlending, sprite = false } = {}) {
-  const c = col(color);
-  const key = `glow|${c.getHexString()}|${opacity}|${texture}|${blending}|${sprite}`;
-  return cachedMat(key, () => {
-    const map = texture === 'ring' ? ringTex() : texture === 'void' ? voidTex() : texture === 'halo' ? haloTex() : radialTex();
-    const o = { map, color: c, transparent: true, opacity, depthWrite: false, blending, toneMapped: false };
-    return sprite ? new THREE.SpriteMaterial(o) : new THREE.MeshBasicMaterial({ ...o, side: THREE.DoubleSide });
   });
 }

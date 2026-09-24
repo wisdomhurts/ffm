@@ -1,7 +1,8 @@
 // Low-poly geometry helpers and the Builder that bakes plant parts into a few merged, vertex-coloured meshes.
 // A species builder places parts in "plant space" (origin = soil surface, +Y up, +Z = the plant's front).
 // Parts are grouped by animation pivot (e.g. 'body', 'head', 'jaw'); within a group all parts that share a
-// material are merged into ONE geometry, so a whole plant is typically 1-4 draw calls.
+// material are merged into ONE geometry; multi-group templates are then skinned (one bone per group) into one
+// mesh per material, so a whole plant is typically 1-2 draw calls.
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { col, recolor, vivid, plantMat, plantQuality, FACE } from './materials.js';
@@ -418,7 +419,7 @@ export class Template {
    * flapping wings costs 1-2 draw calls (and 1 shadow draw) instead of one per part and material.
    */
   _buildSkin() {
-    const channels = new Map(); // material -> {lists, info}
+    const channels = new Map(); // material -> {list of bind-pose geometries, first mesh info}
     const boneInverses = [];
     this.groups.forEach((g, gi) => {
       _bind.makeRotationY(g.yaw).setPosition(g.pivot);

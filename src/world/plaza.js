@@ -375,6 +375,7 @@ function lightPools(list) {
     polygonOffsetFactor: -4,
     polygonOffsetUnits: -4,
     side: THREE.DoubleSide,
+    forceSinglePass: true, // additive: no back-then-front pass needed
   });
   const mesh = m.build(mat, { name: 'light-pools', receiveShadow: false });
   mesh.renderOrder = 9;
