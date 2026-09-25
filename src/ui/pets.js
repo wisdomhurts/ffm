@@ -8,7 +8,7 @@ import { bus } from '../core/events.js';
 import { getProfile, updateProfile } from '../core/profiles.js';
 import { PET, EGGS, PET_CAPACITY, eggOdds, fmtPct, boostLines, petScore } from '../pets/catalog.js';
 import { playHatch } from '../pets/hatch.js';
-import { thumb, cachedThumb } from '../pets/studio.js';
+import { thumb, cachedThumb, configureStudio, onStudioReady } from '../pets/studio.js';
 import { injectPetStyles, RARITY_COLOR, BOOST_ICON, PAW_ICON, EGG_ICON, rarityName } from '../pets/style.js';
 import { h, money, setText, uiSound } from './dom.js';
 import { ICON } from './icons.js';
@@ -35,6 +35,9 @@ export function attachPets(app) {
   if (attachedApp) return;
   attachedApp = app;
   injectPetStyles();
+  // the pet studio follows the game's graphics quality, and repaints placeholders after a WebGL context loss
+  configureStudio({ engine: app.engine });
+  onStudioReady(retryThumbs);
   bus.on('pet:hatched', ({ player, egg, pet } = {}) => {
     if (!player || player !== app.human || !PET[pet]) return;
     const pid = profileIdFor(app, player);
@@ -82,18 +85,30 @@ function pump() {
   else pumping = false;
 }
 
+function queueThumb(img, kind, id, size) {
+  pending.push({ img, kind, id, size });
+  if (!pumping) requestAnimationFrame(pump);
+}
+
+/** The studio is back (context restored or rebuilt): render the thumbnails that fell back to placeholders. */
+function retryThumbs() {
+  for (const wrap of document.querySelectorAll('.pthumb.nothumb[data-kind]')) {
+    const img = wrap.querySelector('img');
+    if (!img) continue;
+    wrap.classList.remove('nothumb');
+    queueThumb(img, wrap.dataset.kind, wrap.dataset.id, +wrap.dataset.size || 224);
+  }
+}
+
 /** <span class="pthumb"><img></span> for a pet or an egg; the picture is rendered lazily. */
 export function thumbEl(kind, id, cls = '') {
   const rarity = kind === 'pet' ? PET[id]?.rarity || 'common' : 'common';
   const img = h('img', { alt: '', draggable: 'false', decoding: 'async' });
-  const wrap = h('span', { class: 'pthumb ' + cls, style: `--rc:${RARITY_COLOR[rarity]}` }, img);
   const size = 224;
+  const wrap = h('span', { class: 'pthumb ' + cls, style: `--rc:${RARITY_COLOR[rarity]}`, dataset: { kind, id, size: String(size) } }, img);
   const url = cachedThumb(kind, id, size);
   if (url) img.src = url;
-  else {
-    pending.push({ img, kind, id, size });
-    if (!pumping) requestAnimationFrame(pump);
-  }
+  else queueThumb(img, kind, id, size);
   img.addEventListener('error', () => wrap.classList.add('nothumb'));
   return wrap;
 }

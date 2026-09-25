@@ -45,7 +45,7 @@ create table if not exists public.sas_scores (
   week_start   date not null,                     -- Monday (UTC) of the week week_value belongs to
   name         text not null,                     -- denormalized for fast top-N reads
   base         text not null,
-  look         jsonb not null default '{}'::jsonb,
+  look         jsonb not null default '{}'::jsonb check (jsonb_typeof(look) = 'object' and octet_length(look::text) <= 2048),
   hidden       boolean not null default false,    -- not listed or banned
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now(),   -- when `value` last improved
@@ -136,10 +136,104 @@ begin
 end;
 $$;
 
--- Kid-safe display name, mirroring src/core/names.js: 1-14 characters of letters (Latin, Greek, Cyrillic,
--- Hebrew, Arabic, Devanagari, Thai, Vietnamese, Japanese kana, CJK, Hangul), digits, space and _ . ' -,
--- and not on the blocklist (checked on a lower-cased, leetspeak-folded, letters-only form).
--- Returns p_fallback when the name isn't acceptable.
+-- Name filter, an exact mirror of src/core/names.js (tests/online/names.test.mjs checks the lists match):
+-- the name is folded to a-z (accents dropped, look-alike Cyrillic/Greek letters and leetspeak mapped) and
+-- split into words. STRONG words are blocked at the start or end of a word (also with an ending), MILD
+-- words only as a whole word (optionally with a simple ending), and runs of 1-2 letter words are also
+-- checked glued together ("f u c k"). Letters of other scripts can't be filtered and are accepted.
+create or replace function public.sas_name_word_bad(p_t text)
+returns boolean
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare
+  c_strong constant text[] := array[
+    'fuck', 'fck', 'fvck', 'phuck', 'shit', 'bitch', 'btch', 'cunt', 'nigg', 'faggot', 'retard', 'pussy',
+    'penis', 'vagin', 'hitler', 'kkk', 'twat', 'dildo', 'jizz', 'asshole', 'cocksuck', 'suicide'];
+  c_strong_end constant text[] := array[
+    '', 's', 'es', 'er', 'ers', 'ing', 'in', 'ed', 'y', 'ey', 'face', 'head', 'hole'];
+  c_mild constant text[] := array[
+    'kill', 'kys', 'rape', 'rapist', 'rapey', 'cock', 'sex', 'sexy', 'nazi', 'anal', 'anus', 'cum', 'arse',
+    'arsehole', 'crap', 'crappy', 'damn', 'tits', 'titty', 'titties', 'dick', 'dickhead', 'porn', 'porno',
+    'porny', 'boob', 'boobie', 'boobies', 'slut', 'slutty', 'whore', 'bastard', 'ass', 'asshat', 'asswipe',
+    'assface', 'dumbass', 'jackass', 'smartass', 'fatass', 'badass', 'fag', 'faggy', 'fuk', 'fcuk', 'wank',
+    'piss', 'milf', 'horny', 'nude', 'naked', 'bollock'];
+  c_mild_end constant text[] := array[
+    '', 's', 'es', 'er', 'ers', 'ing', 'ed'];
+  c_allow constant text[] := array[
+    'cocker', 'shital', 'shitara', 'ashit'];
+  v_w text;
+  v_e text;
+begin
+  if p_t = any (c_allow) then
+    return false;
+  end if;
+  foreach v_w in array c_strong loop
+    if starts_with(p_t, v_w) then
+      return true;
+    end if;
+    foreach v_e in array c_strong_end loop
+      if char_length(p_t) >= char_length(v_w || v_e) and right(p_t, char_length(v_w || v_e)) = v_w || v_e then
+        return true;
+      end if;
+    end loop;
+  end loop;
+  foreach v_w in array c_mild loop
+    foreach v_e in array c_mild_end loop
+      if p_t = v_w || v_e then
+        return true;
+      end if;
+    end loop;
+  end loop;
+  return false;
+end;
+$$;
+
+-- true when no word of the name is on the blocklists
+create or replace function public.sas_name_ok(p_name text)
+returns boolean
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare
+  v_s text;
+  v_t text;
+  v_run text := '';
+  v_runn integer := 0;
+begin
+  v_s := regexp_replace(normalize(coalesce(p_name, ''), NFKD), '[\u0300-\u036f]', '', 'g');
+  v_s := translate(v_s, 'аАвВсСеЕнНіІјЈкКмМоОрРѕЅтТуУхХԁԛԝαΑβΒεΕιΙκΚΜμνΝοΟρΡτΤυΥχΧΖıłŁøØđĐɑƒ', 'aabbcceehhiijjkkmmooppssttyyxxdqwaabbeeiikkmuvnooppttuyxxzillooddaf');
+  v_s := lower(v_s);
+  v_s := translate(v_s, '013457@$!|8', 'oieastasiib');
+  for v_t in
+    select w.x from regexp_split_to_table(v_s, '[^a-z]+') with ordinality as w(x, n) where w.x <> '' order by w.n
+  loop
+    if char_length(v_t) <= 2 then
+      v_run := v_run || v_t;
+      v_runn := v_runn + 1;
+    else
+      if v_runn >= 2 and public.sas_name_word_bad(v_run) then
+        return false;
+      end if;
+      v_run := '';
+      v_runn := 0;
+    end if;
+    if public.sas_name_word_bad(v_t) then
+      return false;
+    end if;
+  end loop;
+  return not (v_runn >= 2 and public.sas_name_word_bad(v_run));
+end;
+$$;
+
+-- Kid-safe display name, mirroring sanitizeName in src/core/names.js: after NFKC and whitespace folding,
+-- 1-14 characters of letters of any script, digits, space and _ . ' - (combining accents only right after
+-- a letter, at most two in a row; no invisible, symbol, emoji or private-use characters), and allowed by
+-- sas_name_ok. Returns p_fallback when the name isn't acceptable.
 create or replace function public.sas_clean_name(p_name text, p_fallback text)
 returns text
 language plpgsql
@@ -148,14 +242,10 @@ security definer
 set search_path = ''
 as $$
 declare
-  c_block constant text[] := array[
-    'fuck', 'fuk', 'fck', 'shit', 'sh1t', 'bitch', 'btch', 'cunt', 'dick', 'cock', 'pussy', 'penis', 'vagin',
-    'porn', 'sex', 'boob', 'tits', 'nigg', 'nigga', 'fag', 'retard', 'rape', 'nazi', 'hitler', 'kkk', 'slut',
-    'whore', 'bastard', 'asshole', 'arse', 'wank', 'jizz', 'cum', 'anal', 'kill', 'suicide', 'damn', 'crap'];
   v_s text;
-  v_n text;
   v_c integer;
-  v_w text;
+  v_prev_letter boolean := false;
+  v_marks integer := 0;
 begin
   if p_name is null then
     return p_fallback;
@@ -166,41 +256,46 @@ begin
   end if;
   for i in 1..char_length(v_s) loop
     v_c := ascii(substr(v_s, i, 1));
-    if not (
-         v_c between 48 and 57 or v_c between 65 and 90 or v_c between 97 and 122
-      or v_c in (32, 39, 45, 46, 95)
-      or (v_c between 192 and 591 and v_c not in (215, 247))   -- Latin-1 letters, Latin Extended A/B
-      or v_c between 880 and 1279                                -- Greek, Cyrillic
-      or v_c between 1488 and 1514 or v_c between 1568 and 1610  -- Hebrew, Arabic letters
-      or v_c between 2308 and 2361                               -- Devanagari letters
-      or v_c between 3585 and 3642                               -- Thai
-      or v_c between 7680 and 7935                               -- Latin Extended Additional
-      or v_c between 12353 and 12543                             -- Hiragana, Katakana
-      or v_c between 19968 and 40959                             -- CJK ideographs
-      or v_c between 44032 and 55203                             -- Hangul syllables
+    if v_c between 768 and 879 then
+      -- combining accent: must follow a letter, at most two in a row (no "zalgo" text)
+      v_marks := v_marks + 1;
+      if not v_prev_letter or v_marks > 2 then
+        return p_fallback;
+      end if;
+      continue;
+    end if;
+    v_marks := 0;
+    if v_c between 65 and 90 or v_c between 97 and 122 then
+      v_prev_letter := true;
+    elsif v_c between 48 and 57 or v_c in (32, 39, 45, 46, 95) then
+      v_prev_letter := false;
+    elsif v_c >= 192 and not (
+         v_c in (215, 247, 1564, 5760, 6158, 12644, 65279)       -- x, divide, Arabic letter mark, Ogham space, Mongolian vowel separator, Hangul filler, BOM
+      or v_c between 4447 and 4448                               -- Hangul choseong/jungseong fillers
+      or v_c between 8192 and 11263                              -- punctuation, symbols, arrows, math, shapes, dingbats (incl. zero-width and bidi controls)
+      or v_c between 11776 and 11903                             -- supplemental punctuation
+      or v_c between 12288 and 12292 or v_c between 12294 and 12351 -- CJK punctuation (keeps the name mark U+3005)
+      or v_c between 55296 and 63743                             -- surrogates, private use
+      or v_c between 65024 and 65135                             -- variation selectors, CJK compatibility forms
+      or v_c between 65280 and 65535                             -- half/full-width forms, specials
+      or v_c between 126976 and 129791                           -- emoji and pictographs
+      or v_c >= 917504                                           -- tags, variation selectors supplement, private use
     ) then
+      v_prev_letter := true;
+    else
       return p_fallback;
     end if;
   end loop;
-  -- 'ass' only as a whole word (Cassie, Jasper... are fine)
-  if lower(v_s) ~ '(^|[^a-z])ass($|[^a-z])' then
+  if not public.sas_name_ok(v_s) then
     return p_fallback;
   end if;
-  v_n := regexp_replace(translate(lower(v_s), '013457@$!|8', 'oieastasiib'), '[^a-z]', '', 'g');
-  if v_n = '' then
-    return p_fallback;
-  end if;
-  foreach v_w in array c_block loop
-    if position(v_w in v_n) > 0 then
-      return p_fallback;
-    end if;
-  end loop;
   return v_s;
 end;
 $$;
 
 -- A Look (docs/ONLINE.md) is a flat object of short scalar fields. Anything else is dropped.
--- Returns null for non-objects so callers can keep the previous look.
+-- Returns null for non-objects and for looks over 2048 bytes, so callers keep the previous look. The result
+-- is a subset of the input, so it always fits the 2048-byte check on sas_players.look / sas_scores.look.
 create or replace function public.sas_clean_look(p_look jsonb)
 returns jsonb
 language sql
@@ -209,7 +304,7 @@ security definer
 set search_path = ''
 as $$
   select case
-    when p_look is null or jsonb_typeof(p_look) <> 'object' or octet_length(p_look::text) > 4096 then null
+    when p_look is null or jsonb_typeof(p_look) <> 'object' or octet_length(p_look::text) > 2048 then null
     else coalesce((
       select jsonb_object_agg(e.key, e.value)
       from (

@@ -137,7 +137,9 @@ const css = `
 .ph-kicker::before{content:'Hatching ';color:var(--txt2)}
 .pet-hatch.burst .ph-kicker::before{content:'From the '}
 .ph-stage{position:absolute;inset:0;z-index:1}
-.ph-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.ph-stage canvas{position:absolute;left:0;top:0;display:block}
+.pet-hatch.lost .ph-stage canvas{visibility:hidden}
+.pet-hatch:not(.lost) .ph-cssegg,.pet-hatch:not(.lost) .ph-csspet{display:none}
 .ph-space{flex:1 1 0;min-height:120px;width:100%;pointer-events:none}
 .ph-info{position:relative;z-index:2;flex:none;display:flex;flex-direction:column;align-items:center;gap:7px;text-align:center;width:min(520px,100%);visibility:hidden;padding-bottom:4px}
 .pet-hatch.info .ph-info{visibility:visible}

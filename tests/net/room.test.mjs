@@ -7,6 +7,7 @@ import { PLANTS, ITEM } from '../../src/config.js';
 import { familyFaceData, faceInfo } from '../../src/characters/faces.js';
 import { createTransport } from '../../src/net/transport.js';
 import { roomTopic, VERSION, normalizeCode, makeCode, isCode, isCleanLine } from '../../src/net/protocol.js';
+import { securitySuite } from './security.mjs';
 
 let failed = 0;
 const check = (cond, msg) => {
@@ -54,7 +55,10 @@ function tp(a, x, z) {
   p.pos.y = 0;
   p.vel.x = p.vel.y = p.vel.z = 0;
   const m = H.online.role.members?.get(a.online.pid);
-  if (m) Object.assign(m.base, { x, y: 0, z, vx: 0, vy: 0, vz: 0, t: H.online.clock, c: null });
+  if (m) {
+    Object.assign(m.base, { x, y: 0, z, vx: 0, vy: 0, vz: 0, t: H.online.clock, c: null });
+    Object.assign(m.show, { x, y: 0, z });
+  }
 }
 
 // Events a given app's bus listeners would see about ITS OWN world (identity-checked).
@@ -421,9 +425,12 @@ try {
   check(C.online.isHost && D.online.room?.hostPid === C.online.pid, 'a leaving host hands the room to the next member right away');
   check(B.profile.online?.garden, 'the old host saved its online garden');
 
-  // ---------------------------------------------------------------- 13. traffic
   const perSec = hub.sent / (hub.now || 1);
   console.log(`INFO ${hub.sent} messages sent (${perSec.toFixed(1)}/s over the run), ${(hub.bytes / 1024).toFixed(0)} KB`);
+  for (const a of apps) a.online.leave();
+
+  // ---------------------------------------------------------------- 13. security (forged/replayed messages, faces, bans, traffic)
+  await securitySuite(check);
   check(!warnings.slice(0).some((w) => /failed|TypeError|undefined/.test(w)), 'no handler failures: ' + warnings.filter((w) => /failed|TypeError|undefined/.test(w)).slice(0, 3).join(' | '));
 } catch (e) {
   console.error(e);

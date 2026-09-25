@@ -6,14 +6,14 @@
 --
 --   n | check | pass | detail
 --
--- EXPECTED RESULT: 39 rows, every `pass` = true (the last row, "all checks passed", says so). Safe to run
+-- EXPECTED RESULT: 42 rows, every `pass` = true (the last row, "all checks passed", says so). Safe to run
 -- on a live project and to run again: it only touches rows it created (names start with "Test") and puts
 -- the global abuse counters back. Rows (expected detail in brackets):
 --   1-3  RLS on sas_scores / sas_players / sas_guard, no policies                   [rls=t policies=0]
 --   4    anon/authenticated/PUBLIC have no privileges on any sas_ table             [0 grants]
 --   5    every sas_ function is SECURITY DEFINER with search_path=''                 [0 bad]
 --   6    anon + authenticated can execute the 8 RPCs                                 [8/8]
---   7    they can NOT execute the 12 helpers                                         [0/12]
+--   7    they can NOT execute the 14 helpers                                         [0/14]
 --   8    anon can't read sas_players directly                                        [permission denied for table sas_players]
 --   9    sas_register -> {id, secret (64 hex), code}                                 [SEED-XXXX-XXXX]
 --   10   the secret is stored only as a salted SHA-256                               [no plaintext]
@@ -44,8 +44,11 @@
 --   35   20 unknown codes from one IP -> the next lookup                             [rate_limited]
 --   36   sas_delete removes the player and their scores                              [0 rows left]
 --   37   look keeps only flat short scalar fields                                    [{"hat": "crown", "shirtColor": "#ff00aa"}]
---   38   test rows cleaned up                                                        [0 left]
---   39   all checks passed                                                           [0 failed]
+--   38   real names are kept: Killian, Ana Lopez, Grape, Peacock, Essex, Nazir, ... [all kept]
+--   39   rude names (spaced, leet, accented, look-alike letters) become Player       [all refused]
+--   40   an oversized look is dropped, never an error (register + save)             [ look={}]
+--   41   test rows cleaned up                                                        [0 left]
+--   42   all checks passed                                                           [0 failed]
 
 create temp table if not exists sas_test_results (n serial, "check" text, pass boolean, detail text);
 truncate sas_test_results;
@@ -80,7 +83,7 @@ declare
     'public.sas_rand(integer)', 'public.sas_new_code()', 'public.sas_norm_code(text)', 'public.sas_clean_name(text,text)',
     'public.sas_clean_look(jsonb)', 'public.sas_ip_key()', 'public.sas_guard_ok(text,integer,interval)',
     'public.sas_guard_hit(text,interval)', 'public.sas_auth(uuid,text)', 'public.sas_week()', 'public.sas_ban(text,boolean)',
-    'public.sas_prune()'];
+    'public.sas_prune()', 'public.sas_name_ok(text)', 'public.sas_name_word_bad(text)'];
   v_ids uuid[] := '{}';
   r jsonb;
   a jsonb;  b jsonb;  c jsonb;  d jsonb;
@@ -244,7 +247,34 @@ begin
   perform pg_temp.sas_ok('look keeps only flat short scalars', r = '{"hat": "crown", "shirtColor": "#ff00aa"}'::jsonb
     and public.sas_clean_look('{"a":{"b":1},"c":[1],"ok":"x","long":"0123456789012345678901234567890123456789X"}') = '{"ok": "x"}'::jsonb, r::text);
 
-  -- 39 cleanup
+  -- 38-39 names: words, not substrings (mirror of src/core/names.js)
+  select string_agg(x, ', ') into v_t
+    from unnest(array['Killian', 'Ana Lopez', 'Grape', 'Peacock', 'Essex', 'Nazir', 'Cassandra', 'Dickens', 'Hancock',
+                      'Scunthorpe', 'Sussex', 'Analise', 'José', 'Zoë', '李明', 'Мария']) x
+   where public.sas_clean_name(x, 'Player') is distinct from normalize(x, NFKC);
+  perform pg_temp.sas_ok('real names are kept (Killian, Grape, Essex, Scunthorpe, 李明...)', v_t is null, coalesce('changed: ' || v_t, 'all kept'));
+  select string_agg(x, ', ') into v_t
+    from unnest(array['fuck', 'f u c k', 'f.u.c.k', 'fück', 'fuсk', 'motherfucker', 'bullshit', 'b1tch', 'a55', 'n1gger',
+                      'k.i.l.l', 'Killer', 'Nazis', 'Sexy', 'dickhead', 'r4pe']) x
+   where public.sas_clean_name(x, 'Player') <> 'Player';
+  perform pg_temp.sas_ok('rude names (spaced, leet, accented, look-alike letters) become Player', v_t is null, coalesce('kept: ' || v_t, 'all refused'));
+
+  -- 40 a look that is too big is dropped, never an error (32 fields of 40 two-byte letters, ~3.5 KB)
+  update public.sas_players p set last_write_at = null where p.id = (a ->> 'id')::uuid;
+  r := pg_temp.sas_anon($q$ select public.sas_register('Test Big Look', 'micah',
+         (select jsonb_object_agg(lpad(i::text, 24, 'k'), repeat('é', 40)) from generate_series(1, 32) i)) $q$);
+  d := pg_temp.sas_anon(format($q$ select public.sas_save(%L, %L, '{"v":4}', null,
+         (select jsonb_object_agg(lpad(i::text, 24, 'k'), repeat('é', 40)) from generate_series(1, 32) i)) $q$, a ->> 'id', a ->> 'secret'));
+  if (r ->> 'ok')::boolean then
+    v_ids := v_ids || (r -> 'v' ->> 'id')::uuid;
+  end if;
+  select p.look into c from public.sas_players p where p.id = (r -> 'v' ->> 'id')::uuid;
+  select p.look into b from public.sas_players p where p.id = (a ->> 'id')::uuid;
+  perform pg_temp.sas_ok('an oversized look is dropped, not an error (register + save)',
+    (r ->> 'ok')::boolean and c = '{}'::jsonb and (d ->> 'ok')::boolean and b = '{"hat": "crown", "shirtColor": "#ff00aa"}'::jsonb,
+    coalesce(r ->> 'err', '') || coalesce(d ->> 'err', '') || ' look=' || coalesce(c::text, 'null'));
+
+  -- 41 cleanup
   delete from public.sas_players p where p.id = any (v_ids);
   delete from public.sas_guard g where g.key = any (v_ipkeys) or g.key in ('reg:*', 'load:*');
   insert into public.sas_guard select * from jsonb_populate_recordset(null::public.sas_guard, v_guard);

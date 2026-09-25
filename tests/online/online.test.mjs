@@ -350,6 +350,20 @@ test('unknown RPC and bad key map to clean errors', async () => {
   }
 });
 
+test('server names and looks: real names kept, rude ones replaced, oversized looks dropped (never an error)', async () => {
+  const reg = (name, look = {}) => rpcMod.rpc('sas_register', { p_name: name, p_base: 'micah', p_look: look });
+  const nameOf = async (r) => (await api.cloudPeek(r.code)).name;
+  backend.clearRateLimits();
+  for (const n of ['Killian', 'Ana Lopez', 'Scunthorpe', '李明']) assert.equal(await nameOf(await reg(n)), n);
+  for (const n of ['k.i.l.l', 'f u c k', 'fück']) assert.equal(await nameOf(await reg(n)), 'Player');
+  // 32 fields of 40 two-byte letters: every field is "clean" but together they're ~3.5 KB
+  const look = Object.fromEntries(Array.from({ length: 32 }, (_, i) => [String(i + 1).padStart(24, 'k'), 'é'.repeat(40)]));
+  const r = await reg('Big Look', look);
+  assert.match(r.code, /^SEED-/);
+  assert.deepEqual((await api.cloudPeek(r.code)).look, {});
+  assert.equal((await rpcMod.rpc('sas_save', { p_id: r.id, p_secret: r.secret, p_save: { v: 1 }, p_look: look })).ok, true);
+});
+
 test('sync: uploads changes, submits new bests once, flushes on quit, stays silent when the server is down', async () => {
   const app = { profileId: 'maddie', get profile() { return profiles.getProfile(this.profileId); }, state: 'playing', human: null, game: null };
   backend.clearRateLimits();

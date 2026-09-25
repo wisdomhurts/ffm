@@ -6,7 +6,7 @@ import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import {
-  EventCodec, forwarded, mergeSections, vetPlayer, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
+  EventCodec, forwarded, mergeSections, vetPlayer, vetGarden, vetPod, vetGround, predict, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
 } from './protocol.js';
 
 const RING = 24;
@@ -21,7 +21,7 @@ const lerpAngle = (a, b, t) => {
 };
 
 export class ClientRole {
-  constructor(s, game, { slot, epoch, hostPid, order, full }) {
+  constructor(s, game, { slot, epoch, hostPid, order, full, banned = null }) {
     this.s = s;
     this.game = game;
     this.slot = slot;
@@ -29,6 +29,8 @@ export class ClientRole {
     this.epoch = epoch;
     this.hostPid = hostPid;
     this.order = Array.isArray(order) ? order.filter(isPid) : [hostPid];
+    this.banned = new Set(Array.isArray(banned) ? banned.filter(isPid).slice(0, 64) : []); // kept if we ever host
+    this.lastSent = null; // what the host believes about our motion (see _send)
     this.full = full;
     this.codec = new EventCodec(game);
     this.lastSeq = -1;
@@ -108,7 +110,7 @@ export class ClientRole {
       if (Number.isInteger(a)) while (this.q.length && this.q[0][0] <= a) this.q.shift();
     }
     if (Array.isArray(msg.O)) this.order = msg.O.filter(isPid).slice(0, 8);
-    this.inRate = Number.isFinite(msg.ir) && msg.ir >= 2 ? msg.ir : 0;
+    if (Array.isArray(msg.bn)) this.banned = new Set(msg.bn.filter(isPid).slice(0, 64));
     if (msg.D && typeof msg.D === 'object') this._applyDelta(msg.D, tm, !!msg.K);
     this._store(tm, msg.P, msg.M);
     this._syncProjectiles(msg.B);
@@ -121,10 +123,11 @@ export class ClientRole {
       const v = D[k];
       let ok = true;
       if (k === 'm') ok = v && typeof v === 'object' && !Array.isArray(v);
-      else if (k === 'pd' || k === 'gr') ok = Array.isArray(v);
+      else if (k === 'pd') ok = Array.isArray(v) && !!(D.pd = v.map(vetPod));
+      else if (k === 'gr') ok = Array.isArray(v) && !!(D.gr = vetGround(v));
       else if (k === 'mo') ok = Array.isArray(v) && v.every((m) => m && typeof m === 'object');
-      else if (k[0] === 'p') ok = +k.slice(1) < n && vetPlayer(v, +k.slice(1));
-      else if (k[0] === 'g') ok = +k.slice(1) < n && v && Array.isArray(v.planters) && v.planters.length === 10;
+      else if (/^p[0-3]$/.test(k)) ok = +k.slice(1) < n && vetPlayer(v, +k.slice(1));
+      else if (/^g[0-3]$/.test(k)) ok = +k.slice(1) < n && vetGarden(v, +k.slice(1));
       else ok = false;
       if (!ok) delete D[k];
     }
@@ -157,7 +160,7 @@ export class ClientRole {
     g.projectiles = this.proj;
     this._keepLocal(p);
     // applyFull put everyone else at the (older) state positions: back to where they're drawn
-    this._interpolate(this.s.clock + this.offset - this.s.rates.interp);
+    this._draw(this.s.clock + this.offset);
     this.s.onStateApplied();
   }
 
@@ -270,6 +273,7 @@ export class ClientRole {
 
   /** app.act on a client: everything goes to the host (emotes and chat ride the same reliable queue). */
   act(name, args) {
+    if (name === 'addCash') return false; // rewards are banked on this device, never sent to a host
     if (name === 'emote') {
       if (EMOTE[args[0]]) this._edge('m', args[0]);
       return undefined;
@@ -289,27 +293,49 @@ export class ClientRole {
     return undefined;
   }
 
+  // Our motion goes to the host only when its guess (our last report + velocity) drifts, when we stop,
+  // turn, jump or land, when there's an action to deliver, and at least once a second (RATES).
   _send() {
     const s = this.s;
+    const R = s.rates;
     const p = this.me;
     const now = s.clock;
-    const busy = this.held || this.q.length || !p.onGround || Math.abs(p.vel.x) + Math.abs(p.vel.z) > 0.3;
-    if (this.busy && !busy) this.urgent = true; // just stopped: tell the host where right away
-    this.busy = busy;
-    const iv = 1 / (busy ? Math.min(s.rates.inMove, this.inRate || Infinity) : s.rates.inIdle);
-    if (!(this.urgent && now - this.sentAt >= 0.04) && now - this.sentAt < iv) return;
+    const since = now - this.sentAt;
+    const L = this.lastSent;
+    let changed = !L;
+    const tvx = this.tvx || 0, tvz = this.tvz || 0;
+    if (L) {
+      const g = predict(L, now - L.t, this._g || (this._g = { x: 0, y: 0, z: 0 }));
+      let dyaw = Math.abs(p.yaw - L.yaw) % TAU;
+      if (dyaw > Math.PI) dyaw = TAU - dyaw;
+      const steering = Math.hypot(tvx - L.tx, tvz - L.tz) > 1.5; // new direction or speed
+      const standing = Math.hypot(tvx, tvz) < 0.5; // facing only matters standing still (running faces the way we go)
+      changed = steering || Math.hypot(p.pos.x - g.x, p.pos.z - g.z) > R.drPos || Math.abs(p.pos.y - g.y) > 0.8 ||
+        (standing && dyaw > R.drYaw) || !!p.onGround !== L.og;
+    }
+    const moving = !p.onGround || Math.abs(p.vel.x) + Math.abs(p.vel.z) > 0.3;
+    if (this.moving && !moving) this.urgent = true; // just stopped: say where right away
+    this.moving = moving;
+    const heartbeat = this.held ? 0.5 : 1 / R.inHeartbeat;
+    // a small burst allowance: starting, stopping and turning get through quickly, steady running is cheap
+    this.tokens = Math.min(R.inBurst, (this.tokens ?? R.inBurst) + (now - (this.tokAt ?? now)) * R.inMax);
+    this.tokAt = now;
+    if (!((this.urgent && since >= 0.04) || (changed && since >= 0.05 && this.tokens >= 1) || since >= heartbeat)) return;
+    this.tokens = Math.max(0, this.tokens - 1);
     this.urgent = false;
     this.sentAt = now;
-    s.sendUp('in', {
+    const msg = {
       c: r3(now),
-      p: [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r3(p.yaw), p.onGround ? 1 : 0],
+      p: [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r3(p.yaw), p.onGround ? 1 : 0, r2(tvx), r2(tvz)],
       i: this.held ? 1 : 0,
       ip: this.ip,
       sel: p.selectedItem,
       e: this.q.slice(0, 16),
       ka: this.lastKick,
-      h: this.hostPid,
-    });
+    };
+    if (!s.sendUp('in', msg)) return;
+    const a = msg.p;
+    this.lastSent = { t: now, x: a[0], y: a[1], z: a[2], vx: a[3], vy: a[4], vz: a[5], yaw: a[6], og: !!a[7], tx: a[8], tz: a[9] };
   }
 
   // ---------------------------------------------------------------- frame
@@ -340,6 +366,17 @@ export class ClientRole {
         this.held = held;
         this.urgent = true;
       }
+      // the velocity we're steering towards (what the host's guess assumes we keep doing)
+      const stunned = g.time < p.stunUntil;
+      let mx = stunned ? 0 : it.moveX, mz = stunned ? 0 : it.moveZ;
+      const len = Math.hypot(mx, mz);
+      if (len > 1) {
+        mx /= len;
+        mz /= len;
+      }
+      const sp = p.maxSpeed(g.time);
+      this.tvx = mx * sp;
+      this.tvz = mz * sp;
       p.intent = it;
       this.simulating = true;
       try {
@@ -354,8 +391,8 @@ export class ClientRole {
     const err = hostNow - g.time;
     if (Math.abs(err) > 0.5) g.time = hostNow;
     else g.time += err * Math.min(1, dt * 2);
-    // 3) everyone else, a little in the past
-    this._interpolate(hostNow - s.rates.interp);
+    // 3) everyone else
+    this._draw(hostNow);
     this._advanceLocal(dt);
     this._prompt(p, dt);
     this._keepLocal(p);
@@ -386,7 +423,14 @@ export class ClientRole {
     }
   }
 
-  _interpolate(rt) {
+  // Other players are drawn a little in the past (they zig-zag), monsters close to now (they move smoothly,
+  // and a monster that looks further away than it is would feel unfair).
+  _draw(hostNow) {
+    this._interpolate(hostNow - this.s.rates.interp, true, false);
+    this._interpolate(hostNow - 0.05, false, true);
+  }
+
+  _interpolate(rt, players = true, monsters = true) {
     if (!this.count) return;
     let i = this.head;
     let newer = -1;
@@ -415,7 +459,7 @@ export class ClientRole {
     }
     const g = this.game;
     const A = a.P, B = b.P;
-    for (let j = 0; j < g.players.length; j++) {
+    if (players) for (let j = 0; j < g.players.length; j++) {
       if (j === this.slot) continue;
       const q = g.players[j];
       const o = j * PLAYER_STRIDE;
@@ -430,7 +474,7 @@ export class ClientRole {
       q.onGround = og;
     }
     const MA = a.M, MB = b.M;
-    for (let j = 0; j < g.monsters.length; j++) {
+    if (monsters) for (let j = 0; j < g.monsters.length; j++) {
       const m = g.monsters[j];
       const o = j * MONSTER_STRIDE;
       m.x = MA[o] + (MB[o] - MA[o]) * t + MA[o + 3] * ext;

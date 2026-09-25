@@ -89,6 +89,8 @@ try {
   let b = await info(B);
   a = await info(A);
   check(b.isClient && b.room.code === code && b.slot === 1, `B joined as Esther's garden (slot ${b.slot})`);
+  check(b.room.faceOk === true && b.room.private, 'B typed the code of an unlisted private room: faces may be shared there');
+  check(/^k[0-9a-f]{15}$/.test(a.pid) && /^k[0-9a-f]{15}$/.test(b.pid), 'both devices have key-hash ids: ' + a.pid + ' ' + b.pid);
   check(a.players[1].kind === 'remote' && a.players[1].name === 'Esther', 'A sees Esther as a remote player');
   check(b.players[0].kind === 'remote' && b.players[0].name === 'Dorian', 'B sees Dorian as a remote player');
   check(a.members.length === 2 && b.members.length === 2, 'both member lists have 2 people');

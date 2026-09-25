@@ -2,26 +2,38 @@
 // the safety filters every received value goes through. Pure JS (no DOM) so Node tests can use it.
 //
 // Channels (see transport.js):
-//   sas:lobby                 presence only: public rooms announce {code, name, host, n, max, v, at}
-//   sas:room:<CODE>           broadcast to everyone in the room + presence {pid, name, v, at, h}
-//   sas:room:<CODE>:u:<pid>   one member's uplink: its 'in' messages reach only the host (saves fan-out)
+//   sas:lobby                 presence only: public rooms announce {code, host, n, max, v, at, c}
+//   sas:room:<CODE>           everyone in the room + presence {pid, dk, name, v, at, h, hp}
+//   sas:room:<CODE>:u:<pid>   one member <-> the host only (inputs up; welcome/kick/kicked down)
 //
-// Room messages (event name: payload)
-//   hello   {v, pid, who, data, pref}          joiner -> host (who = identity, data = its online garden)
-//   welcome {to, slot, ep, h, order, priv, name, st}   host -> joiner (st = full world state)
-//   reject  {to, reason}                       host -> joiner ('full' | 'version' | 'kicked' | 'closed')
-//   who     {pid, name, base, look, pet, face?} anyone -> room (face only in private rooms, opt-in)
-//   tick    {h, ep, s, tm, P, M, B, A, E?, D?, K?, O?}  host -> room, ~10 Hz (see packTick)
-//   kick    {to, k, p, v, su, iu}              host -> one member: rules moved you (knockback, respawn)
-//   kicked  {to}                               host -> one member: removed from the room
-//   bye     {pid, next?}                       leaving (a leaving host names its successor)
-// Uplink messages
-//   in      {c, p, i, ip, sel, e, ka}          client -> host, 2-10 Hz (see ClientRole)
-import { CHARACTERS, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS } from '../config.js';
+// Every message is SEALED (crypto.js): {f: sender pid, d: '[counter, payload]', m: MAC or {pid: MAC}}.
+// A pid is the hash of its device's public key (dk); MACs use pair keys only the two ends can make.
+// Receivers drop anything that doesn't verify, isn't meant for them, or replays an old counter.
+//
+// Room channel (event: payload)
+//   hello   {to, v, hn, who, data}              joiner -> the host it picked (who = identity card, data = its garden)
+//   reject  {to, hn, reason}                    host -> joiner ('full' | 'version' | 'kicked')
+//   who     {name, base, id, look, pet, face?}  anyone -> everyone (face only in private rooms, opt-in)
+//   tick    {ep, s, tm, P, M, B, A, E?, D?, K?, O?, bn?}   host -> everyone, 5x a second (+ right after events)
+//   bye     {next?, ep?}                        host leaving / handing over (names its successor)
+// Uplink (member <-> host)
+//   in      {c, p, i, ip, sel, e, ka}           member -> host: own motion p = [x, y, z, vx, vy, vz, yaw, onGround,
+//                                               targetVx, targetVz] when the shared guess (predict) drifts, held E, actions
+//   bye     {}                                  member -> host: leaving
+//   welcome {to, hn, slot, ep, order, priv, st} host -> joiner (st = full world state)
+//   kick    {to, k, p, v, su, iu}               host -> member: the rules moved you (knockback, caught, respawn)
+//   kicked  {to}                                host -> member: removed from the room
+import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD } from '../config.js';
 import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
+import { REPLIES, EMOTE_LINES } from '../social/replies.js';
+import { PRACTICE_LINES } from '../ai/personalities.js';
 import { PETS, PET } from '../pets/catalog.js';
+import { sanitizeLook as canonLook } from '../characters/cosmetics.js';
 import { sanitizeName, isNameAllowed } from '../core/names.js';
 import { Player } from '../gameplay/player.js';
+
+/** Own keys only: catalog lookups must never match 'toString', '__proto__' and friends. */
+export const own = (obj, k) => typeof k === 'string' && !!obj && Object.prototype.hasOwnProperty.call(obj, k);
 
 export const PROTO = 1;
 
@@ -39,15 +51,24 @@ export const VERSION = `${PROTO}.${RULES}`;
 
 export const MAX_HUMANS = 4;
 
-/** Tunables. Supabase counts every message sent AND delivered (free plan: 100/s per project), so
- *  the defaults keep a full 4-player room around 80 messages/s; override with window.__SAS_ONLINE__.rates. */
+/**
+ * Every network rate in one place. Supabase counts each message sent AND each one delivered, so these
+ * keep a full, busy 4-player room around 35 messages/s (Pro plan: 500/s per project). Override any of
+ * them with window.__SAS_ONLINE__.rates = {...}.
+ */
 export const RATES = {
-  tick: 10, // host -> room ticks per second (motion + events + state deltas)
-  inMove: 10, // client -> host inputs per second while moving / holding / acting
-  inIdle: 2, // ... while standing still (keeps the host's view of us fresh)
-  stateEvery: 5, // every Nth tick also refreshes slowly-changing numbers (cash piles, growth)
-  keyEvery: 50, // every Nth tick is a full keyframe (heals anything lost on the way)
-  interp: 0.15, // clients draw other players/monsters this far (s) behind the host
+  tick: 5, // host -> room ticks per second for motion (monsters, players, balloons)
+  tickFast: 12, // ...but something that happened (grab, steal, hit, purchase) goes out right away, up to this rate
+  stateEvery: 3, // every Nth tick also refreshes slowly-changing numbers (cash piles, growth)
+  keyEvery: 25, // every Nth tick is a full keyframe (heals anything lost on the way, ~5 s)
+  interp: 0.26, // clients draw other players this far (s) behind the host (monsters are extrapolated)
+  // member -> host: position updates only when the host's guess (last position + velocity) drifts
+  inMax: 4, // on average at most this many a second while moving/turning...
+  inBurst: 3, // ...with a few extra right away when starting, stopping or turning
+  inHeartbeat: 1, // at least one a second (standing still)
+  drPos: 0.6, // studs: drift that triggers an update
+  drYaw: 0.6, // radians of turning that triggers an update
+  eventsPerSecond: 40, // Supabase client-side cap
 };
 
 export const TIMEOUTS = {
@@ -91,12 +112,8 @@ export const roomTopic = (code) => `sas:room:${code}`;
 export const upTopic = (code, pid) => `sas:room:${code}:u:${pid}`;
 export const LOBBY_TOPIC = 'sas:lobby';
 
-export function makePid() {
-  let s = 'x';
-  for (let i = 0; i < 9; i++) s += '0123456789abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 36)];
-  return s;
-}
-export const isPid = (s) => typeof s === 'string' && /^[a-z0-9]{4,16}$/.test(s);
+/** pids are 'k' + 15 hex digits of the hash of the device's public key (see crypto.js). */
+export const isPid = (s) => typeof s === 'string' && /^k[0-9a-f]{15}$/.test(s);
 
 // ------------------------------------------------------------------ small helpers
 
@@ -134,24 +151,10 @@ export class RateLimiter {
 
 // ------------------------------------------------------------------ safety filters
 
-const LOOK_KEYS = ['build', 'skin', 'hair', 'hairColor', 'shirt', 'shirtColor', 'shirtColor2', 'pants', 'shoes', 'hat', 'face', 'acc', 'noodle', 'trail'];
-const LOOK_VAL = /^#?[a-zA-Z0-9_-]{1,24}$/;
-
-/** A Look from the network: known keys (plus a few short extra ones from newer builds), id-like values only. */
-export function sanitizeLook(look) {
+/** A Look from the network, in the canonical shape and key order the Wardrobe uses (cosmetics.js). */
+export function sanitizeLook(look, base = CHARACTERS[0].id) {
   if (!isObj(look)) return null;
-  const out = {};
-  let extra = 0;
-  for (const [k, v] of Object.entries(look)) {
-    const known = LOOK_KEYS.includes(k);
-    if (!known && (extra >= 8 || !/^[a-zA-Z][a-zA-Z0-9]{0,15}$/.test(k))) continue;
-    if (v === null || typeof v === 'boolean') out[k] = v;
-    else if (typeof v === 'string' && LOOK_VAL.test(v)) out[k] = v;
-    else if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
-    else continue;
-    if (!known) extra++;
-  }
-  return out;
+  return canonLook(look, own(CHARACTER, base) ? base : CHARACTERS[0].id);
 }
 
 /** A shared Photo Booth face: a small inline JPEG/PNG/WebP picture, nothing else. */
@@ -160,36 +163,102 @@ export function sanitizeFace(face) {
   return /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(face) ? face : null;
 }
 
-export const sanitizePet = (id) => (typeof id === 'string' && PET[id] ? id : null);
-export const sanitizeProfileId = (id) => (typeof id === 'string' && (/^p_[a-z0-9]{4,16}$/.test(id) || CHARACTERS.some((c) => c.id === id)) ? id : null);
-export const sanitizeBase = (id) => (CHARACTERS.some((c) => c.id === id) ? id : CHARACTERS[0].id);
+export const sanitizePet = (id) => (own(PET, id) ? id : null);
+export const sanitizeProfileId = (id) => (typeof id === 'string' && (/^p_[a-z0-9]{4,16}$/.test(id) || own(CHARACTER, id)) ? id : null);
+export const sanitizeBase = (id) => (own(CHARACTER, id) ? id : CHARACTERS[0].id);
 
-/** Identity card ('who' / hello.who). Faces are only kept when `allowFace` (private rooms). */
-export function sanitizeWho(w, allowFace) {
-  if (!isObj(w) || !isPid(w.pid)) return null;
+/** Identity card ('who' / hello.who) for `pid`. Faces are only kept when `allowFace` (private rooms). */
+export function sanitizeWho(w, pid, allowFace) {
+  if (!isObj(w) || !isPid(pid)) return null;
   const base = sanitizeBase(w.base);
   return {
-    pid: w.pid,
+    pid,
     id: sanitizeProfileId(w.id) || base,
     name: sanitizeName(w.name, 'Player'),
     base,
-    look: sanitizeLook(w.look),
+    look: sanitizeLook(w.look, base),
     pet: sanitizePet(w.pet),
     face: allowFace ? sanitizeFace(w.face) : null,
   };
 }
 
-// Bot lines are game content written by the host's code (never typed by people), but a modified host
-// could still send anything, so they must look like a short game line with no bad words.
+// Bot lines are game content written by the host's code (never typed by people). They must be one of
+// the game's own lines (config CHAT, bot replies, practice coaching) with names/plants filled in, or
+// at least look like a short clean game line.
 const BAD = ['fuck', 'fuk', 'fck', 'shit', 'bitch', 'cunt', 'dick', 'cock', 'pussy', 'penis', 'vagina', 'porn', 'sex', 'sexy', 'boob', 'boobs',
   'tits', 'nigger', 'nigga', 'fag', 'faggot', 'retard', 'rape', 'nazi', 'hitler', 'kkk', 'slut', 'whore', 'bastard', 'asshole', 'ass', 'wank',
   'jizz', 'cum', 'anal', 'kill', 'suicide', 'die', 'stupid', 'idiot', 'hate', 'dumb', 'loser', 'shut'];
 const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', '@': 'a', $: 's' };
+const LINE_CHARS = /^[\p{L}\p{N}\p{Emoji_Presentation} _'’.,!?:;&()\-+%$"#/…]*$/u;
 export function isCleanLine(text) {
   if (typeof text !== 'string' || !text.length || text.length > 160) return false;
-  if (!/^[\p{L}\p{N}\p{Emoji_Presentation} '’.,!?:;&()\-+%$"#/…]*$/u.test(text)) return false;
+  if (!LINE_CHARS.test(text)) return false;
   const words = text.toLowerCase().replace(/[0134578@$]/g, (c) => LEET[c] || c).split(/[^a-z]+/);
   return !words.some((w) => w && BAD.includes(w));
+}
+
+let TEMPLATES = null;
+function templates() {
+  if (TEMPLATES) return TEMPLATES;
+  const lines = new Set();
+  const walk = (v) => {
+    if (typeof v === 'string') lines.add(v);
+    else if (Array.isArray(v)) v.forEach(walk);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  };
+  walk(CHAT);
+  walk(REPLIES);
+  walk(EMOTE_LINES);
+  walk(PRACTICE_LINES);
+  // {name}, {plant}, {a_plant}... = a player name (sanitizeName charset) or a plant name
+  const slot = "[\\p{L}\\p{N} _.'’-]{1,40}";
+  TEMPLATES = [...lines].filter((l) => l.length > 1).map((l) => {
+    const re = l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{[a-z_]+\\\}/g, slot);
+    return new RegExp('^' + re + '$', 'u');
+  });
+  return TEMPLATES;
+}
+
+/** A line a bot may say: one of the game's own lines (names and plants filled in) or a clean short line. */
+export function isBotLine(text) {
+  if (typeof text !== 'string' || !text.length || text.length > 160) return false;
+  if (!LINE_CHARS.test(text)) return false;
+  for (const re of templates()) if (re.test(text)) return true;
+  return isCleanLine(text);
+}
+
+/** A plant from the network, or null (unknown species/mutation, bad numbers). */
+export function vetPlantData(d, owner = null) {
+  if (!isObj(d) || !own(PLANT, d.speciesId)) return null;
+  const sp = PLANT[d.speciesId];
+  const growTotal = num(d.growTotal, sp.grow) > 0 ? Math.min(num(d.growTotal, sp.grow), 1e6) : sp.grow;
+  const out = { speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal', growTotal, growLeft: Math.max(0, Math.min(growTotal, num(d.growLeft))) };
+  if ('uid' in d) out.uid = num(d.uid);
+  if (owner != null) out.owner = int(d.owner, 0, CHARACTERS.length - 1, owner);
+  return out;
+}
+
+/** A joiner's own online garden ({player, garden} from serializeSlot) before the host loads it. */
+export function vetSlotData(data) {
+  if (!isObj(data)) return null;
+  const cap = (v, hi, d = 0) => Math.max(0, Math.min(hi, Math.floor(num(v, d))));
+  const out = { v: 1 };
+  const p = isObj(data.player) ? data.player : {};
+  const items = {};
+  for (const it of ITEMS) items[it.id] = cap(isObj(p.items) ? p.items[it.id] : 0, 999);
+  const stats = {};
+  if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds']) stats[k] = cap(p.stats[k], 1e12);
+  out.player = {
+    cash: cap(p.cash, 1e13, PLAYER.startCash), speedLevel: cap(p.speedLevel, 25), rebirths: cap(p.rebirths, 50),
+    upgradeSpend: cap(p.upgradeSpend, 1e13), items, stats,
+  };
+  const g = isObj(data.garden) ? data.garden : {};
+  const planters = Array.isArray(g.planters) ? g.planters.slice(0, 10) : [];
+  out.garden = {
+    cashPile: cap(g.cashPile, 1e13),
+    planters: planters.map((pl) => (isObj(pl) ? { unlocked: !!pl.unlocked, plant: vetPlantData(pl.plant) } : { unlocked: false, plant: null })),
+  };
+  return out;
 }
 
 // ------------------------------------------------------------------ motion packing
@@ -199,6 +268,30 @@ const MONSTER_STRIDE = 7; // x, z, yaw, vx, vz, state, target
 const PROJ_STRIDE = 9; // uid, owner, born, x, y, z, vx, vy, vz
 export { PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE };
 const MSTATE = ['patrol', 'chase', 'stunned'];
+
+/**
+ * Where a player reported at `b` should be `age` seconds later if they keep pressing the same way:
+ * their velocity {vx, vz} eases towards the target velocity {tx, tz} with the game's acceleration
+ * (PLAYER.accel on the ground, airAccel in the air), height follows gravity while airborne. The host
+ * draws remote players with this, and each device uses the same guess to decide when to report.
+ */
+export function predict(b, age, out) {
+  const a = b.og ? PLAYER.accel : PLAYER.airAccel;
+  const dvx = b.tx - b.vx, dvz = b.tz - b.vz;
+  const dv = Math.hypot(dvx, dvz);
+  const T = dv > 1e-6 ? dv / a : 0; // time to reach the target velocity
+  if (age <= T) {
+    const k = (0.5 * a * age * age) / (dv || 1);
+    out.x = b.x + b.vx * age + dvx * k;
+    out.z = b.z + b.vz * age + dvz * k;
+  } else {
+    const k = (0.5 * a * T * T) / (dv || 1);
+    out.x = b.x + b.vx * T + dvx * k + b.tx * (age - T);
+    out.z = b.z + b.vz * T + dvz * k + b.tz * (age - T);
+  }
+  out.y = b.og ? b.y : Math.max(0, b.y + b.vy * age - 0.5 * WORLD.gravity * age * age);
+  return out;
+}
 
 export function packPlayers(game) {
   const out = [];
@@ -288,11 +381,11 @@ export class EventCodec {
   }
 
   /** Back to live objects of this device's game. Returns undefined for anything malformed. */
-  decode(v, depth = 0) {
+  decode(v, depth = 0, key = '') {
     const g = this.game;
     if (v == null || typeof v === 'boolean') return v;
     if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
-    if (typeof v === 'string') return v.length <= 48 ? v : undefined;
+    if (typeof v === 'string') return v.length <= (key === 'text' ? 160 : 48) ? v : undefined;
     if (typeof v !== 'object' || depth > 4) return undefined;
     if (Array.isArray(v)) {
       const out = [];
@@ -314,7 +407,7 @@ export class EventCodec {
       if (!isObj(d)) return undefined;
       const live = g.ground.find((x) => x.uid === d.uid);
       if (live) return live;
-      if (d.kind === 'seed' && !PLANT[d.speciesId]) return undefined;
+      if (d.kind === 'seed' && !own(PLANT, d.speciesId)) return undefined;
       const o = {};
       for (const [k, x] of Object.entries(d)) if (typeof x === 'number' ? Number.isFinite(x) : typeof x === 'string' ? isId(x) : x == null || typeof x === 'boolean') o[k] = x;
       return o;
@@ -329,7 +422,7 @@ export class EventCodec {
     const o = {};
     for (const [k, x] of Object.entries(v)) {
       if (!/^[a-zA-Z0-9_]{1,24}$/.test(k)) return undefined;
-      const d = this.decode(x, depth + 1);
+      const d = this.decode(x, depth + 1, k);
       if (d === undefined) return undefined;
       o[k] = d;
     }
@@ -337,12 +430,12 @@ export class EventCodec {
   }
 
   _plant(d) {
-    if (!isObj(d) || !PLANT[d.speciesId]) return undefined;
+    if (!isObj(d) || !own(PLANT, d.speciesId)) return undefined;
     const g = this.game;
     for (const gd of g.gardens) for (const pl of gd.planters) if (pl.plant && pl.plant.uid === d.uid) return pl.plant;
     for (const p of g.players) if (p.carrying?.kind === 'plant' && p.carrying.plant.uid === d.uid) return p.carrying.plant;
     return {
-      uid: num(d.uid), speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal',
+      uid: num(d.uid), speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal',
       growTotal: num(d.growTotal, 1), growLeft: num(d.growLeft), owner: int(d.owner, 0, 3, 0),
     };
   }
@@ -366,12 +459,11 @@ export class EventCodec {
       const p = e.player;
       if (!(p instanceof Player)) return null;
       if (e.quick) {
-        const ph = PHRASE[e.phrase];
-        if (!ph) return null;
-        e.text = ph.text;
-      } else if (p.kind !== 'bot' || !isCleanLine(e.text)) return null;
+        if (!own(PHRASE, e.phrase)) return null;
+        e.text = PHRASE[e.phrase].text;
+      } else if (p.kind !== 'bot' || !isBotLine(e.text)) return null;
     }
-    if (name === 'emote' && !EMOTE[e.id]) return null;
+    if (name === 'emote' && !own(EMOTE, e.id)) return null;
     return e;
   }
 }
@@ -427,11 +519,32 @@ export function mergeSections(full, D) {
 /** Check a full state from the network has the right shape (applyFull trusts it) and clean its text. */
 export function vetFull(s) {
   if (!isObj(s) || s.v !== 1 || !Array.isArray(s.players) || s.players.length !== CHARACTERS.length) return null;
-  if (!Array.isArray(s.gardens) || !Array.isArray(s.pods) || !Array.isArray(s.ground) || !Array.isArray(s.projectiles) || !Array.isArray(s.monsters)) return null;
+  if (!Array.isArray(s.gardens) || s.gardens.length !== CHARACTERS.length || !Array.isArray(s.pods) || !Array.isArray(s.ground) ||
+    !Array.isArray(s.projectiles) || !Array.isArray(s.monsters)) return null;
   for (let i = 0; i < s.players.length; i++) if (!vetPlayer(s.players[i], i)) return null;
-  for (const g of s.gardens) if (!isObj(g) || !Array.isArray(g.planters)) return null;
+  for (let i = 0; i < s.gardens.length; i++) if (!vetGarden(s.gardens[i], i)) return null;
+  s.pods = s.pods.map(vetPod);
+  s.ground = vetGround(s.ground);
   if (!Number.isFinite(s.time)) return null;
   return s;
+}
+
+export function vetGarden(g, i) {
+  if (!isObj(g) || !Array.isArray(g.planters) || g.planters.length !== 10) return false;
+  g.planters = g.planters.map((pl) => (isObj(pl) ? { unlocked: !!pl.unlocked, stealer: int(pl.stealer, 0, 3, null), plant: vetPlantData(pl.plant, i) } : { unlocked: false, stealer: null, plant: null }));
+  return true;
+}
+
+export const vetPod = (d) => (isObj(d) ? { seed: isObj(d.seed) && own(PLANT, d.seed.speciesId) ? { speciesId: d.seed.speciesId, mutation: own(MUTATIONS, d.seed.mutation) ? d.seed.mutation : 'normal', lucky: !!d.seed.lucky } : null, respawnAt: num(d.respawnAt) } : { seed: null, respawnAt: 0 });
+
+export function vetGround(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 200).filter((gi) => isObj(gi) && (gi.kind === 'banana' || (gi.kind === 'seed' && own(PLANT, gi.speciesId)))).map((gi) => {
+    const o = {};
+    for (const [k, v] of Object.entries(gi)) if (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'string' ? isId(v) : v == null || typeof v === 'boolean') o[k] = v;
+    if (o.kind === 'seed' && !own(MUTATIONS, o.mutation)) o.mutation = 'normal';
+    return o;
+  });
 }
 
 export function vetPlayer(d, i) {
@@ -439,9 +552,21 @@ export function vetPlayer(d, i) {
   d.name = sanitizeName(d.name, CHARACTERS[i].name);
   d.pid = isPid(d.pid) ? d.pid : null;
   d.profileId = sanitizeProfileId(d.profileId) || CHARACTERS[i].id;
-  d.look = { ...CHARACTERS[i].look, ...(sanitizeLook(d.look) || {}) };
+  d.look = sanitizeLook(d.look, CHARACTERS[i].id) || { ...CHARACTERS[i].look };
   d.pet = sanitizePet(d.pet);
-  if (d.emote && (!isObj(d.emote) || !EMOTE[d.emote.id])) d.emote = null;
+  if (d.emote && (!isObj(d.emote) || !own(EMOTE, d.emote.id))) d.emote = null;
+  const c = d.carrying;
+  if (c) {
+    if (c.kind === 'plant') {
+      const plant = vetPlantData(c.plant, int(c.fromSlot, 0, 3, 0));
+      d.carrying = plant ? { kind: 'plant', plant, fromSlot: int(c.fromSlot, 0, 3, 0), fromIndex: int(c.fromIndex, 0, 9, 0) } : null;
+    } else if (c.kind === 'seed' && own(PLANT, c.speciesId)) {
+      d.carrying = { kind: 'seed', speciesId: c.speciesId, mutation: own(MUTATIONS, c.mutation) ? c.mutation : 'normal', podId: int(c.podId, 0, 999, 0), lucky: !!c.lucky };
+    } else d.carrying = null;
+  }
+  const items = {};
+  for (const it of ITEMS) items[it.id] = Math.max(0, Math.floor(num(d.items[it.id])));
+  d.items = items;
   const it = d.interact;
   for (const k of ['label', 'verb', 'key', 'rarity']) if (it[k] != null && (typeof it[k] !== 'string' || it[k].length > 64)) it[k] = '';
   return true;

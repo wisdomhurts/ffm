@@ -46,6 +46,9 @@ const CSS = `
 .lobby .lb-room .lr-n i.on{background:#63f27f}
 .lobby .lb-room .btn{min-height:42px}
 .lobby .lb-empty{padding:16px 12px;text-align:center;font:700 14px/1.35 var(--fb);color:var(--txt2)}
+.lobby .lb-down{display:flex;flex-direction:column;align-items:center;gap:10px;color:#ffd9df}
+.lobby .lb-sec .live.down{color:#ff9aab}
+.lobby .lb-sec .live.down i{background:#ff5a73;box-shadow:none;animation:none}
 .lobby .lb-make{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .lobby .lb-mk{flex-direction:column;align-items:flex-start;gap:6px;text-align:left;min-height:84px;padding:12px 14px 14px}
 .lobby .lb-mk .lbm{display:flex;align-items:center;gap:9px;font-size:21px}
@@ -206,9 +209,10 @@ export function openLobby(app) {
   const head = h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.globe }), h('h2', { text: 'Play Online' }));
 
   if (!on?.available) {
+    const why = on?.unavailable === 'insecure' ? NET_ERRORS.insecure : NET_ERRORS.unavailable;
     root.append(head, h('div', { class: 'lb-off' },
-      h('div', { class: 'big', text: 'Online play is coming soon!' }),
-      h('p', { text: NET_ERRORS.unavailable + ' You can still play with the family on this device.' })));
+      h('div', { class: 'big', text: on?.unavailable === 'insecure' ? "Online play can't start here" : 'Online play is coming soon!' }),
+      h('p', { text: why + ' You can still play with the family on this device.' })));
     const m = menus.openModal(root, { cls: 'lobby-modal', label: 'Play Online' });
     root.appendChild(menus.doneRow(() => m.close()));
     return m;
@@ -259,11 +263,20 @@ export function openLobby(app) {
     'btn-green btn-xl lb-quick lb-act', () => run(() => on.quickPlay()), { 'data-autofocus': '' });
 
   // ---- public rooms
+  const liveTxt = h('span', { text: 'live' });
+  const live = h('span', { class: 'live' }, h('i'), liveTxt);
   const list = h('div', { class: 'lb-rooms', role: 'list', 'aria-label': 'Public rooms', 'aria-live': 'polite' },
     h('div', { class: 'lb-empty', text: 'Looking for rooms…' }));
   function paintRooms(err) {
+    toggle(live, 'down', !!err);
+    setText(liveTxt, err === 'offline' ? 'offline' : err ? 'no connection' : 'live');
     if (err) {
-      list.replaceChildren(h('div', { class: 'lb-empty', text: err === 'unavailable' ? NET_ERRORS.unavailable : "Couldn't load the room list. Quick Play still works!" }));
+      const msg = err === 'offline' ? NET_ERRORS.offline : err === 'connect' ? "Can't reach the game server right now." : NET_ERRORS[err] || NET_ERRORS.unavailable;
+      list.replaceChildren(h('div', { class: 'lb-empty lb-down' }, h('span', { text: msg }),
+        err === 'offline' || err === 'connect' ? btn('Try again', 'btn-blue btn-sm', () => {
+          list.replaceChildren(h('div', { class: 'lb-empty', text: 'Looking for rooms…' }));
+          stopRooms?.retry?.();
+        }) : null));
       return;
     }
     if (!rooms.length) {
@@ -307,7 +320,7 @@ export function openLobby(app) {
   });
   function joinCode() {
     const c = normalizeCode(input.value);
-    if (c.length === CODE_LEN) run(() => on.joinRoom(c));
+    if (c.length === CODE_LEN) run(() => on.joinRoom(c, { typed: true })); // typed codes are the only way faces get shared
   }
 
   // ---- share my face (private rooms only)
@@ -324,7 +337,7 @@ export function openLobby(app) {
     faceSw.disabled = !can;
     toggle(faceRow, 'off', !can);
     setText(faceNote, can
-      ? 'Only friends in your private room see it. Public rooms always show cartoon faces.'
+      ? 'Only friends in a private room you join by typing its code (or make yourself) see it. Public rooms always show cartoon faces.'
       : 'Take a photo in the Photo Booth first. Public rooms always show cartoon faces.');
   }
   faceSw.addEventListener('click', () => {
@@ -388,7 +401,7 @@ export function openLobby(app) {
     h('p', { class: 'lb-sub', text: 'Play in one big garden with friends and family, on any device.' }),
     whoCard,
     quick,
-    h('div', { class: 'lb-sec' }, h('span', { text: 'Public rooms' }), h('span', { class: 'live' }, h('i'), 'live')),
+    h('div', { class: 'lb-sec' }, h('span', { text: 'Public rooms' }), live),
     list,
     h('div', { class: 'lb-sec', text: 'Make a room' }),
     make,
@@ -552,6 +565,7 @@ export function mountRoomPanel(app, hudRoot, anchors = {}) {
       remember();
     }),
     bus.on('net:host', ({ isHost, promoted }) => {
+      if (!room.private) setText(small, on.room?.name || room.name); // the room is named after its (new) host
       paint();
       if (promoted && isHost) toast("You're the host now!", ICON.crown);
     }),

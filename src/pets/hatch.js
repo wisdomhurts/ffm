@@ -137,7 +137,6 @@ function run(app, info, done) {
   const G = {};
   let petModel = null;
   if (stage) {
-    stageEl.appendChild(stage.canvas);
     const root = stage.root;
     const eggRoot = new THREE.Group();
     eggRoot.scale.setScalar(1.9);
@@ -183,37 +182,70 @@ function run(app, info, done) {
     petModel.root.userData.k = k;
     root.add(petModel.root);
     Object.assign(G, { root, eggRoot, whole, bottom, topHalf, shards, sh, cr });
-  } else {
-    // no WebGL for the studio: a CSS egg that wobbles and pops
-    fallback = el('div', `ph-cssegg egg-${egg.id}`);
-    stageEl.appendChild(fallback);
   }
 
+  // CSS stand-ins while the 3D stage can't draw (no WebGL, or its context was lost; it comes back on restore)
+  let cssPet = null;
+  const syncStage = () => {
+    const lost = !stage || stage.lost;
+    wrap.classList.toggle('lost', lost);
+    if (stage && !lost && stage.canvas.parentNode !== stageEl) stageEl.appendChild(stage.canvas);
+    if (!lost) return;
+    if (!fallback) {
+      fallback = el('div', `ph-cssegg egg-${egg.id}${burst ? ' pop' : ''}`);
+      stageEl.appendChild(fallback);
+    }
+    if (burst && !cssPet) {
+      fallback.classList.add('pop');
+      // a big paw badge in the rarity colour stands in for the pet
+      cssPet = el('div', 'ph-csspet');
+      cssPet.innerHTML = PAW_ICON;
+      stageEl.appendChild(cssPet);
+    }
+  };
+
   // Frame the egg/pet inside the free band (fits its height and width), and slide smoothly when the band
-  // moves (the info card appearing beside it on landscape phones). The canvas itself covers the screen.
-  const cam = { d: 0, ox: 0, oy: 0, init: false };
+  // moves (the info card appearing beside it on landscape phones). The canvas only covers the area the egg,
+  // its flying shell and the pet can reach (not the whole screen), to keep the stage light on phones.
+  const cam = { u: 0, cx: 0, cy: 0, init: false };
+  let rectKey = '';
+  let styled = null;
   const resize = (dt = 1) => {
     const R = wrap.getBoundingClientRect();
     const B = space.getBoundingClientRect();
     const W = Math.max(16, R.width), H = Math.max(16, R.height);
     const bw = Math.max(80, B.width), bh = Math.max(80, B.height);
-    const cx = B.left - R.left + B.width / 2, cy = B.top - R.top + B.height / 2;
-    wrap.style.setProperty('--cx', cx.toFixed(0) + 'px');
-    wrap.style.setProperty('--cy', cy.toFixed(0) + 'px');
-    if (!stage) return;
-    stage.setSize(W, H);
-    const u = Math.max(2.05 / (0.8 * bh), 2.9 / (0.94 * bw)); // world units per CSS pixel
-    const c = stage.camera;
-    const d = (u * H) / (2 * Math.tan((c.fov * Math.PI) / 360));
     const k = cam.init ? 1 - Math.exp(-6 * dt) : 1;
     cam.init = true;
-    cam.d += (d - cam.d) * k;
-    cam.ox += (cx - W / 2 - cam.ox) * k;
-    cam.oy += (cy - H / 2 - cam.oy) * k;
+    const u = Math.max(2.05 / (0.8 * bh), 2.9 / (0.94 * bw)); // world units per CSS pixel
+    cam.u += (u - cam.u) * k;
+    cam.cx += (B.left - R.left + B.width / 2 - cam.cx) * k;
+    cam.cy += (B.top - R.top + B.height / 2 - cam.cy) * k;
+    wrap.style.setProperty('--cx', cam.cx.toFixed(0) + 'px');
+    wrap.style.setProperty('--cy', cam.cy.toFixed(0) + 'px');
+    if (!stage) return;
+    // reach around the subject (world units): 2.7 to each side, 2.5 up (the shell's lid flies), 1.7 down
+    const x0 = Math.max(0, Math.floor(cam.cx - 2.7 / cam.u)), x1 = Math.min(W, Math.ceil(cam.cx + 2.7 / cam.u));
+    const y0 = Math.max(0, Math.floor(cam.cy - 2.5 / cam.u)), y1 = Math.min(H, Math.ceil(cam.cy + 1.7 / cam.u));
+    const cw = Math.max(16, x1 - x0), ch = Math.max(16, y1 - y0);
+    const key = `${x0},${y0},${cw},${ch}`;
+    if (key !== rectKey || stage.canvas !== styled) {
+      rectKey = key;
+      styled = stage.canvas; // a rebuilt studio brings a fresh canvas
+      const cs = stage.canvas.style;
+      cs.left = x0 + 'px';
+      cs.top = y0 + 'px';
+      cs.width = cw + 'px';
+      cs.height = ch + 'px';
+    }
+    stage.setSize(cw, ch);
+    const c = stage.camera;
+    const d = (cam.u * ch) / (2 * Math.tan((c.fov * Math.PI) / 360));
     const pitch = 0.2;
-    c.position.set(0, 1.0 + Math.sin(pitch) * cam.d, Math.cos(pitch) * cam.d);
+    c.position.set(0, 1.0 + Math.sin(pitch) * d, Math.cos(pitch) * d);
     c.lookAt(0, 1.0, 0);
-    c.setViewOffset(W, H, -cam.ox, -cam.oy, W, H);
+    // the subject sits at the band centre, which is off the canvas centre where the canvas was clipped
+    c.setViewOffset(cw, ch, -(cam.cx - x0 - cw / 2), -(cam.cy - y0 - ch / 2), cw, ch);
   };
   resize();
   const onResize = () => resize();
@@ -231,6 +263,7 @@ function run(app, info, done) {
     fn();
   };
   let closed = false;
+  syncStage();
 
   // test/debug hook: jump the timeline (e.g. document.querySelector('.pet-hatch').__hatch.seek(2.9))
   wrap.__hatch = {
@@ -258,13 +291,6 @@ function run(app, info, done) {
     if (rarity === 'mythic') setTimeout(() => play(app, 'secret'), 120);
     if (rarity === 'epic') setTimeout(() => play(app, 'grown'), 120);
     if (!quick) spawnConfetti(confetti, rarity);
-    if (fallback) {
-      fallback.classList.add('pop');
-      // no 3D here: a big paw badge in the rarity colour stands in for the pet
-      const badge = el('div', 'ph-csspet');
-      badge.innerHTML = PAW_ICON;
-      stageEl.appendChild(badge);
-    }
   }
 
   function frame(now) {
@@ -295,6 +321,7 @@ function run(app, info, done) {
       (equipBtn.hidden ? okBtn : equipBtn).focus({ preventScroll: true });
     }
 
+    syncStage();
     if (!stage) return;
     const { eggRoot, whole, bottom, topHalf, shards, sh } = G;
     if (!burst) {
@@ -404,8 +431,10 @@ function run(app, info, done) {
     if (k === 'Escape' || k === 'Enter' || k === ' ' || k === 'Spacebar') {
       e.preventDefault();
       e.stopPropagation();
-      if (t < T_BTNS) skip();
-      else if (k === 'Escape') close();
+      if (t < T_BTNS) {
+        if (k === 'Escape') t = Math.max(t, T_BTNS); // Esc: straight to the reveal (a second Esc closes)
+        else skip();
+      } else if (k === 'Escape') close();
       else if (document.activeElement?.closest?.('.ph-btns')) document.activeElement.click();
       else close();
     } else if (k === 'Tab' && btnsShown) {

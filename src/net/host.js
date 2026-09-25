@@ -1,5 +1,6 @@
 // The room host: runs the real Game for everyone. Remote players move on their own devices; the host
-// takes their positions after a sanity check, runs every rule, and streams the world back ~10x a second.
+// takes their positions after a sanity check, runs every rule, and streams the world back ~5x a second (and right away when something happens).
+// Everything a member sends arrives sealed on its own uplink (session.open checks it is really them).
 import { PLAYER, WORLD, ITEMS } from '../config.js';
 import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
@@ -7,10 +8,12 @@ import { EMOTE, PHRASE } from '../social/catalog.js';
 import { BotController } from '../ai/bot.js';
 import {
   RATES, TIMEOUTS, MAX_HUMANS, EventCodec, forwarded, packPlayers, packMonsters, packProjectiles, sectionize, signature,
-  stringifyR, num, int, isId, sanitizeLook, sanitizePet, RateLimiter, upTopic, relay,
+  stringifyR, num, int, isId, own, sanitizeLook, sanitizePet, vetSlotData, RateLimiter, upTopic, relay, isPid, predict,
 } from './protocol.js';
 
 const R = WORLD.playerRadius;
+// events that can ride the next regular tick (frequent, and only cosmetic for the others)
+const CALM = new Set(['player:jump', 'bonk:swing', 'bonk:miss', 'pod:respawn', 'monster:aggro', 'plant:grown', 'seed:expired', 'ground:expired', 'chat', 'emote']);
 
 /** Intent for a remote player, built from their 'in' messages (edges arrive with sequence numbers). */
 export class RemoteController {
@@ -52,15 +55,17 @@ export class HostRole {
    * @param {object} s  the session (send, clock, pid, transport, emit)
    * @param {Game} game the real game (this device's app.game)
    */
-  constructor(s, game, { epoch = 1, order = null } = {}) {
+  constructor(s, game, { epoch = 1, order = null, banned = null } = {}) {
     this.s = s;
     this.game = game;
     this.epoch = epoch;
     this.order = order ? order.slice() : [s.pid];
     this.members = new Map(); // pid -> member (remote humans only)
-    this.banned = new Set();
+    this.banned = new Set(banned || []); // removed by a host of this room: never seated again
+    this.bannedDirty = this.banned.size > 0;
     this.seq = 0;
-    this.tickAcc = 0;
+    this.sinceTick = 0;
+    this.urgent = false;
     this.events = [];
     this.codec = new EventCodec(game);
     this.lastSig = {};
@@ -75,7 +80,10 @@ export class HostRole {
           if (relay.depth || !forwarded(name) || !payload || this.s.role !== this) return;
           this.codec.foreign = false;
           const enc = this.codec.encode(payload);
-          if (!this.codec.foreign) this.events.push([name, enc]);
+          if (!this.codec.foreign) {
+            this.events.push([name, enc]);
+            if (!CALM.has(name)) this.urgent = true;
+          }
           if (this.events.length > 120) this.events.splice(0, 40);
         } catch (e) {
           console.warn('[net] event not shared', name, e);
@@ -97,42 +105,49 @@ export class HostRole {
     return this.members.size + 1;
   }
 
-  /** Members whose devices are currently following this host (decides host-vs-host ties). */
+  /** Members whose devices are following this host right now (their sealed inputs reach us). */
   followers() {
     let n = 0;
-    for (const m of this.members.values()) if (m.follows && this.s.clock - m.lastIn < 3) n++;
+    for (const m of this.members.values()) if (this.s.clock - m.lastIn < 3) n++;
     return n;
+  }
+
+  // Send a sealed message to one member on its own uplink (nobody else hears it).
+  _toMember(m, event, payload) {
+    const env = this.s.seal(event, payload, m.pid);
+    return env && m.up ? m.up.send(event, env) : false;
   }
 
   // ---------------------------------------------------------------- joining and leaving
 
-  /** A friend wants in. Returns a reason string when refused. */
-  async onHello(msg) {
+  /** A friend wants in (the session already checked the hello is really from `pid`). */
+  async onHello(pid, msg) {
     const s = this.s;
-    const pid = msg.pid;
     if (!this.limitHello.allow(pid, s.clock)) return;
-    if (msg.v !== s.version) return s.sendRoom('reject', { to: pid, reason: 'version' });
-    if (this.banned.has(pid)) return s.sendRoom('reject', { to: pid, reason: 'kicked' });
+    const reject = (reason) => s.sendRoom('reject', { to: pid, hn: msg.hn, reason }, pid);
+    if (msg.v !== s.version) return reject('version');
+    if (this.banned.has(pid)) return reject('kicked');
     let m = this.members.get(pid);
     if (!m) {
       const g = this.game;
       const free = g.players.filter((p) => p.kind === 'bot');
-      if (!free.length || this.humans >= MAX_HUMANS) return s.sendRoom('reject', { to: pid, reason: 'full' });
+      if (!free.length || this.humans >= MAX_HUMANS) return reject('full');
       const who = msg.who;
       const pref = free.find((p) => p.char.id === who.base) || free[0];
-      m = this._addMember(pid, pref.slot, who, msg.data);
-      // the uplink must be open before we tell them to start sending on it
+      m = this._addMember(pid, pref.slot, who, vetSlotData(msg.data));
+      // the uplink must be open before we answer on it
       try {
         await m.up.subscribe();
       } catch {
         /* inputs will still arrive once the channel recovers */
       }
       if (this.s.role !== this || !this.members.has(pid)) return;
-    } else if (s.clock - m.welcomedAt < 2.5) return; // a re-sent hello crossed our welcome
+    } else if (s.clock - m.welcomedAt < 2.5 && msg.hn === m.hn) return; // a re-sent hello crossed our welcome
     m.welcomedAt = s.clock;
+    m.hn = msg.hn;
     m.lastIn = s.clock;
-    s.sendRoom('welcome', {
-      to: pid, slot: m.slot, ep: this.epoch, h: s.pid, order: this.order, priv: !!s.room?.private, name: s.room?.name || '',
+    this._toMember(m, 'welcome', {
+      to: pid, hn: msg.hn, slot: m.slot, ep: this.epoch, order: this.order, bn: [...this.banned], priv: !!s.room?.private,
       st: JSON.parse(stringifyR(this.game.serializeFull())),
     });
     s.onMembersChanged();
@@ -161,13 +176,23 @@ export class HostRole {
   _member(pid, p, ctrl) {
     const m = {
       pid, slot: p.slot, ctrl, up: null,
-      base: { x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: 0, vy: 0, vz: 0, yaw: p.yaw, og: true, t: this.s.clock, c: null },
+      base: { x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: 0, vy: 0, vz: 0, tx: 0, tz: 0, yaw: p.yaw, og: true, t: this.s.clock, c: null },
       ex: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
-      lastIn: this.s.clock, goneAt: null, lastEdge: 0, ip: 0, welcomedAt: -9, follows: true,
+      lastIn: this.s.clock, goneAt: null, lastEdge: 0, ip: 0, welcomedAt: -9, hn: null,
+      show: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw },
       kick: 0, kickPending: false, kickAt: 0, kickTries: 0, kickGraceUntil: 0, needKick: false, fixAt: 0,
     };
-    m.up = this.s.t.channel(upTopic(this.s.room.code, pid), { presence: false });
-    m.up.on('in', (msg) => this.onIn(m, msg));
+    m.up = this.s._transport().channel(upTopic(this.s.room.code, pid), { presence: false });
+    m.up.on('in', (env) => {
+      if (this.s.role !== this || this.members.get(pid) !== m) return;
+      const msg = this.s.open('in', env, 'u', pid); // only that member can seal for its uplink
+      if (msg) this.onIn(m, msg);
+    });
+    m.up.on('bye', (env) => {
+      if (this.s.role !== this || this.members.get(pid) !== m || !this.s.open('bye', env, 'u', pid)) return;
+      this.removeMember(pid, 'left');
+      this.s._announce();
+    });
     this.members.set(pid, m);
     return m;
   }
@@ -183,8 +208,8 @@ export class HostRole {
           p.controller = ctrl;
           p.remoteMotion = true;
           const m = this._member(p.pid, p, ctrl);
-          m.base.vx = p.vel.x;
-          m.base.vz = p.vel.z;
+          m.base.vx = m.base.tx = p.vel.x;
+          m.base.vz = m.base.tz = p.vel.z;
           m.up.subscribe().catch(() => {});
         } else {
           this.s.forgetWho(p.pid);
@@ -224,9 +249,11 @@ export class HostRole {
   }
 
   kick(pid) {
-    if (!this.members.has(pid)) return false;
+    const m = this.members.get(pid);
+    if (!m) return false;
     this.banned.add(pid);
-    this.s.sendRoom('kicked', { to: pid });
+    this.bannedDirty = true;
+    this._toMember(m, 'kicked', { to: pid });
     this.removeMember(pid, 'kicked');
     return true;
   }
@@ -245,6 +272,7 @@ export class HostRole {
     const s = this.s;
     if (s.role !== this || this.members.get(m.pid) !== m || !msg || typeof msg !== 'object') return;
     if (!this.limitIn.allow(m.pid, s.clock)) return;
+    // (the session checked the seal: only this member could have sent it, and never twice)
     const p = this.game.players[m.slot];
     if (!p || p.pid !== m.pid) return;
     m.lastIn = s.clock;
@@ -259,7 +287,6 @@ export class HostRole {
       }
     }
     // held interact; a new press while we still think it's held counts as release + press
-    m.follows = msg.h === s.pid;
     const held = !!msg.i;
     if (Number.isInteger(msg.ip) && msg.ip !== m.ip) {
       if (ctrl.held && held) ctrl.release = true;
@@ -275,10 +302,11 @@ export class HostRole {
       b.x = p.pos.x;
       b.y = p.pos.y;
       b.z = p.pos.z;
+      b.vx = b.vz = b.tx = b.tz = 0;
       b.t = s.clock;
       b.c = null;
     }
-    if (!m.kickPending && Array.isArray(msg.p) && msg.p.length === 8) this._motion(m, p, msg.p, num(msg.c, NaN));
+    if (!m.kickPending && Array.isArray(msg.p) && (msg.p.length === 8 || msg.p.length === 10)) this._motion(m, p, msg.p, num(msg.c, NaN));
   }
 
   _edge(m, p, k, v) {
@@ -288,9 +316,9 @@ export class HostRole {
       if (Number.isInteger(v) && v >= 0 && v < ITEMS.length) ctrl.push('u', v);
       else if (isId(v) && ITEMS.some((i) => i.id === v)) ctrl.push('u', v);
     } else if (k === 'm') {
-      if (EMOTE[v]) ctrl.push('m', v);
+      if (own(EMOTE, v)) ctrl.push('m', v);
     } else if (k === 's') {
-      if (PHRASE[v]) ctrl.push('s', v);
+      if (own(PHRASE, v)) ctrl.push('s', v);
     } else if (k === 'a' && Array.isArray(v) && typeof v[0] === 'string') {
       if (this.limitAct.allow(m.pid, this.s.clock)) this.act(p, v[0], Array.isArray(v[1]) ? v[1].slice(0, 4) : []);
     }
@@ -298,7 +326,7 @@ export class HostRole {
 
   /** Accept a remote player's own position if it is physically possible, otherwise the closest that is. */
   _motion(m, p, a, c) {
-    for (let i = 0; i < 8; i++) if (typeof a[i] !== 'number' || !Number.isFinite(a[i])) return;
+    for (let i = 0; i < a.length; i++) if (typeof a[i] !== 'number' || !Number.isFinite(a[i])) return;
     const s = this.s;
     const g = this.game;
     const b = m.base;
@@ -332,15 +360,18 @@ export class HostRole {
     b.y = y;
     b.z = z;
     // velocity only drives dead reckoning and the physics after a kick: keep it to what's possible
-    let vx = a[3], vz = a[5];
-    const vh = Math.hypot(vx, vz), vcap = vmax * 1.1;
-    if (vh > vcap) {
-      vx *= vcap / vh;
-      vz *= vcap / vh;
-    }
+    const vcap = vmax * 1.1;
+    const capped = (x, z) => {
+      const l = Math.hypot(x, z);
+      return l > vcap ? [(x * vcap) / l, (z * vcap) / l] : [x, z];
+    };
+    const [vx, vz] = capped(a[3], a[5]);
+    const [tx, tz] = a.length === 10 ? capped(a[8], a[9]) : [vx, vz];
     b.vx = fix ? 0 : vx;
     b.vy = fix ? 0 : Math.max(-150, Math.min(WORLD.jumpVelocity + 30, a[4]));
     b.vz = fix ? 0 : vz;
+    b.tx = fix ? 0 : tx;
+    b.tz = fix ? 0 : tz;
     b.yaw = Math.atan2(Math.sin(a[6]), Math.cos(a[6]));
     b.og = !!a[7];
     b.t = s.clock;
@@ -371,21 +402,43 @@ export class HostRole {
     return pos;
   }
 
-  // Dead reckoning: between their messages, remote players keep moving the way they were going.
-  _applyBase(m, p, age) {
+  // Between their updates (they only send when our guess drifts), remote players keep going the way
+  // they were, and what we show glides towards that guess: no lurch when they start running and no
+  // snap back when they stop. dt = 0 jumps straight there (teleports, corrections).
+  _applyBase(m, p, age, dt = 0) {
     const b = m.base;
-    age = Math.min(age, 0.15);
-    p.pos.x = b.x + b.vx * age;
-    p.pos.z = b.z + b.vz * age;
-    p.pos.y = b.og ? b.y : Math.max(0, b.y + b.vy * age - 0.5 * WORLD.gravity * age * age);
+    const sh = m.show;
+    age = Math.min(age, 1.2);
+    const t = predict(b, age, this._t || (this._t = { x: 0, y: 0, z: 0, _grounded: true }));
     if (age > 0) {
-      p.pos._grounded = b.og;
-      this.game.physics.resolve(p.pos, R, null);
+      t._grounded = b.og;
+      this.game.physics.resolve(t, R, null);
     }
+    const far = (t.x - sh.x) ** 2 + (t.z - sh.z) ** 2 > 8 * 8;
+    if (dt <= 0 || far) {
+      sh.x = t.x;
+      sh.y = t.y;
+      sh.z = t.z;
+      sh.yaw = b.yaw;
+    } else {
+      // running: face where they're heading (their own turn smoothing does the same)
+      const yawT = Math.hypot(b.tx, b.tz) > 0.5 ? Math.atan2(b.tx, b.tz) : b.yaw;
+      const k = 1 - Math.exp(-dt / 0.06), ky = 1 - Math.exp(-dt / 0.035);
+      sh.x += (t.x - sh.x) * k;
+      sh.z += (t.z - sh.z) * k;
+      sh.y += (t.y - sh.y) * ky;
+      let dy = (yawT - sh.yaw) % (Math.PI * 2);
+      if (dy > Math.PI) dy -= Math.PI * 2;
+      else if (dy < -Math.PI) dy += Math.PI * 2;
+      sh.yaw += dy * Math.min(1, k * 1.5);
+    }
+    p.pos.x = sh.x;
+    p.pos.y = sh.y;
+    p.pos.z = sh.z;
     p.vel.x = b.vx;
     p.vel.y = b.vy;
     p.vel.z = b.vz;
-    p.yaw = b.yaw;
+    p.yaw = sh.yaw;
     p.onGround = b.og;
   }
 
@@ -405,10 +458,14 @@ export class HostRole {
     m.kickAt = this.s.clock;
     m.kickTries++;
     p.remoteMotion = false; // we simulate them until their device confirms
-    this.s.sendRoom('kick', {
+    this._toMember(m, 'kick', {
       to: m.pid, k: m.kick, p: [p.pos.x, p.pos.y, p.pos.z].map((v) => Math.round(v * 100) / 100),
       v: [p.vel.x, p.vel.y, p.vel.z].map((v) => Math.round(v * 100) / 100), su: p.stunUntil, iu: p.invulnUntil,
     });
+    const sh = m.show;
+    sh.x = p.pos.x;
+    sh.y = p.pos.y;
+    sh.z = p.pos.z;
   }
 
   // ---------------------------------------------------------------- actions (UI changes routed by app.act)
@@ -426,7 +483,7 @@ export class HostRole {
       case 'buyEgg': return isId(args[0]) ? g.buyEgg(p, args[0]) : null;
       case 'setPet': g.setPet(p, sanitizePet(args[0])); return true;
       case 'setLook': {
-        const look = sanitizeLook(args[0]);
+        const look = sanitizeLook(args[0], this.s.who.get(p.pid)?.base || p.char.id);
         if (look) g.setLook(p, look);
         return !!look;
       }
@@ -434,17 +491,12 @@ export class HostRole {
         const to = g.players[int(args[0], 0, 3, -1)];
         return to ? g.giftPlant(p, to, int(args[1], 0, 9, -1)) : false;
       }
-      case 'addCash': {
-        // quest and badge rewards; capped so a modified client can't print money
-        const n = Math.floor(num(args[0]));
-        const cap = Math.max(20000, g.gardenIncome(g.gardens[p.slot]) * 1200); // ~20 minutes of their income
-        if (n > 0) p.cash += Math.min(n, cap);
-        return true;
-      }
+      case 'addCash':
+        return false; // quest cash is banked on the device for solo play; online nobody prints money
       case 'emote':
       case 'say': {
         const id = args[0];
-        if (name === 'emote' ? !EMOTE[id] : !PHRASE[id]) return false;
+        if (name === 'emote' ? !own(EMOTE, id) : !own(PHRASE, id)) return false;
         if (p.controller instanceof RemoteController) p.controller.push(name === 'emote' ? 'm' : 's', id);
         else p.controller?.queue?.(name, id);
         return true;
@@ -463,8 +515,15 @@ export class HostRole {
     const now = s.clock;
     for (const m of this.members.values()) {
       const p = g.players[m.slot];
-      if (!m.kickPending) this._applyBase(m, p, now - m.base.t);
-      else if (now - m.kickAt > 0.6) {
+      if (!m.kickPending) this._applyBase(m, p, now - m.base.t, dt);
+      else {
+        const sh = m.show; // we move them ourselves until their device confirms the kick
+        sh.x = p.pos.x;
+        sh.y = p.pos.y;
+        sh.z = p.pos.z;
+        sh.yaw = p.yaw;
+      }
+      if (m.kickPending && now - m.kickAt > 0.6) {
         if (m.kickTries < 4) this._kick(m, p, true);
         else {
           m.kickPending = false; // their device never answered: take its word again
@@ -476,7 +535,7 @@ export class HostRole {
       m.ex.x = p.pos.x;
       m.ex.y = p.pos.y;
       m.ex.z = p.pos.z;
-      if (now - m.lastIn > 1) m.ctrl.held = false; // lost contact: let go of the E key
+      if (now - m.lastIn > 1.3) m.ctrl.held = false; // lost contact: let go of the E key
     }
     g.paused = false; // an online world never pauses (the pause menu is just an overlay)
     g.update(dt);
@@ -499,11 +558,13 @@ export class HostRole {
       else if (now - m.lastIn > TIMEOUTS.memberSilent) (drop ||= []).push(m.pid, 'timeout');
     }
     if (drop) for (let i = 0; i < drop.length; i += 2) this.removeMember(drop[i], drop[i + 1]);
-    this.tickAcc += dt;
-    const rate = s.rates.tick * (this.humans >= 4 ? 0.8 : 1);
-    if (this.tickAcc >= 1 / rate || this.forceKey) {
-      this.tickAcc = Math.min(this.tickAcc - 1 / rate, 0.5 / rate);
-      if (this.tickAcc < 0) this.tickAcc = 0;
+    // Ticks go out at a calm base rate for motion; something that happened (a grab, a steal, a hit...)
+    // goes out right away so it never waits for the next tick.
+    this.sinceTick += dt;
+    const due = this.sinceTick >= 1 / s.rates.tick || (this.urgent && this.sinceTick >= 1 / s.rates.tickFast);
+    if (due || this.forceKey) {
+      this.sinceTick = 0;
+      this.urgent = false;
       this._tick();
     }
   }
@@ -517,7 +578,7 @@ export class HostRole {
     this.forceKey = false;
     const acks = [0, 0, 0, 0];
     for (const m of this.members.values()) acks[m.slot] = m.lastEdge;
-    const msg = { h: s.pid, ep: this.epoch, f: this.followers(), s: this.seq, tm: Math.round(g.time * 1000) / 1000, P: packPlayers(g), M: packMonsters(g), B: packProjectiles(g), A: acks };
+    const msg = { ep: this.epoch, s: this.seq, tm: Math.round(g.time * 1000) / 1000, P: packPlayers(g), M: packMonsters(g), B: packProjectiles(g), A: acks };
     if (this.events.length) {
       msg.E = this.events;
       this.events = [];
@@ -553,8 +614,10 @@ export class HostRole {
       msg.O = this.order; // who hosts next if we disappear
       this.orderDirty = false;
     }
-    // a full room trims everyone's input rate a little (the service counts every message)
-    if (this.humans >= 4) msg.ir = Math.min(s.rates.inMove, 7);
+    if (key || this.bannedDirty) {
+      msg.bn = [...this.banned]; // a new host keeps enforcing kicks
+      this.bannedDirty = false;
+    }
     s.sendRoom('tick', msg);
   }
 }

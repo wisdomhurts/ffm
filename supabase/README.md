@@ -13,7 +13,7 @@ separate and need no tables.
 
    It is safe to run again (`if not exists` / `create or replace`).
 2. Check it: run [`tests.sql`](tests.sql) as one script (MCP `execute_sql` or the SQL editor). It calls
-   the RPCs as `anon`, cleans up after itself and ends with one table. **Expected: 39 rows, all
+   the RPCs as `anon`, cleans up after itself and ends with one table. **Expected: 42 rows, all
    `pass = true`** (the header of the file lists every row and its expected detail).
 3. Put the project URL and the **publishable** key (`sb_publishable_...`, or the legacy anon key) in
    `src/online/config.js` (`SUPABASE_URL`, `SUPABASE_KEY`). Both are public by design.
@@ -71,9 +71,18 @@ Not exposed (run from the SQL editor):
   and 1000 per 10 minutes overall, which makes guessing codes impractical. Loading rotates the secret,
   so only one device writes to a save at a time and nothing is overwritten silently.
 * **Validation server-side:** board whitelist; values finite, non-negative, integers where needed and
-  capped; names 1-14 characters of letters/digits/space/`_ . ' -` (NFKC-normalized) and not on the
-  blocklist from `src/core/names.js` (leetspeak folded), otherwise `Player` on sign-up or the old name
-  later; `look` reduced to <= 32 flat, short scalar fields; saves must be JSON objects <= 200 KB.
+  capped; `look` reduced to <= 32 flat, short scalar fields and dropped when over 2048 bytes (the same
+  cap as the columns, so a look can never make a call fail); saves must be JSON objects <= 200 KB.
+* **Names** (`sas_clean_name` + `sas_name_ok`, an exact mirror of `src/core/names.js`): after NFKC,
+  1-14 characters of letters of any script, digits, space and `_ . ' -` (combining accents only right
+  after a letter, at most two; no invisible, symbol, emoji or private-use characters). The word filter
+  works on words, not substrings: the name is folded to a-z (accents dropped, look-alike Cyrillic/Greek
+  letters and leetspeak mapped) and split into words; strong words (slurs, hard swearing) are blocked at
+  the start or end of a word, milder ones (kill, sex, nazi...) only as a whole word with simple endings,
+  and runs of 1-2 letter words are checked glued together ("f u c k"). So Killian, Grape, Essex,
+  Scunthorpe, "Ana Lopez", José, 李明 and Мария are fine. Letters of other scripts can't be filtered and
+  are accepted. A refused name becomes `Player` on sign-up and keeps the old name later.
+  `tests/online/names.test.mjs` fails if the word lists in the SQL and in `names.js` ever differ.
 * **Rate limits:** saves 1 per 5 s per player, scores 1 per 5 s per board, sign-ups per IP. The caller
   IP comes from `cf-connecting-ip`, then `x-real-ip`, then the first `x-forwarded-for` entry (only its
   hash is stored). A spoofed `x-forwarded-for` can dodge the per-IP limit but not the global ones.
@@ -85,9 +94,11 @@ Not exposed (run from the SQL editor):
 
 ## Local testing (no Supabase needed)
 
-* `node --test tests/online/online.test.mjs`: the client against an in-memory fake of these RPCs.
+* `node --test tests/online/online.test.mjs tests/online/names.test.mjs`: the client against an in-memory
+  fake of these RPCs, and the name filter (including a check that the SQL word lists match `names.js`).
 * The same tests against the real SQL in a local Postgres (15+): apply
   `tests/online/supabase-bootstrap.sql` (fake Supabase roles and default grants) and the migration, then
-  `SAS_PG="host=... port=... dbname=... user=postgres" node --test tests/online/online.test.mjs`
+  `SAS_PG="host=... port=... dbname=... user=postgres" node --test tests/online/online.test.mjs tests/online/names.test.mjs`
+  (the names test then also checks that SQL and JS decide identically on ~180 names)
   (`tests/online/pg-backend.mjs` runs every request through `psql` as `anon`, one transaction each,
   like PostgREST). `psql -f supabase/tests.sql` works there too.

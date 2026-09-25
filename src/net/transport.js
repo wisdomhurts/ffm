@@ -129,6 +129,8 @@ class SupabaseTransport {
       params: { apikey: key, eventsPerSecond: this.eps },
       accessToken: async () => key,
       heartbeatIntervalMs: 15000,
+      // back off when the server can't be reached (1, 2, 5, 10, 20, then every 30 s)
+      reconnectAfterMs: (tries) => [1000, 2000, 5000, 10000, 20000][tries - 1] ?? 30000,
       logLevel: 'error',
     });
   }
@@ -142,6 +144,7 @@ class SupabaseTransport {
     this._sweep();
     return new SupabaseChannel(this, this.client, topic, opts);
   }
+  // Sockets with no channels left are closed (a closed lobby stops trying to reconnect).
   _sweep() {
     this.old = this.old.filter((c) => {
       if (c.getChannels().length) return true;
@@ -152,6 +155,13 @@ class SupabaseTransport {
       }
       return false;
     });
+    if (!this.client.getChannels().length) {
+      try {
+        this.client.disconnect();
+      } catch {
+        /* closed */
+      }
+    }
   }
   close() {
     for (const c of [this.client, ...this.old]) {

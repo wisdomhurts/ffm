@@ -1,7 +1,7 @@
 // In-memory stand-in for the Supabase RPCs in supabase/migrations/0001_steal_a_seed.sql (same inputs,
 // outputs, error tokens and HTTP statuses as PostgREST would give). Used by tests/online/online.test.mjs
 // (as a fetch replacement) and tests/online/ui-check.mjs (behind Playwright's page.route).
-import { isNameAllowed } from '../../src/core/names.js';
+import { sanitizeName } from '../../src/core/names.js';
 
 export const FAKE_URL = 'https://fake-sas.supabase.test';
 export const FAKE_KEY = 'sb_publishable_fake_test_key';
@@ -33,14 +33,15 @@ function normCode(c) {
   if (s.length === 12 && s.startsWith('SEED')) s = s.slice(4);
   return /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/.test(s) ? `SEED-${s.slice(0, 4)}-${s.slice(4)}` : null;
 }
+// like public.sas_clean_name: accept a name only if it is already clean (what sanitizeName would keep)
 function cleanName(n, fb) {
   if (n == null) return fb;
   const s = String(n).normalize('NFKC').replace(/\s+/g, ' ').trim();
-  if (!s || [...s].length > 14 || !/^[\p{L}\p{N} _.'-]+$/u.test(s) || !isNameAllowed(s)) return fb;
+  if (!s || [...s].length > 14 || sanitizeName(s, '') !== s) return fb;
   return s;
 }
 function cleanLook(l) {
-  if (!l || typeof l !== 'object' || Array.isArray(l) || JSON.stringify(l).length > 4096) return null;
+  if (!l || typeof l !== 'object' || Array.isArray(l) || new TextEncoder().encode(JSON.stringify(l)).length > 2048) return null;
   const out = {};
   for (const k of Object.keys(l).sort().slice(0, 32)) {
     const v = l[k];

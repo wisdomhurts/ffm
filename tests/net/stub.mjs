@@ -40,7 +40,7 @@ export class Pad {
 }
 
 export class StubApp {
-  constructor(name, { hub, profileId = null, base = 'dorian', pid = null } = {}) {
+  constructor(name, { hub, profileId = null, base = 'dorian' } = {}) {
     this.label = name;
     const prof = profileId ? getProfile(profileId) : createProfile({ name, base });
     this.profileId = prof.id;
@@ -51,7 +51,7 @@ export class StubApp {
     this.pad = new Pad();
     this.worlds = 0;
     this.transport = createTransport('memory', { hub });
-    this.online = createOnline(this, { transport: this.transport, pid });
+    this.online = createOnline(this, { transport: this.transport });
   }
   get profile() {
     return getProfile(this.profileId);
