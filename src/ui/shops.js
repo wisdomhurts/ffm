@@ -62,7 +62,7 @@ function gearShop(app, game, me) {
       h('div', { class: 'gc-copy' }, h('span', { class: 'gc-name', text: it.name }), h('span', { class: 'gc-desc', text: it.desc }), own),
       h('div', { class: 'gc-buy' }, buy1, buy5));
     const buy = (qty, b) => {
-      if (game.buyItem(me, it.id, qty)) bump(card, 'bought');
+      if (app.act('buyItem', it.id, qty)) bump(card, 'bought');
       else bump(b, 'nope');
     };
     buy1.addEventListener('click', () => buy(1, buy1));
@@ -102,7 +102,7 @@ function speedShop(app, game, me) {
     return { b, ms, row, status };
   });
   train.addEventListener('click', () => {
-    if (game.buySpeed(me)) bump(lvl, 'bump');
+    if (app.act('buySpeed')) bump(lvl, 'bump');
     else bump(train, 'nope');
   });
   const el = h('div', { class: 'speed-body' },
@@ -169,7 +169,7 @@ function rebirthShop(app, game, me, close) {
   const yes = h('button', { class: 'btn btn-gold', type: 'button', text: 'Yes, REBIRTH!' });
   const no = h('button', { class: 'btn btn-grey', type: 'button', text: 'Not yet' });
   yes.addEventListener('click', () => {
-    if (game.rebirth(me)) {
+    if (app.act('rebirth')) {
       close();
     } else {
       confirm.hidden = true;

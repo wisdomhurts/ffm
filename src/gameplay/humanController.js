@@ -68,6 +68,16 @@ export class HumanController {
       // consume edges after the first substep
       this.frameEdges = null;
     }
+    // one-shot requests from the UI (emote wheel, quick chat): delivered with the next intent
+    if (this._queued) {
+      Object.assign(it, this._queued);
+      this._queued = null;
+    }
     return it;
+  }
+
+  /** Put a one-shot intent field (emote, say) into the next tick. */
+  queue(field, value) {
+    (this._queued ||= {})[field] = value;
   }
 }

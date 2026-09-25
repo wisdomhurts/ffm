@@ -20,6 +20,8 @@ export const WORLD = {
     gear: { x: -30, z: -50 },
     speed: { x: 0, z: -50 },
     rebirth: { x: 30, z: -50 },
+    pets: { x: -54, z: -52 },
+    wardrobe: { x: 54, z: -52 },
   },
   playerRadius: 1.4,
   playerHeight: 5.2,

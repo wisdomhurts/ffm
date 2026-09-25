@@ -5,12 +5,45 @@
 // Face photos are 512x512 aligned crops: eyes at y~0.42, eye distance ~0.36 of the width,
 // mouth ~0.66, chin ~0.9, forehead ~0.1.
 import * as THREE from 'three';
-import { CHARACTER } from '../config.js';
+import { CHARACTER, CHARACTERS } from '../config.js';
 import { load } from '../core/save.js';
+import { getProfile } from '../core/profiles.js';
+import { bus } from '../core/events.js';
 
 const cache = new Map();
 
+// Faces are looked up by a key: a family id ('dorian'), a friend's profile id on this device ('p_...'),
+// or a remote online player ('r_<pid>', registered by the network code with registerFace).
+const remote = new Map(); // key -> {name, color, skin, face (dataURL) | null}
+
+/** Tell the game about a face that isn't a local profile (online players). Pass face: null for cartoon. */
+export function registerFace(key, info) {
+  remote.set(key, { ...(remote.get(key) || {}), ...info });
+  for (const k of [...cache.keys()]) if (k.startsWith(key + ':')) cache.delete(k);
+  bus.emit('face:changed', { id: key });
+}
+
+export function forgetFace(key) {
+  remote.delete(key);
+}
+
+/** Display info for any face key: {name, color, skin}. */
+export function faceInfo(key) {
+  const r = remote.get(key);
+  if (r) return { name: r.name || 'Player', color: r.color || '#888', skin: r.skin || null };
+  const c = CHARACTER[key];
+  if (c) return { name: c.name, color: c.color, skin: c.look.skin };
+  const p = getProfile(key);
+  if (p) {
+    const base = CHARACTER[p.base] || CHARACTERS[0];
+    return { name: p.name, color: base.color, skin: p.look?.skin || base.look.skin };
+  }
+  return { name: 'Player', color: '#888', skin: null };
+}
+
 export function familyFaceData(id) {
+  const r = remote.get(id);
+  if (r) return r.face ? { face: r.face, avatar: r.face, skin: r.skin, remote: true } : null;
   const custom = load('face:' + id, null);
   if (custom?.face) return { ...custom, custom: true };
   const inj = (typeof window !== 'undefined' && window.__FAMILY_FACES__) || {};
@@ -33,7 +66,7 @@ export async function getFace(id) {
   const key = id + ':' + (data?.face?.length || 0) + ':' + (data?.custom ? 'c' : 'b');
   if (cache.has(key)) return cache.get(key);
   const face = await loadImage(data?.face);
-  const res = { face, avatarUrl: data?.avatar || data?.face || null, skin: data?.skin || CHARACTER[id]?.look.skin || '#d9a38a' };
+  const res = { face, avatarUrl: data?.avatar || data?.face || null, skin: data?.skin || faceInfo(id).skin || '#d9a38a' };
   cache.set(key, res);
   return res;
 }

@@ -16,6 +16,10 @@ import { createTutorial } from './tutorial.js';
 import { createNextGoal } from './goal.js';
 import { guidePoint } from './route.js';
 import { isTouch, onTouchChange } from './device.js';
+import { mountEmotes } from './emotes.js';
+import { mountSocial } from './trade.js';
+import { mountQuestChip } from './progress.js';
+import { mountRoomPanel } from './lobby.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
@@ -67,6 +71,14 @@ export function createHUD(app) {
   if (me) parts.push(createNextGoal(app, tl, tutorial));
   parts.push(createBoard(app, tr, me));
   parts.push(createEventChip(app, top));
+  // feature widgets (each owns its DOM + styles; see docs/ONLINE.md)
+  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel]) {
+    try {
+      parts.push(mount(app, root, { tl, tr, top, bottom }));
+    } catch (e) {
+      console.warn('[hud] widget failed', e);
+    }
+  }
   const alerts = createAlerts(top, root);
   const unwire = me ? wireNotifications(app, alerts) : () => {};
   if (me) {
@@ -263,7 +275,7 @@ function createBoard(app, parent, me) {
     const star = h('span', { class: 'br-star' });
     const flag = h('span', { class: 'br-flag', title: 'Carrying a stolen plant' });
     const row = h('div', { class: 'brow' + (p === me ? ' me' : ''), role: 'listitem', style: `--c:${p.char.color}` },
-      rank, avatarEl(p.id, 'br-ava'), h('span', { class: 'br-name', text: p.name }), star, flag, val);
+      rank, avatarEl(p.faceKey, 'br-ava'), h('span', { class: 'br-name', text: p.name }), star, flag, val);
     list.appendChild(row);
     return { p, row, rank, val, star, flag };
   });
@@ -539,7 +551,7 @@ function createRoadMeter(app, parent, me) {
   const track = h('div', { class: 'm-track' }, [...segs].reverse());
   const where = h('div', { class: 'm-where' });
   const markers = game.players.map((p) => {
-    const m = h('div', { class: 'm-mk' + (p === me ? ' me' : ''), style: `--c:${p.char.color}` }, avatarEl(p.id, 'm-ava'));
+    const m = h('div', { class: 'm-mk' + (p === me ? ' me' : ''), style: `--c:${p.char.color}` }, avatarEl(p.faceKey, 'm-ava'));
     return { p, m };
   });
   const mine = markers.find((x) => x.p === me).m;

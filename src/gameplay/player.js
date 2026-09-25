@@ -8,16 +8,27 @@ import { PLAYER, speedAt, ITEMS } from '../config.js';
  * interact is held (true while the button is down).
  */
 export function emptyIntent() {
-  return { moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null };
+  return { moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null };
 }
+
+const NO_MODS = Object.freeze({ income: 1, speed: 1, hold: 1, magnet: 0, bonkCd: 1 });
 
 export class Player {
   constructor(slot, char, isHuman) {
     this.slot = slot;
-    this.id = char.id;
+    this.id = char.id; // the slot's family character (chat lines, namesake plant, bot personality)
     this.char = char;
     this.name = char.name;
-    this.isHuman = isHuman;
+    this.isHuman = isHuman; // the LOCAL human on this device
+    // who is playing this slot: 'local' (this device), 'remote' (someone else online) or 'bot'
+    this.kind = isHuman ? 'local' : 'bot';
+    this.profileId = char.id;
+    this.faceKey = char.id; // avatars/faces are looked up by this key (see characters/faces.js)
+    this.pid = null; // network id when online
+    this.look = char.look;
+    this.pet = null; // equipped pet species id
+    this.mods = NO_MODS; // pet boosts, set by Game.setPet
+    this.emote = null; // {id, until}
     this.pos = { x: 0, y: 0, z: 0 };
     this.vel = { x: 0, y: 0, z: 0 };
     this.yaw = 0; // facing; 0 = +Z (north), increases counter-clockwise seen from above (atan2(x, z))
@@ -55,7 +66,12 @@ export class Player {
     if (now < this.coilUntil) s *= 1.5;
     if (this.carrying?.kind === 'seed') s *= PLAYER.carrySeedMult;
     if (this.carrying?.kind === 'plant') s *= PLAYER.carryPlantMult;
-    return s * (this.isHuman ? 1 : diffMult);
+    return s * this.mods.speed * (this.kind === 'bot' ? diffMult : 1);
+  }
+
+  /** Controlled by a person (this device or online), not a bot. */
+  get isPlayer() {
+    return this.kind !== 'bot';
   }
 
   invisible(now) {

@@ -22,6 +22,10 @@ import { injectStyles } from './ui/styles.js';
 import { createHUD } from './ui/hud.js';
 import { createMenus } from './ui/menus.js';
 import { createTouchControls } from './ui/touch.js';
+import { getProfile, activeProfileId, setActiveProfile, updateProfile } from './core/profiles.js';
+import { attachProgress } from './progress/index.js';
+import { createOnline } from './net/session.js';
+import { reactToSocial } from './social/botReact.js';
 
 const SAVE_EVERY = 12;
 
@@ -65,6 +69,9 @@ class App {
     this.cam = null;
     this.menus = createMenus(this);
     this.touch = createTouchControls(this);
+    this.profileId = activeProfileId() || CHARACTERS[0].id;
+    this.progress = attachProgress(this);
+    this.online = createOnline(this);
     this.engine.add((dt, t) => this.frame(dt, t));
     this._saveTimer = 0;
     window.addEventListener('pagehide', () => this.saveNow());
@@ -94,6 +101,23 @@ class App {
       if (target === this.human && this.state === 'shop') this.resume();
     });
     bus.on('camera:shake', ({ amount = 0.5 } = {}) => this.cam?.addShake(amount));
+    // family bots wave back, dance along and answer quick chat
+    for (const ev of ['emote', 'chat']) {
+      bus.on(ev, (e) => {
+        const g = this.game;
+        if (!g || !e?.player || e.player.kind === 'bot' || (ev === 'chat' && !e.quick)) return;
+        if (this.online?.isClient) return; // the host's bots react; clients just see it
+        for (const b of g.players) if (b.kind === 'bot') reactToSocial(g, b, { type: ev, ...e });
+      });
+    }
+    // the local player's outfit/pet follow their profile
+    bus.on('profile:changed', ({ profile }) => {
+      const p = this.human;
+      if (!p || !this.game || profile.id !== p.profileId) return;
+      if (JSON.stringify(profile.look) !== JSON.stringify(p.look)) this.act('setLook', profile.look);
+      const eq = profile.pets.owned.find((x) => x.uid === profile.pets.equipped)?.id || null;
+      if (eq !== p.pet) this.act('setPet', eq);
+    });
     bus.on('match:end', ({ ranking }) => {
       if (!this.human) return;
       this._stagePodium(ranking);
@@ -204,6 +228,49 @@ class App {
     this._podium = null;
   }
 
+  /** The active player profile on this device (see core/profiles.js). */
+  get profile() {
+    return getProfile(this.profileId) || getProfile(CHARACTERS[0].id);
+  }
+
+  setProfile(id) {
+    if (!getProfile(id)) return;
+    this.profileId = id;
+    setActiveProfile(id);
+    bus.emit('profile:active', { profile: this.profile });
+  }
+
+  /**
+   * Every game change the UI asks for goes through here, so it also works as a client in an online
+   * room (the host applies it for the right player). Returns true/false offline, undefined when sent.
+   */
+  act(name, ...args) {
+    if (this.online?.isClient) return this.online.act(name, args);
+    const g = this.game;
+    const p = this.human;
+    if (!g || !p) return false;
+    switch (name) {
+      case 'buyItem': return g.buyItem(p, args[0], args[1] ?? 1);
+      case 'buySpeed': return g.buySpeed(p);
+      case 'rebirth': return g.rebirth(p);
+      case 'buyEgg': return g.buyEgg(p, args[0]);
+      case 'setPet': g.setPet(p, args[0] ?? null); return true;
+      case 'setLook': g.setLook(p, args[0]); return true;
+      case 'gift': return g.giftPlant(p, g.players[args[0]], args[1]);
+      case 'emote':
+      case 'say':
+        this.humanCtrl?.queue(name, args[0]);
+        return true;
+      case 'addCash':
+        // quest/badge rewards (host-authoritative online)
+        if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);
+        return true;
+      default:
+        // trades etc. only exist between people online
+        return this.online?.act?.(name, args);
+    }
+  }
+
   start() {
     this.startAttract();
     this.menus.showTitle();
@@ -220,7 +287,9 @@ class App {
     this.game = game;
     this.cam = new FollowCamera(this.engine.camera, game.physics);
     for (const p of game.players) {
-      p.controller = p.isHuman ? (this.humanCtrl = new HumanController(this.input, this.cam)) : new BotController(p.char.personality, game.difficultyId);
+      // remote players get their controller from the online session (src/net)
+      if (p.kind === 'local') p.controller = this.humanCtrl = new HumanController(this.input, this.cam);
+      else if (p.kind === 'bot') p.controller = new BotController(p.char.personality, game.difficultyId);
     }
     this.human = game.human;
     this.view = new GameView({ engine: this.engine, game, world: this.world, labels: this.labels, fx: this.fx });
@@ -258,16 +327,22 @@ class App {
     bus.emit('app:state', { state: 'title' });
   }
 
-  /** opts: {charId, mode:'endless'|'showdown', difficulty, fresh:boolean} */
+  /** Solo play. opts: {charId (profile id), mode:'endless'|'showdown', difficulty, fresh:boolean} */
   startGame({ charId, mode = 'endless', difficulty = settings.difficulty, fresh = false }) {
-    const saveKey = `save:${mode}:${charId}`;
+    this.online?.leave?.();
+    if (charId && getProfile(charId)) this.setProfile(charId);
+    const prof = this.profile;
+    const saveKey = `save:${mode}:${prof.id}`;
     const saved = !fresh && mode === 'endless' ? load(saveKey, null) : null;
+    // you play your profile's family slot; the other three are the family bots
+    const mySlot = Math.max(0, CHARACTERS.findIndex((c) => c.id === prof.base));
+    const slots = CHARACTERS.map((c, i) => (i === mySlot ? { kind: 'local', profile: prof } : { kind: 'bot' }));
     let game;
     try {
-      game = this._newGame({ humanId: charId, mode, difficulty, save: saved });
+      game = this._newGame({ mode, difficulty, save: saved, slots });
     } catch (e) {
       console.warn('[save] unreadable save, starting fresh', e);
-      game = this._newGame({ humanId: charId, mode, difficulty, save: null });
+      game = this._newGame({ mode, difficulty, save: null, slots });
     }
     game.saveKey = mode === 'endless' ? saveKey : null;
     this.hud = createHUD(this);
@@ -285,8 +360,8 @@ class App {
     bus.emit('app:state', { state: 'playing' });
   }
 
-  hasSave(charId) {
-    return !!load(`save:endless:${charId}`, null);
+  hasSave(profileId) {
+    return !!load(`save:endless:${profileId}`, null);
   }
 
   saveNow() {
@@ -354,7 +429,9 @@ class App {
       else if (this.state === 'paused' || this.state === 'shop') this.resume();
     }
     if (this.state === 'playing' && this.humanCtrl) this.humanCtrl.beginFrame();
-    if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
+    // online: the session steps the world itself (host) or mirrors the host (client)
+    if (this.online?.room) this.online.update(dt);
+    else if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
     if (this.state === 'title' && this._warmup > 0) {
       for (let i = 0; i < 6 && this._warmup > 0; i++, this._warmup--) g.update(1 / 40);
     }

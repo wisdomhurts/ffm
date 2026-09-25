@@ -33,6 +33,7 @@ export class GameView {
     engine.scene.add(this.root);
     this.avatars = [];
     this.carryKeys = [];
+    this._avatarKey = [];
     this.plantViews = new Map(); // `${slot}:${index}` -> {key, view}
     this.podViews = [];
     this.groundViews = new Map();
@@ -44,19 +45,7 @@ export class GameView {
 
   _build() {
     const g = this.game;
-    g.players.forEach((p, i) => {
-      const av = createAvatar(p.char, null, p.char.look.skin);
-      av.object3d.position.set(p.pos.x, p.pos.y, p.pos.z);
-      this.root.add(av.object3d);
-      this.avatars[i] = av;
-      this.carryKeys[i] = null;
-      if (p === g.human) this.xray = addXray(av.object3d, p.char.color);
-      getFace(p.id).then((f) => {
-        if (this.disposed) return;
-        av.setFace(f.face, f.skin);
-        this.world.gardens?.[p.slot]?.setOwner?.(p.char, f.avatarUrl);
-      });
-    });
+    g.players.forEach((p, i) => this._makeAvatar(i));
     g.pods.forEach((pod) => {
       const v = createPodView(pod.biome);
       v.object3d.position.set(pod.x, 0, pod.z);
@@ -69,13 +58,47 @@ export class GameView {
       this.monsterViews.push(v);
     });
     this.unsub.push(bus.on('face:changed', ({ id }) => {
-      const p = this.game.players.find((x) => x.id === id);
-      if (!p) return;
-      getFace(id).then((f) => {
-        this.avatars[p.slot].setFace(f.face, f.skin);
-        this.world.gardens?.[p.slot]?.setOwner?.(p.char, f.avatarUrl);
-      });
+      for (const p of this.game.players) if (p.faceKey === id) this._loadFace(p.slot);
     }));
+    // a friend took over a garden, someone changed outfit, or this device's own slot changed
+    this.unsub.push(bus.on('slot:changed', ({ slot }) => this._makeAvatar(slot)));
+    this.unsub.push(bus.on('player:look', ({ player }) => this._makeAvatar(player.slot)));
+  }
+
+  _makeAvatar(i) {
+    const g = this.game;
+    const p = g.players[i];
+    const old = this.avatars[i];
+    if (old) {
+      if (this.xray && this.xraySlot === i) {
+        this.xray.dispose();
+        this.xray = null;
+      }
+      this.root.remove(old.object3d);
+      old.dispose?.();
+    }
+    const look = p.look || p.char.look;
+    const av = createAvatar({ ...p.char, look }, null, look.skin, look);
+    av.object3d.position.set(p.pos.x, p.pos.y, p.pos.z);
+    this.root.add(av.object3d);
+    this.avatars[i] = av;
+    this.carryKeys[i] = null;
+    this._avatarKey[i] = p.faceKey + '|' + p.kind;
+    if (p === g.human) {
+      this.xray = addXray(av.object3d, p.char.color);
+      this.xraySlot = i;
+    }
+    this._loadFace(i);
+  }
+
+  _loadFace(i) {
+    const p = this.game.players[i];
+    const key = p.faceKey;
+    getFace(key).then((f) => {
+      if (this.disposed || this.game.players[i].faceKey !== key) return;
+      this.avatars[i]?.setFace(f.face, f.skin);
+      this.world.gardens?.[p.slot]?.setOwner?.({ ...p.char, name: p.name }, f.avatarUrl);
+    });
   }
 
   update(dt, time, camera) {
@@ -88,6 +111,7 @@ export class GameView {
 
     // players
     g.players.forEach((p, i) => {
+      if (this._avatarKey[i] !== p.faceKey + '|' + p.kind) this._makeAvatar(i);
       const av = this.avatars[i];
       const o = av.object3d;
       o.position.set(p.pos.x, p.pos.y, p.pos.z);

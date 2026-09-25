@@ -28,7 +28,7 @@ export function wireNotifications(app, alerts) {
   on('steal:start', ({ thief, victim, plant }) => {
     if (victim !== me) return;
     alerts.show({
-      key: 'steal' + thief.slot, kind: 'danger', cls: 'urgent', face: thief.id, sticky: true,
+      key: 'steal' + thief.slot, kind: 'danger', cls: 'urgent', face: thief.faceKey, sticky: true,
       html: `${who(thief, true)} is stealing your ${plantTag(plant)}!<small>Run home and BONK them!</small>`,
     });
   });
@@ -45,7 +45,7 @@ export function wireNotifications(app, alerts) {
     if (stage === 'carry') {
       alerts.remove('chase' + thief.slot); // the friendly coaching replaces the scary "grabbed your plant!"
       alerts.show({
-        key: 'practice', kind: 'info', face: thief.id, duration: 7000,
+        key: 'practice', kind: 'info', face: thief.faceKey, duration: 7000,
         html: `Practice time! Chase ${who(thief, true)}<small>Get close and BONK them (${key}) to get your plant back.</small>`,
       });
       return;
@@ -55,7 +55,7 @@ export function wireNotifications(app, alerts) {
     practiceThief = null;
     if (stage === 'caught' && merged !== thief) {
       // bonked before they grabbed it (no steal:foiled): the lesson on its own
-      alerts.show({ key: 'saved' + thief.slot, kind: 'good', face: thief.id, duration: 4200, html: `Great bonk!${plant ? ` You saved your ${plantTag(plant)}!` : ''}${LESSON}` });
+      alerts.show({ key: 'saved' + thief.slot, kind: 'good', face: thief.faceKey, duration: 4200, html: `Great bonk!${plant ? ` You saved your ${plantTag(plant)}!` : ''}${LESSON}` });
     }
     merged = null;
   });
@@ -63,12 +63,12 @@ export function wireNotifications(app, alerts) {
     alerts.remove('steal' + thief.slot);
     if (victim === me) {
       alerts.show({
-        key: 'chase' + thief.slot, kind: 'danger', cls: 'urgent', face: thief.id, duration: 6000,
+        key: 'chase' + thief.slot, kind: 'danger', cls: 'urgent', face: thief.faceKey, duration: 6000,
         html: `${who(thief, true)} grabbed your ${plantTag(plant)}!<small>Bonk them before they get home!</small>`,
       });
     } else if (thief === me) {
       alerts.show({
-        key: 'heist', kind: 'gold', face: victim.id, duration: 4200,
+        key: 'heist', kind: 'gold', face: victim.faceKey, duration: 4200,
         html: `You grabbed ${who(victim)}'s ${plantTag(plant)}!<small>Run HOME before you get bonked!</small>`,
       });
     }
@@ -77,7 +77,7 @@ export function wireNotifications(app, alerts) {
     alerts.remove('chase' + thief.slot);
     if (victim === me) {
       alerts.show({
-        kind: 'danger', face: thief.id, duration: 4800,
+        kind: 'danger', face: thief.faceKey, duration: 4800,
         html: `${who(thief)} stole your ${plantTag(plant)}!<small>Steal it back, or LOCK your garden next time.</small>`,
       });
     } else if (thief === me) {
@@ -97,7 +97,7 @@ export function wireNotifications(app, alerts) {
         merged = thief;
       }
       alerts.show({
-        key: 'saved' + thief.slot, kind: 'good', face: (by || me).id, duration: practice ? 4200 : 3800,
+        key: 'saved' + thief.slot, kind: 'good', face: (by || me).faceKey, duration: practice ? 4200 : 3800,
         html: by === me
           ? `${practice ? 'Great bonk!' : 'BONK!'} You saved your ${plantTag(plant)}!${practice ? LESSON : ''}`
           : `Your ${plantTag(plant)} flew back home!<small>${causeText(cause, by, thief)}</small>`,
@@ -105,7 +105,7 @@ export function wireNotifications(app, alerts) {
     } else if (thief === me) {
       alerts.remove('heist');
       alerts.show({
-        kind: 'warn', face: (by || victim).id, duration: 3800,
+        kind: 'warn', face: (by || victim).faceKey, duration: 3800,
         html: `Foiled! ${plantTag(plant)} flew back to ${who(victim)}.<small>${causeText(cause, by, thief)}</small>`,
       });
     } else if (by === me) {
@@ -212,7 +212,7 @@ export function wireNotifications(app, alerts) {
   });
   on('player:hit', ({ target, by, cause, dropped }) => {
     if (target === me && by && by !== me && cause === 'bonk') {
-      alerts.show({ key: 'hit', kind: 'warn', face: by.id, duration: 2200, html: `${who(by)} bonked you!${dropped?.kind === 'seed' ? '<small>You dropped your seed. Grab it quick!</small>' : ''}` });
+      alerts.show({ key: 'hit', kind: 'warn', face: by.faceKey, duration: 2200, html: `${who(by)} bonked you!${dropped?.kind === 'seed' ? '<small>You dropped your seed. Grab it quick!</small>' : ''}` });
     } else if (target === me && cause === 'banana') {
       alerts.show({ key: 'hit', kind: 'warn', icon: ITEM_ICONS.banana, duration: 2200, html: 'Whoops! Banana peel!' });
     } else if (by === me && target !== me && dropped?.kind === 'seed') {

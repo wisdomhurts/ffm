@@ -11,6 +11,8 @@ import { buildShop } from './shops.js';
 import { buildSettings } from './settingsPanel.js';
 import { buildPhotoBooth } from './photobooth.js';
 import { buildHowTo } from './howto.js';
+import { buildPetShop } from './pets.js';
+import { buildWardrobe } from './wardrobe.js';
 import { rarityColor } from '../view/gameView.js';
 
 const DIFF_DESC = {
@@ -314,7 +316,7 @@ export function createMenus(app) {
     let meBox = null;
     if (g && me) {
       const rank = g.ranking().indexOf(me) + 1;
-      meBox = h('div', { class: 'pause-me', style: `--c:${me.char.color}` }, avatarEl(me.id, 'pm-ava'),
+      meBox = h('div', { class: 'pause-me', style: `--c:${me.char.color}` }, avatarEl(me.faceKey, 'pm-ava'),
         h('div', {}, h('b', { text: me.name }), h('span', { class: 'cash', text: money(me.cash) }), h('span', { class: 'pm-rank', text: `#${rank} of ${g.players.length} in net worth` })));
     }
     const note = g?.match ? 'Quitting ends this Showdown.' : storageOK ? 'Your garden saves automatically on this device.' : "This browser can't save progress.";
@@ -348,7 +350,9 @@ export function createMenus(app) {
     app.input.reset();
     app.touch?.setVisible(false);
     bus.emit('app:state', { state: 'shop' });
-    const shop = buildShop(app, kind, () => shopModal?.close());
+    // feature stands build their own panel ({el, title, dispose}); see docs/ONLINE.md
+    const custom = { pets: buildPetShop, wardrobe: buildWardrobe }[kind];
+    const shop = (custom || ((a, close) => buildShop(a, kind, close)))(app, () => shopModal?.close());
     shop.el.appendChild(doneRow(() => shopModal?.close()));
     const m = openModal(shop.el, {
       cls: 'shop shop-' + kind, label: shop.title, kind: 'shop',
@@ -389,7 +393,7 @@ export function createMenus(app) {
     const chips = h('div', { class: 'end-chips', role: 'list' }, list.map((r, i) =>
       h('div', { class: `end-chip ${MEDAL[i] || 'plain'}${r.player === me ? ' me' : ''}`, role: 'listitem', style: `--c:${r.player.char.color};--d:${250 + i * 90}ms` },
         h('b', { class: 'ec-rank', text: String(i + 1) }),
-        avatarEl(r.player.id, 'ec-ava'),
+        avatarEl(r.player.faceKey, 'ec-ava'),
         h('span', { class: 'ec-copy' }, h('span', { class: 'ec-name', text: r.player.name }), h('span', { class: 'ec-val', text: money(r.netWorth) })),
         i === 0 ? h('span', { class: 'ec-crown', html: ICON.crown }) : null)));
     let you = null;
@@ -406,7 +410,7 @@ export function createMenus(app) {
     const awardList = computeAwards(list.map((r) => r.player));
     const awards = awardList.length ? h('div', { class: 'awards' }, awardList.map((a, i) =>
       h('div', { class: 'award', style: `--c:${a.player.char.color};--d:${700 + i * 120}ms` },
-        h('span', { class: 'aw-pic' }, avatarEl(a.player.id, 'aw-ava'), h('span', { class: 'aw-ic', html: a.icon })),
+        h('span', { class: 'aw-pic' }, avatarEl(a.player.faceKey, 'aw-ava'), h('span', { class: 'aw-ic', html: a.icon })),
         h('span', { class: 'aw-copy' },
           h('span', { class: 'aw-title', text: a.title }),
           h('span', { class: 'aw-name' }, h('b', { text: a.player.name }), h('span', { class: 'aw-stat', text: ` · ${a.stat}` })))))) : null;
@@ -447,7 +451,7 @@ export function createMenus(app) {
       h('div', { class: 'end-top' + (won ? ' win' : '') },
         h('div', { class: 'end-kicker', html: `${ICON.trophy}<span>Family Showdown</span>` }),
         h('h1', { class: 'end-title', text: title }),
-        h('div', { class: 'end-sub' }, won ? null : avatarEl(winner.id, 'es-ava'), h('span', { text: sub }))),
+        h('div', { class: 'end-sub' }, won ? null : avatarEl(winner.faceKey, 'es-ava'), h('span', { text: sub }))),
       h('div', { class: 'end-card' },
         chips,
         you,
@@ -483,6 +487,14 @@ export function createMenus(app) {
     openSettings,
     openPhotoBooth,
     openHowTo,
+    // shared building blocks for feature panels (docs/ONLINE.md): openModal(content, {cls, label, onClose, kind})
+    // -> {wrap, close(silent), dispose}; btn(label, cls, onclick, attrs); iconLabel(svg, text); doneRow(onDone); click()
+    openModal,
+    btn,
+    iconLabel,
+    doneRow,
+    click,
+    closeAllModals,
     isBlocking: () => !!screen || modals.length > 0,
     get screen() {
       return screen?.name || null;

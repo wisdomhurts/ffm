@@ -101,6 +101,9 @@ function staticColliders(gardens) {
   // counters are solid up to the awning so nobody hops behind them
   box(-36, -24, -66, -57, 9, 0, 'shop');
   box(24, 36, -66, -57, 9, 0, 'shop');
+  // pet egg stand (west end of the shop row) and the wardrobe boutique (east end)
+  box(-60, -48, -66, -59, 9, 0, 'shop');
+  box(48, 60, -66, -59, 9, 0, 'shop');
   for (const b of boxes) if (b.tag === 'shop') b.camMaxY = 4.2;
   return boxes;
 }
@@ -116,6 +119,8 @@ export function buildLayout() {
       gear: { x: WORLD.shops.gear.x, z: WORLD.shops.gear.z, r: 7 },
       speed: { x: WORLD.shops.speed.x, z: WORLD.shops.speed.z, r: 7 },
       rebirth: { x: WORLD.shops.rebirth.x, z: WORLD.shops.rebirth.z, r: 7 },
+      pets: { x: WORLD.shops.pets.x, z: WORLD.shops.pets.z, r: 7 },
+      wardrobe: { x: WORLD.shops.wardrobe.x, z: WORLD.shops.wardrobe.z, r: 7 },
     },
     spawn: { x: WORLD.spawn.x, z: WORLD.spawn.z },
     roadGate: { x: 0, z: ROAD.startZ },
