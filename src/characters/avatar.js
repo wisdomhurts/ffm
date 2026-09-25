@@ -547,7 +547,9 @@ export function createAvatar(char, faceImage, skinHex, lookArg) {
       }
     };
     const fit = hairDef.fit;
-    const lift = capped && fit.capLift != null ? fit.capLift : fit.lift;
+    // hats sit on the hair's base; tall parts (bun, spikes, crest) are hidden under covering hats and
+    // poke through open ones (crowns, flower crowns)
+    const lift = fit.capLift ?? fit.lift;
     let hat = null;
     if (hatDef) {
       hat = new THREE.Group();

@@ -1063,7 +1063,7 @@ export class Game {
     const it = p.intent;
     const now = this.time;
     if (it.emote && EMOTE[it.emote] && !stunned && !p.carrying) {
-      p.emote = { id: it.emote, until: now + EMOTE[it.emote].dur };
+      p.emote = { id: it.emote, until: now + EMOTE[it.emote].dur, since: now };
       bus.emit('emote', { player: p, id: it.emote });
     } else if (p.emote && (moving || stunned || p.carrying || now >= p.emote.until)) p.emote = null;
     if (it.say && PHRASE[it.say] && now >= (p._sayAt || 0)) {

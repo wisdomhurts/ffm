@@ -782,7 +782,7 @@ function createChat(app, parent) {
         const p = game.players[slot];
         if (p.invisible(game.time)) continue;
         const r = cam ? box(p, b, cam) : null;
-        if (r && placed.some((q) => r[0] < q[2] && r[2] > q[0] && r[1] < q[3] && r[3] > q[1])) {
+        if (r && p !== app.human && placed.some((q) => r[0] < q[2] && r[2] > q[0] && r[1] < q[3] && r[3] > q[1])) {
           b.until = Math.max(b.until, now + 2000); // wait for the newer bubble, then get a moment on screen
           if (now - b.at > BUBBLE_MS * 2.2) bubbles.delete(slot);
           continue;

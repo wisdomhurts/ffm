@@ -593,6 +593,25 @@ export function boostSkin(hex) {
   return '#' + to(r1) + to(g1) + to(b1);
 }
 
+const cartoonUrls = new Map();
+/**
+ * A cartoon face picture (data URL, square) for UI avatars of players without a photo, in their
+ * look's skin tone and expression (look.face; 'photo' falls back to the classic smile).
+ */
+export function cartoonFaceUrl(look = {}, size = 128) {
+  const skin = boostSkin(look.skin || '#d9a38a');
+  const expr = !look.face || look.face === 'photo' ? 'smile' : look.face;
+  const key = skin + expr + size;
+  if (!cartoonUrls.has(key)) {
+    try {
+      cartoonUrls.set(key, composeFaceCanvas(null, skin, size, { layout: { scale: 1.3, eyeY: 0.44 }, expr }).toDataURL('image/png'));
+    } catch {
+      cartoonUrls.set(key, null);
+    }
+  }
+  return cartoonUrls.get(key);
+}
+
 export function faceTexture(img, skin, opts = {}) {
   const t = new THREE.CanvasTexture(composeFaceCanvas(img, skin, opts.size || 512, opts));
   t.colorSpace = THREE.SRGBColorSpace;

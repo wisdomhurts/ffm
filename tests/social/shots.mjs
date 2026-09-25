@@ -116,6 +116,8 @@ for (const name of runs) {
       g.gardens[1].planters.forEach((pl) => (pl.unlocked = true)); // Sam has room to trade
       g.players[0].cash = 12500;
       friend.cash = 4000;
+      // live bots may bonk or splash us mid-test (a stunned player can't emote): not in this test
+      g.players[0].invulnUntil = friend.invulnUntil = 1e9;
       at(g.players[0], 0, -6, 0);
       at(friend, 30, -30);
       // bots hang out in front of Dorian (bots with a job to do walk on, as they should)
@@ -194,6 +196,15 @@ for (const name of runs) {
         };
         at(g.players[2], -3.2, 3);
         at(g.players[3], 3.2, 3.5);
+        // between errands (a bot on a steal, a chase or guarding its garden rightly ignores emotes)
+        for (const b of [g.players[2], g.players[3]]) {
+          const c = b.controller;
+          if (!c) continue;
+          c.goal = null;
+          c.threat = null;
+          c.nextDecideAt = g.time + 3;
+          c.motor?.stop?.();
+        }
         // pull the camera back a little so the family is in view on narrow phones too
         const cam = window.__app.cam;
         cam.distance = cam._dist = window.innerWidth < 500 ? 26 : 19;

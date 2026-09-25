@@ -21,12 +21,12 @@ import { createPreview } from '../characters/preview.js';
 
 // Friendly names for the badges that unlock items (progress module badge ids).
 const BADGE_TEXT = {
-  steals_100: 'Steal 100 plants',
-  showdown_win: 'Win a Family Showdown',
-  gift: 'Give someone a gift',
-  secret_plant: 'Grow a Secret plant',
-  chaos_win: 'Win a game on Chaos',
-  rainbow_plant: 'Grow a Rainbow plant',
+  thief2: 'Steal 100 plants',
+  champ1: 'Win a Family Showdown',
+  generous: 'Give someone a gift',
+  secret: 'Grow a Secret plant',
+  chaos: 'Win a game on Chaos',
+  rainbow: 'Grow a Rainbow plant',
 };
 
 // ------------------------------------------------------------------ tab icons (sticker style)
@@ -162,6 +162,7 @@ const CSS = `
 }
 @media (max-width:440px) and (max-aspect-ratio:9/10){
   .wd-head h2{display:none}
+  .wd-bar .bl2{display:none}
   .wd-tile .wt-name{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.05;min-height:2.1em;font-size:10.5px}
 }
 @media (max-width:380px) and (max-aspect-ratio:9/10){
@@ -476,7 +477,7 @@ function createWardrobe(app, close, opts = {}) {
       saveBtn.disabled = true;
       flash(`${badgeOnly[0].item.name}: ${BADGE_TEXT[badgeOnly[0].item.unlock] || 'earn its badge'} to unlock it.`, 'warn');
     } else if (miss.length) {
-      saveBtn.innerHTML = `<span class="bi">${STAR}</span><span>Buy ${cost} &amp; Save</span>`;
+      saveBtn.innerHTML = `<span class="bi">${STAR}</span><span>Buy ${cost}<span class="bl2"> &amp; Save</span></span>`;
       saveBtn.disabled = cost > (prof.stars || 0);
       flash(cost > (prof.stars || 0) ? `You need ${cost - (prof.stars || 0)} more stars. Earn them with quests and badges!` : `Trying on: ${miss.map((m) => m.item.name).join(', ')}`, 'warn');
     } else {
@@ -636,9 +637,9 @@ function createWardrobe(app, close, opts = {}) {
     return h('div', { class: 'wd-sec' }, h('div', { class: 'wd-sec-l' }, h('span', { text: label }), note ? h('small', { text: note }) : null), ...kids);
   }
 
-  function swatches(field, colors, { family = null, label } = {}) {
-    const cur = draft[field];
-    const list = [...colors];
+  function swatches(field, colors, { family = null, label, fallback = null } = {}) {
+    const cur = draft[field] ?? fallback;
+    const list = [...new Set(colors)];
     if (cur && !list.includes(cur)) list.unshift(cur);
     const sws = [];
     if (family) {
@@ -754,18 +755,18 @@ function createWardrobe(app, close, opts = {}) {
         out.push(info());
         const none = tile({ name: 'No hat', vis: h('span', { class: 'wt-ico', html: NONE }), on: !d.hat, onPick: () => setDraft({ hat: null }) });
         out.push(h('div', { class: 'wd-grid' }, none, HATS.map((it) => tile({ name: it.name, vis: thumbVis('hat', it.id, { ...d, hatColor: d.hatColor || it.tint }), on: d.hat === it.id, cat: 'hat', item: it,
-          onPick: pick('hat', 'hat', it, d.hatColor ? {} : { hatColor: it.tint }) }))));
+          onPick: pick('hat', 'hat', it) }))));
         const def = d.hat ? HAT_BY_ID[d.hat] : null;
-        if (def?.tint) out.push(section('Hat colour', null, swatches('hatColor', COLORS.cloth, { label: 'Hat colour' })));
+        if (def?.tint) out.push(section('Hat colour', null, swatches('hatColor', COLORS.cloth, { label: 'Hat colour', fallback: def.tint })));
         break;
       }
       case 'accs': {
         out.push(info());
         const none = tile({ name: 'Nothing', vis: h('span', { class: 'wt-ico', html: NONE }), on: !d.acc, onPick: () => setDraft({ acc: null }) });
         out.push(h('div', { class: 'wd-grid' }, none, ACCS.map((it) => tile({ name: it.name, vis: thumbVis('acc', it.id, { ...d, accColor: d.accColor || it.tint }), on: d.acc === it.id, cat: 'acc', item: it,
-          onPick: pick('acc', 'acc', it, d.accColor ? {} : { accColor: it.tint }) }))));
+          onPick: pick('acc', 'acc', it) }))));
         const def = d.acc ? ACC_BY_ID[d.acc] : null;
-        if (def?.tint) out.push(section('Colour', null, swatches('accColor', COLORS.cloth, { label: 'Accessory colour' })));
+        if (def?.tint) out.push(section('Colour', null, swatches('accColor', COLORS.cloth, { label: 'Accessory colour', fallback: def.tint })));
         break;
       }
       case 'noodle': {

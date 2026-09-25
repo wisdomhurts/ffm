@@ -28,6 +28,7 @@ import { createOnline } from './net/session.js';
 import { reactToSocial } from './social/botReact.js';
 import { attachCloudSync } from './online/sync.js';
 import { attachPets } from './ui/pets.js';
+import { createTradeManager } from './social/trades.js';
 
 const SAVE_EVERY = 12;
 
@@ -75,6 +76,7 @@ class App {
     this.profileId = activeProfileId() || CHARACTERS[0].id;
     this.progress = attachProgress(this);
     this.online = createOnline(this);
+    this.trades = createTradeManager(this); // host-side trade state machine (docs/ONLINE.md Social)
     this.cloudSync = attachCloudSync(this); // cloud save + high-score sync; silent when offline or not configured
     this.engine.add((dt, t) => this.frame(dt, t));
     this._saveTimer = 0;
@@ -462,6 +464,7 @@ class App {
     // online: the session steps the world itself (host) or mirrors the host (client)
     if (this.online?.room) this.online.update(dt);
     else if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
+    if (!this.online?.isClient) this.trades?.update?.();
     if (this.state === 'title' && this._warmup > 0) {
       for (let i = 0; i < 6 && this._warmup > 0; i++, this._warmup--) g.update(1 / 40);
     }

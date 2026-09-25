@@ -1,6 +1,8 @@
 // Circular family photo avatars for the DOM UI. Falls back to a coloured disc with the initial.
 // Avatars refresh themselves when a face changes in the Photo Booth ('face:changed').
-import { familyFaceData, faceInfo } from '../characters/faces.js';
+import { familyFaceData, faceInfo, cartoonFaceUrl } from '../characters/faces.js';
+import { getProfile } from '../core/profiles.js';
+import { CHARACTER } from '../config.js';
 import { bus } from '../core/events.js';
 import { h } from './dom.js';
 
@@ -9,7 +11,9 @@ const urls = new Map();
 export function avatarUrl(id) {
   if (!urls.has(id)) {
     const d = familyFaceData(id);
-    urls.set(id, d?.avatar || d?.face || null);
+    // no photo: draw the player's cartoon face (their chosen expression and skin) instead of an initial
+    const look = getProfile(id)?.look || CHARACTER[id]?.look || { skin: faceInfo(id).skin };
+    urls.set(id, d?.avatar || d?.face || cartoonFaceUrl(look) || null);
   }
   return urls.get(id);
 }
@@ -86,6 +90,12 @@ export function lookFigure(look = {}) {
   const body = kid ? `<g transform="translate(32 88) scale(.84) translate(-32 -88)">${p}</g>` : p;
   return `<svg class="ico fig" viewBox="0 0 64 92" aria-hidden="true" focusable="false"><ellipse cx="32" cy="88.5" rx="20" ry="3.2" fill="rgba(10,14,40,.35)"/>${body}</svg>`;
 }
+
+bus.on('profile:changed', ({ profile } = {}) => {
+  if (!profile || familyFaceData(profile.id)) return;
+  urls.delete(profile.id);
+  document.querySelectorAll(`.ava[data-face="${profile.id}"]`).forEach((el) => fill(el, profile.id));
+});
 
 bus.on('face:changed', ({ id } = {}) => {
   if (!id) return;

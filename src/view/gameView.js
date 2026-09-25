@@ -147,6 +147,8 @@ export class GameView {
         isLocal: p === human,
         coil: now < p.coilUntil,
         interacting: p.interact?.t > 0 ? p.interact.verb : null,
+        emote: p.emote && now < p.emote.until ? p.emote.id : null,
+        emoteT: p.emote ? now - (p.emote.since ?? now) : 0,
       });
       if (p === human && this.xray) this.xray.setVisible(invisible >= 1);
       this._updatePet(i, p, dt, time, now, invisible);

@@ -32,10 +32,11 @@ export const BUILDS = [
   { id: 'kid', name: 'Kid', price: 0 },
 ];
 
-// fit: how a hat sits on this hair ({lift above the head top, scale}); `tall` parts poke up and are
-// left out under a covering hat (lift then drops to capLift). sling: which way the noodle is slung
-// ('long' = further off the back, over hair that falls down it). paint: how the head's sides/back are
-// painted (share of the head height in solid hair colour, fade end, stubble).
+// fit: how hats sit on this hair: {lift: how far the hair's top sits above the head, s: hat scale,
+// capLift: for styles with tall parts (bun, spikes, crest, the crown of curls), the height of the hair
+// under them: hats sit there; covering hats hide the tall parts, open ones (crowns) let them poke
+// through}. sling: which way the noodle is slung ('long' = further off the back, over hair that falls
+// down it). The head's painted sides/back per style live in outfits.js (HEAD_PAINT).
 export const HAIR = [
   { id: 'short', name: 'Crew Cut', price: 0, fit: { lift: 0.08, s: 1.04 }, sling: 'short' },
   { id: 'short-thick', name: 'Mop Top', price: 0, fit: { lift: 0.4, s: 1.13 }, sling: 'short' },
@@ -47,7 +48,7 @@ export const HAIR = [
   { id: 'pigtails', name: 'Pigtails', price: 15, fit: { lift: 0.18, s: 1.08 }, sling: 'short' },
   { id: 'bun', name: 'Top Bun', price: 15, fit: { lift: 0.62, s: 1.08, capLift: 0.18 }, sling: 'short' },
   { id: 'spiky', name: 'Spiky', price: 20, fit: { lift: 0.62, s: 1.1, capLift: 0.3 }, sling: 'short' },
-  { id: 'curly', name: 'Big Curls', price: 20, fit: { lift: 0.62, s: 1.3 }, sling: 'short' },
+  { id: 'curly', name: 'Big Curls', price: 20, fit: { lift: 0.62, s: 1.3, capLift: 0.3 }, sling: 'short' },
   { id: 'mohawk', name: 'Mohawk', price: 30, fit: { lift: 0.08, s: 1.03, capLift: 0.04 }, sling: 'short' },
 ];
 
@@ -87,9 +88,9 @@ export const HATS = [
   { id: 'propeller', name: 'Propeller Cap', price: 25, covers: true, h: 0.9 },
   { id: 'tophat', name: 'Top Hat', price: 30, tint: '#23232b', covers: true, h: 1.45 },
   { id: 'wizard', name: 'Wizard Hat', price: 35, tint: '#5b3fc4', covers: true, h: 2.1 },
-  { id: 'viking', name: 'Viking Helmet', price: 40, unlock: 'steals_100', covers: true, h: 1.1 },
-  { id: 'crown', name: 'Royal Crown', price: 60, unlock: 'showdown_win', h: 0.85 },
-  { id: 'halo', name: 'Halo', price: 50, unlock: 'gift', h: 0.9 },
+  { id: 'viking', name: 'Viking Helmet', price: 40, unlock: 'thief2', covers: true, h: 1.1 },
+  { id: 'crown', name: 'Royal Crown', price: 60, unlock: 'champ1', h: 0.85 },
+  { id: 'halo', name: 'Halo', price: 50, unlock: 'generous', h: 0.9 },
 ];
 
 // at: where it attaches ('face' on the head front, 'neck', 'back'); back items push the slung noodle
@@ -104,7 +105,7 @@ export const ACCS = [
   { id: 'lei', name: 'Flower Lei', price: 15, at: 'neck' },
   { id: 'backpack', name: 'Backpack', price: 20, tint: '#ff8a1a', at: 'back' },
   { id: 'cape', name: 'Super Cape', price: 30, tint: '#e8323c', at: 'back' },
-  { id: 'wings', name: 'Fairy Wings', price: 45, unlock: 'secret_plant', at: 'back' },
+  { id: 'wings', name: 'Fairy Wings', price: 45, unlock: 'secret', at: 'back' },
 ];
 
 // Cartoon expressions for players without a photo (or who pick one). 'photo' = the Photo Booth /
@@ -129,8 +130,8 @@ export const TRAILS = [
   { id: 'hearts', name: 'Hearts', price: 15 },
   { id: 'bubbles', name: 'Bubbles', price: 15 },
   { id: 'leaves', name: 'Leaves', price: 15 },
-  { id: 'fire', name: 'Fire', price: 40, unlock: 'chaos_win' },
-  { id: 'rainbow', name: 'Rainbow', price: 50, unlock: 'rainbow_plant' },
+  { id: 'fire', name: 'Fire', price: 40, unlock: 'chaos' },
+  { id: 'rainbow', name: 'Rainbow', price: 50, unlock: 'rainbow' },
 ];
 
 /** The catalog, by category (contract shape plus the extras the Wardrobe uses). */

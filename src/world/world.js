@@ -22,6 +22,7 @@ import { buildPlaza } from './plaza.js';
 import { buildGardens } from './gardens.js';
 import { buildShops } from './shops.js';
 import { createPetShop } from './petshop.js';
+import { createBoutique } from './boutique.js';
 import { buildRoad } from './road.js';
 
 function createMaterials() {
@@ -62,6 +63,9 @@ export function buildWorld(engine, layout, quality = engine.quality) {
   const shops = buildShops(homeCtx);
   const petShop = createPetShop({ layout, quality, mats });
   home.add(petShop);
+  const boutique = createBoutique({ mats, quality });
+  boutique.position.set(layout.shops.wardrobe.x, 0, layout.shops.wardrobe.z);
+  home.add(boutique);
   const homeGlow = homeCtx.glow.build(mats.glow, { name: 'home-glow', receiveShadow: false });
   if (homeGlow) home.add(homeGlow);
 
@@ -99,6 +103,7 @@ export function buildWorld(engine, layout, quality = engine.quality) {
         gardens.update(dt, t);
         shops.update(dt, t);
         petShop.update(dt, t);
+        boutique.userData.update(dt, t);
       }
       road.update(dt, t, cz, dd);
     },

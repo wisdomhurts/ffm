@@ -550,9 +550,13 @@ export function mountSocial(app, hudRoot, parts = {}) {
     const byThem = e.changedBy != null && slotOf(e.changedBy) === T.other.slot;
     const byMe = e.changedBy != null && isMe(e.changedBy);
     if (byThem && (e.reason === 'offer' || e.reason === 'changed')) {
-      // anti-scam: shout about every change on their side
+      // anti-scam: shout about every change on their side (their very first offer is just news)
+      const first = !prev.planters.length && !prev.cash;
       T.changedUntil = game.time + 3;
-      T.note = { cls: 'warn', html: `<b>${esc(T.other.name)} changed their offer!</b> Check it again before you press Ready.`, until: game.time + 4 };
+      T.theirChanged.textContent = first ? 'New!' : 'Changed!';
+      T.note = first
+        ? { cls: 'warn', html: `<b>${esc(T.other.name)} made an offer!</b> Take a good look.`, until: game.time + 3 }
+        : { cls: 'warn', html: `<b>${esc(T.other.name)} changed their offer!</b> Check it again before you press Ready.`, until: game.time + 4 };
       T.theirSide.classList.remove('flash');
       void T.theirSide.offsetWidth;
       T.theirSide.classList.add('flash');

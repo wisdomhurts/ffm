@@ -109,6 +109,7 @@ function buildHair(style, longLen, capped) {
     P.push(part(box(W + 0.3, 0.9, D + 0.3, 3, 0.4), [0, hh - 0.05, -0.05], [0, 0, 0], STRANDS));
     const ico = new THREE.IcosahedronGeometry(1, 1);
     const puffs = [];
+    // the lowest ring stays under hats (a puffy ring round the brim); the crown of curls is "tall"
     for (const [el, n, rr] of [[0.15, 9, 0.6], [0.65, 8, 0.62], [1.2, 5, 0.6], [1.57, 1, 0.62]]) {
       for (let i = 0; i < n; i++) {
         const az = (i / n) * Math.PI * 2 + el;
@@ -116,12 +117,12 @@ function buildHair(style, longLen, capped) {
         const z = Math.cos(az) * Math.cos(el) * (hd + 0.25) - 0.12;
         const y = hh - 0.1 + Math.sin(el) * 0.62;
         if (z > 0.35 && y < hh + 0.05) continue; // keep the face clear
-        puffs.push([x, y, z, rr]);
+        puffs.push([x, y, z, rr, el > 0.5]);
       }
     }
     // a row of small curls along the hairline
-    for (const x of [-0.72, -0.24, 0.24, 0.72]) puffs.push([x, hh - 0.05, hd - 0.02, 0.32]);
-    for (const [x, y, z, r] of puffs) P.push(part(ico, [x, y, z], [x, y * 2, z], STRANDS, [r, r * 0.92, r]));
+    for (const x of [-0.72, -0.24, 0.24, 0.72]) puffs.push([x, hh - 0.05, hd - 0.02, 0.32, false]);
+    for (const [x, y, z, r, tall] of puffs) (tall ? T : P).push(part(ico, [x, y, z], [x, y * 2, z], STRANDS, [r, r * 0.92, r]));
     ico.dispose();
   }
   const all = capped ? P : P.concat(T);
@@ -138,4 +139,4 @@ export function hairGeometry(style, len, capped = false) {
 }
 
 /** Does this style have parts a covering hat hides? */
-export const hasTallHair = (style) => style === 'bun' || style === 'spiky' || style === 'mohawk';
+export const hasTallHair = (style) => style === 'bun' || style === 'spiky' || style === 'mohawk' || style === 'curly';

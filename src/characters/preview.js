@@ -221,10 +221,21 @@ export function createPreview(canvas, { char, look, face = null, skin = null } =
     renderer.setViewport(0, 0, w, h);
   }
 
+  // phones: a little lower resolution and 30 fps, so the game underneath (boutique stand) stays smooth
+  const coarse = (() => {
+    try {
+      return matchMedia('(pointer: coarse)').matches;
+    } catch {
+      return false;
+    }
+  })();
+  const MAX_DPR = coarse ? 1.5 : 2;
+  const MIN_FRAME = coarse ? 1 / 31 : 0;
+
   function fit() {
     const w = Math.max(1, canvas.clientWidth);
     const h = Math.max(1, canvas.clientHeight);
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(MAX_DPR, window.devicePixelRatio || 1);
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
       renderer.setPixelRatio(dpr);
       renderer.setSize(w, h, false);
@@ -246,6 +257,7 @@ export function createPreview(canvas, { char, look, face = null, skin = null } =
   let disposed = false;
   function frame(now) {
     raf = requestAnimationFrame(frame);
+    if ((now - last) / 1000 < MIN_FRAME - 0.002 && !queue.length) return;
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     if (!canvas.isConnected || canvas.clientWidth < 2) return;
