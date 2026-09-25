@@ -21,6 +21,7 @@ import { createAmbience } from './sky.js';
 import { buildPlaza } from './plaza.js';
 import { buildGardens } from './gardens.js';
 import { buildShops } from './shops.js';
+import { createPetShop } from './petshop.js';
 import { buildRoad } from './road.js';
 
 function createMaterials() {
@@ -59,6 +60,8 @@ export function buildWorld(engine, layout, quality = engine.quality) {
   const plaza = buildPlaza(homeCtx);
   const gardens = buildGardens(homeCtx);
   const shops = buildShops(homeCtx);
+  const petShop = createPetShop({ layout, quality, mats });
+  home.add(petShop);
   const homeGlow = homeCtx.glow.build(mats.glow, { name: 'home-glow', receiveShadow: false });
   if (homeGlow) home.add(homeGlow);
 
@@ -95,6 +98,7 @@ export function buildWorld(engine, layout, quality = engine.quality) {
         plaza.update(dt, t, Math.max(ambience.weather.diamond, ambience.zoneW[6]));
         gardens.update(dt, t);
         shops.update(dt, t);
+        petShop.update(dt, t);
       }
       road.update(dt, t, cz, dd);
     },

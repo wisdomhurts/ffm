@@ -8,6 +8,7 @@ import { createPlantView, createSeedView, createCarriedPlantView, createPodView 
 import { createBanana, createBalloon } from '../fx/props.js';
 import { fmt, SELL_SECONDS } from '../gameplay/game.js';
 import { bus } from '../core/events.js';
+import { createPetView } from '../pets/view.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -39,6 +40,7 @@ export class GameView {
     this.groundViews = new Map();
     this.projViews = new Map();
     this.monsterViews = [];
+    this.petViews = []; // per slot: {id, view, mood} for the pet following that player
     this.unsub = [];
     this._build();
   }
@@ -147,6 +149,7 @@ export class GameView {
         interacting: p.interact?.t > 0 ? p.interact.verb : null,
       });
       if (p === human && this.xray) this.xray.setVisible(invisible >= 1);
+      this._updatePet(i, p, dt, time, now, invisible);
       if (invisible > 0.05) {
         const tag = p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`;
         let carry = '';
@@ -325,6 +328,24 @@ export class GameView {
     });
   }
 
+  _updatePet(i, p, dt, time, now, invisible) {
+    let rec = this.petViews[i];
+    const id = p.pet || null;
+    if ((rec?.id || null) !== id) {
+      if (rec) {
+        this.root.remove(rec.view.object3d);
+        rec.view.dispose();
+      }
+      rec = this.petViews[i] = id ? { id, view: createPetView(id, { side: i % 2 ? -1 : 1 }), mood: { celebrating: false, stunned: false } } : null;
+      if (rec) this.root.add(rec.view.object3d);
+    }
+    if (!rec) return;
+    rec.view.object3d.visible = invisible > 0.05;
+    rec.mood.celebrating = now < p.celebrateUntil;
+    rec.mood.stunned = now < p.stunUntil;
+    rec.view.update(dt, p, time, rec.mood);
+  }
+
   dispose() {
     this.disposed = true;
     this.unsub.forEach((f) => f());
@@ -336,6 +357,7 @@ export class GameView {
     this.xray?.dispose();
     this.avatars.forEach((a) => a.dispose?.());
     this.monsterViews.forEach((m) => m.dispose?.());
+    this.petViews.forEach((r) => r?.view.dispose());
   }
 }
 

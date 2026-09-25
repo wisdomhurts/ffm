@@ -27,6 +27,7 @@ import { attachProgress } from './progress/index.js';
 import { createOnline } from './net/session.js';
 import { reactToSocial } from './social/botReact.js';
 import { attachCloudSync } from './online/sync.js';
+import { attachPets } from './ui/pets.js';
 
 const SAVE_EVERY = 12;
 
@@ -69,6 +70,7 @@ class App {
     this.state = 'boot';
     this.cam = null;
     this.menus = createMenus(this);
+    attachPets(this); // hatching (solo and online) adds pets to the profile
     this.touch = createTouchControls(this);
     this.profileId = activeProfileId() || CHARACTERS[0].id;
     this.progress = attachProgress(this);

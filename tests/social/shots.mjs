@@ -214,6 +214,12 @@ for (const name of runs) {
         await page.keyboard.press('1');
       }
       await frames(1);
+      const mine = await E(() => {
+        const a = window.__app;
+        const h = a.human;
+        return { emote: h.emote?.id || null, state: a.state, blocking: !!a.menus?.isBlocking?.(), carrying: !!h.carrying, stunned: a.game.time < h.stunUntil, wheel: !!document.querySelector('.sw-layer:not(.out)') };
+      });
+      if (mine.emote !== 'wave') console.log('  wave attempt: ' + JSON.stringify(mine));
       await sim(1.3);
       waved = await E(() => window.__waves.some((w) => /wave/.test(w)));
       if (!waved) await sim(10);

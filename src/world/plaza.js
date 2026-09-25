@@ -119,37 +119,8 @@ export function buildPlaza(ctx) {
     solid(x, z, 0.4, 0.4, 7);
     canopy(x, z, 3.4, 5.0, 7.6);
   }
-  for (const [x, z] of [[54, -57], [63, -57]]) {
-    palapa(props, x, z, r);
-    lounger(props, x - 1.6, z + 0.5, Math.PI, '#ff7eb6');
-    lounger(props, x + 1.6, z + 0.5, Math.PI, '#ffd23f');
-    solid(x, z, 0.4, 0.4, 7);
-    canopy(x, z, 3.4, 5.0, 7.6);
-  }
-  // tiki bar hut (south-west)
-  {
-    const x = -57, z = -57.5;
-    for (const [dx, dz] of [[-4, -3], [4, -3], [-4, 3], [4, 3]]) {
-      props.cyl(x + dx, 0, z + dz, 0.35, 5.2, '#8a6038', { seg: 7 });
-      solid(x + dx, z + dz, 0.45, 0.45, 6);
-    }
-    props.prim('cone:4', x, 6.6, z, 13.5, 3.4, 11.5, '#d9a95a', { ry: Math.PI / 4, ao: 0.35 });
-    canopy(x, z, 5.2, 4.9, 8.3);
-    props.block(x, 5.1, z, 9.4, 0.4, 7.4, '#b88444');
-    // counter
-    props.block(x, 0, z + 2.2, 7.6, 2.4, 1.4, '#8a6038', { ao: 0.3 });
-    props.block(x, 2.4, z + 2.2, 8.0, 0.3, 1.8, '#e8793a', { ao: 0 });
-    solid(x, z + 2.2, 3.9, 0.8, 2.7);
-    // stools and coconut drinks
-    for (let i = -1; i <= 1; i++) {
-      props.cyl(x + i * 2.6, 0, z + 4.4, 0.18, 1.5, '#6b4a2a', { seg: 6 });
-      props.cyl(x + i * 2.6, 1.5, z + 4.4, 0.65, 0.25, '#e84a5f', { seg: 10 });
-      props.prim('sphere:8', x + i * 2.4 + 0.4, 2.95, z + 2.2, 0.7, 0.65, 0.7, '#7a4a24', { ao: 0 });
-      props.beam(x + i * 2.4 + 0.4, 3.1, z + 2.2, x + i * 2.4 + 0.6, 3.9, z + 2.4, 0.08, '#ff5a8a', { ao: 0 });
-    }
-    // hanging sign board facing north
-    props.block(x, 3.6, z + 3.7, 5.2, 1.4, 0.2, '#f2b640', { ao: 0.1 });
-  }
+  // (the south-east corner is the Wardrobe boutique: src/world/boutique.js)
+  // (the south-west corner is the Pet Egg stand: src/world/petshop.js)
   // surfboard rack (north-east corner)
   for (let i = 0; i < 4; i++) {
     const c = ['#ff5a8a', '#3fb6ff', '#ffd23f', '#1ec8a5'][i];
