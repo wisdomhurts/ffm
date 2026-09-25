@@ -1,6 +1,6 @@
 # Steal A Seed! — Family Edition
 
-A Roblox-style 3D browser game starring **Dorian, Esther, Maddie and Micah**, based on the
+A Roblox-style 3D browser game starring **Dorian, Esther, Mati and Micah**, based on the
 Roblox hit *Steal A Seed!* (itself a riff on *Steal a Brainrot* and *Grow a Garden*).
 
 > Core loop: **steal a seed → run it home → plant it → it pays forever → buy Speed → reach a
@@ -48,7 +48,7 @@ Top-down, **+Z is north** (towards the road). Y is up.
 |---|---|---|---|---|
 | dorian | Dorian | `#2f80ed` | **Tycoon**: farms hard, upgrades, occasionally steals big | black & white "face-print" party shirt, dark jeans |
 | esther | Esther | `#ff4f9a` | **Guardian**: locks often, chases thieves relentlessly | hot-pink dress |
-| maddie | Maddie | `#9b5cff` | **Speedster**: buys speed first, goes deep for rare seeds | purple top, floral jacket |
+| maddie | Mati | `#9b5cff` | **Speedster**: buys speed first, goes deep for rare seeds | purple top, floral jacket |
 | micah | Micah | `#1ec8a5` | **Sneaky Thief**: steals constantly, banana peels & balloons | mint Hawaiian shirt, khaki shorts |
 
 Avatars are blocky R6-style (legs, torso, arms, big head) with the family member's

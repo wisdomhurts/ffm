@@ -1,6 +1,6 @@
 # Steal A Seed! Family Edition
 
-A Roblox-style 3D browser game starring **Dorian, Esther, Maddie and Micah**, inspired by the Roblox
+A Roblox-style 3D browser game starring **Dorian, Esther, Mati and Micah**, inspired by the Roblox
 hit *Steal A Seed!*. Run up the Seed Road, grab seeds, grow them into money-making plants, train your
 speed to reach rarer biomes, and steal your family's best plants (while stopping them from stealing yours).
 

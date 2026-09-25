@@ -69,7 +69,7 @@ async function runViewport(label, opts) {
   }, [FAKE_URL, FAKE_KEY]);
   await page.goto('file://' + path.join(GALLERY, 'index.html'));
   await page.waitForFunction(() => window.__sas);
-  // this device: the family has played a bit; Maddie is the active player
+  // this device: the family has played a bit; Mati is the active player
   await page.evaluate(() => {
     const { profiles, app } = window.__sas;
     const set = (id, f) => profiles.updateProfile(id, f);
@@ -92,13 +92,13 @@ async function runViewport(label, opts) {
   await page.evaluate(() => window.__sas.openLeaderboard(window.__sas.app, { scope: 'global', board: 'networth' }));
   await W('.lb-row:not(.sk)');
   check(await page.locator('.lb-row:not(.sk)').count() === 11, `${label}: global board lists the 11 seeded players`);
-  check(await page.locator('.lb-join').isVisible(), `${label}: join bar invites Maddie`);
+  check(await page.locator('.lb-join').isVisible(), `${label}: join bar invites Mati`);
   await snap('lb-global-join');
-  // join -> Maddie gets a code, her bests are submitted, her row is highlighted
+  // join -> Mati gets a code, her bests are submitted, her row is highlighted
   await page.locator('.lb-join .btn').click();
   await W('.lb-row.me', 10000);
   const meRow = await page.locator('.lb-row.me').innerText();
-  check(/Maddie/.test(meRow) && /1\.34M/.test(meRow), `${label}: after joining Maddie's row is highlighted: ${meRow.replace(/\s+/g, ' ')}`);
+  check(/Mati/.test(meRow) && /1\.34M/.test(meRow), `${label}: after joining Mati's row is highlighted: ${meRow.replace(/\s+/g, ' ')}`);
   await snap('lb-global-me');
   // week + another board
   await page.locator('.lb-tab[data-v=steals]').click();
@@ -110,7 +110,7 @@ async function runViewport(label, opts) {
   await page.locator('.lb-scope .seg-b[data-v=family]').click();
   await W('.lb-row.me');
   const fam = await page.locator('.lb-row .lb-nm').allInnerTexts();
-  check(fam.join(',') === 'Micah,Maddie,Dorian,Esther', `${label}: family thief board order: ${fam.join(',')}`);
+  check(fam.join(',') === 'Micah,Mati,Dorian,Esther', `${label}: family thief board order: ${fam.join(',')}`);
   await snap('lb-family');
   // server down -> friendly error with retry
   fake.state.mode = 'down';

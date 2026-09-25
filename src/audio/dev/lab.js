@@ -296,7 +296,7 @@ const DEMOS = [
     ['grab', { tier: 3, mutation: 'diamond' }, 'Epic Diamond'], ['grab', { tier: 2, mutation: 'rainbow' }, 'Rare Rainbow'], ['grab', { tier: 6 }, 'SECRET']]],
   ['Garden', [['plant'], ['grown'], ['coins', { amount: 40 }, 'coins 40'], ['coins', { amount: 25000 }, 'coins 25K'], ['unlock'], ['lockOn'], ['lockOff'], ['dropped'], ['sprout']]],
   ['Stealing', [['stolen', {}, 'stolen (victim)'], ['yoink', {}, 'yoink (thief)'], ['heist', {}, 'heist (thief home)'], ['robbed', {}, 'robbed (victim)'], ['saved', {}, 'got it back!']]],
-  ['Combat', [['whoosh'], ['hit', { who: 'dorian' }, 'hit Dorian'], ['hit', { who: 'esther' }, 'hit Esther'], ['hit', { who: 'maddie' }, 'hit Maddie'], ['hit', { who: 'micah' }, 'hit Micah'],
+  ['Combat', [['whoosh'], ['hit', { who: 'dorian' }, 'hit Dorian'], ['hit', { who: 'esther' }, 'hit Esther'], ['hit', { who: 'maddie' }, 'hit Mati'], ['hit', { who: 'micah' }, 'hit Micah'],
     ['jump'], ['slip'], ['splash']]],
   ['Items', [['item', { item: 'banana' }, 'banana'], ['item', { item: 'balloon' }, 'balloon'], ['item', { item: 'coil' }, 'coil'], ['item', { item: 'cloak' }, 'cloak'], ['item', { item: 'bucket' }, 'bucket']]],
   ['Monsters', [['aggro', { type: 'stump' }, 'Grumpy Stump'], ['aggro', { type: 'crab' }, 'Cactus Crab'], ['aggro', { type: 'snapper' }, 'Swamp Snapper'],

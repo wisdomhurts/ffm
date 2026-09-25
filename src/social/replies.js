@@ -1,5 +1,5 @@
 // What the family bots say back to quick chat and emotes, in each family member's voice.
-// Dorian = the dad (Tycoon), Esther = the mom (Guardian), Maddie = the girl (Speedster),
+// Dorian = the dad (Tycoon), Esther = the mom (Guardian), Mati = the girl (Speedster),
 // Micah = the boy (Sneaky Thief). {name} = the person they're answering. Keep every line kid-safe.
 
 export const REPLIES = {

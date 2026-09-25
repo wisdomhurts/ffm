@@ -34,13 +34,13 @@ try {
   await page.goto('file://' + path.join(DIR, 'index.html'), { timeout: 300000 });
   await page.waitForFunction(() => window.__sas && window.__app.game, null, { timeout: 300000 });
   await manualFrames(page);
-  // Maddie gets a save code, then plays a little Endless
+  // Mati gets a save code, then plays a little Endless
   const code = await page.evaluate(async () => {
     const { api, profiles } = window.__sas;
     profiles.updateProfile('maddie', (p) => (p.best.netWorth = 750000));
     return (await api.cloudLink(profiles.getProfile('maddie'))).code;
   });
-  check(/^SEED-/.test(code), 'linked Maddie: ' + code);
+  check(/^SEED-/.test(code), 'linked Mati: ' + code);
   await page.evaluate(() => window.__app.startGame({ charId: 'maddie', mode: 'endless', difficulty: 'normal', fresh: true }));
   await stepFrames(page, 3);
   await fastForward(page, 30);
@@ -51,7 +51,7 @@ try {
   await stepFrames(page, 2);
   // scores reach the board in the background
   await page.waitForFunction(() => (window.__sas.api.cloudMeta('maddie').sent.networth || 0) === 750000, null, { timeout: 20000 });
-  check(true, 'sync submitted Maddie\'s best in the background');
+  check(true, 'sync submitted Mati\'s best in the background');
   // panels over the paused game
   await page.evaluate(() => window.__app.pause());
   await stepFrames(page, 1);

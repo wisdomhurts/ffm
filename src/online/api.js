@@ -220,7 +220,7 @@ export async function cloudPull(code) {
  * Where a peeked/pulled save would go on this device:
  *   {target: profile|null, why: 'linked'|'family'|null, targetHasProgress, targetOtherCode}
  * target null = it becomes a new player. 'linked' = this device already had that code for the profile;
- * 'family' = it's one of the family's own profiles (Dorian, Esther, Maddie, Micah).
+ * 'family' = it's one of the family's own profiles (Dorian, Esther, Mati, Micah).
  */
 export function restorePlan(remote, app = null) {
   const all = listProfiles();

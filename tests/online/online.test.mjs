@@ -176,7 +176,7 @@ test('cloudPush skips unchanged data, is rate limited, and uploads changes', asy
 
 test('cloudPeek previews without changing anything; bad and unknown codes', async () => {
   const peek = await api.cloudPeek(maddieCode.toLowerCase().replace(/-/g, ' '));
-  assert.equal(peek.name, 'Maddie');
+  assert.equal(peek.name, 'Mati');
   assert.equal(peek.base, 'maddie');
   assert.equal(peek.summary.stars, 13);
   assert.equal(peek.hasSave, true);
@@ -188,7 +188,7 @@ test('cloudPeek previews without changing anything; bad and unknown codes', asyn
 });
 
 test('moving a save: pull on "another device", restore safely, old device sees "moved", undo works', async () => {
-  // Another device = this device's state after we note what Maddie had here.
+  // Another device = this device's state after we note what Mati had here.
   const plan = api.restorePlan(await api.cloudPeek(maddieCode));
   assert.equal(plan.why, 'linked');
   assert.equal(plan.target.id, 'maddie');
@@ -206,7 +206,7 @@ test('moving a save: pull on "another device", restore safely, old device sees "
   assert.equal(api.cloudState(profiles.getProfile('maddie')), 'moved');
   assert.equal(await errCode(api.cloudPush(profiles.getProfile('maddie'))), 'moved');
 
-  // restore into Maddie: the local profile is backed up first
+  // restore into Mati: the local profile is backed up first
   const res = api.restoreCloud(pulled, { into: 'maddie' });
   assert.equal(res.replaced, true);
   const m = profiles.getProfile('maddie');
@@ -234,13 +234,13 @@ test('restoring as a NEW player never touches existing profiles', async () => {
   assert.equal(res.created, true);
   const np = res.profile;
   assert.match(np.id, /^p_/);
-  assert.equal(np.name, 'Maddie 2', 'a family name gets a number');
+  assert.equal(np.name, 'Mati 2', 'a family name gets a number');
   assert.equal(np.base, 'maddie');
   assert.notEqual(np.look.face, 'photo', 'photo faces stay with the family profile');
   assert.equal(profiles.listProfiles().length, before + 1);
   assert.equal(profiles.getProfile('maddie').cloud, null, 'one cloud identity per device');
   assert.equal(lsLoad('save:endless:' + np.id).players[2].cash, 5000);
-  // hand the code back to Maddie for the next tests
+  // hand the code back to Mati for the next tests
   const again = await api.cloudPull(maddieCode);
   api.restoreCloud(again, { into: 'maddie' });
   profiles.deleteProfile(np.id);
@@ -261,10 +261,10 @@ test('scores: best is kept, ranks, "me", week board, hidden players, family boar
     assert.equal(profiles.getProfile(base).name, name);
   }
   const top = await api.topScores('steals', { me: profiles.getProfile('maddie'), fresh: true });
-  assert.deepEqual(top.map((r) => [r.rank, r.name, r.value]), [[1, 'Dorian', 80], [2, 'Maddie', 40], [2, 'Esther', 40], [4, 'Micah', 5]]);
-  assert.deepEqual(top.filter((r) => r.me).map((r) => r.name), ['Maddie']);
+  assert.deepEqual(top.map((r) => [r.rank, r.name, r.value]), [[1, 'Dorian', 80], [2, 'Mati', 40], [2, 'Esther', 40], [4, 'Micah', 5]]);
+  assert.deepEqual(top.filter((r) => r.me).map((r) => r.name), ['Mati']);
   const two = await api.topScores('steals', { limit: 2, me: profiles.getProfile('micah'), fresh: true });
-  assert.deepEqual(two.map((r) => [r.rank, r.name, r.me]), [[1, 'Dorian', false], [2, 'Maddie', false], [4, 'Micah', true]]);
+  assert.deepEqual(two.map((r) => [r.rank, r.name, r.me]), [[1, 'Dorian', false], [2, 'Mati', false], [4, 'Micah', true]]);
   assert.equal((await api.topScores('steals', { period: 'week', fresh: true })).length, 4);
   assert.equal(await errCode(api.submitScore(maddie, 'coins', 1)), 'bad_board');
   backend.clearRateLimits();
@@ -282,7 +282,7 @@ test('scores: best is kept, ranks, "me", week board, hidden players, family boar
   profiles.updateProfile('micah', (p) => (p.counters.steals = 5));
   profiles.updateProfile('maddie', (p) => (p.counters.steals = 40));
   const fam = api.familyScores('steals', { profileId: 'esther' });
-  assert.deepEqual(fam.map((r) => [r.rank, r.name, r.value, r.me]), [[1, 'Dorian', 80, false], [2, 'Esther', 40, true], [2, 'Maddie', 40, false], [4, 'Micah', 5, false]]);
+  assert.deepEqual(fam.map((r) => [r.rank, r.name, r.value, r.me]), [[1, 'Dorian', 80, false], [2, 'Esther', 40, true], [2, 'Mati', 40, false], [4, 'Micah', 5, false]]);
   assert.equal(api.familyScores('rebirths', {}).find((r) => r.profileId === 'maddie').value, 2, 'rebirths come from the Endless save');
 });
 
@@ -380,7 +380,7 @@ test('sync: uploads changes, submits new bests once, flushes on quit, stays sile
     await until(() => (api.cloudMeta('maddie').sent.steals || 0) === 41 && (api.cloudMeta('maddie').sent.networth || 0) === 250000, 3000, 'scores');
     await until(() => backend.stored(id)?.profile?.best?.netWorth === 250000, 3000, 'upload');
     const top = await api.topScores('networth', { fresh: true });
-    assert.equal(top.find((r) => r.name === 'Maddie')?.value, 250000);
+    assert.equal(top.find((r) => r.name === 'Mati')?.value, 250000);
     // nothing new -> nothing sent
     await sleep(200);
     const before = backend.state.calls.filter((c) => c.fn === 'sas_submit').length;

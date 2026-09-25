@@ -8,7 +8,7 @@
 //   brain (every ~0.6-1.2 s) utility scores for farm / steal / defend / shop / ... -> a Goal (brain.js)
 //   goal (every tick)        a small state machine that drives the motor and interactions (goals.js)
 //   motor (every tick)       routes, braking, dodging monsters and peels, un-sticking (motor.js)
-// Personalities: tycoon (Dorian), guardian (Esther), speedster (Maddie), thief (Micah).
+// Personalities: tycoon (Dorian), guardian (Esther), speedster (Mati), thief (Micah).
 //
 // Rubber band (`_pace`, from config DIFFICULTY): bots farm at most `biomeLead` biomes deeper than the
 // human has been (and a biome shallower unless they trail), a bot ahead of the human eases off (jogs on

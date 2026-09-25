@@ -17,9 +17,9 @@ export const GOOD = [
   'Analise', 'José', 'Zoë', '李明', 'Мария',
   'Cassidy', 'Cassie', 'Jasper', 'Shital', 'Cummings', 'Sexton', 'Assad', 'Fukuda', 'Pornsak', 'Faggin', 'Fagan', 'Hitomi',
   'Titus', 'Dickinson', 'Matsushita', 'Yoshito', 'Toshitaka', 'Bass', 'Glass', 'Analy', 'Cocker', 'Kumar', 'Hellen', 'Sasha',
-  'Maddie 2', 'Zippy Melon', "O'Neil", 'Anne-Marie', 'Mr. Smith', 'J R R Tolkien', 'Shi Tao', 'Li Na', 'Van Dyke',
+  'Mati 2', 'Zippy Melon', "O'Neil", 'Anne-Marie', 'Mr. Smith', 'J R R Tolkien', 'Shi Tao', 'Li Na', 'Van Dyke',
   'Łukasz', 'Søren', 'Björk', 'Nguyễn Văn An', 'Ζωή', 'Александр', '佐々木', 'さくら', 'प्रिया', 'محمد', 'דוד', 'สมชาย',
-  '김민준', 'Ngozi', 'Siobhán', 'Dorian', 'Esther', 'Maddie', 'Micah', 'Player', 'Captain Kale',
+  '김민준', 'Ngozi', 'Siobhán', 'Dorian', 'Esther', 'Mati', 'Micah', 'Player', 'Captain Kale',
 ];
 
 // must be refused (sanitizeName -> fallback), including spaced, dotted, leet, accented and look-alike spellings

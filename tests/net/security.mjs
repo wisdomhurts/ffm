@@ -160,7 +160,7 @@ export async function securitySuite(check) {
   check(lookKeys.startsWith('build,skin,hair'), 'remote looks come out in the Wardrobe key order: ' + lookKeys);
 
   // bot lines: the game's own lines (with player/plant names in them) get through, junk doesn't
-  check(isBotLine('Hey there, Cool_Kid!') && isBotLine("I'll take that Rainbow Galaxy Orchid, Maddie.") &&
+  check(isBotLine('Hey there, Cool_Kid!') && isBotLine("I'll take that Rainbow Galaxy Orchid, Mati.") &&
     isBotLine('Dad joke incoming: this garden is un-BE-LEAF-able.') && !isBotLine('you are stupid') && !isBotLine('<b>hi</b>'), 'bot lines: templates and names with _ pass, junk does not');
 
   // ---------------------------------------------------------------- faces only where the joiner KNOWS it's private

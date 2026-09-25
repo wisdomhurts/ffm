@@ -129,7 +129,7 @@ begin
   perform pg_temp.sas_ok('anon cannot read sas_players', not (r ->> 'ok')::boolean and r ->> 'err' like 'permission denied%', r ->> 'err');
 
   -- 9-11 register
-  a := pg_temp.sas_anon($q$ select public.sas_register('Test Maddie', 'maddie', '{"hat":"crown","shirtColor":"#ff00aa"}') $q$) -> 'v';
+  a := pg_temp.sas_anon($q$ select public.sas_register('Test Mati', 'maddie', '{"hat":"crown","shirtColor":"#ff00aa"}') $q$) -> 'v';
   v_ids := v_ids || (a ->> 'id')::uuid;
   perform pg_temp.sas_ok('sas_register returns id, secret, code',
     a ->> 'secret' ~ '^[0-9a-f]{64}$' and a ->> 'code' ~ '^SEED-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$' and (a ->> 'id') is not null, a ->> 'code');
@@ -143,7 +143,7 @@ begin
   perform pg_temp.sas_ok('rude name becomes Player', v_t = 'Player', v_t);
 
   -- 12-16 save
-  r := pg_temp.sas_anon(format($q$ select public.sas_save(%L, %L, '{"v":1,"summary":{"netWorth":4200,"stars":7}}', 'Test Maddie', null) $q$, a ->> 'id', a ->> 'secret'));
+  r := pg_temp.sas_anon(format($q$ select public.sas_save(%L, %L, '{"v":1,"summary":{"netWorth":4200,"stars":7}}', 'Test Mati', null) $q$, a ->> 'id', a ->> 'secret'));
   perform pg_temp.sas_ok('sas_save stores the save', (r -> 'v' ->> 'ok')::boolean, r::text);
   r := pg_temp.sas_anon(format($q$ select public.sas_save(%L, %L, '{"v":2}') $q$, a ->> 'id', a ->> 'secret'));
   perform pg_temp.sas_ok('second save within 5 s is rate limited', r ->> 'err' = 'rate_limited' and r ->> 'state' = 'PT429', r ->> 'err');
@@ -158,7 +158,7 @@ begin
   -- 17-19 peek
   v_code := a ->> 'code';
   r := pg_temp.sas_anon(format($q$ select public.sas_peek(%L) $q$, lower(replace(v_code, '-', ' '))));
-  perform pg_temp.sas_ok('sas_peek finds a messy code', r -> 'v' ->> 'name' = 'Test Maddie' and (r -> 'v' -> 'summary' ->> 'netWorth')::numeric = 4200
+  perform pg_temp.sas_ok('sas_peek finds a messy code', r -> 'v' ->> 'name' = 'Test Mati' and (r -> 'v' -> 'summary' ->> 'netWorth')::numeric = 4200
     and not (r -> 'v' ? 'secret') and not (r -> 'v' ? 'save'), r ->> 'v');
   r := pg_temp.sas_anon($q$ select public.sas_peek('SEED-2222-2222') $q$);
   perform pg_temp.sas_ok('unknown code -> null', (r ->> 'ok')::boolean and jsonb_typeof(r -> 'v') is distinct from 'object', coalesce(r ->> 'v', 'null'));
@@ -209,7 +209,7 @@ begin
     and (r -> 3 ->> 0)::int > (r -> 2 ->> 0)::int + 1 and (r -> 4 ->> 0)::int > (r -> 3 ->> 0)::int, r::text);
   select count(*) into v_n from public.sas_top('networth', 2, 'all', null);
   perform pg_temp.sas_ok('sas_top respects the limit', v_n = 2, v_n || ' rows');
-  select count(*) into v_n from public.sas_top('networth', 100, 'all', (a ->> 'id')::uuid) t where t.me and t.name = 'Test Maddie';
+  select count(*) into v_n from public.sas_top('networth', 100, 'all', (a ->> 'id')::uuid) t where t.me and t.name = 'Test Mati';
   perform pg_temp.sas_ok('sas_top flags my row', v_n = 1, v_n || ' me rows');
   select jsonb_agg(to_jsonb(t)) into r from public.sas_top('networth', 1, 'all', (b ->> 'id')::uuid) t;
   select count(*) into v_n from public.sas_scores s where s.board = 'networth' and not s.hidden and s.value > 100;
@@ -223,7 +223,7 @@ begin
   select count(*) into v_n from public.sas_top('networth', 100, 'all', null) t where t.name = 'Test 4';
   perform pg_temp.sas_ok('unlisted players are hidden', v_n = 0, v_n || ' rows');
   perform public.sas_ban(a ->> 'code', true);
-  select count(*) into v_n from public.sas_top('networth', 100, 'all', null) t where t.name = 'Test Maddie';
+  select count(*) into v_n from public.sas_top('networth', 100, 'all', null) t where t.name = 'Test Mati';
   perform public.sas_ban(a ->> 'code', false);
   perform pg_temp.sas_ok('banned players are hidden', v_n = 0, v_n || ' rows');
   r := pg_temp.sas_anon($q$ select count(*)::text::jsonb from public.sas_top('gold') $q$);

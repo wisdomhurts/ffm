@@ -15,7 +15,7 @@ function place(p, x, z) {
   p.vel.x = p.vel.y = p.vel.z = 0;
 }
 
-// A local game like main.js builds it: the human is Maddie, the family bots think for themselves, and
+// A local game like main.js builds it: the human is Mati, the family bots think for themselves, and
 // main.js's listener hands every person's emote / quick-chat line to reactToSocial for each bot.
 function setup(seed = 11) {
   bus.clear();
@@ -106,8 +106,8 @@ test('quick chat gets one fitting reply in the family voice, after a natural pau
   assert.ok(replied >= 4, `GG usually gets an answer (${replied}/5)`);
 });
 
-test('Race you! gets a race-ready reply, e.g. Maddie is ON', () => {
-  // the human is Micah this time so Maddie is a bot next to them
+test('Race you! gets a race-ready reply, e.g. Mati is ON', () => {
+  // the human is Micah this time so Mati is a bot next to them
   bus.clear();
   const game = new Game({ humanId: 'micah', seed: 9 });
   for (const p of game.players) if (!p.isHuman) p.controller = new BotController(p.char.personality, 'normal', { seed: p.slot });
@@ -120,7 +120,7 @@ test('Race you! gets a race-ready reply, e.g. Maddie is ON', () => {
   reactToSocial(game, maddie, { type: 'chat', player: game.human, text: 'Race you!', quick: true, phrase: 'race' });
   for (let t = 0; t < 2.5; t += 1 / 30) game.update(1 / 30);
   const line = said.find((x) => x.player === maddie);
-  assert.ok(line, 'Maddie answers');
+  assert.ok(line, 'Mati answers');
   assert.ok(REPLIES.race.maddie.includes(line.text), line.text);
 });
 

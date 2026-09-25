@@ -112,7 +112,7 @@ export const PLANTS = [
   // Secret: the family
   { id: 'dorianfruit', name: "Dorian's Dragonfruit", rarity: 'secret', income: 7000, grow: 300, look: 'dragonfruit', colors: ['#ff3f8e', '#7ee36b'], family: 'dorian' },
   { id: 'estherlotus', name: "Esther's Eternal Lotus", rarity: 'secret', income: 7000, grow: 300, look: 'lotus', colors: ['#ff8fc8', '#ffe066'], family: 'esther' },
-  { id: 'maddiemarigold', name: "Maddie's Magic Marigold", rarity: 'secret', income: 7000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
+  { id: 'maddiemarigold', name: "Mati's Magic Marigold", rarity: 'secret', income: 7000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
   { id: 'micahmelon', name: "Micah's Mega Melon", rarity: 'secret', income: 7000, grow: 300, look: 'melon', colors: ['#3ddc84', '#ff5d5d'], family: 'micah' },
 ];
 export const PLANT = Object.assign(Object.create(null), Object.fromEntries(PLANTS.map((p) => [p.id, p])));
@@ -200,7 +200,7 @@ export const CHARACTERS = [
       pants: '#ff3d8b', shoes: '#f2d0b8', build: 'adult', skin: '#d19a82' },
   },
   {
-    id: 'maddie', name: 'Maddie', title: 'The Speedster', color: '#9b5cff', personality: 'speedster',
+    id: 'maddie', name: 'Mati', title: 'The Speedster', color: '#9b5cff', personality: 'speedster',
     tagline: 'Zoom zoom!',
     look: { hair: 'long', hairColor: '#5a3b28', shirt: 'floral', shirtColor: '#8a5cc8', shirtColor2: '#ff7eb6',
       pants: '#3b4b8a', shoes: '#ffffff', build: 'kid', skin: '#d6a08a' },

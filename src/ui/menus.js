@@ -51,7 +51,7 @@ export function profileInfo(p) {
   };
 }
 
-// "Esther, Maddie and Micah": the family bots you'll face when playing from this profile's garden
+// "Esther, Mati and Micah": the family bots you'll face when playing from this profile's garden
 function rivalsOf(p) {
   const names = CHARACTERS.filter((c) => c.id !== p.base).map((c) => c.name);
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names.join('');
@@ -297,7 +297,7 @@ export function createMenus(app) {
       fs ? h('div', { class: 'title-corner' }, fs) : null,
       h('div', { class: 'title-hero' }, logo(), h('div', { class: 'edition' }, h('span', { text: 'Family Edition' }))),
       who, h('div', { class: 'title-actions' }, main), h('div', { class: 'title-more' }, tiles, small),
-      h('div', { class: 'title-foot', text: 'Starring Dorian, Esther, Maddie & Micah (and you!)' }));
+      h('div', { class: 'title-foot', text: 'Starring Dorian, Esther, Mati & Micah (and you!)' }));
     title = { cast, main, tiles, el: s.el };
     paintTitle(true);
     // profiles change under the title (new player, rename, cloud restore, stars from the Wardrobe)
