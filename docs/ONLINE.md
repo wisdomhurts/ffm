@@ -74,6 +74,8 @@ client in an online room (the host applies it for the right player):
 ## Multiplayer (`src/net/**`, net agent)
 Host-authoritative rooms with **client-authoritative movement**:
 * The room host's browser runs the real `Game` (bots fill empty slots). Up to 4 humans per room (4 gardens).
+* Remote players have `p.remoteMotion = true` on the host: `_movePlayer` skips physics for them (emits their
+  jump + social intents only); the net code writes their pos/vel/yaw/onGround from `in` messages.
 * Every client keeps a mirror `Game` updated from the host; its OWN player's position/velocity/yaw/onGround
   are simulated locally every frame (instant, no input lag) and sent to the host ~20x/s. The host accepts them
   after a sanity clamp (max distance per message from speed, collider check) and runs all rules (grabs,

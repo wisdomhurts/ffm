@@ -265,6 +265,14 @@ export class Game {
     const it = p.intent;
     const now = this.time;
     const stunned = now < p.stunUntil;
+    if (p.remoteMotion) {
+      // online: this player's own device simulates their movement and the network code writes
+      // pos/vel/yaw/onGround (after a sanity clamp); the host only runs the rules around it
+      if (it.jump) bus.emit('player:jump', { player: p });
+      this._handleSocial(p, Math.hypot(p.vel.x, p.vel.z) > 1.5, stunned);
+      if (!inPlayArea(p.pos)) this.respawn(p);
+      return;
+    }
     let mx = stunned ? 0 : it.moveX;
     let mz = stunned ? 0 : it.moveZ;
     const len = Math.hypot(mx, mz);
