@@ -131,6 +131,7 @@ const CSS = `
 .lm-ic{width:66px;height:66px;display:grid;place-items:center;padding:14px;border-radius:22px;border:3px solid var(--ink);color:#fff;background:linear-gradient(180deg,#8a95c9,#4f5889);
   box-shadow:inset 0 3px 0 rgba(255,255,255,.3),0 5px 0 var(--ink);animation:lbBob 2.6s ease-in-out infinite}
 .lm-ic.sun{background:linear-gradient(180deg,#ffe463,#ffa600);color:var(--ink)}
+.lm-ic.sky{background:linear-gradient(180deg,#7fd3ff,#2a8fe6)}
 .lb-msg b{font:var(--fdw) 23px/1.1 var(--fd);letter-spacing:.02em;text-shadow:var(--o1)}
 .lb-msg p{margin:0;max-width:340px;font:700 14px/1.4 var(--fb);color:var(--txt2)}
 .lb-msg .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px}
@@ -267,6 +268,12 @@ const CSS = `
   .cs-input{flex:none;width:100%;height:54px;font-size:24px;text-align:center}
   .cs-input-row .btn{min-height:50px}
 }
+.cs-card.cs-soon{align-items:center;text-align:center;gap:10px;padding:26px 18px 24px}
+.cs-soon > b{font:var(--fdw) 25px/1.1 var(--fd);letter-spacing:.02em;text-shadow:var(--o1)}
+.cs-soon > p{margin:0;max-width:400px;font:700 14.5px/1.42 var(--fb);color:var(--txt2)}
+.cs-soon > p.cs-soon-ok{display:flex;align-items:center;gap:8px;padding:8px 14px;text-align:left;border-radius:12px;background:rgba(63,214,90,.16);color:#dcffe3;font-size:13.5px}
+.cs-soon-ok svg{width:18px;height:18px;flex:none;color:var(--cash)}
+.cs-soon .sas-note b{color:#fff}
 @media (prefers-reduced-motion:reduce){.cs-card,.cs-prev,.cs-packet,.cs-done{animation:none}}
 `;
 

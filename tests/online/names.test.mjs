@@ -20,6 +20,10 @@ export const GOOD = [
   'Mati 2', 'Zippy Melon', "O'Neil", 'Anne-Marie', 'Mr. Smith', 'J R R Tolkien', 'Shi Tao', 'Li Na', 'Van Dyke',
   'Łukasz', 'Søren', 'Björk', 'Nguyễn Văn An', 'Ζωή', 'Александр', '佐々木', 'さくら', 'प्रिया', 'محمد', 'דוד', 'สมชาย',
   '김민준', 'Ngozi', 'Siobhán', 'Dorian', 'Esther', 'Mati', 'Micah', 'Player', 'Captain Kale',
+  // double letters are fine (only listed words may be stretched)
+  'Anna', 'Cassidy', 'Jess', 'Kimmie', 'Bobby', 'Bob', 'Harriet', 'Matthew', 'Joanne', 'Nigel', 'Hannah', 'Emmett', 'Scott',
+  'Tommy', 'Pippa', 'Kitty', 'Poppy', 'Holly', 'Otto', 'Abby', 'Ellie', 'Lilly', 'Buddy', 'Ross', 'Tess', 'Missy', 'Booboo',
+  'Coco', 'Shiina', 'Assunta', 'Bassam', 'Mississippi',
 ];
 
 // must be refused (sanitizeName -> fallback), including spaced, dotted, leet, accented and look-alike spellings
@@ -30,6 +34,10 @@ export const BAD = [
   'kill', 'Killer', 'KILLING', 'kys', 'Nazi', 'Nazis', 'Hitler', 'kkk', 'sex', 'Sexy', 'porn', 'p0rn0', 'cum', 'c u m',
   'dick', 'D1ck', 'dickhead', 'cock', 'rape', 'Rap3', 'rapist', 'boobies', 'tits', 'penis', 'Pussy', 'twat', 'wanker',
   'slut', 'whore', 'bastards', 'anal', 'a n a l', 'retard', 'fu*k', 'c*o*c*k', 'Κill', 'dildo', 'jizz', 'suicide',
+  // stretched letters and "biatch" spellings
+  'fuuuck', 'fuuck', 'fffuck', 'fuccck', 'fuuuuk', 'shiit', 'shiiit', 'shiiiit', 'sh1111t', 'bulllshiiit', 'biatch', 'biotch',
+  'beyotch', 'biiiatch', 'b1tchh', 'f u u c k', 'boooobs', 'asss', 'kiiill', 'kiiilllerr', 'naaazi', 'seeexy', 'diiick',
+  'pussssy', 'niiigger', 'cuuunt', 'twaaat', 'reetard', 'kkkk', 'poooorn',
 ];
 
 // anything else worth comparing between JS and SQL

@@ -40,7 +40,11 @@ function onTap(el, fn) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
     armed = e.pointerId;
-    el.setPointerCapture?.(e.pointerId);
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic or already-released pointers can't be captured */
+    }
   });
   el.addEventListener('pointerup', (e) => {
     if (e.pointerId !== armed) return;
@@ -95,9 +99,17 @@ export function mountSocial(app, hudRoot, parts = {}) {
   };
 
   // ---------------------------------------------------------------- dock: chip + invite
+  // The HUD's social slot sits between the proximity prompt and the carry pill; the dock only joins it while
+  // it has something to show (an empty slot collapses, and the HUD's squeeze / hush logic watches it)
   const dock = h('div', { class: 'soc-dock' });
-  if (parts.bottom) parts.bottom.prepend(dock);
-  else hudRoot.appendChild(dock);
+  function syncDock() {
+    const want = dock.childElementCount > 0;
+    if (want === dock.isConnected) return;
+    if (!want) dock.remove();
+    else if (parts.social) parts.social.appendChild(dock);
+    else if (parts.bottom) parts.bottom.prepend(dock);
+    else hudRoot.appendChild(dock);
+  }
 
   let near = null; // the person the chip is for
   let outgoing = null; // {to, expiresAt} my open ask
@@ -115,7 +127,7 @@ export function mountSocial(app, hudRoot, parts = {}) {
     chipKey = key;
     chipEl?.remove();
     chipEl = null;
-    if (!show) return;
+    if (!show) return syncDock();
     const p = near;
     if (outgoing && outgoing.to === p) {
       chipEl = h('div', { class: 'soc-chip', role: 'status' }, avatarEl(p.faceKey, 'sc-ava'),
@@ -137,15 +149,17 @@ export function mountSocial(app, hudRoot, parts = {}) {
           h('span', { class: 'bi', html: SOCIAL_ICONS.gift }), h('span', { text: 'Gift' }), h('kbd', { text: 'U' }))), () => openGift(p)));
     }
     dock.appendChild(chipEl);
+    syncDock();
   }
 
   function renderInvite() {
     inviteEl?.remove();
     inviteEl = inviteBar = null;
-    if (!invite) return;
+    if (!invite) return syncDock();
     const p = invite.from;
     inviteBar = h('i');
-    inviteEl = h('div', { class: 'soc-invite', role: 'alertdialog', 'aria-label': `${p.name} wants to trade` },
+    // .urgent: the HUD treats it like the prompt pill (banners squeeze for it; it never waits)
+    inviteEl = h('div', { class: 'soc-invite urgent', role: 'alertdialog', 'aria-label': `${p.name} wants to trade` },
       avatarEl(p.faceKey, 'si-ava'),
       h('div', { class: 'si-t', html: `${who(p)} wants to trade!<small>Swap plants and cash, fair and square.</small>` }),
       h('div', { class: 'si-btns' },
@@ -153,6 +167,7 @@ export function mountSocial(app, hudRoot, parts = {}) {
         onTap(noFocus(h('button', { class: 'btn btn-grey si-b', type: 'button' }, h('span', { text: 'No thanks' }), h('kbd', { text: 'N' }))), declineInvite)),
       h('div', { class: 'si-bar' }, inviteBar));
     dock.prepend(inviteEl);
+    syncDock();
   }
 
   function requestTrade(p) {
@@ -735,7 +750,7 @@ export function mountSocial(app, hudRoot, parts = {}) {
   // ---------------------------------------------------------------- per frame
   let acc = 1;
   let visible = true;
-  let dockH = 0;
+  let dockClear = -1;
   let scanAcc = 1;
   return {
     update(dt = 0) {
@@ -798,12 +813,14 @@ export function mountSocial(app, hudRoot, parts = {}) {
       if (outgoing && !best && dist(outgoing.to) < TRADE.requestRange + 4) best = outgoing.to;
       near = best;
       renderChip();
-      // phones: the chat log sits right where the dock goes; tell the CSS how tall the dock is
-      const dh = dock.childElementCount ? dock.offsetHeight : 0;
-      if (dh !== dockH) {
-        dockH = dh;
-        hudRoot.style.setProperty('--soc-dock-h', dh + 'px');
-        hudRoot.classList.toggle('soc-docked', dh > 0);
+      syncDock();
+      // phones: the chat log sits where the dock can be; publish how far up from the bottom of the screen the
+      // dock really reaches (it rides higher while the carry pill shows) so the log can lift clear of it
+      const clear = dock.isConnected && dock.offsetHeight ? Math.round(window.innerHeight - dock.getBoundingClientRect().top + 8) : 0;
+      if (clear !== dockClear) {
+        dockClear = clear;
+        hudRoot.style.setProperty('--soc-dock-clear', clear + 'px');
+        hudRoot.classList.toggle('soc-docked', clear > 0);
       }
     },
     dispose() {

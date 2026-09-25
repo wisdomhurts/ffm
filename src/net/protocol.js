@@ -79,6 +79,7 @@ export const TIMEOUTS = {
   memberSilent: 45, // a member sent nothing this long: free their slot
   hiddenHandoff: 4, // hosting from a hidden tab this long: hand the room to someone who's looking
   hiddenLeave: 300, // our tab has been hidden this long: leave the room
+  settle: 12, // after a host change: don't save a garden that suddenly shrank for this long
 };
 
 // ------------------------------------------------------------------ room codes

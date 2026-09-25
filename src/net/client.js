@@ -1,7 +1,7 @@
 // A room member that isn't the host. Keeps a mirror of the host's Game: its OWN player moves locally
 // every frame (no input lag) while everything else follows the host's ticks, drawn slightly in the past
 // and interpolated so it glides. UI actions and one-shot inputs travel to the host in 'in' messages.
-import { WORLD, ITEMS, PLAYER } from '../config.js';
+import { WORLD, ITEMS, PLAYER, ROAD_END_Z } from '../config.js';
 import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
@@ -11,6 +11,8 @@ import {
 
 const RING = 24;
 const NO_PROJ = Object.freeze([]);
+const KICK_V = 60; // fastest a knockback may throw us (a bonk is 26, a monster ~26)
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const R = WORLD.playerRadius;
 const TAU = Math.PI * 2;
 const lerpAngle = (a, b, t) => {
@@ -28,6 +30,7 @@ export class ClientRole {
     this.me = game.players[slot];
     this.epoch = epoch;
     this.hostPid = hostPid;
+    this.fresh = false;
     this.order = Array.isArray(order) ? order.filter(isPid) : [hostPid];
     this.banned = new Set(Array.isArray(banned) ? banned.filter(isPid).slice(0, 64) : []); // kept if we ever host
     this.lastSent = null; // what the host believes about our motion (see _send)
@@ -81,12 +84,26 @@ export class ClientRole {
 
   // ---------------------------------------------------------------- from the host
 
+  /**
+   * The session picked a different device to follow (its own election, or the frozen host is back).
+   * `fresh`: a newly elected host, whose ticks only count once it starts a new epoch.
+   */
+  setHost(pid, fresh) {
+    if (pid === this.hostPid) return;
+    this.hostPid = pid;
+    this.fresh = fresh;
+    this.lastKick = 0; // kick numbers belong to the host that sent them (replays are stopped by the seal)
+    this.lastTickAt = this.s.clock;
+  }
+
   onTick(msg) {
     const s = this.s;
     if (!Number.isInteger(msg.s) || !Number.isInteger(msg.ep)) return;
-    if (msg.ep < this.epoch) return;
+    if (msg.ep < this.epoch || (this.fresh && msg.ep === this.epoch)) return;
     if (msg.ep > this.epoch || msg.h !== this.hostPid) {
       // a new host took over: its clock and sequence numbers start fresh
+      if (msg.h !== this.hostPid) this.lastKick = 0;
+      this.fresh = false;
       this.epoch = msg.ep;
       this.hostPid = msg.h;
       this.lastSeq = -1;
@@ -250,16 +267,20 @@ export class ClientRole {
     if (!ok(k.p) || !ok(k.v)) return;
     this.lastKick = k.k;
     const p = this.me;
-    p.pos.x = k.p[0];
-    p.pos.y = k.p[1];
-    p.pos.z = k.p[2];
-    p.vel.x = k.v[0];
-    p.vel.y = k.v[1];
-    p.vel.z = k.v[2];
+    // even our host can only put us somewhere we could stand, moving no faster than a bonk, briefly stunned
+    const z = clamp(k.p[2], -67, ROAD_END_Z + 0.5);
+    const xMax = z < WORLD.road.startZ ? 72.5 : WORLD.road.width / 2 + 0.5;
+    p.pos.x = clamp(k.p[0], -xMax, xMax);
+    p.pos.y = clamp(k.p[1], 0, 60);
+    p.pos.z = z;
+    p.vel.x = clamp(k.v[0], -KICK_V, KICK_V);
+    p.vel.y = clamp(k.v[1], -KICK_V, KICK_V);
+    p.vel.z = clamp(k.v[2], -KICK_V, KICK_V);
     p.onGround = false;
     p._jumpQ = 0;
-    if (Number.isFinite(k.su)) p.stunUntil = k.su;
-    if (Number.isFinite(k.iu)) p.invulnUntil = k.iu;
+    const cap = this.game.time + 10;
+    if (Number.isFinite(k.su)) p.stunUntil = Math.min(k.su, cap);
+    if (Number.isFinite(k.iu)) p.invulnUntil = Math.min(k.iu, cap);
     this.urgent = true;
   }
 

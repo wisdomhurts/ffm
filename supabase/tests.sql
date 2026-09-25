@@ -44,8 +44,8 @@
 --   35   20 unknown codes from one IP -> the next lookup                             [rate_limited]
 --   36   sas_delete removes the player and their scores                              [0 rows left]
 --   37   look keeps only flat short scalar fields                                    [{"hat": "crown", "shirtColor": "#ff00aa"}]
---   38   real names are kept: Killian, Ana Lopez, Grape, Peacock, Essex, Nazir, ... [all kept]
---   39   rude names (spaced, leet, accented, look-alike letters) become Player       [all refused]
+--   38   real names are kept: Killian, Ana Lopez, Grape, Essex, Anna, Bobby, Nigel...  [all kept]
+--   39   rude names (spaced, leet, stretched, accented, look-alike) become Player      [all refused]
 --   40   an oversized look is dropped, never an error (register + save)             [ look={}]
 --   41   test rows cleaned up                                                        [0 left]
 --   42   all checks passed                                                           [0 failed]
@@ -250,14 +250,16 @@ begin
   -- 38-39 names: words, not substrings (mirror of src/core/names.js)
   select string_agg(x, ', ') into v_t
     from unnest(array['Killian', 'Ana Lopez', 'Grape', 'Peacock', 'Essex', 'Nazir', 'Cassandra', 'Dickens', 'Hancock',
-                      'Scunthorpe', 'Sussex', 'Analise', 'José', 'Zoë', '李明', 'Мария']) x
+                      'Scunthorpe', 'Sussex', 'Analise', 'José', 'Zoë', '李明', 'Мария',
+                      'Anna', 'Cassidy', 'Jess', 'Kimmie', 'Bobby', 'Bob', 'Harriet', 'Matthew', 'Joanne', 'Nigel']) x
    where public.sas_clean_name(x, 'Player') is distinct from normalize(x, NFKC);
   perform pg_temp.sas_ok('real names are kept (Killian, Grape, Essex, Scunthorpe, 李明...)', v_t is null, coalesce('changed: ' || v_t, 'all kept'));
   select string_agg(x, ', ') into v_t
     from unnest(array['fuck', 'f u c k', 'f.u.c.k', 'fück', 'fuсk', 'motherfucker', 'bullshit', 'b1tch', 'a55', 'n1gger',
-                      'k.i.l.l', 'Killer', 'Nazis', 'Sexy', 'dickhead', 'r4pe']) x
+                      'k.i.l.l', 'Killer', 'Nazis', 'Sexy', 'dickhead', 'r4pe',
+                      'fuuuck', 'fuuck', 'fuuuuk', 'shiit', 'shiiiit', 'biatch', 'beyotch', 'b1tchh', 'boooobs', 'kiiill']) x
    where public.sas_clean_name(x, 'Player') <> 'Player';
-  perform pg_temp.sas_ok('rude names (spaced, leet, accented, look-alike letters) become Player', v_t is null, coalesce('kept: ' || v_t, 'all refused'));
+  perform pg_temp.sas_ok('rude names (spaced, leet, stretched, accented, look-alike) become Player', v_t is null, coalesce('kept: ' || v_t, 'all refused'));
 
   -- 40 a look that is too big is dropped, never an error (32 fields of 40 two-byte letters, ~3.5 KB)
   update public.sas_players p set last_write_at = null where p.id = (a ->> 'id')::uuid;

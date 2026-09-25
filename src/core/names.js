@@ -8,6 +8,8 @@
 //    ending ("fuckface", "bullshit", "motherfucker");
 //  * MILD words (kill, sex, cock, nazi...) are blocked only as a whole word, optionally with a simple
 //    ending (kills, killer, killing);
+//  * any letter of a listed word may be repeated ("fuuuck", "shiiit"), but a doubled letter in a listed
+//    word still needs two, so "boob" doesn't catch Bob and "nigg" doesn't catch Nigel;
 //  * runs of 1-2 letter words are also checked glued together, which catches "f u c k" and "k.i.l.l";
 //  * letters of other scripts can't be filtered reliably, so they are accepted as they are.
 // MIRRORED IN SQL: public.sas_name_ok / public.sas_clean_name in supabase/migrations/0001_steal_a_seed.sql.
@@ -16,7 +18,7 @@
 const MAX = 14;
 
 export const NAME_STRONG = [
-  'fuck', 'fck', 'fvck', 'phuck', 'shit', 'bitch', 'btch', 'cunt', 'nigg', 'faggot', 'retard', 'pussy', 'penis', 'vagin',
+  'fuck', 'fck', 'fvck', 'phuck', 'shit', 'bitch', 'btch', 'biatch', 'biotch', 'beyotch', 'byatch', 'biyatch', 'cunt', 'nigg', 'faggot', 'retard', 'pussy', 'penis', 'vagin',
   'hitler', 'kkk', 'twat', 'dildo', 'jizz', 'asshole', 'cocksuck', 'suicide',
 ];
 export const NAME_STRONG_END = ['', 's', 'es', 'er', 'ers', 'ing', 'in', 'ed', 'y', 'ey', 'face', 'head', 'hole'];
@@ -63,14 +65,17 @@ export function nameWords(name) {
   return s.split(/[^a-z]+/).filter(Boolean);
 }
 
+// Each listed word becomes a pattern in which every letter may repeat: fuck -> f+u+c+k+, boob -> b+o+o+b+.
+// Built the same way in SQL (sas_name_word_bad), so both sides match exactly the same words.
+const plus = (w) => w.replace(/([a-z])/g, '$1+');
+const alt = (list) => list.filter(Boolean).map(plus).join('|');
+const RX_STRONG_START = new RegExp(`^(${alt(NAME_STRONG)})`);
+const RX_STRONG_END = new RegExp(`(${alt(NAME_STRONG)})(${alt(NAME_STRONG_END)})?$`);
+const RX_MILD = new RegExp(`^(${alt(NAME_MILD)})(${alt(NAME_MILD_END)})?$`);
+
 function badWord(t) {
   if (NAME_ALLOW.includes(t)) return false;
-  for (const w of NAME_STRONG) {
-    if (t.startsWith(w)) return true;
-    for (const e of NAME_STRONG_END) if (t.endsWith(w + e)) return true;
-  }
-  for (const w of NAME_MILD) for (const e of NAME_MILD_END) if (t === w + e) return true;
-  return false;
+  return RX_STRONG_START.test(t) || RX_STRONG_END.test(t) || RX_MILD.test(t);
 }
 
 /** True when no word of the name is on the blocklists (see the top of this file). */

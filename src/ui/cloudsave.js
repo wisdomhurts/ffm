@@ -62,10 +62,22 @@ export function openCloudSave(app, opts = {}) {
   const who = h('div');
   const codeCard = h('section', { class: 'cs-card', 'aria-label': 'Your save code' });
   const loadCard = h('section', { class: 'cs-card', 'aria-label': 'Load from a code' });
+  // No backend yet: a friendly "coming soon" card instead of controls that can't work.
+  const soon = !onlineConfigured();
   const root = h('div', { class: 'sas-cs-body' },
     h('div', { class: 'mh' }, h('span', { class: 'mh-ic sas-sky', html: SAS_ICON.cloud }), h('h2', { text: 'Cloud Save' })),
-    h('p', { class: 'cs-intro', text: 'Playing on another phone or computer? A save code carries your garden, cash, stars and pets there.' }),
-    who, codeCard, loadCard);
+    soon ? null : h('p', { class: 'cs-intro', text: 'Playing on another phone or computer? A save code carries your garden, cash, stars and pets there.' }),
+    who, soon ? soonCard() : [codeCard, loadCard]);
+
+  function soonCard() {
+    const code = app.profile?.cloud?.code;
+    return h('section', { class: 'cs-card cs-soon', 'aria-label': 'Cloud saves are coming soon' },
+      h('span', { class: 'lm-ic sky', html: SAS_ICON.cloud }),
+      h('b', { text: 'Cloud saves are coming soon!' }),
+      h('p', { text: "Soon you'll get a save code that carries your garden, stars and pets to another phone or computer." }),
+      h('p', { class: 'cs-soon-ok', html: `${ICON.check}<span>Your progress saves by itself right here on this device.</span>` }),
+      code ? h('p', { class: 'sas-note' }, 'Keep your code ', h('b', { text: code }), ': it will work again when cloud saves are back.') : null);
+  }
 
   const inGame = () => !!(app.game && app.human && app.state !== 'title') || !!app.online?.room;
   const prof = () => app.profile;
@@ -375,28 +387,30 @@ export function openCloudSave(app, opts = {}) {
 
   // ---------------------------------------------------------------- mount
   paintWho();
-  paintCode();
-  paintLoad();
+  if (!soon) {
+    paintCode();
+    paintLoad();
+  }
   const m = menus.openModal(root, { cls: 'sas-cs', label: 'Cloud Save' });
   root.appendChild(menus.doneRow(() => m.close()));
   const offs = [
     bus.on('cloud:status', (e) => {
-      if (e?.profileId !== prof().id || disposed) return;
+      if (soon || e?.profileId !== prof().id || disposed) return;
       if (e.state === 'moved' || e.state === 'linked' || e.state === 'off') paintCode();
       else paintStatus(e);
     }),
     bus.on('profile:active', () => {
       paintWho();
-      paintCode();
+      if (!soon) paintCode();
     }),
   ];
-  tick = setInterval(() => statusEl.isConnected && paintStatus(), 20000);
+  if (!soon) tick = setInterval(() => statusEl.isConnected && paintStatus(), 20000);
   m.dispose = () => {
     disposed = true;
     clearInterval(tick);
     offs.forEach((f) => f());
   };
-  if (opts.code) {
+  if (opts.code && !soon) {
     codeInput.value = formatCodeInput(opts.code);
     setTimeout(() => !disposed && check(), 0);
   }

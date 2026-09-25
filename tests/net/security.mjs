@@ -141,6 +141,69 @@ export async function securitySuite(check) {
   check(A.game.players[sM].cash === mc0, `addCash from a member is refused (${mc0} -> ${A.game.players[sM].cash})`);
   check(M.act('addCash', 5) === false, 'app.act addCash on a client says no right away');
 
+  // ---------------------------------------------------------------- the host stalls: a member can't take over
+  // Alice's device goes quiet for 1.7 s (screen lock, Wi-Fi blip). Mallory is a member, not next in line: her
+  // properly sealed ticks (epoch 999, wiping Bob's garden), kick and "kicked" must not make Bob follow her.
+  await step(0.4);
+  B.online._saveNow();
+  const savedPlants = () => (B.profile.online?.garden?.planters || []).filter((pl) => pl?.plant).length;
+  const saved0 = savedPlants();
+  const bobUp = upTopic(code, B.online.pid);
+  live.delete(A);
+  await step(1.7);
+  const wipe = JSON.parse(JSON.stringify(M.game.serializeFull().gardens[sB]));
+  for (const pl of wipe.planters) pl.plant = null;
+  const tm0 = B.online.clock + B.online.role.offset + 0.1;
+  for (let i = 0; i < 5; i++) {
+    await raw(roomTopic(code), 'tick', sealed('tick', { ep: 999, s: 1 + i, tm: tm0 + i * 0.25, P: [], M: [], B: [], D: { [`g${sB}`]: wipe } }, [B.online.pid]));
+    await step(0.25);
+  }
+  await raw(bobUp, 'kick', sealed('kick', { to: B.online.pid, k: 1e6, p: [0, 25, 690], v: [0, 0, 0], su: 2e9, iu: 0 }, B.online.pid));
+  await step(0.2);
+  check(B.online.role?.hostPid === hostPid && B.online.role.epoch < 999, `while Alice is frozen, Mallory's sealed epoch-999 ticks don't make Bob follow her (Bob follows ${B.online.role?.hostPid === M.online.pid ? 'MALLORY' : B.online.role?.hostPid})`);
+  live.add(A); // Alice is back
+  await step(1);
+  check(bobDev().pos.z < 600 && bobDev().stunUntil < 1e6, '...Mallory could not teleport or freeze him');
+  check(B.game.gardens[sB].planters[1].plant?.uid === 42042, "...nor wipe his garden on his screen");
+  await raw(bobUp, 'kicked', sealed('kicked', { to: B.online.pid }, B.online.pid));
+  await step(0.5);
+  check(!!B.online.room && B.online.isClient && B.online.role.hostPid === hostPid && A.online.role.members.has(B.online.pid), '...nor throw him out: once Alice is back, Bob is still in her room');
+  B.online._saveNow();
+  check(saved0 > 0 && savedPlants() === saved0, `...nor wipe his saved garden (${saved0} -> ${savedPlants()} plants)`);
+
+  // a kick from the real host is kept inside the play area and stuns briefly at most
+  B.online.role.onKick({ k: B.online.role.lastKick + 1, p: [5000, 900, -9000], v: [1e6, 0, -1e6], su: 1e9, iu: 1e9 });
+  const bk = bobDev();
+  check(Math.abs(bk.pos.x) <= 73 && bk.pos.z > -67.5 && bk.pos.y <= 60 && Math.abs(bk.vel.x) <= 60 && bk.stunUntil <= B.game.time + 10 && bk.invulnUntil <= B.game.time + 10,
+    `kicks are clamped: (${bk.pos.x.toFixed(0)}, ${bk.pos.y.toFixed(0)}, ${bk.pos.z.toFixed(0)}) stun ${(bk.stunUntil - B.game.time).toFixed(1)} s`);
+  bk.stunUntil = bk.invulnUntil = 0;
+  await step(1.5);
+
+  // a host that froze for longer than hostSilent: Mallory picks Bob (next in line); if Alice is back before
+  // Bob took over, Mallory goes back to Alice
+  live.delete(A);
+  live.delete(B);
+  await step(5.4);
+  check(M.online.role?.hostPid === B.online.pid && M.online.isClient, 'Alice quiet for 5 s: Mallory waits for Bob, the next in line');
+  live.add(A);
+  await step(0.6);
+  check(M.online.isClient && M.online.role.hostPid === hostPid && M.online.status === 'playing', 'Alice comes back before Bob took over: Mallory follows Alice again');
+  live.add(B);
+  await step(1.5);
+  check(A.online.isHost && B.online.isClient && B.online.role.hostPid === hostPid && M.online.role?.hostPid === hostPid &&
+    A.online.role.members.has(B.online.pid) && A.online.role.members.has(M.online.pid), 'everyone is back in Alice\'s room');
+
+  // a sharp shrink right after a host change is not saved over the garden saved before it
+  const snap0 = JSON.stringify(B.profile.online);
+  B.online._hostChangedAt = B.online.clock;
+  const keep = B.game.gardens[sB].planters.map((pl) => pl.plant);
+  for (const pl of B.game.gardens[sB].planters) pl.plant = null;
+  B.online._saveNow();
+  const kept = JSON.stringify(B.profile.online) === snap0;
+  B.game.gardens[sB].planters.forEach((pl, i) => (pl.plant = keep[i]));
+  B.online._hostChangedAt = -1e9;
+  check(kept, 'a garden that suddenly emptied right after a host change is not saved');
+
   // bad catalog ids and poisoned gardens
   const st = A.game.serializeFull();
   st.gardens[0].planters[0].plant = { uid: 1, speciesId: 'toString', mutation: '__proto__', growTotal: 5, growLeft: 0, owner: 0 };

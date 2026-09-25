@@ -47,10 +47,10 @@ const css = `
 .ec-name{margin:0;font:var(--fdw) 21px/1 var(--fd);letter-spacing:.02em;text-shadow:var(--o1)}
 .ec-blurb{font:700 12px/1.25 var(--fb);color:var(--txt2);min-height:2.5em}
 .ec-odds{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
-.ec-odds li{display:flex;align-items:center;gap:6px;padding:2px 7px 2px 3px;border-radius:9px;background:rgba(10,15,40,.45);border-left:4px solid var(--rc);font:800 12.5px/1 var(--fb)}
-.ec-odds li .pthumb{width:24px;height:24px}
-.ec-odds li .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--rc);color:color-mix(in srgb,var(--rc) 70%,#fff)}
-.ec-odds li b{font:900 12px/1 var(--fb);color:#fff;opacity:.92}
+.ec-odds li{display:flex;align-items:center;gap:6px;min-height:28px;padding:2px 7px 2px 3px;border-radius:9px;background:rgba(10,15,40,.45);border-left:4px solid var(--rc);font:800 12.5px/1.08 var(--fb)}
+.ec-odds li .pthumb{width:24px;height:24px;flex:none}
+.ec-odds li .n{flex:1;min-width:0;overflow-wrap:break-word;hyphens:manual;color:var(--rc);color:color-mix(in srgb,var(--rc) 70%,#fff)}
+.ec-odds li b{flex:none;font:900 12px/1 var(--fb);color:#fff;opacity:.92;white-space:nowrap}
 .ec-odds li.own .n::after{content:' \\2713';color:var(--cash)}
 .ec-foot{display:flex;flex-direction:column;gap:6px;padding:0 11px;margin-top:auto}
 .ec-buy{width:100%;min-height:52px;flex-direction:column;gap:3px;padding:7px 8px 9px}
@@ -186,7 +186,8 @@ const css = `
   .ec-art .pthumb{width:86px;height:86px}
   .ec-name{font-size:18px}
   .ec-blurb{display:none}
-  .ec-odds li{font-size:11.5px;padding:1px 6px 1px 2px}
+  .ec-odds li{font-size:11.5px;padding:2px 6px 2px 2px;gap:5px;min-height:26px}
+  .ec-price{left:8px;right:auto;font-size:15px;padding:4px 8px 5px}
   .ec-odds li .pthumb{width:21px;height:21px}
   .ps-bar{margin-top:-6px}
   .ps-bar .btn{padding:8px 12px 10px;font-size:15px;min-height:42px}
@@ -204,6 +205,8 @@ const css = `
 }
 @media (max-width:370px){
   .ec-odds li b{font-size:11px}
+  .ec-odds li{font-size:11px;padding-right:5px}
+  .ec-body,.ec-foot{padding:0 8px}
   .ec-buy{font-size:17px}
 }
 /* phones in landscape: the pet on the left, its card on the right */
@@ -218,15 +221,17 @@ const css = `
   .ph-name{font-size:24px}
   .ph-blurb{display:none}
   .ph-btns .btn-lg{min-height:46px;font-size:18px;padding:9px 16px 11px}
-  .ps-eggs{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+  .ps-eggs{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding-right:38px}
+  .ec-price{right:6px;left:auto;top:6px;font-size:14px;padding:4px 7px 5px}
   .ec-art{height:90px}
   .ec-art .pthumb{width:74px;height:74px}
   .ec-blurb{display:none}
   .ec-body{padding:0 8px}
   .ec-foot{padding:0 8px}
   .ec-name{font-size:16px}
-  .ec-odds li{font-size:11px}
+  .ec-odds li{font-size:11px;gap:4px;padding:2px 5px 2px 2px;min-height:24px}
   .ec-odds li .pthumb{width:18px;height:18px}
+  .ec-odds li b{font-size:10.5px}
   .ec-buy{min-height:44px;font-size:16px}
   .pi-sel{grid-template-columns:90px 1fr;min-height:0;padding:8px 10px}
   .pi-sel .pthumb{width:90px;height:90px}

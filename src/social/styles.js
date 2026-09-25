@@ -55,7 +55,10 @@ const css = `
 .sw-x{position:absolute;right:-6px;top:-6px;width:40px;height:40px;padding:9px;border-radius:50%;border:3px solid var(--ink);color:#fff;cursor:pointer;pointer-events:auto;
   background:linear-gradient(180deg,#ff6b80,#dc2548);box-shadow:inset 0 2px 0 rgba(255,255,255,.3),0 3px 0 var(--ink)}
 .sw-x svg{width:100%;height:100%}
-.sw-hint{font:800 12px/1.2 var(--fb);color:var(--txt2);text-shadow:0 1px 0 rgba(0,0,0,.6);text-align:center}
+.sw-hint{font:800 12px/1.2 var(--fb);color:var(--txt2);text-shadow:0 1px 0 rgba(0,0,0,.6);text-align:center;padding:5px 12px 6px;border-radius:999px;
+  background:rgba(16,22,58,.94);border:2px solid var(--ink);box-shadow:0 3px 0 rgba(10,14,40,.5)}
+/* while the wheel is up, the bottom-centre pills step out from under it (they'd show through its hint) */
+.hud.soc-wheel-open .prompt,.hud.soc-wheel-open .carry,.hud.soc-wheel-open .hud-slot-social{visibility:hidden;opacity:0;transition:none}
 .sw-hint kbd{font:900 11px/1 var(--fb);padding:2px 5px 3px;border-radius:5px;background:rgba(255,255,255,.18);color:#fff;margin:0 1px}
 .is-touch .sw-hint{display:none}
 .sw-wheel.nope{animation:socNope .32s}
@@ -71,6 +74,11 @@ const css = `
 
 /* ------------------------------------------------------------ chip + invite (bottom dock) */
 .hud:not([data-state=playing]) .soc-dock,.hud.intro .soc-dock{display:none}
+/* an invite is wide: on narrow phones it draws over the road meter's edge rather than under it */
+/* (4: above the meter's own marker (3); the centre reveal card (4, later in the HUD) still goes on top) */
+.hud-bottom:has(.soc-invite){z-index:4}
+/* phones: an invite needs an answer, a quest / badge toast is just news: the toast waits while it's up */
+@media (max-width:640px),(max-height:500px){.hud:has(.soc-invite) .pg-toasts:not(.global){visibility:hidden}}
 .soc-dock{display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;max-width:100%}
 .soc-dock:empty{display:none}
 .soc-chip{display:flex;align-items:center;gap:8px;max-width:100%;padding:5px 6px 5px 5px;border-radius:999px;pointer-events:auto;
@@ -248,9 +256,13 @@ button.spc:active{transform:translateY(2px)}
   .st-state{min-height:44px;font-size:16px}
   .st-plants,.ss-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
   .st-plants .spc-ic,.ss-grid .spc-ic{width:42px;height:42px}
-  .sc-name{max-width:84px;font-size:15px}
-  /* the chat log sits where the Trade / Gift dock appears: lift it while the dock is up */
-  .hud.soc-docked .chat{bottom:calc(var(--sb) + 348px + var(--soc-dock-h,56px))}
+  /* compact chip: the friend's face (their name floats over their head anyway) and the two buttons */
+  .soc-chip .sc-name{display:none}
+  .soc-chip{gap:6px}
+  /* the chat log sits where the Trade / Gift dock can be: lift it clear of the dock's real top (trade.js
+     measures it; the dock rides higher while the carry pill shows) */
+  .hud.soc-docked .chat{bottom:max(calc(var(--sb) + 340px),var(--soc-dock-clear,0px))}
+  .hud.soc-docked .cl:nth-last-child(n+3){display:none}
   .sc-b{padding:6px 10px 8px 6px;font-size:15px}
   .sg-confirm{grid-template-columns:1fr;justify-items:center;text-align:center}
 }
@@ -266,7 +278,7 @@ button.spc:active{transform:translateY(2px)}
   .sw-lb{font-size:12.5px;max-width:76px}
   .sw-item.say .sw-lb{font-size:12px}
   .sw-hub-t{font-size:15px}
-  .sw-hub-s{display:none}
+  .sw-hub-s{font-size:9.5px;line-height:1.1}
   .ss-panel{width:min(720px,100%);padding:8px 10px 9px;border-radius:18px}
   .ss-head{margin-bottom:4px;min-height:30px}
   .ss-with .ava{--s:24px}
@@ -321,7 +333,11 @@ button.spc:active{transform:translateY(2px)}
   .si-ava{--s:38px}
   .si-t{font-size:16px}
   .si-b{min-height:38px;font-size:16px;padding:6px 8px 8px}
-  .sc-b{min-height:36px}
+  .sc-b{min-height:36px;font-size:15px;padding:5px 10px 7px 6px}
+  .sc-b .bi{width:20px;height:20px}
+  .soc-chip .sc-name{display:none}
+  .soc-chip{gap:6px;padding:4px}
+  .sc-ava{--s:30px}
 }
 @media (max-height:400px) and (orientation:landscape){
   .sw-item{width:72px;height:66px;margin:-33px 0 0 -36px}

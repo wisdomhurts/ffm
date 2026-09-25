@@ -140,7 +140,9 @@ $$;
 -- the name is folded to a-z (accents dropped, look-alike Cyrillic/Greek letters and leetspeak mapped) and
 -- split into words. STRONG words are blocked at the start or end of a word (also with an ending), MILD
 -- words only as a whole word (optionally with a simple ending), and runs of 1-2 letter words are also
--- checked glued together ("f u c k"). Letters of other scripts can't be filtered and are accepted.
+-- checked glued together ("f u c k"). Every letter of a listed word may repeat ("fuuuck"), but a doubled
+-- letter still needs two ("boob" doesn't catch Bob). Letters of other scripts can't be filtered and are
+-- accepted.
 create or replace function public.sas_name_word_bad(p_t text)
 returns boolean
 language plpgsql
@@ -150,8 +152,9 @@ set search_path = ''
 as $$
 declare
   c_strong constant text[] := array[
-    'fuck', 'fck', 'fvck', 'phuck', 'shit', 'bitch', 'btch', 'cunt', 'nigg', 'faggot', 'retard', 'pussy',
-    'penis', 'vagin', 'hitler', 'kkk', 'twat', 'dildo', 'jizz', 'asshole', 'cocksuck', 'suicide'];
+    'fuck', 'fck', 'fvck', 'phuck', 'shit', 'bitch', 'btch', 'biatch', 'biotch', 'beyotch', 'byatch',
+    'biyatch', 'cunt', 'nigg', 'faggot', 'retard', 'pussy', 'penis', 'vagin', 'hitler', 'kkk', 'twat',
+    'dildo', 'jizz', 'asshole', 'cocksuck', 'suicide'];
   c_strong_end constant text[] := array[
     '', 's', 'es', 'er', 'ers', 'ing', 'in', 'ed', 'y', 'ey', 'face', 'head', 'hole'];
   c_mild constant text[] := array[
@@ -164,30 +167,22 @@ declare
     '', 's', 'es', 'er', 'ers', 'ing', 'ed'];
   c_allow constant text[] := array[
     'cocker', 'shital', 'shitara', 'ashit'];
-  v_w text;
-  v_e text;
+  v_strong text;
+  v_strong_end text;
+  v_mild text;
+  v_mild_end text;
 begin
   if p_t = any (c_allow) then
     return false;
   end if;
-  foreach v_w in array c_strong loop
-    if starts_with(p_t, v_w) then
-      return true;
-    end if;
-    foreach v_e in array c_strong_end loop
-      if char_length(p_t) >= char_length(v_w || v_e) and right(p_t, char_length(v_w || v_e)) = v_w || v_e then
-        return true;
-      end if;
-    end loop;
-  end loop;
-  foreach v_w in array c_mild loop
-    foreach v_e in array c_mild_end loop
-      if p_t = v_w || v_e then
-        return true;
-      end if;
-    end loop;
-  end loop;
-  return false;
+  -- every letter may repeat: fuck -> f+u+c+k+ (the same patterns names.js builds)
+  select string_agg(regexp_replace(w, '([a-z])', '\1+', 'g'), '|') into v_strong from unnest(c_strong) as w where w <> '';
+  select string_agg(regexp_replace(w, '([a-z])', '\1+', 'g'), '|') into v_strong_end from unnest(c_strong_end) as w where w <> '';
+  select string_agg(regexp_replace(w, '([a-z])', '\1+', 'g'), '|') into v_mild from unnest(c_mild) as w where w <> '';
+  select string_agg(regexp_replace(w, '([a-z])', '\1+', 'g'), '|') into v_mild_end from unnest(c_mild_end) as w where w <> '';
+  return p_t ~ ('^(' || v_strong || ')')
+      or p_t ~ ('(' || v_strong || ')(' || v_strong_end || ')?$')
+      or p_t ~ ('^(' || v_mild || ')(' || v_mild_end || ')?$');
 end;
 $$;
 

@@ -161,6 +161,7 @@ export function mountEmotes(app, hudRoot, parts = {}) {
     if (!layer.isConnected) hudRoot.appendChild(layer);
     open = true;
     socialUi.wheel = true;
+    hudRoot.classList.add('soc-wheel-open');
     uiSound(app, 'click');
     return true;
   }
@@ -169,6 +170,7 @@ export function mountEmotes(app, hudRoot, parts = {}) {
     if (!open) return;
     open = false;
     socialUi.wheel = false;
+    hudRoot.classList.remove('soc-wheel-open');
     hot = -1;
     drag = null;
     layer.classList.add('out');
@@ -255,7 +257,11 @@ export function mountEmotes(app, hudRoot, parts = {}) {
   tbtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     tbtn.classList.add('down');
-    tbtn.setPointerCapture?.(e.pointerId);
+    try {
+      tbtn.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic or already-released pointers can't be captured */
+    }
     if (open) {
       close();
       return;

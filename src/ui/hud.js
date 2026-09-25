@@ -68,7 +68,8 @@ export function createHUD(app) {
   // collapses while empty; widgets append their chip/button into it and the layout makes room:
   //   quest  - top-left column, under the next-goal chip (daily quest tracker)
   //   room   - top-right column, under the leaderboard (online room chip)
-  //   social - bottom centre, just above the proximity prompt (gift / trade chip)
+  //   social - bottom centre, between the proximity prompt and the carry pill (gift / trade chip: as low as
+  //            it can sit, so it stays clear of the tutorial card and the banners)
   //   emote  - beside the hotbar on desktop; near the Jump/Bonk/Action buttons on touch screens
   const slot = (name) => h('div', { class: `hud-slot hud-slot-${name}` });
   const anchors = { tl, tr, top, bottom, quest: slot('quest'), room: slot('room'), social: slot('social'), emote: slot('emote') };
@@ -87,8 +88,8 @@ export function createHUD(app) {
   const unwire = me ? wireNotifications(app, alerts) : () => {};
   if (me) {
     parts.push(createRoadMeter(app, root, me));
-    bottom.appendChild(anchors.social);
     parts.push(createPrompt(app, bottom, me));
+    bottom.appendChild(anchors.social);
     parts.push(createCarry(app, bottom, me));
     parts.push(createHotbar(app, bottom, me, anchors.emote, root));
   }
@@ -116,12 +117,18 @@ export function createHUD(app) {
   const layoutBox = (el, hr) => ({ l: hr.left + el.offsetLeft, t: hr.top + el.offsetTop, r: hr.left + el.offsetLeft + el.offsetWidth, b: hr.top + el.offsetTop + el.offsetHeight });
   const hits = (a, b, pad = 0) => a.l < b.r && a.r > b.l && a.t < b.b + pad && a.b > b.t - pad;
   function unclutter() {
-    hushSocial();
     const shown = [...bottom.querySelectorAll('.prompt.show, .carry.show')].filter((p) => p.offsetParent);
+    // the gift / trade chip counts too, gently: the card steps aside and banners drop their second line for it,
+    // but it never hides the banners (it waits itself, see hushSocial). Something marked .urgent in the social
+    // slot (a trade invite) is a real pill: it never waits.
+    const soft = anchors.social.offsetParent && anchors.social.offsetHeight > 0;
+    const urgent = soft && !!anchors.social.querySelector('.urgent');
     let level = 0;
-    if (shown.length) {
+    if (shown.length || soft) {
       const br = bottom.getBoundingClientRect();
       const pills = shown.map((p) => layoutBox(p, br));
+      const chip = soft ? layoutBox(anchors.social, br) : null;
+      if (urgent) pills.push(chip);
       const c = tutEl?.classList;
       const tutOn = !!c && !c.contains('gone') && !c.contains('hidden') && !c.contains('wait');
       if (tutOn && tutEl.offsetParent) {
@@ -132,10 +139,12 @@ export function createHUD(app) {
       const banners = [];
       for (const a of top.querySelectorAll('.alert:not(.out)')) if (a.offsetParent) banners.push(layoutBox(a, tr));
       const bannerClash = banners.some((a) => pills.some((p) => hits(a, p, 6)));
-      const tutClash = tutOn && !!tutRect && pills.some((p) => hits(tutRect, p));
+      const chipClash = !urgent && !!chip && banners.some((a) => hits(a, chip, 6));
+      const tutClash = tutOn && !!tutRect && (pills.some((p) => hits(tutRect, p)) || (!!chip && hits(tutRect, chip)));
       // step up one level per check while they clash (level 1 only helps with the card on screen), hold
       // the level while banners stay up
       if (bannerClash) level = Math.min(3, Math.max(squeeze + 1, tutOn ? 1 : 2));
+      else if (chipClash) level = Math.min(2, Math.max(squeeze + 1, tutOn ? 1 : 2));
       else if (banners.length && squeeze) level = squeeze;
       else level = tutClash ? 1 : 0;
     }
@@ -145,6 +154,7 @@ export function createHUD(app) {
       root.classList.toggle('squeeze2', level >= 2);
       root.classList.toggle('squeeze3', level >= 3);
     }
+    hushSocial(); // after the squeeze: whatever still overlaps the chip wins and the chip waits
   }
 
   // Widgets can hang extra chips under the corner columns (quest tracker, room chip...). Instead of knowing
@@ -197,14 +207,14 @@ export function createHUD(app) {
     }
   }
 
-  // The gift / trade chip is the least urgent thing on screen: it waits while it would cover a banner or the
-  // tutorial card (it comes back as soon as they're gone).
+  // The gift / trade chip is the least urgent thing on screen: it waits while it would cover a banner, a quest /
+  // badge toast or the tutorial card (it comes back as soon as they're gone).
   let hushed = false;
   function hushSocial() {
     const chips = [...anchors.social.children].filter((c) => c.offsetParent);
     let clash = false;
-    if (chips.length) {
-      const boxes = [...top.querySelectorAll('.alert:not(.out)')].filter((a) => a.offsetParent).map((a) => a.getBoundingClientRect());
+    if (chips.length && !anchors.social.querySelector('.urgent')) {
+      const boxes = [...top.querySelectorAll('.alert:not(.out)'), ...document.querySelectorAll('.pg-toast:not(.out)')].filter((a) => a.offsetParent).map((a) => a.getBoundingClientRect());
       const c = tutEl?.classList;
       if (c && !c.contains('gone') && !c.contains('hidden') && !c.contains('wait') && tutEl.offsetWidth > 0) boxes.push(tutEl.getBoundingClientRect());
       clash = chips.some((ch) => {

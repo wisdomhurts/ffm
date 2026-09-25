@@ -8,6 +8,7 @@ import { ICON } from './icons.js';
 import { resetTutorial } from './tutorial.js';
 import { fsAvailable, isFullscreen, toggleFullscreen, onFullscreenChange, iosNeedsHomeScreen, IOS_TIP } from './fullscreen.js';
 import { openCloudSave } from './cloudsave.js';
+import { onlineConfigured } from '../online/config.js';
 
 export function buildSettings(app) {
   const rows = [];
@@ -82,8 +83,10 @@ export function buildSettings(app) {
 
   const pct = (v) => Math.round(v * 100) + '%';
 
-  // Cloud Save (save codes) lives here; the panel itself comes from the backend module
-  const cloudBtn = h('button', { class: 'btn btn-blue btn-sm set-cloud', type: 'button', html: `<span class="bi">${ICON.cloud}</span><span>Cloud Save</span>` });
+  // Cloud Save (save codes) lives here; the panel itself comes from the backend module. Until a backend
+  // is configured it is a quiet "coming soon" row (the panel then shows a coming-soon card).
+  const cloudOn = onlineConfigured();
+  const cloudBtn = h('button', { class: `btn ${cloudOn ? 'btn-blue' : 'btn-grey'} btn-sm set-cloud`, type: 'button', html: `<span class="bi">${ICON.cloud}</span><span>${cloudOn ? 'Cloud Save' : 'Coming soon'}</span>` });
   cloudBtn.addEventListener('click', () => {
     uiSound(app, 'click');
     try {
@@ -93,7 +96,8 @@ export function buildSettings(app) {
     }
   });
   const who = app.profile?.name;
-  row('Cloud Save', cloudBtn, `Get a save code to keep ${who ? who + "'s" : 'your'} progress safe, or load it on another device.`).classList.add('set-hi');
+  if (cloudOn) row('Cloud Save', cloudBtn, `Get a save code to keep ${who ? who + "'s" : 'your'} progress safe, or load it on another device.`).classList.add('set-hi');
+  const cloudRow = cloudOn ? null : row('Cloud Save', cloudBtn, 'Save codes to take your garden to another phone or computer.');
   const qualityNote = h('span', { class: 'set-note warn', text: 'Applies after you reload the page.', hidden: true });
 
   row('Music', slider('music', 0, 1, 0.05, pct));
@@ -138,7 +142,8 @@ export function buildSettings(app) {
 
   const el = h('div', { class: 'set-body' },
     h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.gear }), h('h2', { text: 'Settings' })),
-    h('div', { class: 'set-rows' }, rows));
+    // a feature that isn't switched on yet goes last
+    h('div', { class: 'set-rows' }, cloudRow ? [...rows.filter((r) => r !== cloudRow), cloudRow] : rows));
   // keep controls in sync when mute flips the volumes
   const off = bus.on('settings:changed', () => {
     sliders.forEach((f) => f());

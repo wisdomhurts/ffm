@@ -98,6 +98,8 @@ class Online {
     this._whoAt = null;
     this._whoSig = '';
     this._hostMissingAt = null;
+    this._prevHost = null; // the host we gave up on when it went quiet (it may come back, see _onTick)
+    this._hostChangedAt = -1e9; // when a different device started running our room (see _saveNow)
     this._hiddenAt = null;
     this._qpUntil = 0;
     this.limitWho = new RateLimiter(1, 3);
@@ -834,7 +836,9 @@ class Online {
     }
     const order = Array.isArray(m.order) ? m.order.filter(isPid) : [hostPid];
     this.dead.clear(); // a fresh seat: forget hosts we gave up on before
+    this._prevHost = null;
     this._hostMissingAt = null;
+    this._hostChangedAt = this.clock;
     this.role = new ClientRole(this, game, { slot, epoch: int(m.ep, 1, 1e9, 1), hostPid, order, full, banned: m.bn });
     this.role.start();
     return true;
@@ -863,15 +867,25 @@ class Online {
     }
     if (!this.isClient) return;
     const r = this.role;
+    // Only the host we follow may tick. We move to another device only by our own election (_hostLost: the
+    // host went quiet or left) or by the host's signed goodbye naming the next one, never because some
+    // member starts ticking at us. One exception: the host we gave up on was only frozen and is back
+    // before the one we picked took over.
+    let back = false;
     if (from !== r.hostPid) {
-      // switch hosts only when ours is really gone and the new one is one of the room's members
-      const ourGone = this.dead.has(r.hostPid) || this.clock - r.lastTickAt > 1.5;
-      if (!ourGone || this.dead.has(from) || !r.order.includes(from)) return;
+      if (from !== this._prevHost || (this.present.size && !this.present.has(from))) return;
+      back = true;
     }
     const m = this.open('tick', env, 'r', from);
-    if (!m || !Number.isInteger(m.ep) || (from !== r.hostPid && m.ep <= r.epoch)) return;
+    if (!m || !Number.isInteger(m.ep)) return;
+    if (back) {
+      if (m.ep < r.epoch) return;
+      this._prevHost = null;
+      this.dead.delete(from);
+      r.setHost(from, false);
+      this._status('playing', '');
+    }
     m.h = from;
-    this.dead.delete(from);
     if (!this.present.size || this.present.has(from)) this._hostMissingAt = null;
     r.onTick(m);
   }
@@ -899,7 +913,7 @@ class Online {
     if (Number.isInteger(m.ep) && m.ep !== this.role.epoch) return; // an old goodbye
     this.dead.add(env.f);
     if (isPid(m.next)) this.role.order = [m.next, ...this.role.order.filter((p) => p !== m.next)];
-    this._hostLost();
+    this._hostLost(true);
   }
 
   /** Called by the host role when someone joined/left. */
@@ -927,7 +941,11 @@ class Online {
 
   onHostChanged(pid) {
     if (!this.room) return;
+    // (called before the new host's first state is applied: what we show now is the old host's last word)
+    this._saveNow();
+    this._hostChangedAt = this.clock;
     this.dead.clear(); // the room has a host again: whoever we gave up on may be back as a member
+    this._prevHost = null;
     this.room.hostPid = pid;
     const name = this.world?.players.find((p) => p.pid === pid)?.name || this.present.get(pid)?.name;
     this.room.hostName = sanitizeName(name, this.room.hostName);
@@ -1039,9 +1057,15 @@ class Online {
 
   // ---------------------------------------------------------------- host changes
 
-  _hostLost() {
+  /** Our host went quiet or left (`bye`: it said so itself): follow the next one in the host's order. */
+  _hostLost(bye = false) {
     const r = this.role;
     if (!this.isClient || !this.room) return;
+    // the last host that really ran the room, in case it was only frozen (one that said goodbye won't be back)
+    if (bye) this._prevHost = null;
+    else if (!this._prevHost) this._prevHost = r.hostPid;
+    this._saveNow(); // what the old host last showed us
+    this._hostChangedAt = this.clock;
     this.dead.add(r.hostPid);
     let order = r.order.filter((p) => !this.dead.has(p));
     if (!order.includes(this.pid)) order.push(this.pid);
@@ -1050,8 +1074,7 @@ class Online {
     const next = order[0];
     if (next === this.pid) this._promote();
     else {
-      r.hostPid = next;
-      r.lastTickAt = this.clock;
+      r.setHost(next, true); // the only other device whose ticks we take now (it must start a new epoch)
       this._hostMissingAt = null;
       this._status('reconnecting', 'Switching to a new host…');
     }
@@ -1065,6 +1088,7 @@ class Online {
     const order = [this.pid, ...c.order.filter((p) => p !== this.pid && !this.dead.has(p))];
     const host = new HostRole(this, game, { epoch: c.epoch + 1, order, banned: c.banned });
     this.role = host;
+    this._prevHost = null;
     host.adoptMirror(alive);
     this.up?.leave();
     this.up = null;
@@ -1160,6 +1184,7 @@ class Online {
     this.present.clear();
     this._seenPids?.clear();
     this.dead.clear();
+    this._prevHost = null;
     this.keys.clear();
     this.seen.clear();
     this._code = null;
@@ -1192,8 +1217,11 @@ class Online {
       const data = g.serializeSlot(slot);
       const json = JSON.stringify(data);
       if (json === this._lastSave) return;
-      this._lastSave = json;
       const prof = this._profile();
+      // Right after a host change, a garden that suddenly shrank doesn't replace the one saved before it
+      // (a broken or dishonest new host). If the loss is real it's saved once things have settled.
+      if (this.clock - this._hostChangedAt < TIMEOUTS.settle && shrank(getProfile(prof.id)?.online ?? prof.online, data)) return;
+      this._lastSave = json;
       updateProfile(prof.id, (p) => {
         p.online = data;
       });
@@ -1262,6 +1290,23 @@ class Online {
       if (hidden > TIMEOUTS.hiddenLeave) this._exit('left');
     }
   }
+}
+
+// Did a saved garden (serializeSlot data) lose what a few seconds of normal play can't lose?
+function shrank(before, now) {
+  if (!before || typeof before !== 'object') return false;
+  const size = (d) => {
+    let open = 0, plants = 0;
+    for (const x of Array.isArray(d?.garden?.planters) ? d.garden.planters : []) {
+      if (x?.unlocked) open++;
+      if (x?.plant) plants++;
+    }
+    const p = d?.player && typeof d.player === 'object' ? d.player : {};
+    return { open, plants, cash: num(p.cash) + num(d?.garden?.cashPile), speed: num(p.speedLevel), reb: num(p.rebirths) };
+  };
+  const a = size(before), b = size(now);
+  return b.reb < a.reb || b.open < a.open || b.speed < a.speed || b.plants * 2 < a.plants ||
+    (a.cash >= 100 && b.cash * 4 < a.cash);
 }
 
 // A public room from the lobby's presence list, cleaned up for display.

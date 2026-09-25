@@ -164,7 +164,42 @@ async function runViewport(label, opts) {
   await browser.close();
 }
 
+// No backend configured (the shipped default until the project exists): quiet "coming soon" states.
+async function runUnconfigured(label, opts) {
+  const { browser, page, errors } = await launch(opts);
+  let requests = 0;
+  page.on('request', (r) => /^https?:/.test(r.url()) && requests++);
+  await page.goto('file://' + path.join(GALLERY, 'index.html'));
+  await page.waitForFunction(() => window.__sas);
+  const settle = async () => {
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getTiming?.().iterations === Infinity), null, { timeout: 5000 }).catch(() => {});
+    await sleep(150);
+  };
+  await page.evaluate(() => window.__sas.openCloudSave(window.__sas.app));
+  await page.waitForSelector('.cs-soon');
+  check(await page.getByText('Cloud saves are coming soon!').isVisible(), `${label}: cloud save shows the coming-soon card`);
+  check(await page.locator('.cs-input, .cs-code').count() === 0 && !(await page.getByText('Get my save code').count()), `${label}: no live-looking controls without a backend`);
+  await settle();
+  console.log('  shot', await shot(page, `cs-soon-${label}`));
+  await page.evaluate(() => window.__app.menus.closeAllModals());
+  await page.evaluate(() => window.__app.menus.openSettings());
+  await page.waitForSelector('.set-cloud');
+  const row = page.locator('.set-row', { has: page.locator('.set-cloud') });
+  check(!(await row.getAttribute('class')).includes('set-hi') && /Coming soon/.test(await row.innerText()), `${label}: settings row is quiet and says Coming soon`);
+  await row.scrollIntoViewIfNeeded();
+  await settle();
+  console.log('  shot', await shot(page, `settings-soon-${label}`));
+  await page.locator('.set-cloud').click();
+  await page.waitForSelector('.cs-soon');
+  check(true, `${label}: the settings button opens the coming-soon card`);
+  check(requests === 0, `${label}: no network requests (${requests})`);
+  check(errors.length === 0, `${label}: no console errors` + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+  await browser.close();
+}
+
 await runViewport('phone', { mobile: true });
 await runViewport('laptop', { width: 1280, height: 720 });
+await runUnconfigured('phone', { mobile: true });
+await runUnconfigured('laptop', { width: 1280, height: 720 });
 console.log(failed ? `${failed} FAILED` : 'ALL PASS');
 process.exit(failed ? 1 : 0);
