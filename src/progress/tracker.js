@@ -286,11 +286,12 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     if (c.streak > (c.streakBest || 0)) c.streakBest = c.streak;
   }
 
-  // Quest cash is paid into an Endless (or online) garden. With no such game running it waits in the bank
-  // and arrives at the start of the next one (a Showdown is a fair race, so it never gets extra cash).
+  // Quest cash is paid into a solo Endless garden. Otherwise it waits in the bank and arrives at the start of
+  // the next one: a Showdown is a fair race, and an online room is a shared world (the host never takes
+  // reward cash from other devices, so nobody can print money over the network).
   function inCashGame() {
     const g = app.game;
-    return !!app.human && !!g && g.mode !== 'showdown' && !g.over && app.state !== 'title' && app.state !== 'ended';
+    return !!app.human && !!g && !app.online?.room && g.mode !== 'showdown' && !g.over && app.state !== 'title' && app.state !== 'ended';
   }
   function payCash(p, amount) {
     if (!(amount > 0)) return true;

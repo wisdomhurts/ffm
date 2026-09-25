@@ -28,6 +28,7 @@ import { createOnline } from './net/session.js';
 import { reactToSocial } from './social/botReact.js';
 import { attachCloudSync } from './online/sync.js';
 import { attachPets } from './ui/pets.js';
+import { sameLook } from './characters/cosmetics.js';
 import { createTradeManager } from './social/trades.js';
 
 const SAVE_EVERY = 12;
@@ -120,7 +121,7 @@ class App {
     bus.on('profile:changed', ({ profile }) => {
       const p = this.human;
       if (!p || !this.game || profile.id !== p.profileId) return;
-      if (JSON.stringify(profile.look) !== JSON.stringify(p.look)) this.act('setLook', profile.look);
+      if (!sameLook(profile.look, p.look)) this.act('setLook', profile.look);
       const eq = profile.pets.owned.find((x) => x.uid === profile.pets.equipped)?.id || null;
       if (eq !== p.pet) this.act('setPet', eq);
     });
@@ -232,6 +233,16 @@ class App {
       });
     });
     this._podium = null;
+  }
+
+  _safe(name, fn) {
+    try {
+      fn();
+    } catch (e) {
+      const n = (this._errCount ||= {});
+      n[name] = (n[name] || 0) + 1;
+      if (n[name] <= 3 || n[name] % 600 === 0) console.warn(`[app] ${name} update failed (${n[name]}x)`, e);
+    }
   }
 
   /** The active player profile on this device (see core/profiles.js). */
@@ -405,6 +416,7 @@ class App {
     if (this.state !== 'playing') return;
     this.state = 'paused';
     if (!this.online?.room) this.game.paused = true; // online the world keeps running under the menu
+    else this.input.enabled = false; // ...but your own character stands still while the menu is open
     this.input.reset();
     this.touch.setVisible(false);
     this.menus.showPause();
@@ -419,6 +431,7 @@ class App {
     this.menus.hidePause();
     this.menus.closeShop();
     this.input.reset();
+    this.input.enabled = true;
     if (this.humanCtrl) this.humanCtrl._tapHold = 0;
     // a button still held from the menu (gamepad B, keyboard E) must be released before it acts again
     if (this.human) this.human.prevInteract = true;
@@ -499,14 +512,16 @@ class App {
       cam.lookAt(0, 2, 0);
       this.engine.setFocus(0, 0, 0);
     }
-    this.labels.begin();
-    this.view?.update(dt, t, this.engine.camera);
-    this.world.update(dt, { time: t, camera: this.engine.camera, focus: this.human ? this.human.pos : { x: 0, y: 0, z: 0 }, event: g.event, game: g });
-    this.fx.update(dt, t);
-    this.hud?.update(dt, t);
-    this.touch.update(dt);
-    this.audio.update(dt, { game: g, human: this.human, state: this.state });
-    this.labels.end();
+    // each part updates on its own: one bad object (e.g. odd data from another device) must never
+    // freeze the HUD, sound or labels for the rest of the session
+    this._safe('labels', () => this.labels.begin());
+    this._safe('view', () => this.view?.update(dt, t, this.engine.camera));
+    this._safe('world', () => this.world.update(dt, { time: t, camera: this.engine.camera, focus: this.human ? this.human.pos : { x: 0, y: 0, z: 0 }, event: g.event, game: g }));
+    this._safe('fx', () => this.fx.update(dt, t));
+    this._safe('hud', () => this.hud?.update(dt, t));
+    this._safe('touch', () => this.touch.update(dt));
+    this._safe('audio', () => this.audio.update(dt, { game: g, human: this.human, state: this.state }));
+    this._safe('labels', () => this.labels.end());
     if (this.state === 'playing' && g.saveKey) {
       this._saveTimer += dt;
       if (this._saveTimer > SAVE_EVERY) {

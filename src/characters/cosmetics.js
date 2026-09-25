@@ -137,7 +137,7 @@ export const TRAILS = [
 /** The catalog, by category (contract shape plus the extras the Wardrobe uses). */
 export const COSMETICS = { builds: BUILDS, hair: HAIR, shirts: SHIRTS, legs: LEGS, hats: HATS, accs: ACCS, faces: FACES, trails: TRAILS, colors: COLORS };
 
-const byId = (list) => Object.fromEntries(list.map((x) => [x.id, x]));
+const byId = (list) => Object.assign(Object.create(null), Object.fromEntries(list.map((x) => [x.id, x])));
 export const HAIR_BY_ID = byId(HAIR);
 export const SHIRT_BY_ID = byId(SHIRTS);
 export const LEGS_BY_ID = byId(LEGS);

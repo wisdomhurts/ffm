@@ -5,6 +5,8 @@ import { CHARACTERS, CHARACTER } from '../config.js';
 import { load, save, remove } from './save.js';
 import { bus } from './events.js';
 import { sanitizeName } from './names.js';
+import { sanitizeLook } from '../characters/cosmetics.js';
+import { PET } from '../pets/catalog.js';
 
 const INDEX_KEY = 'profiles';
 const key = (id) => 'profile:' + id;
@@ -50,12 +52,12 @@ function normalize(p, id) {
   if (!p || typeof p !== 'object') return out;
   const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : null);
   if (!family && p.name) out.name = sanitizeName(p.name, out.name);
-  if (obj(p.look)) out.look = { ...out.look, ...p.look };
+  out.look = sanitizeLook(obj(p.look) ? { ...out.look, ...p.look } : out.look, base);
   out.shareFace = !!p.shareFace;
   out.stars = Number.isFinite(p.stars) && p.stars > 0 ? Math.floor(p.stars) : 0;
   if (Array.isArray(p.unlocks)) out.unlocks = p.unlocks.filter((u) => typeof u === 'string');
   if (obj(p.pets)) {
-    out.pets.owned = Array.isArray(p.pets.owned) ? p.pets.owned.filter((x) => x && typeof x.id === 'string') : [];
+    out.pets.owned = Array.isArray(p.pets.owned) ? p.pets.owned.filter((x) => x && typeof x.id === 'string' && Object.hasOwn(PET, x.id)) : [];
     out.pets.equipped = out.pets.owned.some((x) => x.uid === p.pets.equipped) ? p.pets.equipped : null;
   }
   if (obj(p.badges)) out.badges = { ...p.badges };

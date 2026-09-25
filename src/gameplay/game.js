@@ -12,6 +12,7 @@ import { Player, emptyIntent } from './player.js';
 import { petMods } from '../pets/effects.js';
 import { PET, EGG } from '../pets/catalog.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
+import { sanitizeLook, sameLook } from '../characters/cosmetics.js';
 
 let UID = 1;
 const uid = () => UID++;
@@ -1054,7 +1055,9 @@ export class Game {
 
   setLook(p, look) {
     if (!look || typeof look !== 'object') return;
-    p.look = { ...p.char.look, ...look };
+    const next = sanitizeLook({ ...p.look, ...look }, p.char.id);
+    if (sameLook(next, p.look)) return;
+    p.look = next;
     bus.emit('player:look', { player: p });
   }
 
@@ -1137,7 +1140,7 @@ export class Game {
       p.profileId = profile.id;
       p.faceKey = kind === 'remote' ? 'r_' + pid : profile.id;
       p.name = profile.name || p.char.name;
-      p.look = { ...p.char.look, ...(profile.look || {}) };
+      p.look = sanitizeLook({ ...p.char.look, ...(profile.look || {}) }, p.char.id);
       const eq = profile.pets?.owned?.find((x) => x.uid === profile.pets.equipped);
       p.pet = eq && PET[eq.id] ? eq.id : typeof profile.pet === 'string' && PET[profile.pet] ? profile.pet : null;
     } else {
@@ -1169,6 +1172,18 @@ export class Game {
       }
     }
     for (const g of this.gardens) for (const pl of g.planters) if (pl.stealer === slot) pl.stealer = null;
+    // plants someone is carrying away from this garden belong to whoever is leaving (serializeSlot saved
+    // them): they must not fly "home" to the newcomer or be counted twice
+    for (const q of this.players) {
+      if (q === p || q.carrying?.kind !== 'plant' || q.carrying.fromSlot !== slot) continue;
+      const plant = q.carrying.plant;
+      q.carrying = null;
+      bus.emit('steal:cancel', { thief: q, plant, cause: 'left' });
+    }
+    for (const pl of this.gardens[slot].planters) {
+      const thief = pl.stealer != null ? this.players[pl.stealer] : null;
+      if (thief?.interact?.stealPl === pl) this._clearStealer(pl, thief);
+    }
     for (const m of this.monsters) if (m.target === slot) m.target = null;
     const fresh = new Player(slot, p.char, false);
     for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'items', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt',
@@ -1207,6 +1222,7 @@ export class Game {
       const orig = garden.planters[c.fromIndex];
       const spot = orig && orig.unlocked && !orig.plant ? orig : garden.planters.find((x) => x.unlocked && !x.plant);
       if (spot) spot.plant = plantData(c.plant);
+      else garden.cashPile += Math.round(this.plantIncome(c.plant, p) * SELL_SECONDS); // no room: keep its value
     }
     return { v: 1, player: p.serialize(), garden };
   }
@@ -1293,7 +1309,7 @@ export class Game {
       p.profileId = d.profileId;
       p.faceKey = mine ? p.faceKey : p.kind === 'bot' ? p.char.id : faceKeyOf ? faceKeyOf(d) : 'r_' + d.pid;
       p.name = d.name;
-      if (d.look && d.look !== p.look) p.look = d.look;
+      if (d.look && !sameLook(d.look, p.look)) p.look = sanitizeLook(d.look, p.char.id);
       if (d.pet !== p.pet) {
         p.pet = d.pet && PET[d.pet] ? d.pet : null;
         p.mods = petMods(p.pet);

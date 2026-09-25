@@ -68,7 +68,7 @@ export const RARITIES = [
   { id: 'mythic', name: 'Mythic', color: '#ff4d6d', glow: 0xff4d6d, tier: 5 },
   { id: 'secret', name: 'Secret', color: '#111111', glow: 0xffffff, tier: 6 },
 ];
-export const RARITY = Object.fromEntries(RARITIES.map((r) => [r.id, r]));
+export const RARITY = Object.assign(Object.create(null), Object.fromEntries(RARITIES.map((r) => [r.id, r])));
 
 export const MUTATIONS = {
   normal: { id: 'normal', name: '', mult: 1, color: null },
@@ -115,7 +115,7 @@ export const PLANTS = [
   { id: 'maddiemarigold', name: "Maddie's Magic Marigold", rarity: 'secret', income: 7000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
   { id: 'micahmelon', name: "Micah's Mega Melon", rarity: 'secret', income: 7000, grow: 300, look: 'melon', colors: ['#3ddc84', '#ff5d5d'], family: 'micah' },
 ];
-export const PLANT = Object.fromEntries(PLANTS.map((p) => [p.id, p]));
+export const PLANT = Object.assign(Object.create(null), Object.fromEntries(PLANTS.map((p) => [p.id, p])));
 export const NAMESAKE_BONUS = 2; // owning your own family secret plant doubles it
 
 export const BIOMES = [
@@ -154,7 +154,7 @@ export const ITEMS = [
   { id: 'cloak', name: 'Invisibility Cloak', price: 5000, key: '4', desc: 'Invisible for 10 s. Monsters and family ignore you.', duration: 10 },
   { id: 'bucket', name: 'Water Bucket', price: 400, key: '5', desc: 'Halves the growing time left on a nearby plant.' },
 ];
-export const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+export const ITEM = Object.assign(Object.create(null), Object.fromEntries(ITEMS.map((i) => [i.id, i])));
 
 export const EVENTS = {
   firstDelay: 150, // seconds before the first weather event
@@ -212,7 +212,7 @@ export const CHARACTERS = [
       pants: '#c8b48a', shoes: '#2a2a2a', build: 'kid', skin: '#d3a08b' },
   },
 ];
-export const CHARACTER = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
+export const CHARACTER = Object.assign(Object.create(null), Object.fromEntries(CHARACTERS.map((c) => [c.id, c])));
 
 // Family banter. {plant} {victim} {thief} {name} are substituted.
 export const CHAT = {
@@ -257,3 +257,6 @@ export const CHAT = {
       'Watch your garden, {human}...', 'I have a plan. A sneaky plan.', 'Is it snack time yet?'],
   },
 };
+
+// Keyed tables are looked up with ids from saves and the network: no inherited keys ('constructor', 'toString'...).
+for (const t of [MUTATIONS, DIFFICULTY, CHAT]) Object.setPrototypeOf(t, null);

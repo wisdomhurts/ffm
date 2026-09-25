@@ -15,7 +15,7 @@ export const EMOTES = [
   { id: 'dance3', name: 'Floss', dur: 6, loop: true, icon: I.dance3 },
   { id: 'sit', name: 'Sit', dur: 30, loop: true, icon: I.sit },
 ];
-export const EMOTE = Object.fromEntries(EMOTES.map((e) => [e.id, e]));
+export const EMOTE = Object.assign(Object.create(null), Object.fromEntries(EMOTES.map((e) => [e.id, e])));
 export const DANCES = ['dance1', 'dance2', 'dance3'];
 
 export const QUICK_CHAT = [
@@ -38,7 +38,7 @@ export const QUICK_CHAT = [
   { id: 'watch', text: 'Watch out!', tab: 'game', icon: I.watch },
   { id: 'catch', text: 'Catch me!', tab: 'game', icon: I.catch },
 ];
-export const PHRASE = Object.fromEntries(QUICK_CHAT.map((q) => [q.id, q]));
+export const PHRASE = Object.assign(Object.create(null), Object.fromEntries(QUICK_CHAT.map((q) => [q.id, q])));
 
 /** Pages of the emote / quick-chat wheel (8 slots each, keys 1-8 in this order, clockwise from the top). */
 export const WHEEL_TABS = [

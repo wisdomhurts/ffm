@@ -21,8 +21,8 @@ export const QUALITY = {
 export class Engine {
   constructor(container) {
     this.container = container;
-    this.qualityId = settings.quality === 'auto' ? detectQuality() : settings.quality;
-    this.quality = QUALITY[this.qualityId];
+    this.qualityId = settings.quality === 'auto' || !QUALITY[settings.quality] ? detectQuality() : settings.quality;
+    this.quality = QUALITY[this.qualityId] || QUALITY[(this.qualityId = 'medium')];
     const renderer = new THREE.WebGLRenderer({ antialias: this.quality.antialias, powerPreference: 'high-performance', preserveDrawingBuffer: false, stencil: true }); // stencil: the player's x-ray silhouette
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality.pixelRatio));
     renderer.setSize(container.clientWidth, container.clientHeight);

@@ -37,7 +37,7 @@ export const PETS = [
   { id: 'phoenix', name: 'Phoenix', rarity: 'mythic', boost: '+25% income, +12% speed', mods: { income: 1.25, speed: 1.12 }, blurb: 'Born from Emberroot flames.', flies: true },
   { id: 'axolotl', name: 'Golden Axolotl', rarity: 'mythic', boost: '+30% income, grabs 20% faster, magnet +3', mods: { income: 1.3, hold: 0.8, magnet: 3 }, blurb: 'The rarest smile in Starbloom.', flies: true },
 ];
-export const PET = Object.fromEntries(PETS.map((p) => [p.id, p]));
+export const PET = Object.assign(Object.create(null), Object.fromEntries(PETS.map((p) => [p.id, p])));
 
 export const EGGS = [
   {
@@ -61,7 +61,7 @@ export const EGGS = [
     odds: [['owl', 22], ['unicorn', 36], ['dragon', 26], ['phoenix', 9], ['axolotl', 7]],
   },
 ];
-export const EGG = Object.fromEntries(EGGS.map((e) => [e.id, e]));
+export const EGG = Object.assign(Object.create(null), Object.fromEntries(EGGS.map((e) => [e.id, e])));
 
 // ------------------------------------------------------------------ helpers for the UI
 

@@ -151,7 +151,7 @@ export const QUESTS = [
   { id: 'rebirth', tier: 'hard', group: 'rebirth', icon: 'crown', on: 'rebirth', gate: (ctx) => ctx.netWorth >= 0.45 * REBIRTH.threshold(ctx.rebirths),
     make: () => ({ target: 1 }), text: () => 'Rebirth at the Rebirth Altar' },
 ];
-export const QUEST = Object.fromEntries(QUESTS.map((q) => [q.id, q]));
+export const QUEST = Object.assign(Object.create(null), Object.fromEntries(QUESTS.map((q) => [q.id, q])));
 /** A player's very first quests follow the tutorial (grab, plant, steal); tier = the reward level. */
 export const STARTER = [{ id: 'grab', tier: 'easy' }, { id: 'plant10', tier: 'medium' }, { id: 'steal2', tier: 'hard' }];
 
@@ -212,7 +212,7 @@ export const BADGES = [
   { id: 'streak', name: 'Daily Streak', icon: 'flame', stat: (c) => c.streakBest, tiers: [3, 7, 30], stars: [20, 50, 150], how: (n) => `Finish a quest ${n} days in a row` },
   { id: 'questmaster', name: 'Quest Master', icon: 'scroll', stat: (c) => c.questsDone, tiers: [10, 50, 200], stars: [20, 50, 150], how: (n) => `Finish ${n} daily quests` },
 ];
-export const BADGE = Object.fromEntries(BADGES.map((b) => [b.id, b]));
+export const BADGE = Object.assign(Object.create(null), Object.fromEntries(BADGES.map((b) => [b.id, b])));
 
 const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
 export const badgeId = (fam, i) => (fam.tiers.length === 1 ? fam.id : fam.id + (i + 1));
@@ -223,4 +223,4 @@ export const ALL_BADGES = BADGES.flatMap((fam) => fam.tiers.map((goal, i) => ({
   id: badgeId(fam, i), family: fam.id, tier: i, tiers: fam.tiers.length, goal, name: badgeName(fam, i), icon: fam.icon,
   stars: fam.stars[i] ?? fam.stars[fam.stars.length - 1], how: fam.how(goal),
 })));
-export const BADGE_BY_ID = Object.fromEntries(ALL_BADGES.map((b) => [b.id, b]));
+export const BADGE_BY_ID = Object.assign(Object.create(null), Object.fromEntries(ALL_BADGES.map((b) => [b.id, b])));

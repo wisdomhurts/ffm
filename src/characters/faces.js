@@ -237,7 +237,7 @@ function sampleGrid(g, size, x, y, out) {
  */
 export function composeFaceCanvas(img, skin, size = 512, opts = {}) {
   const c = makeCanvas(size);
-  const g = c.getContext('2d');
+  const g = c.getContext('2d', { willReadFrequently: true }); // CPU-backed: toDataURL for avatars must not stall on the GPU
   g.fillStyle = skin;
   g.fillRect(0, 0, size, size);
   const L = typeof opts.layout === 'object' ? opts.layout : FACE_LAYOUT[opts.layout || 'flat'];

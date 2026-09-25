@@ -62,8 +62,9 @@ function gearShop(app, game, me) {
       h('div', { class: 'gc-copy' }, h('span', { class: 'gc-name', text: it.name }), h('span', { class: 'gc-desc', text: it.desc }), own),
       h('div', { class: 'gc-buy' }, buy1, buy5));
     const buy = (qty, b) => {
-      if (app.act('buyItem', it.id, qty)) bump(card, 'bought');
-      else bump(b, 'nope');
+      const r = app.act('buyItem', it.id, qty); // undefined = sent to the online host
+      if (r === false) bump(b, 'nope');
+      else if (r) bump(card, 'bought');
     };
     buy1.addEventListener('click', () => buy(1, buy1));
     buy5.addEventListener('click', () => buy(5, buy5));
@@ -102,8 +103,9 @@ function speedShop(app, game, me) {
     return { b, ms, row, status };
   });
   train.addEventListener('click', () => {
-    if (app.act('buySpeed')) bump(lvl, 'bump');
-    else bump(train, 'nope');
+    const r = app.act('buySpeed'); // undefined = sent to the online host
+    if (r === false) bump(train, 'nope');
+    else if (r) bump(lvl, 'bump');
   });
   const el = h('div', { class: 'speed-body' },
     h('div', { class: 'sp-card' },
@@ -169,7 +171,7 @@ function rebirthShop(app, game, me, close) {
   const yes = h('button', { class: 'btn btn-gold', type: 'button', text: 'Yes, REBIRTH!' });
   const no = h('button', { class: 'btn btn-grey', type: 'button', text: 'Not yet' });
   yes.addEventListener('click', () => {
-    if (app.act('rebirth')) {
+    if (app.act('rebirth') !== false) {
       close();
     } else {
       confirm.hidden = true;
