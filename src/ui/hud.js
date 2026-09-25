@@ -20,6 +20,7 @@ import { mountEmotes } from './emotes.js';
 import { mountSocial } from './trade.js';
 import { mountQuestChip } from './progress.js';
 import { mountRoomPanel } from './lobby.js';
+import { fullscreenButton } from './fullscreen.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
@@ -63,33 +64,46 @@ export function createHUD(app) {
   const bottom = h('div', { class: 'hud-bottom' });
   root.append(vignette, tl, tr, top, bottom);
 
+  // Anchors for the feature widgets (docs/ONLINE.md). Each is an empty flex box in the right spot that
+  // collapses while empty; widgets append their chip/button into it and the layout makes room:
+  //   quest  - top-left column, under the next-goal chip (daily quest tracker)
+  //   room   - top-right column, under the leaderboard (online room chip)
+  //   social - bottom centre, just above the proximity prompt (gift / trade chip)
+  //   emote  - beside the hotbar on desktop; near the Jump/Bonk/Action buttons on touch screens
+  const slot = (name) => h('div', { class: `hud-slot hud-slot-${name}` });
+  const anchors = { tl, tr, top, bottom, quest: slot('quest'), room: slot('room'), social: slot('social'), emote: slot('emote') };
+
   const parts = [];
   parts.push(createMenuButtons(app, tl));
   parts.push(createStats(app, tl, me));
   const tutorial = me ? createTutorial(app, tl) : null;
   if (tutorial) parts.push(tutorial);
   if (me) parts.push(createNextGoal(app, tl, tutorial));
+  tl.appendChild(anchors.quest);
   parts.push(createBoard(app, tr, me));
+  tr.appendChild(anchors.room);
   parts.push(createEventChip(app, top));
-  // feature widgets (each owns its DOM + styles; see docs/ONLINE.md)
-  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel]) {
-    try {
-      parts.push(mount(app, root, { tl, tr, top, bottom }));
-    } catch (e) {
-      console.warn('[hud] widget failed', e);
-    }
-  }
   const alerts = createAlerts(top, root);
   const unwire = me ? wireNotifications(app, alerts) : () => {};
   if (me) {
     parts.push(createRoadMeter(app, root, me));
+    bottom.appendChild(anchors.social);
     parts.push(createPrompt(app, bottom, me));
     parts.push(createCarry(app, bottom, me));
-    parts.push(createHotbar(app, bottom, me));
+    parts.push(createHotbar(app, bottom, me, anchors.emote, root));
   }
   parts.push(createChat(app, root));
   parts.push(createKeyHints(app, root));
   parts.push(createMatchClock(app, alerts));
+  // feature widgets (each owns its DOM + styles; see docs/ONLINE.md)
+  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel]) {
+    try {
+      const w = mount(app, root, anchors);
+      if (w) parts.push(w);
+    } catch (e) {
+      console.warn('[hud] widget failed', e);
+    }
+  }
 
   // Small phones: banners (and the tutorial card) must never cover the prompt / carry pills. While one would,
   // the HUD squeezes: level 1 moves the tutorial card aside (in portrait the banners sit under it, so they
@@ -102,6 +116,7 @@ export function createHUD(app) {
   const layoutBox = (el, hr) => ({ l: hr.left + el.offsetLeft, t: hr.top + el.offsetTop, r: hr.left + el.offsetLeft + el.offsetWidth, b: hr.top + el.offsetTop + el.offsetHeight });
   const hits = (a, b, pad = 0) => a.l < b.r && a.r > b.l && a.t < b.b + pad && a.b > b.t - pad;
   function unclutter() {
+    hushSocial();
     const shown = [...bottom.querySelectorAll('.prompt.show, .carry.show')].filter((p) => p.offsetParent);
     let level = 0;
     if (shown.length) {
@@ -132,12 +147,84 @@ export function createHUD(app) {
     }
   }
 
+  // Widgets can hang extra chips under the corner columns (quest tracker, room chip...). Instead of knowing
+  // each one, measure: the portrait tutorial card, the banner column and the road meter each start below
+  // any column they share screen width with. Pushes are margins, so the tuned CSS positions stay the base.
+  const meterEl = root.querySelector('.meter');
+  const push = { tut: 0, top: 0, meter: 0 };
+  const across = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 12;
+  function floors() {
+    const tlR = tl.getBoundingClientRect();
+    const trR = tr.getBoundingClientRect();
+    const cols = [tlR, trR].filter((r) => r.height > 0);
+    const below = (r, pad) => cols.reduce((m, c) => (across(r, c) ? Math.max(m, c.bottom + pad) : m), 0);
+    const c = tutEl?.classList;
+    const tutOn = !!c && !c.contains('gone') && !c.contains('hidden') && !c.contains('wait') && tutEl.offsetWidth > 0;
+    let tutR = null;
+    let tp = 0;
+    if (tutOn) {
+      tutR = tutEl.getBoundingClientRect();
+      if (getComputedStyle(tutEl).position === 'fixed') {
+        const base = tutR.top - push.tut;
+        tp = Math.max(0, Math.round(below(tutR, 6) - base));
+      }
+    }
+    if (tp !== push.tut) {
+      if (tutR) tutR = { left: tutR.left, right: tutR.right, top: tutR.top + tp - push.tut, bottom: tutR.bottom + tp - push.tut };
+      push.tut = tp;
+      setStyle(root, '--tut-push', tp + 'px');
+    }
+    const topR = top.getBoundingClientRect();
+    let floor = below(topR, 8);
+    if (tutR && getComputedStyle(tutEl).position === 'fixed' && across(topR, tutR)) floor = Math.max(floor, tutR.bottom + 8);
+    const tpush = floor ? Math.max(0, Math.round(floor - (topR.top - push.top))) : 0;
+    if (tpush !== push.top) {
+      push.top = tpush;
+      setStyle(root, '--top-push', tpush + 'px');
+    }
+    if (meterEl) {
+      const mR = meterEl.getBoundingClientRect();
+      let mf = below(mR, 10);
+      if (tutR && getComputedStyle(tutEl).position === 'fixed' && across(mR, tutR)) mf = Math.max(mf, tutR.bottom + 8);
+      const mp = mf ? Math.max(0, Math.round(mf - (mR.top - push.meter))) : 0;
+      const hgt = mR.height + push.meter - mp; // its height once the new push applies
+      if (mp !== push.meter) {
+        push.meter = mp;
+        setStyle(root, '--meter-push', mp + 'px');
+      }
+      // too squashed to read: step aside rather than show a stub
+      toggle(meterEl, 'tiny', mp > 0 && hgt < 56);
+    }
+  }
+
+  // The gift / trade chip is the least urgent thing on screen: it waits while it would cover a banner or the
+  // tutorial card (it comes back as soon as they're gone).
+  let hushed = false;
+  function hushSocial() {
+    const chips = [...anchors.social.children].filter((c) => c.offsetParent);
+    let clash = false;
+    if (chips.length) {
+      const boxes = [...top.querySelectorAll('.alert:not(.out)')].filter((a) => a.offsetParent).map((a) => a.getBoundingClientRect());
+      const c = tutEl?.classList;
+      if (c && !c.contains('gone') && !c.contains('hidden') && !c.contains('wait') && tutEl.offsetWidth > 0) boxes.push(tutEl.getBoundingClientRect());
+      clash = chips.some((ch) => {
+        const r = ch.getBoundingClientRect();
+        return boxes.some((b) => r.left < b.right && r.right > b.left && r.top < b.bottom + 4 && r.bottom > b.top - 4);
+      });
+    }
+    if (clash !== hushed) {
+      hushed = clash;
+      root.classList.toggle('hush-social', clash);
+    }
+  }
+
   // Stay hidden while the intro camera swoops down, then fade in as it lands.
   let intro = true;
   root.classList.add('intro');
   let vAcc = 0;
   return {
     alerts,
+    anchors,
     update(dt, t) {
       if (!app.game) return;
       if (root.dataset.state !== app.state) root.dataset.state = app.state;
@@ -153,6 +240,7 @@ export function createHUD(app) {
         let danger = game.gardens[me.slot].planters.some((pl) => pl.stealer != null);
         if (!danger) danger = game.players.some((p) => p !== me && p.carrying?.kind === 'plant' && p.carrying.fromSlot === me.slot);
         toggle(vignette, 'on', danger && app.state === 'playing');
+        floors();
         unclutter();
       }
     },
@@ -186,8 +274,15 @@ function createMenuButtons(app, parent) {
     paint();
   }, 'up');
   const off = bus.on('settings:changed', ({ key }) => (key === 'muted' || key === 'music' || key === 'sfx') && paint());
-  parent.appendChild(h('div', { class: 'hud-btns' }, pause, mute));
-  return { dispose: off };
+  // full screen (hidden where the browser can't do it: iPhone Safari, sandboxed frames)
+  const fs = fullscreenButton('hbtn', { hud: true, bind: (el, fn) => onPress(el, fn, 'up'), onToggle: () => uiSound(app, 'click') });
+  parent.appendChild(h('div', { class: 'hud-btns' }, pause, mute, fs));
+  return {
+    dispose() {
+      off();
+      fs?._dispose?.();
+    },
+  };
 }
 
 // ------------------------------------------------------------------ cash / income / speed
@@ -266,19 +361,44 @@ function createBoard(app, parent, me) {
   const list = h('div', { class: 'board-rows', role: 'list' });
   const el = h('div', { class: 'board' + (game.match ? ' showdown' : '') }, head, list);
   parent.appendChild(el);
-  setHTML(title, game.match ? `${ICON.trophy}<span>Showdown</span>` : `${ICON.family}<span>Family</span>`);
   timer.hidden = !game.match;
+  let online = null;
+  const paintTitle = () => {
+    const on = !!app.online?.room;
+    if (on === online) return;
+    online = on;
+    setHTML(title, game.match ? `${ICON.trophy}<span>Showdown</span>` : on ? `${ICON.globe}<span>Players</span>` : `${ICON.family}<span>Family</span>`);
+  };
+  paintTitle();
 
   const rows = game.players.map((p) => {
     const rank = h('b', { class: 'br-rank' });
     const val = h('span', { class: 'br-val' });
     const star = h('span', { class: 'br-star' });
     const flag = h('span', { class: 'br-flag', title: 'Carrying a stolen plant' });
-    const row = h('div', { class: 'brow' + (p === me ? ' me' : ''), role: 'listitem', style: `--c:${p.char.color}` },
-      rank, avatarEl(p.faceKey, 'br-ava'), h('span', { class: 'br-name', text: p.name }), star, flag, val);
+    const name = h('span', { class: 'br-name' });
+    const dot = h('span', { class: 'br-dot', title: 'Online player' });
+    const row = h('div', { class: 'brow' + (p === me ? ' me' : ''), role: 'listitem' }, rank, name, dot, star, flag, val);
     list.appendChild(row);
-    return { p, row, rank, val, star, flag };
+    return { p, row, rank, val, star, flag, name, dot, ava: null, face: null };
   });
+  // who's in a slot can change mid-game online (a friend joins, a bot takes over): keep the row honest
+  function identity(r) {
+    const p = r.p;
+    if (r.face !== p.faceKey) {
+      r.face = p.faceKey;
+      const a = avatarEl(p.faceKey, 'br-ava');
+      if (r.ava) r.ava.replaceWith(a);
+      else r.row.insertBefore(a, r.name);
+      r.ava = a;
+    }
+    setText(r.name, p.name);
+    setStyle(r.row, '--c', p.char.color);
+    toggle(r.row, 'remote', p.kind === 'remote');
+    const tip = p.kind === 'remote' ? `${p.name} (online)` : p.kind === 'bot' && app.online?.room ? `${p.name} (computer)` : '';
+    if (r.row.title !== tip) r.row.title = tip;
+  }
+  rows.forEach(identity);
 
   let acc = 1;
   return {
@@ -286,8 +406,10 @@ function createBoard(app, parent, me) {
       acc += dt;
       if (acc < 0.25) return;
       acc = 0;
+      paintTitle();
       const order = game.ranking();
       for (const r of rows) {
+        identity(r);
         const i = order.indexOf(r.p);
         setStyle(r.row, '--i', String(i));
         setText(r.rank, String(i + 1));
@@ -479,7 +601,7 @@ function createCarry(app, parent, me) {
 
 // ------------------------------------------------------------------ hotbar
 
-function createHotbar(app, parent, me) {
+function createHotbar(app, parent, me, emoteSlot, hudRoot) {
   const game = app.game;
   const tip = h('div', { class: 'hb-tip' });
   const slots = ITEMS.map((it, i) => {
@@ -496,7 +618,16 @@ function createHotbar(app, parent, me) {
     return { b, count, timer, it, until: 0, total: 1 };
   });
   const bar = h('div', { class: 'hotbar', role: 'toolbar', 'aria-label': 'Items' }, slots.map((s) => s.b));
-  parent.append(tip, bar);
+  const row = h('div', { class: 'hb-row' }, bar);
+  parent.append(tip, row);
+  // the emote button sits beside the hotbar with a mouse, and by the thumb buttons on touch screens
+  const placeEmote = () => {
+    if (!emoteSlot) return;
+    const target = isTouch() ? hudRoot : row;
+    if (emoteSlot.parentNode !== target) target.appendChild(emoteSlot);
+  };
+  placeEmote();
+  const offTouch = onTouchChange(placeEmote);
   let sel = -1;
   let tipTimer = 0;
   let acc = 1;
@@ -538,6 +669,7 @@ function createHotbar(app, parent, me) {
         setStyle(s.timer, 'transform', `scaleX(${Math.max(0, Math.min(1, f)).toFixed(3)})`);
       });
     },
+    dispose: offTouch,
   };
 }
 
@@ -552,7 +684,7 @@ function createRoadMeter(app, parent, me) {
   const where = h('div', { class: 'm-where' });
   const markers = game.players.map((p) => {
     const m = h('div', { class: 'm-mk' + (p === me ? ' me' : ''), style: `--c:${p.char.color}` }, avatarEl(p.faceKey, 'm-ava'));
-    return { p, m };
+    return { p, m, face: p.faceKey };
   });
   const mine = markers.find((x) => x.p === me).m;
   mine.appendChild(where);
@@ -566,7 +698,12 @@ function createRoadMeter(app, parent, me) {
       acc += dt;
       if (acc < 0.1) return;
       acc = 0;
-      for (const { p, m } of markers) {
+      for (const mk of markers) {
+        const { p, m } = mk;
+        if (mk.face !== p.faceKey) {
+          mk.face = p.faceKey;
+          m.querySelector('.m-ava')?.replaceWith(avatarEl(p.faceKey, 'm-ava'));
+        }
         const z = p.pos.z;
         const home = z < start;
         const f = home ? 0 : Math.max(0, Math.min(1, (z - start) / len));
@@ -604,8 +741,8 @@ function createChat(app, parent) {
   const bubbles = new Map(); // slot -> {html, until, at, chars}
   const timers = new Set();
   const placed = [];
-  const off = bus.on('chat', ({ player, text }) => {
-    if (!player) return;
+  const off = bus.on('chat', ({ player, text, quick }) => {
+    if (!player || app.online?.isMuted?.(player)) return;
     const line = h('div', { class: 'cl' }, h('b', { style: `--c:${player.char.color}`, text: player.name + ': ' }), h('span', { text }));
     el.appendChild(line);
     while (el.children.length > 5) el.firstChild.remove();
@@ -615,7 +752,7 @@ function createChat(app, parent) {
     }, 9000);
     timers.add(id);
     const now = performance.now();
-    if (!player.isHuman) bubbles.set(player.slot, { html: `<div class="bb">${esc(text)}</div>`, at: now, until: now + BUBBLE_MS, chars: String(text).length });
+    if (!player.isHuman || quick) bubbles.set(player.slot, { html: `<div class="bb">${esc(text)}</div>`, at: now, until: now + BUBBLE_MS, chars: String(text).length });
   });
   // rough on-screen box of a bubble (the label scales with distance like labels.js does)
   function box(p, b, cam) {
@@ -669,7 +806,7 @@ function createKeyHints(app, parent) {
   const k = (s) => `<kbd>${s}</kbd>`;
   const kb = [
     [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'],
-    [k('Click') + k('F'), 'Bonk'], [k('1') + '-' + k('5'), 'Items'], [k('Right-drag'), 'Camera'], [k('Esc'), 'Menu'],
+    [k('Click') + k('F'), 'Bonk'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T'), 'Quick chat'], [k('Right-drag'), 'Camera'], [k('Esc'), 'Menu'],
   ];
   const gp = [
     [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('X'), 'Bonk'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],

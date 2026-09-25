@@ -242,7 +242,7 @@ export function composeFaceCanvas(img, skin, size = 512, opts = {}) {
   g.fillRect(0, 0, size, size);
   const L = typeof opts.layout === 'object' ? opts.layout : FACE_LAYOUT[opts.layout || 'flat'];
   if (!img) {
-    drawCartoonFace(g, size, L);
+    drawCartoonFace(g, size, L, opts.expr);
     return c;
   }
   const k = L.scale;
@@ -326,34 +326,243 @@ export function composeFaceCanvas(img, skin, size = 512, opts = {}) {
   return c;
 }
 
-// Classic blocky-game smile, laid out on the same eye line as photo faces.
-function drawCartoonFace(g, size, L) {
-  const k = L.scale;
-  const eyeY = size * L.eyeY;
-  const dx = size * 0.15 * k;
-  g.fillStyle = '#1b1b1b';
-  g.beginPath();
-  g.ellipse(size / 2 - dx, eyeY, size * 0.042 * k, size * 0.075 * k, 0, 0, Math.PI * 2);
-  g.ellipse(size / 2 + dx, eyeY, size * 0.042 * k, size * 0.075 * k, 0, 0, Math.PI * 2);
-  g.fill();
-  // eye shine
-  g.fillStyle = 'rgba(255,255,255,0.85)';
-  g.beginPath();
-  g.ellipse(size / 2 - dx + size * 0.012 * k, eyeY - size * 0.03 * k, size * 0.012 * k, size * 0.02 * k, 0, 0, Math.PI * 2);
-  g.ellipse(size / 2 + dx + size * 0.012 * k, eyeY - size * 0.03 * k, size * 0.012 * k, size * 0.02 * k, 0, 0, Math.PI * 2);
-  g.fill();
-  // rosy cheeks
-  g.fillStyle = 'rgba(255,110,110,0.22)';
-  g.beginPath();
-  g.ellipse(size / 2 - dx * 1.55, eyeY + size * 0.12 * k, size * 0.06 * k, size * 0.035 * k, 0, 0, Math.PI * 2);
-  g.ellipse(size / 2 + dx * 1.55, eyeY + size * 0.12 * k, size * 0.06 * k, size * 0.035 * k, 0, 0, Math.PI * 2);
-  g.fill();
-  g.lineWidth = size * 0.034 * k;
+// Classic blocky-game faces, laid out on the same eye line as photo faces. `expr` picks the
+// expression (characters/cosmetics.js FACES); the default is the classic smile.
+const INK = '#1b1b1b';
+export const EXPRESSIONS = ['smile', 'grin', 'happy', 'wink', 'cool', 'surprised', 'silly', 'shy', 'determined', 'starry', 'sleepy'];
+
+function drawCartoonFace(g, size, L, expr = 'smile') {
+  const u = size * L.scale; // one "face unit"
+  const cx = size / 2;
+  const ey = size * L.eyeY;
+  const dx = 0.15 * u;
+  const TAU = Math.PI * 2;
   g.lineCap = 'round';
-  g.strokeStyle = '#1b1b1b';
-  g.beginPath();
-  g.arc(size / 2, eyeY + size * 0.03 * k, size * 0.19 * k, 0.2 * Math.PI, 0.8 * Math.PI);
-  g.stroke();
+  g.lineJoin = 'round';
+  const ell = (x, y, rx, ry, fill, rot = 0) => {
+    g.fillStyle = fill;
+    g.beginPath();
+    g.ellipse(x, y, rx, ry, rot, 0, TAU);
+    g.fill();
+  };
+  const stroke = (w, color = INK) => {
+    g.lineWidth = w * u;
+    g.strokeStyle = color;
+    g.stroke();
+  };
+  const eye = (x, y = ey, sx = 1, sy = 1) => {
+    ell(x, y, 0.042 * u * sx, 0.075 * u * sy, INK);
+    ell(x + 0.012 * u * sx, y - 0.03 * u * sy, 0.012 * u * sx, 0.02 * u * sy, 'rgba(255,255,255,0.85)');
+  };
+  const cheeks = (a = 0.22, s = 1) => {
+    ell(cx - dx * 1.55, ey + 0.12 * u, 0.06 * u * s, 0.035 * u * s, `rgba(255,110,110,${a})`);
+    ell(cx + dx * 1.55, ey + 0.12 * u, 0.06 * u * s, 0.035 * u * s, `rgba(255,110,110,${a})`);
+  };
+  const smileArc = (r = 0.19, a0 = 0.2, a1 = 0.8, y = 0.03, w = 0.034) => {
+    g.beginPath();
+    g.arc(cx, ey + y * u, r * u, a0 * Math.PI, a1 * Math.PI);
+    stroke(w);
+  };
+  // open "D" mouth: flat top, round bottom (teeth / tongue optional)
+  const openMouth = (w, top, depth, { teeth = false, tongue = true } = {}) => {
+    const x0 = cx - w * u;
+    const x1 = cx + w * u;
+    const y0 = ey + top * u;
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.quadraticCurveTo(cx, y0 + 0.012 * u, x1, y0);
+    g.bezierCurveTo(x1, y0 + depth * 0.9 * u, cx + w * 0.45 * u, y0 + depth * u, cx, y0 + depth * u);
+    g.bezierCurveTo(cx - w * 0.45 * u, y0 + depth * u, x0, y0 + depth * 0.9 * u, x0, y0);
+    g.closePath();
+    g.fillStyle = '#5a1420';
+    g.fill();
+    g.save();
+    g.clip();
+    if (teeth) {
+      g.fillStyle = '#fff';
+      g.fillRect(x0, y0 - 0.01 * u, x1 - x0, depth * 0.3 * u);
+    }
+    if (tongue) ell(cx, y0 + depth * 0.95 * u, w * 0.55 * u, depth * 0.42 * u, '#ff6f86');
+    g.restore();
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.quadraticCurveTo(cx, y0 + 0.012 * u, x1, y0);
+    g.bezierCurveTo(x1, y0 + depth * 0.9 * u, cx + w * 0.45 * u, y0 + depth * u, cx, y0 + depth * u);
+    g.bezierCurveTo(cx - w * 0.45 * u, y0 + depth * u, x0, y0 + depth * 0.9 * u, x0, y0);
+    g.closePath();
+    stroke(0.022);
+  };
+  // closed happy eye: an upside-down U
+  const happyEye = (x, y = ey) => {
+    g.beginPath();
+    g.arc(x, y + 0.03 * u, 0.05 * u, 1.1 * Math.PI, 1.9 * Math.PI);
+    stroke(0.03);
+  };
+  const star = (x, y, r) => {
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * TAU - Math.PI / 2;
+      const rr = i % 2 ? r * 0.45 : r;
+      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    g.closePath();
+    g.fillStyle = '#ffd23f';
+    g.fill();
+    stroke(0.016);
+    ell(x - r * 0.25, y - r * 0.25, r * 0.16, r * 0.12, 'rgba(255,255,255,0.9)');
+  };
+  const brow = (x, y, rot, len = 0.07, w = 0.026) => {
+    g.beginPath();
+    g.moveTo(x - Math.cos(rot) * len * u, y - Math.sin(rot) * len * u);
+    g.lineTo(x + Math.cos(rot) * len * u, y + Math.sin(rot) * len * u);
+    stroke(w);
+  };
+
+  switch (expr) {
+    case 'grin':
+      eye(cx - dx);
+      eye(cx + dx);
+      cheeks(0.26);
+      openMouth(0.17, 0.12, 0.15, { teeth: true, tongue: true });
+      break;
+    case 'happy':
+      happyEye(cx - dx);
+      happyEye(cx + dx);
+      cheeks(0.34, 1.15);
+      openMouth(0.15, 0.12, 0.13);
+      break;
+    case 'wink':
+      eye(cx - dx);
+      // the character's left eye (viewer's right) winks
+      g.beginPath();
+      g.moveTo(cx + dx - 0.055 * u, ey + 0.005 * u);
+      g.quadraticCurveTo(cx + dx, ey - 0.04 * u, cx + dx + 0.055 * u, ey + 0.005 * u);
+      stroke(0.03);
+      cheeks(0.26);
+      smileArc(0.18, 0.12, 0.72);
+      ell(cx + 0.07 * u, ey + 0.22 * u, 0.035 * u, 0.03 * u, '#ff6f86');
+      break;
+    case 'cool': {
+      // half-closed, unimpressed eyes, one brow up, a sideways smirk
+      for (const s of [-1, 1]) {
+        g.save();
+        g.beginPath();
+        g.rect(cx + s * dx - 0.06 * u, ey - 0.012 * u, 0.12 * u, 0.2 * u);
+        g.clip();
+        eye(cx + s * dx);
+        g.restore();
+        g.beginPath();
+        g.moveTo(cx + s * dx - 0.052 * u, ey - 0.012 * u);
+        g.lineTo(cx + s * dx + 0.052 * u, ey - 0.012 * u);
+        stroke(0.026);
+      }
+      brow(cx - dx, ey - 0.13 * u, 0.12);
+      brow(cx + dx, ey - 0.16 * u, -0.18);
+      g.beginPath();
+      g.moveTo(cx - 0.12 * u, ey + 0.2 * u);
+      g.quadraticCurveTo(cx + 0.02 * u, ey + 0.23 * u, cx + 0.14 * u, ey + 0.15 * u);
+      stroke(0.032);
+      break;
+    }
+    case 'surprised':
+      eye(cx - dx, ey, 1.3, 1.15);
+      eye(cx + dx, ey, 1.3, 1.15);
+      g.beginPath();
+      g.arc(cx - dx, ey - 0.12 * u, 0.06 * u, 1.15 * Math.PI, 1.85 * Math.PI);
+      stroke(0.024);
+      g.beginPath();
+      g.arc(cx + dx, ey - 0.12 * u, 0.06 * u, 1.15 * Math.PI, 1.85 * Math.PI);
+      stroke(0.024);
+      cheeks(0.2);
+      ell(cx, ey + 0.21 * u, 0.055 * u, 0.075 * u, '#5a1420');
+      g.beginPath();
+      g.ellipse(cx, ey + 0.21 * u, 0.055 * u, 0.075 * u, 0, 0, TAU);
+      stroke(0.022);
+      break;
+    case 'silly':
+      // cross-eyed with the tongue out
+      ell(cx - dx, ey, 0.05 * u, 0.075 * u, '#fff');
+      ell(cx + dx, ey, 0.05 * u, 0.075 * u, '#fff');
+      g.beginPath();
+      g.ellipse(cx - dx, ey, 0.05 * u, 0.075 * u, 0, 0, TAU);
+      g.ellipse(cx + dx, ey, 0.05 * u, 0.075 * u, 0, 0, TAU);
+      stroke(0.016);
+      ell(cx - dx + 0.022 * u, ey + 0.012 * u, 0.026 * u, 0.04 * u, INK);
+      ell(cx + dx - 0.022 * u, ey + 0.012 * u, 0.026 * u, 0.04 * u, INK);
+      cheeks(0.24);
+      g.fillStyle = '#ff6f86';
+      g.beginPath();
+      g.moveTo(cx - 0.05 * u, ey + 0.2 * u);
+      g.lineTo(cx - 0.05 * u, ey + 0.27 * u);
+      g.arc(cx, ey + 0.27 * u, 0.05 * u, Math.PI, 0, true);
+      g.lineTo(cx + 0.05 * u, ey + 0.2 * u);
+      g.closePath();
+      g.fill();
+      stroke(0.018);
+      g.beginPath();
+      g.moveTo(cx, ey + 0.21 * u);
+      g.lineTo(cx, ey + 0.265 * u);
+      stroke(0.012, '#c8405a');
+      smileArc(0.17, 0.18, 0.82, 0.02);
+      break;
+    case 'shy':
+      eye(cx - dx + 0.02 * u, ey + 0.03 * u, 0.85, 0.8);
+      eye(cx + dx + 0.02 * u, ey + 0.03 * u, 0.85, 0.8);
+      cheeks(0.42, 1.25);
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const x = cx + s * dx * 1.55 + (i - 1) * 0.03 * u;
+          g.beginPath();
+          g.moveTo(x - 0.01 * u, ey + 0.14 * u);
+          g.lineTo(x + 0.01 * u, ey + 0.1 * u);
+          stroke(0.01, 'rgba(200,60,80,0.6)');
+        }
+      }
+      g.beginPath();
+      g.moveTo(cx - 0.07 * u, ey + 0.2 * u);
+      g.quadraticCurveTo(cx - 0.035 * u, ey + 0.225 * u, cx, ey + 0.2 * u);
+      g.quadraticCurveTo(cx + 0.035 * u, ey + 0.225 * u, cx + 0.07 * u, ey + 0.2 * u);
+      stroke(0.026);
+      break;
+    case 'determined':
+      eye(cx - dx, ey + 0.01 * u, 1, 0.85);
+      eye(cx + dx, ey + 0.01 * u, 1, 0.85);
+      brow(cx - dx + 0.005 * u, ey - 0.1 * u, 0.38, 0.07, 0.032);
+      brow(cx + dx - 0.005 * u, ey - 0.1 * u, -0.38, 0.07, 0.032);
+      cheeks(0.18);
+      g.beginPath();
+      g.moveTo(cx - 0.1 * u, ey + 0.2 * u);
+      g.quadraticCurveTo(cx, ey + 0.235 * u, cx + 0.1 * u, ey + 0.19 * u);
+      stroke(0.034);
+      break;
+    case 'starry':
+      star(cx - dx, ey, 0.085 * u);
+      star(cx + dx, ey, 0.085 * u);
+      cheeks(0.3);
+      openMouth(0.16, 0.12, 0.14);
+      break;
+    case 'sleepy':
+      for (const s of [-1, 1]) {
+        g.beginPath();
+        g.arc(cx + s * dx, ey - 0.01 * u, 0.048 * u, 0.12 * Math.PI, 0.88 * Math.PI);
+        stroke(0.028);
+      }
+      cheeks(0.2);
+      ell(cx, ey + 0.2 * u, 0.03 * u, 0.035 * u, '#5a1420');
+      g.fillStyle = '#6f7cff';
+      g.font = `900 ${Math.round(0.11 * u)}px Arial, sans-serif`;
+      g.textAlign = 'center';
+      g.fillText('z', cx + 0.28 * u, ey - 0.12 * u);
+      g.font = `900 ${Math.round(0.08 * u)}px Arial, sans-serif`;
+      g.fillText('z', cx + 0.36 * u, ey - 0.21 * u);
+      break;
+    default:
+      // the classic smile (unchanged)
+      eye(cx - dx);
+      eye(cx + dx);
+      cheeks(0.22);
+      smileArc();
+  }
 }
 
 /** A slightly brighter, warmer version of a photo skin tone so it survives the game's tone mapping. */

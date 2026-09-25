@@ -105,6 +105,57 @@ export const ICON = {
   gamepad: ui('<path d="M7 7.5h10a4.5 4.5 0 0 1 4.3 5.7l-1 3.6a2.5 2.5 0 0 1-4.2 1.1L14 16h-4l-2.1 1.9a2.5 2.5 0 0 1-4.2-1.1l-1-3.6A4.5 4.5 0 0 1 7 7.5z"/><path d="M7.5 11v3M6 12.5h3"/><circle cx="16" cy="11.5" r=".7" fill="currentColor"/><circle cx="17.6" cy="13.6" r=".7" fill="currentColor"/>'),
   eye: ui('<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   flag: ui('<path d="M5 21V4M5 4.5h12l-2.5 4 2.5 4H5"/>'),
+  expand: ui('<path d="M4 9.5V4h5.5M14.5 4H20v5.5M20 14.5V20h-5.5M9.5 20H4v-5.5"/>', 'stroke-width="3"'),
+  collapse: ui('<path d="M9.5 4v5.5H4M20 9.5h-5.5V4M14.5 20v-5.5H20M4 14.5h5.5V20"/>', 'stroke-width="3"'),
+  globe: ui('<circle cx="12" cy="12" r="9.2"/><path d="M3 12h18M12 2.8c2.5 2.6 3.7 5.7 3.7 9.2s-1.2 6.6-3.7 9.2c-2.5-2.6-3.7-5.7-3.7-9.2s1.2-6.6 3.7-9.2z"/>'),
+  shirt: svg('0 0 24 24', '<path d="M8.6 3.2L2.8 6.4l2.3 4.6 2.2-1.1v10.6h9.4V9.9l2.2 1.1 2.3-4.6-5.8-3.2c-.6 1.7-1.9 2.6-3.4 2.6s-2.8-.9-3.4-2.6z" fill="currentColor" stroke="#10163a" stroke-width="1.6" stroke-linejoin="round"/>'),
+  paw: svg('0 0 24 24', '<g fill="currentColor" stroke="#10163a" stroke-width="1.4"><path d="M12 11.5c3.3 0 6.3 3.6 6.3 6.3 0 2-1.6 3-3.4 3-1.2 0-1.9-.6-2.9-.6s-1.7.6-2.9.6c-1.8 0-3.4-1-3.4-3 0-2.7 3-6.3 6.3-6.3z"/><ellipse cx="5" cy="10.2" rx="2.2" ry="2.8"/><ellipse cx="9.2" cy="5.6" rx="2.2" ry="2.9"/><ellipse cx="14.8" cy="5.6" rx="2.2" ry="2.9"/><ellipse cx="19" cy="10.2" rx="2.2" ry="2.8"/></g>'),
+  medal: svg('0 0 24 24', `<path d="M7 2.5h4l2.2 6.2-3.4 1.6zM17 2.5h-4l-2.2 6.2 3.4 1.6z" fill="#ff5a73" stroke="#10163a" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="15" r="6.8" fill="currentColor" stroke="#10163a" stroke-width="1.6"/><path d="${starPath(12, 15.3, 3.8, 1.7)}" fill="#fff6c2" stroke="#10163a" stroke-width="1" stroke-linejoin="round"/>`),
+  chat: ui('<path d="M4.5 4.5h15a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-8l-5 4v-4h-2a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/><path d="M8 10.8h.01M12 10.8h.01M16 10.8h.01" stroke-width="3.2"/>'),
+  smile: ui('<circle cx="12" cy="12" r="9.3"/><path d="M8 14.2c1 1.5 2.4 2.3 4 2.3s3-.8 4-2.3"/><path d="M9 9.6h.01M15 9.6h.01" stroke-width="3.2"/>'),
+  swap: ui('<path d="M4 8.5h15.5M16 4.5l4 4-4 4M20 15.5H4.5M8 11.5l-4 4 4 4"/>'),
+  gift: ui('<rect x="3.2" y="8.3" width="17.6" height="4.4" rx="1.2"/><path d="M5 12.7v7.8h14v-7.8M12 8.3v12.2M12 8.3C10.6 5 6.4 4 6.4 6.6c0 1.6 2.4 1.7 5.6 1.7zm0 0c1.4-3.3 5.6-4.3 5.6-1.7 0 1.6-2.4 1.7-5.6 1.7z"/>'),
+  cloud: ui('<path d="M7.2 19h10.3a4.3 4.3 0 0 0 .7-8.5A6.2 6.2 0 0 0 6.3 8.9 5 5 0 0 0 7.2 19z"/><path d="M12 16.2v-5.4M9.6 12.9L12 10.5l2.4 2.4"/>'),
+  pencil: ui('<path d="M4 20l1.1-4.6L15.6 4.9a2.2 2.2 0 0 1 3.1 3.1L8.2 18.5zM13.8 6.7l3.1 3.1"/>'),
+  plus: ui('<path d="M12 4.5v15M4.5 12h15"/>', 'stroke-width="3.6"'),
+  dice: svg('0 0 24 24', '<rect x="3.2" y="3.2" width="17.6" height="17.6" rx="4.6" fill="currentColor" stroke="#10163a" stroke-width="1.8"/><g fill="#10163a"><circle cx="8.2" cy="8.2" r="1.6"/><circle cx="15.8" cy="8.2" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="8.2" cy="15.8" r="1.6"/><circle cx="15.8" cy="15.8" r="1.6"/></g>'),
+  trash: ui('<path d="M4.5 6.8h15M9.5 6.8V4.3h5v2.5M6.4 6.8l1 13.2h9.2l1-13.2M10.2 10.6v5.8M13.8 10.6v5.8"/>'),
+  exit: ui('<path d="M13.5 4H6.6A1.6 1.6 0 0 0 5 5.6v12.8A1.6 1.6 0 0 0 6.6 20h6.9M10 12h10.5M16.8 8.3l3.7 3.7-3.7 3.7"/>'),
+  user: ui('<circle cx="12" cy="8.2" r="4"/><path d="M4.2 20.5c0-4.3 3.5-7 7.8-7s7.8 2.7 7.8 7"/>'),
+  userPlus: ui('<circle cx="10" cy="8.2" r="3.8"/><path d="M3 20.5c0-4.2 3.1-6.8 7-6.8 1.7 0 3.2.5 4.4 1.4M18.5 13.5v7M15 17h7"/>'),
+};
+
+// Full-colour "sticker" art for the title's feature tiles (same style as the item icons).
+export const TILE_ICONS = {
+  wardrobe: svg('0 0 64 64', `<g ${O}>
+    <path d="M32 13 C 32 9, 29 7, 29 5.5 C 29 3.5, 31 2.5, 33 3 C 35 3.5, 35.5 5.5, 34.5 7" fill="none" stroke-width="3"/>
+    <path d="M22 13 L 7 21 L 12.5 33 L 18.5 30.2 L 18.5 58 L 45.5 58 L 45.5 30.2 L 51.5 33 L 57 21 L 42 13 C 40 18.5, 36.5 20.5, 32 20.5 C 27.5 20.5, 24 18.5, 22 13 Z" fill="#ff5fa2"/>
+    <path d="${starPath(32, 39.5, 10, 4.3)}" fill="#ffd23f" stroke-width="2.4"/></g>
+    <path d="M13 23.5 L 16 30" stroke="#ffb3d4" stroke-width="3" stroke-linecap="round"/>
+    <path d="M24 16.5 C 27 19, 37 19, 40 16.5" fill="none" stroke="#ffb3d4" stroke-width="2.6" stroke-linecap="round"/>`, 'tile-art'),
+  pets: svg('0 0 64 64', `<g ${O} fill="#ffb347">
+    <path d="M32 29 C 42 29, 51 39.5, 51 47.5 C 51 53.5, 46.5 57, 41 57 C 37.5 57, 35.5 55, 32 55 C 28.5 55, 26.5 57, 23 57 C 17.5 57, 13 53.5, 13 47.5 C 13 39.5, 22 29, 32 29 Z"/>
+    <ellipse cx="11" cy="27" rx="6.2" ry="7.8" transform="rotate(-18 11 27)"/>
+    <ellipse cx="23.5" cy="13.5" rx="6.4" ry="8.4" transform="rotate(-6 23.5 13.5)"/>
+    <ellipse cx="40.5" cy="13.5" rx="6.4" ry="8.4" transform="rotate(6 40.5 13.5)"/>
+    <ellipse cx="53" cy="27" rx="6.2" ry="7.8" transform="rotate(18 53 27)"/></g>
+    <path d="M22 41 C 24 37, 27 35, 30 34.5" fill="none" stroke="#ffe0b0" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M20.5 10.5 C 21 8.5, 22.5 7.5, 24 7.3" fill="none" stroke="#ffe0b0" stroke-width="2.4" stroke-linecap="round"/>`, 'tile-art'),
+  quests: svg('0 0 64 64', `<g ${O}>
+    <path d="M17 4 L 29 4 L 36 23 L 26 28 Z" fill="#3d9bff"/>
+    <path d="M47 4 L 35 4 L 28 23 L 38 28 Z" fill="#ff4d6d"/>
+    <circle cx="32" cy="41" r="18" fill="#ffd23f"/>
+    <circle cx="32" cy="41" r="12.5" fill="#ffb627" stroke-width="2.4"/>
+    <path d="${starPath(32, 41.8, 9, 3.9)}" fill="#fff6c2" stroke-width="2.2"/></g>
+    <path d="M19.5 34 C 21.5 29.5, 25 26.5, 29.5 25.5" fill="none" stroke="#fff6c2" stroke-width="3" stroke-linecap="round"/>`, 'tile-art'),
+  scores: svg('0 0 64 64', `<g ${O}>
+    <path d="M17 10 L 11 10 C 9 10, 8 11, 8 13 C 8 21, 13 26, 20 27 M47 10 L 53 10 C 55 10, 56 11, 56 13 C 56 21, 51 26, 44 27" fill="none"/>
+    <path d="M17 6 L 47 6 L 47 20 C 47 30, 40 36, 32 36 C 24 36, 17 30, 17 20 Z" fill="#ffd23f"/>
+    <path d="M27.5 36 L 36.5 36 L 38 46 L 26 46 Z" fill="#ffb627"/>
+    <rect x="17" y="46" width="30" height="12" rx="3.5" fill="#8a5cff"/>
+    <path d="${starPath(32, 20, 7.5, 3.2)}" fill="#fff6c2" stroke-width="2"/></g>
+    <path d="M21.5 11 L 21.5 21 C 21.5 25, 23 28, 25.5 30" fill="none" stroke="#fff6c2" stroke-width="3" stroke-linecap="round"/>
+    <path d="M24 52 L 40 52" stroke="#c9b2ff" stroke-width="2.6" stroke-linecap="round"/>`, 'tile-art'),
 };
 
 export const EVENT_ICON = { golden: ICON.sun, diamond: ICON.diamond, rainbow: ICON.rainbow };

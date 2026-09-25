@@ -1,8 +1,9 @@
 // "How to Play" guide (static, illustrated with the UI's own icons).
 import { RARITIES, BIOMES, MUTATIONS, EVENTS, PLANTERS, LOCK } from '../config.js';
 import { h } from './dom.js';
-import { ICON, ITEM_ICONS, NOODLE, EVENT_ICON } from './icons.js';
+import { ICON, ITEM_ICONS, NOODLE, EVENT_ICON, TILE_ICONS } from './icons.js';
 import { isTouch } from './device.js';
+import { iosNeedsHomeScreen, IOS_TIP } from './fullscreen.js';
 
 const act = () => (isTouch() ? 'Action' : 'E');
 
@@ -16,9 +17,18 @@ const LOOP = () => [
 ];
 
 const CONTROLS = [
-  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['E', 'Grab (hold to Steal / Sell)'], ['Click / F', 'Bonk with the noodle'], ['1-5', 'Use items'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['Esc', 'Menu']]],
-  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Bonk', 'Swing the noodle'], ['Jump', 'Jump'], ['Hotbar', 'Tap to use items']]],
+  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['E', 'Grab (hold to Steal / Sell)'], ['Click / F', 'Bonk with the noodle'], ['1-5', 'Use items'], ['G', 'Emotes'], ['T', 'Quick chat'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['Esc', 'Menu']]],
+  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Bonk', 'Swing the noodle'], ['Jump', 'Jump'], ['Hotbar', 'Tap to use items'], ['Smiley', 'Emotes + quick chat']]],
   [ICON.gamepad, 'Gamepad', [['Left stick', 'Move'], ['Right stick', 'Camera'], ['A', 'Jump'], ['B', 'Grab / hold to Steal'], ['X', 'Bonk'], ['Y', 'Use item'], ['LB / RB', 'Pick item'], ['Start', 'Menu']]],
+];
+
+// The second-wave features, one card each (kept short: kids skim)
+const FEATURES = () => [
+  ['pets', TILE_ICONS.pets, 'Pets', 'Buy an egg at the Pet Shop in the plaza and hatch a buddy. Your pet follows you around and gives a boost, like faster legs or more cash.', []],
+  ['emotes', ICON.smile, 'Emotes & Quick Chat', isTouch() ? 'Tap the smiley button to wave, cheer or dance, or to send a quick message. The family might answer back!' : 'Wave, cheer or dance, or send a quick message. The family might answer back!', isTouch() ? [] : [['G', 'Emotes'], ['T', 'Quick chat']]],
+  ['quests', TILE_ICONS.quests, 'Quests & Badges', 'Three new quests every day. Finish them for cash and stars, then spend your stars in the Wardrobe. Badges are for big moments, like your first steal.', []],
+  ['online', ICON.globe, 'Playing Online', 'Tap PLAY ONLINE to hop into a room with up to 4 players. Make a private room and share its 5-letter code with friends. Family bots fill empty gardens, and online games never pause!', []],
+  ['trade', ICON.swap, 'Trading & Gifts', 'Online, walk up to another player to give them a plant or offer a trade. You both pick what to swap, press Ready, then Accept. No take-backs!', []],
 ];
 
 const TIPS = () => [
@@ -52,11 +62,18 @@ export function buildHowTo() {
   return h('div', { class: 'ht-body' },
     h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.help }), h('h2', { text: 'How to Play' })),
     sec('The loop', ICON.reset, loop),
-    sec('Controls', ICON.gamepad, controls),
+    sec('Controls', ICON.gamepad, controls, iosNeedsHomeScreen() ? h('p', { class: 'ht-p ht-ios', text: IOS_TIP }) : null),
     sec('Rarities', ICON.star, h('p', { class: 'ht-p', text: 'Each biome up the Seed Road grows a rarer seed. Rarer = way more cash.' }), rarities),
     sec('Mutations', ICON.diamond, h('p', { class: 'ht-p', text: 'Some seeds spawn mutated and pay extra.' }), muts),
     sec('Weather', ICON.sun, h('p', { class: 'ht-p', text: 'Every few minutes the sky changes for 60 seconds.' }), weather),
     sec('Items', ICON.shop, items),
+    sec('Friends, pets & more', ICON.star, h('div', { class: 'ht-feats' }, FEATURES().map(([id, ic, name, text, keys]) =>
+      h('div', { class: `ht-feat ht-f-${id}` },
+        h('span', { class: 'hf-ic', html: ic }),
+        h('div', { class: 'hf-copy' },
+          h('h4', { text: name }),
+          h('p', { text }),
+          keys.length ? h('div', { class: 'hf-keys' }, keys.map(([k, v]) => h('span', {}, h('kbd', { text: k }), ' ' + v))) : null))))),
     sec('Tips', ICON.target, h('ul', { class: 'ht-tips' }, TIPS().map((t) => h('li', { text: t })))));
 }
 

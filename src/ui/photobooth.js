@@ -1,9 +1,11 @@
-// Photo Booth: replace a family member's face with a local photo. Includes a crop editor
-// (drag to pan, pinch / wheel / slider to zoom) with an oval face guide and an eye line.
-// Photos never leave the device: they are stored with core/save.js as 'face:<id>'.
+// Photo Booth: put a local photo on any player's avatar: the family and friends' profiles on this device.
+// Includes a crop editor (drag to pan, pinch / wheel / slider to zoom) with an oval face guide and an
+// eye line. Photos never leave the device (except, opt-in, to a private room): they are stored with
+// core/save.js as 'face:<profileId>'. Saving one also switches that profile's face to 'photo'.
 import { CHARACTERS, CHARACTER } from '../config.js';
 import { bus } from '../core/events.js';
 import { save, remove } from '../core/save.js';
+import { listProfiles, getProfile, updateProfile, isFamilyId } from '../core/profiles.js';
 import { familyFaceData } from '../characters/faces.js';
 import { h, uiSound } from './dom.js';
 import { avatarEl } from './avatars.js';
@@ -18,6 +20,13 @@ const AVATAR_ZOOM_OUT = 1.28;
 // Session-only fallback when storage is blocked (sandboxed pages): patch the injected faces in memory.
 const originals = {};
 
+// name / colour / skin for any profile id (family or friend)
+function who(id) {
+  const p = getProfile(id);
+  const base = CHARACTER[p?.base] || CHARACTER[id] || CHARACTERS[0];
+  return { id, name: p?.name || base.name, color: base.color, look: { ...base.look, ...(p?.look || {}) }, family: isFamilyId(id) };
+}
+
 export function buildPhotoBooth(app) {
   const el = h('div', { class: 'booth-body' });
   let editor = null;
@@ -26,7 +35,8 @@ export function buildPhotoBooth(app) {
     editor?.dispose();
     editor = null;
     el.textContent = '';
-    const cards = CHARACTERS.map((c) => {
+    const people = listProfiles().map((p) => who(p.id));
+    const cards = people.map((c) => {
       const data = familyFaceData(c.id);
       const status = data?.custom || originals[c.id] ? 'Your photo' : data?.face ? 'Family photo' : 'Cartoon face';
       const input = h('input', { type: 'file', accept: 'image/*', class: 'vh', 'data-face-input': c.id, 'aria-label': `Upload a photo for ${c.name}` });
@@ -43,11 +53,11 @@ export function buildPhotoBooth(app) {
         }
       });
       const reset = (data?.custom || originals[c.id]) ? h('button', {
-        class: 'btn btn-grey btn-sm', type: 'button', html: `<span class="bi">${ICON.reset}</span><span>Reset to original</span>`,
+        class: 'btn btn-grey btn-sm', type: 'button', html: `<span class="bi">${ICON.reset}</span><span>${c.family ? 'Reset to original' : 'Remove photo'}</span>`,
         onclick: () => {
           uiSound(app, 'click');
           resetFace(c.id);
-          showList(`${c.name}'s original face is back.`);
+          showList(c.family ? `${c.name}'s original face is back.` : `${c.name} has a cartoon face again.`);
         },
       }) : null;
       return h('div', { class: 'pb-card', style: `--c:${c.color}` },
@@ -58,7 +68,7 @@ export function buildPhotoBooth(app) {
     });
     el.append(...[
       h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.camera }), h('h2', { text: 'Photo Booth' })),
-      h('p', { class: 'pb-intro', html: 'Put a real face on any family member! Pick a photo, line up the face, done. <b>Your photo stays on this device.</b> It is never uploaded anywhere.' }),
+      h('p', { class: 'pb-intro', html: 'Put a real face on any player! Pick a photo, line up the face, done. <b>Your photo stays on this device.</b> It is only shared if you switch on face sharing for a private room with friends.' }),
       msg ? h('div', { class: 'pb-msg', role: 'status', text: msg }) : null,
       h('div', { class: 'pb-grid' }, cards)].filter(Boolean));
   }
@@ -113,7 +123,7 @@ function storeFace(id, data) {
 }
 
 function createEditor(app, id, photo, { done, cancel }) {
-  const c = CHARACTER[id];
+  const c = who(id);
   const img = downscale(photo, 1600);
   const W = img.width;
   const H = img.height;
@@ -285,6 +295,12 @@ function createEditor(app, id, photo, { done, cancel }) {
       const face = faceCv.toDataURL('image/jpeg', 0.85);
       const avatar = renderAvatar(document.createElement('canvas'), 256).toDataURL('image/jpeg', 0.85);
       const persisted = storeFace(id, { face, avatar, skin });
+      // a new photo means they want to wear it: switch a cartoon expression back to the photo
+      if (getProfile(id) && getProfile(id).look?.face && getProfile(id).look.face !== 'photo') {
+        updateProfile(id, (p) => {
+          p.look = { ...p.look, face: 'photo' };
+        });
+      }
       bus.emit('face:changed', { id });
       done(persisted ? `${c.name}'s new face is saved on this device!` : `${c.name}'s new face is on! (This browser blocks saving, so it lasts until you reload.)`);
     } catch (err) {

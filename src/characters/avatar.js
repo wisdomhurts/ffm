@@ -1,42 +1,41 @@
-// R6-style family avatar: blocky plastic body, oversized rounded head with the family member's
-// photo face, hair accessory, Cabo-sunset outfit, pool noodle (slung on the back, drawn to swing),
-// and procedural animation. Nothing is ever posed in front of the face.
-// Contract: createAvatar(charDef, faceImage, skinHex) -> Avatar
+// R6-style avatar: blocky plastic body, oversized rounded head with a photo (or cartoon) face, hair,
+// outfit, hat and accessory (characters/cosmetics.js), pool noodle (slung on the back, drawn to swing),
+// speed trail and procedural animation incl. emotes and dances. Nothing is ever posed in front of the face.
+// Contract: createAvatar(charDef, faceImage, skinHex, look?) -> Avatar
+//   look                 any Look (defaults to charDef.look); sanitized, so unknown ids are safe
 //   avatar.object3d      THREE.Group, origin at the feet, facing +Z
 //   avatar.headTop       THREE.Object3D positioned just above the head (name tags, carried items)
 //   avatar.update(dt, s) s = {time, speed, onGround, vy, carrying:null|'seed'|'plant', stunned, swing (0..1 or -1),
-//                              celebrating, invisible (0..1 alpha), isLocal, coil, interacting (verb|null)}
+//                              celebrating, invisible (0..1 alpha), isLocal, coil, interacting (verb|null),
+//                              emote: id|null (social/catalog.js EMOTES), emoteT (seconds since it started),
+//                              inPlace (turntables: the speed trail streams back as if running)}
 //   avatar.setCarry(object3d|null)  attach an item above the head
-//   avatar.setFace(image, skin)
+//   avatar.setFace(image, skin)     photo (or null) + its skin tone; look.face picks photo vs cartoon
+//   avatar.setLook(look)            rebuilds the outfit in place (same object3d / headTop)
 //   avatar.dispose()
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { WORLD } from '../config.js';
 import { composeFaceCanvas, FACE_LAYOUT, boostSkin } from './faces.js';
-import { drawOutfit, drawHeadAtlas, headRects, atlasRects, TORSO_ATLAS, LIMB_ATLAS, shoeColors, loadFacePrint, facePrintReady, makeCanvas } from './outfits.js';
+import { drawOutfit, drawHeadAtlas, drawHairTexture, headRects, atlasRects, TORSO_ATLAS, LIMB_ATLAS, shoeColors, loadFacePrint, facePrintReady, makeCanvas } from './outfits.js';
+import { LEG_H, TORSO_H, ARM_TOP, SHOULDER_Y, HEAD, ADULT_SCALE, KID, TAU, box, part, mergeParts, markShared, clamp01, lerp, damp, smooth } from './rig.js';
+import { hairGeometry, hasTallHair, HAIR_SIDE } from './hair.js';
+import { hatGeometry, accGeometry } from './gear.js';
+import { EMOTE_ANIM } from './emotes.js';
+import { createTrail } from './trails.js';
+import { sanitizeLook, sameLook, HAIR_BY_ID, HAT_BY_ID } from './cosmetics.js';
 
-// R6 proportions in studs (before the whole rig is scaled to WORLD.playerHeight).
-const LEG_H = 2;
-const TORSO_H = 2;
-const ARM_TOP = 0.15; // shoulder pivot sits this far below the top of the arm
-const SHOULDER_Y = TORSO_H - ARM_TOP;
-const HEAD = { w: 2.2, h: 2.12, d: 1.95, r: 0.4, bulge: 0.08 };
-const ADULT_SCALE = WORLD.playerHeight / (LEG_H + TORSO_H + HEAD.h);
-const KID = { scale: 0.82, head: 1.14 }; // big heads on small bodies: kids' faces read as well as adults'
 const NOODLE_SEG = 1.5; // the noodle is 3 segments = 4.5 studs
 const NOODLE_CURVE = [0.07, -0.07, -0.07]; // gentle permanent bend per segment
+const NOODLE_FLEX = [0.1, 0.15, 0.2]; // how much each segment flexes when swung
 // Slung across the back (torso space): grip end up over the right shoulder, tip down at the left hip,
 // a little off the back so the swinging arms don't cut through it. Long hair falls down the back, so
 // there it lies over the hair instead: further back (more for big kid heads), a little lower, and leaning
 // in with the hair (pitch) so the tip still sits by the hip. As long hair swings with the head, the sneaky
 // steal then looks round more with the shoulders (twist: share of the look-around) and keeps the chin
-// lower (chin: head tilt against the crouch).
+// lower (chin: head tilt against the crouch). A backpack pushes it further off the back too.
 const SLING = { tilt: Math.PI / 4, y: 1.25, z: -0.95, pitch: 0, twist: 0, chin: -0.32 };
 const SLING_LONG = { y: 1.05, z: -1.55, pitch: -0.08, twist: 0.75, chin: -0.1 };
-const LONG_TUCK = 0.12; // long hair leans in towards the back by this angle (radians)
+const PACK_Z = -1.5;
 const GLOW = 0.2; // soft self-illumination so characters pop against the world
-const TAU = Math.PI * 2;
 // the noodle's grip frame inside the baked sling mesh (the hand noodle's frame maps onto it)
 const SLING_BASE = new THREE.Matrix4()
   .makeTranslation(-Math.sin(SLING.tilt) * NOODLE_SEG * 1.5, Math.cos(SLING.tilt) * NOODLE_SEG * 1.5, 0)
@@ -47,118 +46,6 @@ const _m2 = new THREE.Matrix4();
 const _v = new THREE.Vector3();
 
 // ------------------------------------------------------------------ shared geometry
-
-function remapSides(geo, rects) {
-  const uv = geo.attributes.uv;
-  const per = uv.count / 6;
-  for (let i = 0; i < uv.count; i++) {
-    const r = rects[Math.floor(i / per)];
-    uv.setXY(i, r[0] + uv.getX(i) * (r[2] - r[0]), r[1] + uv.getY(i) * (r[3] - r[1]));
-  }
-  uv.needsUpdate = true;
-  return geo;
-}
-
-function box(w, h, d, seg, r, rects) {
-  const g = new RoundedBoxGeometry(w, h, d, seg, r);
-  g.clearGroups();
-  return rects ? remapSides(g, rects) : g;
-}
-
-// A part for mergeParts(): geometry + transform + uv rect [u0,v0,u1,v1] it is squeezed into.
-function part(geo, pos, rot = [0, 0, 0], uvRect = null) {
-  let g = geo.index ? geo.toNonIndexed() : geo.clone();
-  g.clearGroups();
-  if (uvRect) {
-    const uv = g.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, uvRect[0] + uv.getX(i) * (uvRect[2] - uvRect[0]), uvRect[1] + uv.getY(i) * (uvRect[3] - uvRect[1]));
-  }
-  const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(1, 1, 1));
-  g.applyMatrix4(m);
-  return g;
-}
-
-function mergeParts(parts) {
-  const g = mergeGeometries(parts, false);
-  parts.forEach((p) => p.dispose());
-  g.computeBoundingSphere();
-  return g;
-}
-
-const STRANDS = [0, 0, 0.5, 1];
-
-// A shell slightly larger than the head, keeping only the triangles above hairline(x, z).
-function scalpShell(offset, hairline) {
-  // fine segments so the cut along the hairline doesn't leave a saw-tooth edge on the rounded corners
-  const g = new RoundedBoxGeometry(HEAD.w + offset * 2, HEAD.h + offset * 2, HEAD.d + offset * 2, 8, HEAD.r + offset);
-  const src = { position: g.attributes.position, normal: g.attributes.normal, uv: g.attributes.uv };
-  const keep = [];
-  const p = src.position;
-  for (let i = 0; i < p.count; i += 3) {
-    const cx = (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3;
-    const cy = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3;
-    const cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3;
-    if (cy > hairline(cx, cz)) keep.push(i, i + 1, i + 2);
-  }
-  const out = new THREE.BufferGeometry();
-  for (const [name, attr] of Object.entries(src)) {
-    const n = attr.itemSize;
-    const arr = new Float32Array(keep.length * n);
-    keep.forEach((vi, k) => {
-      for (let c = 0; c < n; c++) arr[k * n + c] = attr.array[vi * n + c];
-    });
-    out.setAttribute(name, new THREE.BufferAttribute(arr, n));
-  }
-  g.dispose();
-  return out;
-}
-
-// Hair accessories, built around the head centre (head is HEAD.w x HEAD.h x HEAD.d).
-function buildHair(style, longLen) {
-  const W = HEAD.w;
-  const D = HEAD.d;
-  const hw = W / 2;
-  const hh = HEAD.h / 2;
-  const hd = D / 2;
-  const P = [];
-  if (style === 'short') {
-    // a close-cropped shell that follows the head, cut along a hairline (fade painted on the head)
-    P.push(part(scalpShell(0.07, (x, z) => {
-      const a = Math.abs(Math.atan2(x, z)) / Math.PI; // 0 = front, 1 = back
-      return hh - (a < 0.25 ? 0.36 : a < 0.6 ? 0.36 + (a - 0.25) * 0.9 : 0.68);
-    }), [0, 0, 0], [0, 0, 0], STRANDS));
-    // a little textured lift at the front of the crop
-    [-0.5, 0, 0.5].forEach((x, i) => P.push(part(box(0.62, 0.2, 0.62, 2, 0.09), [x, hh + 0.05 + (i === 1 ? 0.02 : 0), hd - 0.42], [-0.22, 0, x * -0.3], STRANDS)));
-  } else if (style === 'long') {
-    P.push(part(box(W + 0.12, 0.6, D + 0.16, 3, 0.28), [0, hh - 0.1, -0.04], [0, 0, 0], STRANDS));
-    // middle part sweeping down to each side of the forehead
-    for (const s of [-1, 1]) P.push(part(box(hw + 0.08, 0.3, 0.3, 2, 0.14), [s * 0.52, hh - 0.21, hd - 0.04], [0, 0, s * -0.26], STRANDS));
-    // long strands framing the face, falling over the front of the shoulders
-    for (const s of [-1, 1]) P.push(part(box(0.44, 2.55, 0.36, 2, 0.16), [s * (hw - 0.15), hh - 1.22, hd - 0.13], [0, 0, 0], STRANDS));
-    // sides over the ears
-    for (const s of [-1, 1]) P.push(part(box(0.3, 2.35, D - 0.3, 2, 0.13), [s * (hw + 0.04), hh - 1.12, -0.2], [0, 0, 0], STRANDS));
-    // long fall down the back, hinged at the crown and tucked in to lie along the back (the slung
-    // noodle rests across it)
-    const c = new THREE.Vector3(0, -longLen / 2, -0.25).applyAxisAngle(new THREE.Vector3(1, 0, 0), -LONG_TUCK);
-    P.push(part(box(W + 0.16, longLen, 0.5, 2, 0.22), [0, hh + 0.1 + c.y, -hd + 0.19 + c.z], [-LONG_TUCK, 0, 0], STRANDS));
-  } else if (style === 'short-thick') {
-    P.push(part(box(W + 0.26, 0.88, D + 0.3, 3, 0.4), [0, hh - 0.02, -0.05], [0, 0, 0], STRANDS));
-    // chunky bangs that stop just above the eyebrows
-    const xs = [-0.88, -0.44, 0, 0.44, 0.88];
-    const drop = [0.2, 0.27, 0.24, 0.28, 0.18];
-    xs.forEach((x, i) => P.push(part(box(0.54, 0.6, 0.34, 1, 0.14), [x, hh - drop[i], hd + 0.05], [-0.18, 0, (i - 2) * -0.07], STRANDS)));
-    for (const s of [-1, 1]) P.push(part(box(0.34, 1.1, D - 0.15, 2, 0.15), [s * (hw + 0.1), hh - 0.57, -0.12], [0, 0, 0], STRANDS));
-    P.push(part(box(W + 0.24, 1.35, 0.42, 2, 0.17), [0, hh - 0.62, -hd - 0.1], [0, 0, 0], STRANDS));
-  }
-  return P.length ? mergeParts(P) : null;
-}
-
-// Geometry shared by every avatar (and reused across matches) is tagged so views can skip it on dispose.
-function markShared(o) {
-  if (o?.isBufferGeometry) o.userData.shared = true;
-  else if (o && typeof o === 'object') Object.values(o).forEach(markShared);
-  return o;
-}
 
 let GEO = null;
 function sharedGeometry() {
@@ -251,7 +138,6 @@ function sharedGeometry() {
     halo,
     ring: new THREE.TorusGeometry(0.72, 0.075, 6, 20).rotateX(Math.PI / 2),
     skirt,
-    hair: {},
   };
   markShared(GEO);
   return GEO;
@@ -280,22 +166,7 @@ function shoeGeometry(look) {
   return G[key];
 }
 
-function hairGeometry(style, len) {
-  const G = sharedGeometry();
-  const key = style + ':' + len;
-  if (!(key in G.hair)) G.hair[key] = markShared(buildHair(style, len));
-  return G.hair[key];
-}
-
 // ------------------------------------------------------------------ helpers
-
-const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
-const lerp = (a, b, t) => a + (b - a) * t;
-const damp = (cur, target, rate, dt) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
-const smooth = (a, b, x) => {
-  const t = clamp01((x - a) / (b - a));
-  return t * t * (3 - 2 * t);
-};
 
 // The noodle lives on the back so it never hides a face. A swing draws it over the right shoulder
 // (the wind-up reaches right where it hangs), whacks, and ends "at the ready": fist at the hip, noodle
@@ -363,7 +234,9 @@ function swingKey(arr, u) {
   return lerp(arr[i], arr[i + 1], SW_EASE[i](t));
 }
 
+let streakTex = null;
 function streakTexture() {
+  if (streakTex) return streakTex;
   const c = makeCanvas(32, 64);
   const g = c.getContext('2d');
   const v = g.createLinearGradient(0, 0, 0, 64);
@@ -378,23 +251,23 @@ function streakTexture() {
   h.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = h;
   g.fillRect(0, 0, 32, 64);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  streakTex = new THREE.CanvasTexture(c);
+  streakTex.colorSpace = THREE.SRGBColorSpace;
+  return streakTex;
 }
 
-// Composed head-front faces, cached per photo + skin (avatars are rebuilt every match).
+// Composed head-front faces, cached per photo + skin + expression (avatars are rebuilt every match).
 const faceCache = new WeakMap();
 const noPhoto = {};
-function cachedFace(img, skin) {
+function cachedFace(img, skin, expr) {
   const k = img || noPhoto;
   let m = faceCache.get(k);
   if (!m) faceCache.set(k, (m = new Map()));
   const L = FACE_LAYOUT.head;
-  const key = skin + '|' + L.scale + '|' + L.eyeY;
+  const key = skin + '|' + L.scale + '|' + L.eyeY + '|' + (img ? '' : expr);
   if (!m.has(key)) {
-    if (m.size > 4) m.clear();
-    m.set(key, composeFaceCanvas(img, skin, 512, { layout: L }));
+    if (m.size > (img ? 4 : 24)) m.clear();
+    m.set(key, composeFaceCanvas(img, skin, 512, { layout: L, expr }));
   }
   return m.get(key);
 }
@@ -406,209 +279,40 @@ function canvasTexture(c, aniso = 4) {
   return t;
 }
 
+// Hats, glasses etc. are vertex-coloured; they get the same soft self-illumination as the textured
+// body parts (one shader program shared by every avatar).
+function cosmeticMaterial() {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0 });
+  m.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += vColor.rgb * ${GLOW.toFixed(2)};`);
+  };
+  m.customProgramCacheKey = () => 'avatar-cosmetic';
+  return m;
+}
+
+// Which emote poses need the hands (the noodle goes onto the back and is tucked away)
+const POSE_KEYS = ['rigY', 'rigX', 'rigRX', 'rigRZ', 'rigYaw', 'torsoX', 'torsoY', 'torsoZ', 'headX', 'headY', 'headZ', 'armRx', 'armRz', 'armLx', 'armLz', 'legRx', 'legLx', 'legRz', 'legLz', 'sit'];
+
 // ------------------------------------------------------------------ avatar
 
-export function createAvatar(char, faceImage, skinHex) {
+export function createAvatar(char, faceImage, skinHex, lookArg) {
   const G = sharedGeometry();
-  const look = char.look;
-  const kid = look.build === 'kid';
-  const S = ADULT_SCALE * (kid ? KID.scale : 1);
-  const hs = kid ? KID.head : 1;
-  const longHair = look.hair === 'long';
-  const slung = longHair ? { ...SLING_LONG, z: SLING_LONG.z - (hs - 1) } : SLING;
-  let skin = boostSkin(skinHex || look.skin);
+  let look = sanitizeLook(lookArg || char.look, char.id);
   let faceImg = faceImage || null;
+  let faceSkin = skinHex || null;
 
-  // ---- textures (owned by this avatar)
-  let outfit = drawOutfit(char, skin);
-  const headCanvas = makeCanvas(1024, 512);
-  const faceCanvas = () => cachedFace(faceImg, skin);
-  drawHeadAtlas(faceCanvas(), look, skin, headCanvas);
-  const tex = {
-    head: canvasTexture(headCanvas, 8),
-    torso: canvasTexture(outfit.torso),
-    arm: canvasTexture(outfit.arm),
-    leg: canvasTexture(outfit.leg),
-    hair: canvasTexture(outfit.hair),
-    noodle: canvasTexture(outfit.noodle, 1),
-    skirt: outfit.skirt ? canvasTexture(outfit.skirt) : null,
-  };
-
-  // ---- materials (owned by this avatar so opacity can change per player)
-  const mats = [];
-  const std = (o) => {
-    const m = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, ...o });
-    mats.push(m);
-    return m;
-  };
-  const texMat = (t, o = {}) => std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: GLOW, ...o });
-  const M = {
-    head: texMat(tex.head, { roughness: 0.66 }),
-    torso: texMat(tex.torso, { roughness: look.shirt === 'dress' ? 0.42 : 0.6 }),
-    arm: texMat(tex.arm, { roughness: 0.58 }),
-    leg: texMat(tex.leg, { roughness: 0.62 }),
-    // vertex-coloured: shares its shader with the monsters, so that program compiles with the family
-    shoe: std({ vertexColors: true, roughness: 0.4, emissive: 0x000000 }),
-    hair: texMat(tex.hair, { roughness: 0.42, emissiveIntensity: GLOW * 0.6 }),
-    noodle: texMat(tex.noodle, { roughness: 0.75, emissiveIntensity: GLOW * 1.4 }),
-    skirt: tex.skirt ? texMat(tex.skirt, { roughness: 0.42 }) : null,
-  };
-  const starMat = new THREE.MeshBasicMaterial({ color: 0xffe14d, toneMapped: false });
-  const trailMat = new THREE.MeshBasicMaterial({ color: 0x5ff2ff, map: streakTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x6ff7ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-  mats.push(starMat);
-
-  const shadowed = [];
-  // While see-through (cloak), each body part first writes depth only so the ghost shows just its
-  // outer surface instead of every overlapping box.
-  const depthMat = new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true, side: THREE.DoubleSide });
-  const ghosts = [];
-  const mesh = (geo, mat, cast = true) => {
-    const m = new THREE.Mesh(geo, mat);
-    m.castShadow = cast;
-    m.receiveShadow = true;
-    if (cast) shadowed.push(m);
-    const d = new THREE.Mesh(geo, depthMat);
-    d.visible = false;
-    d.renderOrder = 20;
-    m.add(d);
-    ghosts.push(m);
-    return m;
-  };
-
-  // ---- rig
   const root = new THREE.Group();
   root.name = 'avatar-' + char.id;
-  const rig = new THREE.Group();
-  rig.scale.setScalar(S);
-  root.add(rig);
-  const body = new THREE.Group(); // bob / dizzy wobble / dance
-  rig.add(body);
-  const hips = new THREE.Group();
-  hips.position.y = LEG_H;
-  body.add(hips);
-  const torso = new THREE.Group(); // lean + twist pivot at the hips
-  hips.add(torso);
-  const torsoMesh = mesh(G.torso, M.torso);
-  torsoMesh.name = 'torso';
-  torsoMesh.position.y = TORSO_H / 2;
-  torso.add(torsoMesh);
-  const neck = new THREE.Group();
-  neck.position.y = TORSO_H;
-  torso.add(neck);
-  const head = new THREE.Group();
-  head.scale.setScalar(hs);
-  neck.add(head);
-  const headMesh = mesh(G.head, M.head);
-  headMesh.name = 'head';
-  headMesh.position.y = HEAD.h / 2;
-  head.add(headMesh);
-  const hairGeo = hairGeometry(look.hair, char.id === 'maddie' ? 3.0 : 3.4);
-  if (hairGeo) {
-    const hair = mesh(hairGeo, M.hair, false); // no self-shadow across the face
-    hair.name = 'hair';
-    hair.position.y = HEAD.h / 2;
-    head.add(hair);
-  }
-
-  const makeArm = (side) => {
-    const sh = new THREE.Group();
-    sh.position.set(side * 1.5, SHOULDER_Y, 0);
-    torso.add(sh);
-    const a = mesh(G.arm, M.arm);
-    a.name = 'arm';
-    a.position.y = ARM_TOP - 1;
-    sh.add(a);
-    return sh;
-  };
-  const armR = makeArm(-1); // character's right is -X
-  const armL = makeArm(1);
-
-  const makeLeg = (side) => {
-    const hip = new THREE.Group();
-    hip.position.set(side * 0.5, 0, 0);
-    hips.add(hip);
-    const l = mesh(G.leg, M.leg);
-    l.name = 'leg';
-    l.position.y = -LEG_H / 2;
-    hip.add(l);
-    const sandal = look.shirt === 'dress';
-    const s = mesh(shoeGeometry(look), M.shoe);
-    s.position.set(0, -LEG_H, sandal ? 0.12 : 0.15);
-    hip.add(s);
-    const ring = new THREE.Mesh(G.ring, ringMat);
-    ring.position.y = -LEG_H + 0.62;
-    ring.visible = false;
-    hip.add(ring);
-    return { hip, ring };
-  };
-  const legR = makeLeg(-1);
-  const legL = makeLeg(1);
-  const trails = [-1, 1].map((side) => {
-    const m = new THREE.Mesh(G.trail, trailMat);
-    m.position.set(side * 0.5, 0.35, -0.35);
-    m.visible = false;
-    body.add(m);
-    return m;
-  });
-
-  let skirt = null;
-  if (M.skirt) {
-    skirt = mesh(G.skirt, M.skirt);
-    skirt.name = 'skirt';
-    skirt.position.y = 0.02;
-    torso.add(skirt);
-  }
-
-  // pool noodle: slung across the back, or in the right fist while swinging
-  const sling = new THREE.Mesh(G.sling, M.noodle);
-  sling.name = 'sling';
-  sling.position.set(0, slung.y, slung.z);
-  sling.rotation.x = slung.pitch;
-  torso.add(sling);
-  const slingRest = { p: sling.position.clone(), q: sling.quaternion.clone() };
-  const slideFrom = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
-  const hand = new THREE.Group();
-  hand.position.set(0, ARM_TOP - 1.72, 0.02);
-  armR.add(hand);
-  const wrist = new THREE.Group();
-  hand.add(wrist);
-  // three chained segments: a gentle permanent curve plus a springy flex when swung
-  const noodle = new THREE.Group();
-  noodle.position.y = -0.4;
-  wrist.add(noodle);
-  const NOODLE_FLEX = [0.1, 0.15, 0.2];
-  const joints = [];
-  let parent = noodle;
-  [G.noodle.base, G.noodle.mid, G.noodle.tip].forEach((geo, i) => {
-    const j = new THREE.Group();
-    if (i) j.position.y = NOODLE_SEG;
-    j.rotation.x = NOODLE_CURVE[i];
-    parent.add(j);
-    const m = new THREE.Mesh(geo, M.noodle);
-    m.name = 'noodle';
-    j.add(m);
-    joints.push(j);
-    parent = j;
-  });
-
-  // things that live in unscaled avatar space
   const headTop = new THREE.Object3D();
   headTop.name = 'headTop';
   root.add(headTop);
-  const stars = new THREE.Mesh(G.halo, starMat);
-  stars.visible = false;
-  root.add(stars);
+  let carry = null;
 
-  const HEAD_TOP_Y = TORSO_H + HEAD.h * hs; // above the hips
-  // raise the shoulders when carrying so the hands reach the item above the head
-  const CARRY_LIFT = Math.max(0, HEAD_TOP_Y - (SHOULDER_Y + 2 - ARM_TOP) + 0.05);
-  // ...and splay them into a V around bigger (kid) heads instead of through the face
-  const CARRY_SPLAY = 0.1 + (hs - 1) * 1.4;
-
-  // ---- animation state
-  const W = { move: 0, air: 0, carry: 0, stun: 0, celeb: 0, steal: 0, reach: 0, coil: 0, ready: 0 };
-  const P = { rigY: 0, rigRX: 0, rigRZ: 0, rigYaw: 0, torsoX: 0, torsoY: 0, torsoZ: 0, headX: 0, headY: 0, headZ: 0, armRx: 0, armRz: 0, armLx: 0, armLz: 0, legRx: 0, legLx: 0, wrist: READY.wrist, wristZ: 0, lift: 0 };
+  // ---- animation state (kept across setLook)
+  const W = { move: 0, air: 0, carry: 0, stun: 0, celeb: 0, steal: 0, reach: 0, coil: 0, ready: 0, emote: 0, hat: 1 };
+  const P = { rigY: 0, rigX: 0, rigRX: 0, rigRZ: 0, rigYaw: 0, torsoX: 0, torsoY: 0, torsoZ: 0, headX: 0, headY: 0, headZ: 0, armRx: 0, armRz: 0, armLx: 0, armLz: 0, legRx: 0, legLx: 0, legRz: 0, legLz: 0, wrist: READY.wrist, wristZ: 0, lift: 0, sit: 0 };
+  const E = { ...P };
+  const emo = { id: null, t: 0 };
   let clock = Math.random() * 10;
   let phase = Math.random() * TAU;
   let prevArm = 0;
@@ -618,7 +322,6 @@ export function createAvatar(char, faceImage, skinHex) {
   let holster = -1; // 0..1 while putting it back over the shoulder
   let holsterArm = 0; // holster pose weight (fades out if a swing or a pickup interrupts it)
   let holsterAt = 0; // 0..1 along the holster keys
-  const HK = HOLSTER[longHair ? 'long' : 'short'];
   let slide = 2; // 0..1 while the let-go noodle settles onto the back (2 = at rest)
   let handScale = 0;
   let slingScale = 1;
@@ -627,13 +330,321 @@ export function createAvatar(char, faceImage, skinHex) {
   let alpha = 1;
   let transparent = false;
   let castOn = true;
-  let carry = null;
+
+  const usePhoto = () => look.face === 'photo' && !!faceImg;
+  const skinNow = () => boostSkin(usePhoto() ? faceSkin || look.skin : look.skin);
+  const exprNow = () => (look.face === 'photo' ? 'smile' : look.face);
+
+  // ---- everything the look decides (rebuilt by setLook)
+  let R = null;
+  let buildId = 0;
+
+  function build() {
+    const id = ++buildId;
+    const kid = look.build === 'kid';
+    const S = ADULT_SCALE * (kid ? KID.scale : 1);
+    const hs = kid ? KID.head : 1;
+    const hairDef = HAIR_BY_ID[look.hair];
+    const hatDef = look.hat ? HAT_BY_ID[look.hat] : null;
+    const longHair = hairDef.sling === 'long';
+    const pack = look.acc === 'backpack';
+    const slung = longHair ? { ...SLING_LONG, z: SLING_LONG.z - (hs - 1) - (pack ? 0.25 : 0) } : pack ? { ...SLING, z: PACK_Z } : SLING;
+    const skin = skinNow();
+
+    // ---- textures (owned by this avatar)
+    let outfit = drawOutfit(char, skin, look);
+    const headCanvas = makeCanvas(1024, 512);
+    drawHeadAtlas(cachedFace(usePhoto() ? faceImg : null, skin, exprNow()), look, skin, headCanvas);
+    const tex = {
+      head: canvasTexture(headCanvas, 8),
+      torso: canvasTexture(outfit.torso),
+      arm: canvasTexture(outfit.arm),
+      leg: canvasTexture(outfit.leg),
+      hair: canvasTexture(outfit.hair),
+      noodle: canvasTexture(outfit.noodle, 1),
+      skirt: outfit.skirt ? canvasTexture(outfit.skirt) : null,
+    };
+
+    // ---- materials (owned by this avatar so opacity can change per player)
+    const mats = [];
+    const std = (o) => {
+      const m = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, ...o });
+      mats.push(m);
+      return m;
+    };
+    const texMat = (t, o = {}) => std({ map: t, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: GLOW, ...o });
+    const M = {
+      head: texMat(tex.head, { roughness: 0.66 }),
+      torso: texMat(tex.torso, { roughness: look.shirt === 'dress' ? 0.42 : 0.6 }),
+      arm: texMat(tex.arm, { roughness: 0.58 }),
+      leg: texMat(tex.leg, { roughness: 0.62 }),
+      // vertex-coloured: shares its shader with the monsters, so that program compiles with the family
+      shoe: std({ vertexColors: true, roughness: 0.4, emissive: 0x000000 }),
+      hair: texMat(tex.hair, { roughness: 0.42, emissiveIntensity: GLOW * 0.6 }),
+      noodle: texMat(tex.noodle, { roughness: 0.75, emissiveIntensity: GLOW * 1.4 }),
+      skirt: tex.skirt ? texMat(tex.skirt, { roughness: 0.42 }) : null,
+      cos: null,
+      glow: null,
+    };
+    const cosMat = () => {
+      if (!M.cos) mats.push((M.cos = cosmeticMaterial()));
+      return M.cos;
+    };
+    const glowMat = () => {
+      if (!M.glow) mats.push((M.glow = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false })));
+      return M.glow;
+    };
+    const starMat = new THREE.MeshBasicMaterial({ color: 0xffe14d, toneMapped: false });
+    const trailMat = new THREE.MeshBasicMaterial({ color: 0x5ff2ff, map: streakTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x6ff7ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    mats.push(starMat);
+
+    const shadowed = [];
+    // While see-through (cloak), each body part first writes depth only so the ghost shows just its
+    // outer surface instead of every overlapping box.
+    const depthMat = new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true, side: THREE.DoubleSide });
+    const ghosts = [];
+    const mesh = (geo, mat, cast = true) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.castShadow = cast;
+      m.receiveShadow = true;
+      if (cast) shadowed.push(m);
+      const d = new THREE.Mesh(geo, depthMat);
+      d.visible = false;
+      d.renderOrder = 20;
+      m.add(d);
+      ghosts.push(m);
+      return m;
+    };
+
+    // ---- rig
+    const rig = new THREE.Group();
+    rig.scale.setScalar(S);
+    root.add(rig);
+    const body = new THREE.Group(); // bob / dizzy wobble / dance
+    rig.add(body);
+    const hips = new THREE.Group();
+    hips.position.y = LEG_H;
+    body.add(hips);
+    const torso = new THREE.Group(); // lean + twist pivot at the hips
+    hips.add(torso);
+    const torsoMesh = mesh(G.torso, M.torso);
+    torsoMesh.name = 'torso';
+    torsoMesh.position.y = TORSO_H / 2;
+    torso.add(torsoMesh);
+    const neck = new THREE.Group();
+    neck.position.y = TORSO_H;
+    torso.add(neck);
+    const head = new THREE.Group();
+    head.scale.setScalar(hs);
+    neck.add(head);
+    const headMesh = mesh(G.head, M.head);
+    headMesh.name = 'head';
+    headMesh.position.y = HEAD.h / 2;
+    head.add(headMesh);
+    const capped = !!(hatDef?.covers && hasTallHair(look.hair));
+    const hairGeo = hairGeometry(look.hair, kid ? 3.0 : 3.4, capped);
+    if (hairGeo) {
+      const hair = mesh(hairGeo, M.hair, false); // no self-shadow across the face
+      hair.name = 'hair';
+      hair.position.y = HEAD.h / 2;
+      head.add(hair);
+    }
+
+    const makeArm = (side) => {
+      const sh = new THREE.Group();
+      sh.position.set(side * 1.5, SHOULDER_Y, 0);
+      torso.add(sh);
+      const a = mesh(G.arm, M.arm);
+      a.name = 'arm';
+      a.position.y = ARM_TOP - 1;
+      sh.add(a);
+      return sh;
+    };
+    const armR = makeArm(-1); // character's right is -X
+    const armL = makeArm(1);
+
+    const sandal = look.shirt === 'dress';
+    const makeLeg = (side) => {
+      const hip = new THREE.Group();
+      hip.position.set(side * 0.5, 0, 0);
+      hips.add(hip);
+      const l = mesh(G.leg, M.leg);
+      l.name = 'leg';
+      l.position.y = -LEG_H / 2;
+      hip.add(l);
+      const s = mesh(shoeGeometry(look), M.shoe);
+      s.position.set(0, -LEG_H, sandal ? 0.12 : 0.15);
+      hip.add(s);
+      const ring = new THREE.Mesh(G.ring, ringMat);
+      ring.position.y = -LEG_H + 0.62;
+      ring.visible = false;
+      hip.add(ring);
+      return { hip, ring };
+    };
+    const legR = makeLeg(-1);
+    const legL = makeLeg(1);
+    const coilTrails = [-1, 1].map((side) => {
+      const m = new THREE.Mesh(G.trail, trailMat);
+      m.position.set(side * 0.5, 0.35, -0.35);
+      m.visible = false;
+      body.add(m);
+      return m;
+    });
+
+    let skirt = null;
+    if (M.skirt) {
+      skirt = mesh(G.skirt, M.skirt);
+      skirt.name = 'skirt';
+      skirt.position.y = 0.02;
+      torso.add(skirt);
+    }
+
+    // pool noodle: slung across the back, or in the right fist while swinging
+    const sling = new THREE.Mesh(G.sling, M.noodle);
+    sling.name = 'sling';
+    sling.position.set(0, slung.y, slung.z);
+    sling.rotation.x = slung.pitch;
+    torso.add(sling);
+    const slingRest = { p: sling.position.clone(), q: sling.quaternion.clone() };
+    const slideFrom = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
+    const hand = new THREE.Group();
+    hand.position.set(0, ARM_TOP - 1.72, 0.02);
+    armR.add(hand);
+    const wrist = new THREE.Group();
+    hand.add(wrist);
+    // three chained segments: a gentle permanent curve plus a springy flex when swung
+    const noodle = new THREE.Group();
+    noodle.position.y = -0.4;
+    wrist.add(noodle);
+    const joints = [];
+    let parent = noodle;
+    [G.noodle.base, G.noodle.mid, G.noodle.tip].forEach((geo, i) => {
+      const j = new THREE.Group();
+      if (i) j.position.y = NOODLE_SEG;
+      j.rotation.x = NOODLE_CURVE[i];
+      parent.add(j);
+      const m = new THREE.Mesh(geo, M.noodle);
+      m.name = 'noodle';
+      j.add(m);
+      joints.push(j);
+      parent = j;
+    });
+
+    // ---- hat and accessory
+    const anims = [];
+    const addParts = (parts, into) => {
+      if (parts.main) into.add(mesh(parts.main, cosMat()));
+      if (parts.glow) into.add(mesh(parts.glow, glowMat(), false));
+      const groups = [];
+      for (const a of parts.anim || []) {
+        const g = new THREE.Group();
+        g.position.set(...a.pos);
+        (a.parent != null ? groups[a.parent] : into).add(g);
+        g.add(mesh(a.geo, a.glow ? glowMat() : cosMat(), !a.glow));
+        groups.push(g);
+        anims.push({ obj: g, anim: a.anim, y: a.pos[1] });
+      }
+    };
+    const fit = hairDef.fit;
+    const lift = capped && fit.capLift != null ? fit.capLift : fit.lift;
+    let hat = null;
+    if (hatDef) {
+      hat = new THREE.Group();
+      hat.name = 'hat';
+      hat.position.y = HEAD.h + lift;
+      hat.scale.setScalar(fit.s);
+      head.add(hat);
+      addParts(hatGeometry(look.hat, look.hatColor), hat);
+    }
+    let acc = null;
+    if (look.acc) {
+      const ag = accGeometry(look.acc, look.accColor, look.hairColor);
+      if (ag) {
+        acc = new THREE.Group();
+        acc.name = 'acc';
+        if (ag.at === 'face') {
+          acc.position.y = HEAD.h / 2;
+          head.add(acc);
+        } else {
+          // wings sit over long hair that falls down the back
+          if (look.acc === 'wings' && longHair) acc.position.z = -0.95 * hs;
+          torso.add(acc);
+        }
+        addParts(ag, acc);
+      }
+    }
+    // how high the top of the hair / hat reaches above the head (name tags sit above it)
+    const hatTop = hatDef ? (lift + hatDef.h * fit.s) * hs : 0;
+    const tallHat = !!hatDef && hatDef.h > 0.6;
+
+    // ---- speed trail
+    const trail = look.trail ? createTrail(look.trail) : null;
+    if (trail) root.add(trail.object3d);
+
+    // things that live in unscaled avatar space
+    const stars = new THREE.Mesh(G.halo, starMat);
+    stars.visible = false;
+    root.add(stars);
+
+    const HEAD_TOP_Y = TORSO_H + HEAD.h * hs; // above the hips
+    // raise the shoulders when carrying so the hands reach the item above the head
+    const CARRY_LIFT = Math.max(0, HEAD_TOP_Y - (SHOULDER_Y + 2 - ARM_TOP) + 0.05);
+    // ...and splay them into a V around bigger (kid) heads instead of through the face
+    const CARRY_SPLAY = 0.1 + (hs - 1) * 1.4;
+
+    R = {
+      id, S, hs, kid, slung, longHair, skin, outfit, headCanvas, tex, mats, M, starMat, trailMat, ringMat, depthMat, shadowed, ghosts,
+      rig, body, hips, torso, neck, head, armR, armL, legR, legL, coilTrails, skirt, sling, slingRest, slideFrom, hand, wrist, noodle, joints,
+      hat, acc, anims, hatTop, tallHat, trail, stars, HEAD_TOP_Y, CARRY_LIFT, CARRY_SPLAY,
+      HK: HOLSTER[longHair ? 'long' : 'short'],
+      // how far arms must splay out to go up past the head and hair
+      ctx: { up: 0.12 + (hs - 1) * 1.4 + (HAIR_SIDE[look.hair] || 0) * 1.1 * hs, kid },
+      redrawOutfit() {
+        R.outfit = drawOutfit(char, R.skin, look);
+        for (const k of ['torso', 'arm', 'leg', 'hair']) {
+          tex[k].image = R.outfit[k];
+          tex[k].needsUpdate = true;
+        }
+        if (tex.skirt && R.outfit.skirt) {
+          tex.skirt.image = R.outfit.skirt;
+          tex.skirt.needsUpdate = true;
+        }
+      },
+    };
+    // re-apply the cloak to the new materials on the next update
+    alpha = 1;
+    transparent = false;
+    castOn = true;
+    // the slung noodle rests on the (new) back
+    slide = 2;
+    if (look.shirt === 'faceprint') {
+      if (facePrintReady()) R.redrawOutfit();
+      else loadFacePrint().then(() => R && R.id === id && R.redrawOutfit());
+    }
+  }
+
+  function teardown() {
+    if (!R) return;
+    root.remove(R.rig);
+    root.remove(R.stars);
+    if (R.trail) {
+      root.remove(R.trail.object3d);
+      R.trail.dispose();
+    }
+    R.mats.forEach((m) => m.dispose());
+    R.ringMat.dispose();
+    R.depthMat.dispose();
+    R.trailMat.dispose();
+    Object.values(R.tex).forEach((t) => t?.dispose());
+    R = null;
+  }
 
   function setOpacity(a) {
     if (a === alpha) return;
     alpha = a;
     const tr = a < 0.999;
-    for (const m of mats) {
+    for (const m of R.mats) {
       m.opacity = a;
       if (tr !== transparent) {
         m.transparent = tr;
@@ -641,7 +652,7 @@ export function createAvatar(char, faceImage, skinHex) {
       }
     }
     if (tr !== transparent) {
-      for (const m of ghosts) {
+      for (const m of R.ghosts) {
         m.children[0].visible = tr;
         m.renderOrder = tr ? 21 : 0;
       }
@@ -650,28 +661,22 @@ export function createAvatar(char, faceImage, skinHex) {
     const cast = !tr;
     if (cast !== castOn) {
       castOn = cast;
-      for (const m of shadowed) m.castShadow = cast;
+      for (const m of R.shadowed) m.castShadow = cast;
     }
   }
 
-  function redrawOutfit() {
-    outfit = drawOutfit(char, skin);
-    for (const k of ['torso', 'arm', 'leg', 'hair']) {
-      tex[k].image = outfit[k];
-      tex[k].needsUpdate = true;
-    }
+  function repaintHead() {
+    drawHeadAtlas(cachedFace(usePhoto() ? faceImg : null, R.skin, exprNow()), look, R.skin, R.headCanvas);
+    R.tex.head.needsUpdate = true;
   }
 
-  let disposed = false;
-  if (look.shirt === 'faceprint') {
-    if (facePrintReady()) redrawOutfit();
-    else loadFacePrint().then(() => !disposed && redrawOutfit());
-  }
+  build();
 
   function update(dt, s) {
     dt = Math.min(Math.max(dt || 0, 0), 0.1);
     clock += dt;
     const t = clock;
+    const { body, torso, head, armR, armL, legR, legL, hand, wrist, noodle, sling, slingRest, slideFrom, skirt, joints, HK, slung, S, hs } = R;
     const speed = s.speed || 0;
     const ground = s.onGround !== false;
     W.move = damp(W.move, clamp01(speed / 5) * (ground ? 1 : 0), 9, dt);
@@ -683,6 +688,24 @@ export function createAvatar(char, faceImage, skinHex) {
     W.reach = damp(W.reach, s.interacting && s.interacting !== 'Steal' ? 1 : 0, 10, dt);
     W.coil = damp(W.coil, s.coil ? 1 : 0, 6, dt);
 
+    // emotes: blend out the old one before a new one blends in; moving, carrying or a hit cancels them
+    const want = s.emote && EMOTE_ANIM[s.emote] ? s.emote : null;
+    if (want !== emo.id && (W.emote < 0.04 || !emo.id)) {
+      emo.id = want;
+      emo.t = 0;
+    }
+    const emoting = !!emo.id && want === emo.id && !s.carrying && !s.stunned && !(s.swing >= 0) && speed < 2.5 && ground;
+    // emoteT (time since it started, from the game) keeps everyone's dances in step; without it the
+    // avatar keeps its own clock
+    if (emoting && Number.isFinite(s.emoteT)) emo.t = s.emoteT;
+    else emo.t += dt;
+    W.emote = damp(W.emote, emoting ? 1 : 0, emoting ? 9 : 12, dt);
+    if (!emoting && W.emote < 0.002) {
+      W.emote = 0;
+      if (!want) emo.id = null;
+    }
+    const hands = W.emote > 0.05;
+
     // noodle: drawn by a swing, held at the ready for a moment, then holstered
     const u = s.swing;
     const swinging = u != null && u >= 0;
@@ -691,7 +714,7 @@ export function createAvatar(char, faceImage, skinHex) {
       lastSwing = clock;
       holster = -1;
       if (!inHand && u >= DRAW_U) inHand = snap = true;
-    } else if (s.carrying || s.interacting || s.celebrating || s.stunned) {
+    } else if (s.carrying || s.interacting || s.celebrating || s.stunned || hands) {
       inHand = false; // hands needed: pop it back onto the back (or cut the holster's follow-through)
       holster = -1;
     } else if (inHand && holster < 0 && clock - lastSwing > READY_HOLD) holster = 0;
@@ -723,7 +746,8 @@ export function createAvatar(char, faceImage, skinHex) {
       slingScale = 1 - handScale;
     } else {
       handScale = damp(handScale, inHand ? 1 : 0, 24, dt);
-      slingScale = damp(slingScale, inHand ? 0 : 1, 18, dt);
+      // dances and emotes tuck the slung noodle away (arms swing behind the back)
+      slingScale = damp(slingScale, inHand || W.emote > 0.3 ? 0 : 1, 18, dt);
     }
     W.ready = damp(W.ready, inHand ? 1 : 0, 16, dt);
 
@@ -734,6 +758,7 @@ export function createAvatar(char, faceImage, skinHex) {
     // --- idle
     const br = Math.sin(t * 2.2);
     P.rigY = br * 0.025;
+    P.rigX = 0;
     P.rigRX = 0;
     P.rigRZ = 0;
     P.rigYaw = 0;
@@ -751,8 +776,11 @@ export function createAvatar(char, faceImage, skinHex) {
     P.armLz = 0.07 + br * 0.025;
     P.legRx = 0;
     P.legLx = 0;
+    P.legRz = 0;
+    P.legLz = 0;
     P.wrist = READY.wrist;
     P.lift = 0;
+    P.sit = 0;
 
     // --- walk / run
     const wm = W.move * (1 - W.air);
@@ -830,9 +858,9 @@ export function createAvatar(char, faceImage, skinHex) {
       const cb = Math.sin(phase * 2) * 0.05 * wm;
       P.armRx = lerp(P.armRx, -3.06 + cb, wc);
       P.armLx = lerp(P.armLx, -3.06 - cb, wc);
-      P.armRz = lerp(P.armRz, -CARRY_SPLAY, wc);
-      P.armLz = lerp(P.armLz, CARRY_SPLAY, wc);
-      P.lift = CARRY_LIFT * wc;
+      P.armRz = lerp(P.armRz, -R.CARRY_SPLAY, wc);
+      P.armLz = lerp(P.armLz, R.CARRY_SPLAY, wc);
+      P.lift = R.CARRY_LIFT * wc;
       P.torsoX -= 0.04 * wc;
     }
 
@@ -852,6 +880,14 @@ export function createAvatar(char, faceImage, skinHex) {
       P.headX = lerp(P.headX, -0.12, we);
       P.torsoZ += Math.sin(t * 6.5) * 0.07 * we;
       P.rigYaw += Math.sin(t * 1.7) * 0.4 * we;
+    }
+
+    // --- emotes and dances
+    const wem = W.emote;
+    if (wem > 0.001 && emo.id) {
+      for (const k of POSE_KEYS) E[k] = P[k];
+      EMOTE_ANIM[emo.id].pose(E, emo.t, R.ctx);
+      for (const k of POSE_KEYS) P[k] = lerp(P[k], E[k], wem);
     }
 
     // --- stunned: dizzy wobble
@@ -895,7 +931,7 @@ export function createAvatar(char, faceImage, skinHex) {
     }
 
     // --- apply
-    body.position.y = P.rigY;
+    body.position.set(P.rigX, P.rigY, 0);
     body.rotation.set(P.rigRX, P.rigYaw, P.rigRZ);
     torso.rotation.set(P.torsoX, P.torsoY, P.torsoZ);
     head.rotation.set(P.headX, P.headY, P.headZ);
@@ -903,13 +939,14 @@ export function createAvatar(char, faceImage, skinHex) {
     armL.position.y = SHOULDER_Y + P.lift;
     armR.rotation.set(P.armRx, 0, P.armRz);
     armL.rotation.set(P.armLx, 0, P.armLz);
-    legR.hip.rotation.x = P.legRx;
-    legL.hip.rotation.x = P.legLx;
+    legR.hip.rotation.set(P.legRx, 0, P.legRz);
+    legL.hip.rotation.set(P.legLx, 0, P.legLz);
     wrist.rotation.set(P.wrist, 0, P.wristZ);
     if (skirt) {
-      skirt.rotation.x = -P.torsoX * 0.6 + Math.sin(phase * 2) * 0.035 * wm;
+      // sitting drapes the skirt forward over the legs
+      skirt.rotation.x = -P.torsoX * 0.6 + Math.sin(phase * 2) * 0.035 * wm - 1.2 * P.sit;
       const flare = 1 + Math.abs(Math.sin(phase)) * 0.06 * wm + wa * 0.08;
-      skirt.scale.set(flare, 1, flare);
+      skirt.scale.set(flare, 1 - 0.3 * P.sit, flare);
     }
 
     // foam noodle: tip lags behind the arm like a spring
@@ -946,11 +983,38 @@ export function createAvatar(char, faceImage, skinHex) {
     sling.visible = slingScale > 0.02;
     sling.scale.setScalar(Math.max(0.001, slingScale));
 
-    // carried items / name anchor follow the head over the (leaning) torso
-    const top = HEAD_TOP_Y + 0.08;
-    headTop.position.set(0, S * (LEG_H + P.rigY + Math.cos(P.torsoX) * top), S * Math.sin(P.torsoX) * top);
+    // hats that stand tall tuck away while a pot is carried over the head
+    if (R.hat) {
+      W.hat = damp(W.hat, R.tallHat && s.carrying ? 0 : 1, 16, dt);
+      const hsz = Math.max(0.001, W.hat);
+      R.hat.visible = hsz > 0.02;
+      R.hat.scale.setScalar(HAIR_BY_ID[look.hair].fit.s * hsz);
+    }
+    // cosmetic motion: propeller, halo, cape, wings
+    for (const a of R.anims) {
+      const o = a.obj;
+      if (a.anim === 'spin') o.rotation.y += dt * (5 + Math.min(speed, 60) * 0.7);
+      else if (a.anim === 'halo') {
+        o.position.y = a.y + Math.sin(t * 2.1) * 0.06;
+        o.rotation.y = t * 0.7;
+      } else if (a.anim === 'capeTop') {
+        o.rotation.x = 0.04 + P.sit * 0.3;
+      } else if (a.anim === 'cape') {
+        // the cape streams out behind as you run, flutters, and lifts when falling
+        const flare = Math.min(1.2, 0.08 + speed * 0.032) * (1 - W.emote * 0.7) + wa * 0.35 * clamp01(-(s.vy || 0) / 20);
+        o.rotation.x = damp(o.rotation.x, flare + Math.sin(t * (6 + speed * 0.3)) * 0.05 * clamp01(speed / 10) - P.torsoX * 0.5, 10, dt);
+      } else if (a.anim === 'wingL' || a.anim === 'wingR') {
+        const f = Math.sin(t * (7 + Math.min(speed, 40) * 0.25)) * (0.18 + clamp01(speed / 20) * 0.18);
+        o.rotation.y = (a.anim === 'wingL' ? 1 : -1) * (0.35 + f);
+      }
+    }
+
+    // carried items / name anchor follow the head over the (leaning) torso; name tags clear the hat
+    const top = R.HEAD_TOP_Y + 0.08 + R.hatTop * W.hat * (1 - W.carry);
+    headTop.position.set(S * P.rigX, S * (LEG_H + P.rigY + Math.cos(P.torsoX) * top), S * Math.sin(P.torsoX) * top);
 
     // dizzy stars
+    const stars = R.stars;
     stars.visible = wt > 0.03;
     if (stars.visible) {
       stars.position.set(0, S * (LEG_H + TORSO_H + HEAD.h * hs + 0.35) + P.rigY * S, 0);
@@ -962,9 +1026,10 @@ export function createAvatar(char, faceImage, skinHex) {
     const wco = W.coil;
     const coilOn = wco > 0.02;
     legR.ring.visible = legL.ring.visible = coilOn;
+    const M = R.M;
     if (coilOn) {
       const pulse = 0.75 + Math.sin(t * 14) * 0.25;
-      ringMat.opacity = wco * pulse * alpha;
+      R.ringMat.opacity = wco * pulse * alpha;
       legR.ring.rotation.y = t * 9;
       legL.ring.rotation.y = -t * 9;
       const rs = 1 + Math.sin(t * 20) * 0.08;
@@ -972,23 +1037,26 @@ export function createAvatar(char, faceImage, skinHex) {
       legL.ring.scale.setScalar(rs);
       M.shoe.emissive.setRGB(0.2, 0.85, 1).multiplyScalar(wco * pulse * 0.8);
       const len = Math.min(4.5, speed * 0.09);
-      trailMat.opacity = wco * clamp01(speed / 8) * alpha * (0.55 + 0.2 * pulse);
-      for (const tr of trails) {
+      R.trailMat.opacity = wco * clamp01(speed / 8) * alpha * (0.55 + 0.2 * pulse);
+      for (const tr of R.coilTrails) {
         tr.visible = len > 0.2;
         tr.scale.set(1, 1, len);
       }
     } else if (M.shoe.emissive.g !== 0) {
       M.shoe.emissive.setRGB(0, 0, 0);
-      trails[0].visible = trails[1].visible = false;
+      R.coilTrails[0].visible = R.coilTrails[1].visible = false;
     }
 
     // invisibility cloak
     const inv = s.invisible == null ? 1 : s.invisible;
     root.visible = inv > 0.02;
     setOpacity(inv > 0.02 ? Math.min(1, inv) : 1);
+
+    // cosmetic speed trail (never while cloaked: no giveaway sparkles)
+    if (R.trail) R.trail.update(dt, root, ground ? speed : speed * 0.6, { scale: S, visible: inv >= 0.999, inPlace: !!s.inPlace });
   }
 
-  return {
+  const api = {
     object3d: root,
     headTop,
     update,
@@ -999,28 +1067,65 @@ export function createAvatar(char, faceImage, skinHex) {
       if (carry) headTop.add(carry);
     },
     setFace(img, sk) {
-      const newSkin = sk ? boostSkin(sk) : skin;
       faceImg = img || null;
-      if (newSkin !== skin) {
-        skin = newSkin;
-        redrawOutfit();
+      if (sk) faceSkin = sk;
+      const newSkin = skinNow();
+      if (newSkin !== R.skin) {
+        R.skin = newSkin;
+        R.redrawOutfit();
       }
-      drawHeadAtlas(faceCanvas(), look, skin, headCanvas);
-      tex.head.needsUpdate = true;
+      repaintHead();
+    },
+    setLook(l) {
+      const nl = sanitizeLook(l, char.id);
+      if (sameLook(nl, look)) return;
+      look = nl;
+      teardown();
+      build();
+      api.scale = R.S;
+    },
+    get look() {
+      return look;
     },
     dispose() {
-      disposed = true;
       if (carry) headTop.remove(carry);
-      mats.forEach((m) => m.dispose());
-      ringMat.dispose();
-      depthMat.dispose();
-      trailMat.map?.dispose();
-      trailMat.dispose();
-      Object.values(tex).forEach((t) => t?.dispose());
+      carry = null;
+      teardown();
     },
     // extras for galleries / menus
     char,
-    scale: S,
+    scale: R.S,
+  };
+  return api;
+}
+
+/**
+ * Just a head with its hair (and hat), for Wardrobe thumbnails. Origin at the head centre, facing +Z.
+ * Returns {object3d, dispose}.
+ */
+export function createHeadBust(lookArg, base = 'dorian') {
+  const G = sharedGeometry();
+  const look = sanitizeLook(lookArg, base);
+  const skin = boostSkin(look.skin);
+  const expr = look.face === 'photo' ? 'smile' : look.face;
+  const headCanvas = drawHeadAtlas(cachedFace(null, skin, expr), look, skin, makeCanvas(1024, 512));
+  const tex = [canvasTexture(headCanvas), canvasTexture(drawHairTexture(look, skin))];
+  const mats = [
+    new THREE.MeshStandardMaterial({ map: tex[0], emissive: 0xffffff, emissiveMap: tex[0], emissiveIntensity: GLOW, roughness: 0.66 }),
+    new THREE.MeshStandardMaterial({ map: tex[1], emissive: 0xffffff, emissiveMap: tex[1], emissiveIntensity: GLOW * 0.6, roughness: 0.42 }),
+  ];
+  const root = new THREE.Group();
+  root.add(new THREE.Mesh(G.head, mats[0]));
+  const hatDef = look.hat ? HAT_BY_ID[look.hat] : null;
+  const capped = !!(hatDef?.covers && hasTallHair(look.hair));
+  const hg = hairGeometry(look.hair, 3.4, capped);
+  if (hg) root.add(new THREE.Mesh(hg, mats[1]));
+  return {
+    object3d: root,
+    dispose() {
+      mats.forEach((m) => m.dispose());
+      tex.forEach((t) => t.dispose());
+    },
   };
 }
 

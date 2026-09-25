@@ -26,6 +26,7 @@ import { getProfile, activeProfileId, setActiveProfile, updateProfile } from './
 import { attachProgress } from './progress/index.js';
 import { createOnline } from './net/session.js';
 import { reactToSocial } from './social/botReact.js';
+import { attachCloudSync } from './online/sync.js';
 
 const SAVE_EVERY = 12;
 
@@ -72,6 +73,7 @@ class App {
     this.profileId = activeProfileId() || CHARACTERS[0].id;
     this.progress = attachProgress(this);
     this.online = createOnline(this);
+    this.cloudSync = attachCloudSync(this); // cloud save + high-score sync; silent when offline or not configured
     this.engine.add((dt, t) => this.frame(dt, t));
     this._saveTimer = 0;
     window.addEventListener('pagehide', () => this.saveNow());
@@ -360,6 +362,31 @@ class App {
     bus.emit('app:state', { state: 'playing' });
   }
 
+  /**
+   * Online rooms (src/net/session.js) build their world through here, so the HUD, camera, touch
+   * controls and app state work exactly like solo play. opts: Game options incl. `slots`.
+   */
+  startOnline(opts) {
+    const game = this._newGame({ mode: 'endless', difficulty: settings.difficulty, ...opts });
+    game.saveKey = null; // online gardens are saved into profile.online by the session
+    this.hud = createHUD(this);
+    this.menus.hideAll();
+    if (this.human) {
+      this.cam.snapBehind(this.human.yaw);
+      this.cam.yaw = this.human.yaw;
+      this.cam.playIntro(reducedMotion() ? 0.01 : 1.6);
+    }
+    this.state = 'playing';
+    this.input.reset();
+    this.input.enabled = true;
+    this.touch.setVisible(true);
+    this.audio.unlock();
+    this.audio.setMusicMode('play');
+    bus.emit('game:start', { game, human: this.human, resumed: false, online: true });
+    bus.emit('app:state', { state: 'playing' });
+    return game;
+  }
+
   hasSave(profileId) {
     return !!load(`save:endless:${profileId}`, null);
   }
@@ -373,7 +400,7 @@ class App {
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
-    this.game.paused = true;
+    if (!this.online?.room) this.game.paused = true; // online the world keeps running under the menu
     this.input.reset();
     this.touch.setVisible(false);
     this.menus.showPause();
@@ -396,6 +423,7 @@ class App {
   }
 
   quitToTitle() {
+    this.online?.leave?.();
     this.saveNow();
     this.startAttract();
     this.menus.showTitle();

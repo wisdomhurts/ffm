@@ -1,10 +1,12 @@
-// Procedural canvas textures for the family outfits (what they wore in the Cabo sunset photo).
+// Procedural canvas textures for the outfits: the family's (what they wore in the Cabo sunset photo)
+// and every Wardrobe style (characters/cosmetics.js).
 // Body parts are boxes whose six sides are packed into one atlas per part:
 //   torso atlas: 6 x 3 studs  (front 2x2, back 2x2, +x side 1x2, -x side 1x2, top 2x1, bottom 2x1)
 //   limb atlas:  5 x 2 studs  (front, back, +x, -x: 1x2 each; top 1x1 and bottom 1x1 stacked)
 // In every side region the canvas top is the top of the part. On the front, canvas-left is the
 // character's right hand side (-x). Characters face +Z; their right is -X.
 import { familyFaceData, loadImage } from './faces.js';
+import { SHIRT_BY_ID, legsOf } from './cosmetics.js';
 
 export const PPU = 112; // canvas pixels per stud
 
@@ -267,7 +269,54 @@ function patternSolid(g, w, h, look) {
   g.fillRect(0, 0, w, h);
 }
 
-const PATTERNS = { faceprint: patternFacePrint, hawaiian: patternHawaiian, floral: patternFloral, dress: patternDress };
+// soft cotton: a faint speckle so flat colours don't look like bare plastic
+function patternCotton(g, w, h, look, seed) {
+  const r = rng(seed);
+  patternSolid(g, w, h, look);
+  for (let i = 0; i < (w * h) / 90; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+    g.fillRect(r() * w, r() * h, 2, 2);
+  }
+}
+
+function patternStripes(g, w, h, look) {
+  patternSolid(g, w, h, look);
+  const step = px(0.36);
+  g.fillStyle = look.shirtColor2;
+  for (let y = step * 0.5; y < h; y += step) g.fillRect(0, y, w, step * 0.48);
+}
+
+// cable knit: ribbed columns with little V stitches
+function patternKnit(g, w, h, look) {
+  patternSolid(g, w, h, look);
+  const col = px(0.14);
+  for (let x = 0; x < w; x += col) {
+    g.fillStyle = 'rgba(0,0,0,0.07)';
+    g.fillRect(x, 0, 2, h);
+    g.strokeStyle = 'rgba(255,255,255,0.1)';
+    g.lineWidth = 2;
+    for (let y = 0; y < h; y += col * 0.7) {
+      g.beginPath();
+      g.moveTo(x + col * 0.2, y);
+      g.lineTo(x + col * 0.5, y + col * 0.35);
+      g.lineTo(x + col * 0.8, y);
+      g.stroke();
+    }
+  }
+}
+
+function patternMesh(g, w, h, look) {
+  patternSolid(g, w, h, look);
+  g.fillStyle = 'rgba(0,0,0,0.1)';
+  const s = 7;
+  for (let y = 0; y < h; y += s) for (let x = (y / s) % 2 ? s / 2 : 0; x < w; x += s) g.fillRect(x, y, 2.5, 2.5);
+}
+
+const PATTERNS = {
+  faceprint: patternFacePrint, hawaiian: patternHawaiian, floral: patternFloral, dress: patternDress,
+  stripes: patternStripes, sweater: patternKnit, jersey: patternMesh, tee: patternCotton, tank: patternCotton,
+  hoodie: patternCotton, overalls: patternCotton, suit: patternCotton,
+};
 
 // Fabric prints don't depend on skin tone, so they're drawn once per outfit and reused
 // (avatars are rebuilt every match and redrawn when the photo skin arrives).
@@ -283,8 +332,8 @@ function pattern(look, w, h, seed) {
   return c;
 }
 
-// Short / long sleeves etc. per outfit (studs from the top of the arm).
-const SLEEVE = { faceprint: 0.85, hawaiian: 0.8, floral: 1.72, dress: 0, default: 0.9 };
+// Short / long sleeves etc. per outfit (studs from the top of the arm): characters/cosmetics.js SHIRTS.
+const sleeveOf = (look) => SHIRT_BY_ID[look.shirt]?.sleeve ?? 0.9;
 
 // ------------------------------------------------------------------ torso
 
@@ -425,6 +474,8 @@ function drawTorso(look, skin, seed) {
     g.ellipse(bcx - px(0.14), wy + px(0.06), px(0.16), px(0.1), 0.3, 0, Math.PI * 2);
     g.ellipse(bcx + px(0.14), wy + px(0.06), px(0.16), px(0.1), -0.3, 0, Math.PI * 2);
     g.fill();
+  } else {
+    drawTorsoStyle(g, look, skin, { fx, fy, fw, fh, bx, by, bw, cx, tx, ty, tw, th });
   }
   // soft ambient-occlusion under the arms and at the bottom edge (reads well on plastic)
   for (const side of ['px', 'nx']) {
@@ -459,6 +510,295 @@ function hem(g, x, y, w, h, color) {
   g.fillRect(x, y, w, h);
 }
 
+function starPath(g, x, y, r, inner = 0.45, n = 5) {
+  g.beginPath();
+  for (let i = 0; i < n * 2; i++) {
+    const a = (i / (n * 2)) * Math.PI * 2 - Math.PI / 2;
+    const rr = i % 2 ? r * inner : r;
+    g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  g.closePath();
+}
+
+function crewNeck(g, cx, fy, bx, bw, by, skin, trim) {
+  g.fillStyle = skin;
+  g.beginPath();
+  g.ellipse(cx, fy, px(0.3), px(0.15), 0, 0, Math.PI);
+  g.fill();
+  g.strokeStyle = trim;
+  g.lineWidth = px(0.06);
+  g.beginPath();
+  g.ellipse(cx, fy, px(0.3) + px(0.03), px(0.15) + px(0.03), 0, 0, Math.PI);
+  g.stroke();
+  g.fillStyle = skin;
+  g.beginPath();
+  g.ellipse(bx + bw / 2, by, px(0.28), px(0.07), 0, 0, Math.PI);
+  g.fill();
+}
+
+// Big sports number, drawn with a chunky outline.
+function jerseyNumber(g, x, y, size, num, fill, line) {
+  g.save();
+  g.font = `900 ${Math.round(size)}px "Arial Black", "Lilita One", Impact, sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.lineWidth = size * 0.16;
+  g.strokeStyle = line;
+  g.strokeText(String(num), x, y);
+  g.fillStyle = fill;
+  g.fillText(String(num), x, y);
+  g.restore();
+}
+
+const lum = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return (((n >> 16) & 255) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) / 255;
+};
+
+// Torso details for the Wardrobe styles (the family's four outfits are drawn in drawTorso itself).
+function drawTorsoStyle(g, look, skin, R) {
+  const { fx, fy, fw, fh, bx, by, bw, cx, tx, ty, tw, th } = R;
+  const W = px(TORSO_ATLAS.size[0]);
+  const s = look.shirt;
+  const c1 = look.shirtColor;
+  const c2 = look.shirtColor2;
+  const dark = shade(c1, -0.22);
+  if (s === 'tee' || s === 'stripes') {
+    crewNeck(g, cx, fy, bx, bw, by, skin, s === 'tee' ? c2 : shade(c1, -0.15));
+    if (s === 'tee') {
+      // a little star on the chest (the character's left: canvas right)
+      starPath(g, cx + px(0.45), fy + px(0.6), px(0.17));
+      g.fillStyle = c2;
+      g.fill();
+      g.lineWidth = 3;
+      g.strokeStyle = shade(c2, -0.3);
+      g.stroke();
+    }
+    hem(g, 0, fy + fh - px(0.07), W, px(0.07), 'rgba(0,0,0,0.16)');
+  } else if (s === 'tank') {
+    // skin shoulders with two straps, scooped neck and armholes
+    g.fillStyle = skin;
+    g.fillRect(tx, ty, tw, th);
+    g.fillStyle = c1;
+    for (const k of [-1, 1]) g.fillRect(tx + tw / 2 + k * px(0.55) - px(0.2), ty, px(0.4), th);
+    for (const [x0, w0] of [[fx, fw], [bx, bw]]) {
+      const mx = x0 + w0 / 2;
+      g.fillStyle = skin;
+      g.beginPath();
+      g.moveTo(x0, fy);
+      g.lineTo(mx - px(0.75), fy);
+      g.bezierCurveTo(mx - px(0.72), fy + px(0.2), mx - px(0.9), fy + px(0.42), x0, fy + px(0.46));
+      g.closePath();
+      g.fill();
+      g.beginPath();
+      g.moveTo(x0 + w0, fy);
+      g.lineTo(mx + px(0.75), fy);
+      g.bezierCurveTo(mx + px(0.72), fy + px(0.2), mx + px(0.9), fy + px(0.42), x0 + w0, fy + px(0.46));
+      g.closePath();
+      g.fill();
+      g.beginPath();
+      g.ellipse(mx, fy, px(0.36), px(x0 === fx ? 0.42 : 0.25), 0, 0, Math.PI);
+      g.fill();
+      g.strokeStyle = c2;
+      g.lineWidth = px(0.05);
+      g.beginPath();
+      g.ellipse(mx, fy, px(0.38), px(x0 === fx ? 0.44 : 0.27), 0, 0, Math.PI);
+      g.stroke();
+    }
+    for (const side of ['px', 'nx']) {
+      const [sx, sy, sw] = rect(TORSO_ATLAS, side);
+      g.fillStyle = skin;
+      g.beginPath();
+      g.moveTo(sx, sy);
+      g.lineTo(sx + sw, sy);
+      g.lineTo(sx + sw, sy + px(0.46));
+      g.quadraticCurveTo(sx + sw / 2, sy + px(0.75), sx, sy + px(0.46));
+      g.closePath();
+      g.fill();
+    }
+    hem(g, 0, fy + fh - px(0.07), W, px(0.07), 'rgba(0,0,0,0.16)');
+  } else if (s === 'hoodie') {
+    // hood lying on the back, kangaroo pocket, drawstrings, ribbed hem
+    g.fillStyle = dark;
+    g.beginPath();
+    g.ellipse(bx + bw / 2, by, px(0.74), px(0.68), 0, 0, Math.PI);
+    g.fill();
+    g.strokeStyle = shade(c1, -0.38);
+    g.lineWidth = 3;
+    g.beginPath();
+    g.ellipse(bx + bw / 2, by, px(0.5), px(0.42), 0, 0, Math.PI);
+    g.stroke();
+    g.fillStyle = dark;
+    g.beginPath();
+    g.ellipse(cx, fy, px(0.42), px(0.2), 0, 0, Math.PI);
+    g.fill();
+    g.fillStyle = skin;
+    g.beginPath();
+    g.moveTo(cx - px(0.24), fy);
+    g.lineTo(cx + px(0.24), fy);
+    g.lineTo(cx, fy + px(0.22));
+    g.closePath();
+    g.fill();
+    for (const k of [-1, 1]) {
+      g.strokeStyle = c2;
+      g.lineWidth = px(0.045);
+      g.beginPath();
+      g.moveTo(cx + k * px(0.14), fy + px(0.14));
+      g.quadraticCurveTo(cx + k * px(0.18), fy + px(0.5), cx + k * px(0.15), fy + px(0.72));
+      g.stroke();
+      g.fillStyle = '#e8e8e8';
+      g.fillRect(cx + k * px(0.15) - px(0.03), fy + px(0.7), px(0.06), px(0.1));
+    }
+    const py0 = fy + px(1.12);
+    g.fillStyle = shade(c1, -0.08);
+    g.beginPath();
+    g.moveTo(cx - px(0.52), py0);
+    g.lineTo(cx + px(0.52), py0);
+    g.lineTo(cx + px(0.7), fy + fh - px(0.18));
+    g.lineTo(cx - px(0.7), fy + fh - px(0.18));
+    g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,0.3)';
+    g.lineWidth = 3;
+    g.setLineDash([6, 5]);
+    g.stroke();
+    g.setLineDash([]);
+    hem(g, 0, fy + fh - px(0.16), W, px(0.16), dark);
+    g.fillStyle = 'rgba(0,0,0,0.12)';
+    for (let x = 0; x < W; x += 8) g.fillRect(x, fy + fh - px(0.16), 2, px(0.16));
+  } else if (s === 'sweater') {
+    // zigzag band across the chest, ribbed collar and hem
+    const y0 = fy + px(0.62);
+    const bh = px(0.34);
+    g.fillStyle = c2;
+    g.fillRect(0, y0, W, bh);
+    g.fillStyle = c1;
+    const zz = px(0.2);
+    g.beginPath();
+    for (let x = 0; x <= W + zz; x += zz) {
+      g.moveTo(x - zz / 2, y0 + bh * 0.5);
+      g.lineTo(x, y0 + bh * 0.2);
+      g.lineTo(x + zz / 2, y0 + bh * 0.5);
+      g.lineTo(x, y0 + bh * 0.8);
+      g.closePath();
+    }
+    g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let x = zz / 2; x < W; x += zz) g.fillRect(x - 3, y0 + 4, 6, 6);
+    crewNeck(g, cx, fy, bx, bw, by, skin, dark);
+    hem(g, 0, fy + fh - px(0.18), W, px(0.18), dark);
+    g.fillStyle = 'rgba(0,0,0,0.14)';
+    for (let x = 0; x < W; x += 7) g.fillRect(x, fy + fh - px(0.18), 2, px(0.18));
+  } else if (s === 'jersey') {
+    // V-neck with trim, side panels, a big number front and back
+    g.fillStyle = skin;
+    g.beginPath();
+    g.moveTo(cx - px(0.3), fy);
+    g.lineTo(cx + px(0.3), fy);
+    g.lineTo(cx, fy + px(0.38));
+    g.closePath();
+    g.fill();
+    g.strokeStyle = c2;
+    g.lineWidth = px(0.08);
+    g.beginPath();
+    g.moveTo(cx - px(0.36), fy);
+    g.lineTo(cx, fy + px(0.44));
+    g.lineTo(cx + px(0.36), fy);
+    g.stroke();
+    for (const side of ['px', 'nx']) {
+      const [sx, sy, sw, sh] = rect(TORSO_ATLAS, side);
+      g.fillStyle = c2;
+      g.fillRect(sx + sw / 2 - px(0.14), sy + px(0.3), px(0.28), sh);
+    }
+    const num = Number.isFinite(look.num) ? look.num : 10;
+    const light = lum(c1) > 0.6;
+    jerseyNumber(g, cx, fy + px(0.95), px(0.62), num, c2, light ? '#1b2440' : '#ffffff');
+    jerseyNumber(g, bx + bw / 2, by + px(0.95), px(1.05), num, c2, light ? '#1b2440' : '#ffffff');
+    hem(g, 0, fy + fh - px(0.1), W, px(0.1), c2);
+  } else if (s === 'overalls') {
+    // denim bib + straps over a tee (shirtColor); the bib is the legs' colour
+    const d = look.pants;
+    crewNeck(g, cx, fy, bx, bw, by, skin, shade(c1, -0.18));
+    const r = rng(11);
+    const bibTop = fy + px(0.72);
+    denim(g, cx - px(0.62), bibTop, px(1.24), fh - (bibTop - fy), d, r);
+    denim(g, 0, fy + fh - px(0.34), W, px(0.34), d, r);
+    g.strokeStyle = 'rgba(255,210,140,0.5)';
+    g.lineWidth = 2;
+    g.setLineDash([5, 4]);
+    g.strokeRect(cx - px(0.56), bibTop + px(0.06), px(1.12), fh - (bibTop - fy) - px(0.08));
+    g.strokeRect(cx - px(0.28), bibTop + px(0.2), px(0.56), px(0.36));
+    g.setLineDash([]);
+    for (const k of [-1, 1]) {
+      g.fillStyle = shade(d, -0.08);
+      g.fillRect(cx + k * px(0.5) - px(0.13), fy, px(0.26), bibTop - fy + px(0.05));
+      g.fillRect(tx + tw / 2 + k * px(0.5) - px(0.13), ty, px(0.26), th);
+      // back straps cross into an X
+      g.save();
+      g.beginPath();
+      g.moveTo(bx + bw / 2 + k * px(0.5) - px(0.13), by);
+      g.lineTo(bx + bw / 2 + k * px(0.5) + px(0.13), by);
+      g.lineTo(bx + bw / 2 - k * px(0.4) + px(0.13), by + fh - px(0.34));
+      g.lineTo(bx + bw / 2 - k * px(0.4) - px(0.13), by + fh - px(0.34));
+      g.closePath();
+      g.fill();
+      g.restore();
+      g.fillStyle = '#ffd23f';
+      g.beginPath();
+      g.arc(cx + k * px(0.5), bibTop + px(0.08), px(0.075), 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = '#8a6a10';
+      g.lineWidth = 2;
+      g.stroke();
+    }
+  } else if (s === 'suit') {
+    // white shirt, tie, lapels, two buttons and a pocket square
+    g.fillStyle = '#fbfbfb';
+    g.beginPath();
+    g.moveTo(cx - px(0.42), fy);
+    g.lineTo(cx + px(0.42), fy);
+    g.lineTo(cx, fy + px(1.05));
+    g.closePath();
+    g.fill();
+    g.fillStyle = c2;
+    g.beginPath();
+    g.moveTo(cx - px(0.1), fy + px(0.02));
+    g.lineTo(cx + px(0.1), fy + px(0.02));
+    g.lineTo(cx + px(0.06), fy + px(0.16));
+    g.lineTo(cx + px(0.13), fy + px(0.82));
+    g.lineTo(cx, fy + px(0.98));
+    g.lineTo(cx - px(0.13), fy + px(0.82));
+    g.lineTo(cx - px(0.06), fy + px(0.16));
+    g.closePath();
+    g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.18)';
+    g.fillRect(cx - px(0.07), fy + px(0.14), px(0.14), px(0.03));
+    for (const k of [-1, 1]) {
+      g.fillStyle = dark;
+      g.beginPath();
+      g.moveTo(cx + k * px(0.42), fy);
+      g.lineTo(cx + k * px(0.6), fy);
+      g.lineTo(cx + k * px(0.42), fy + px(0.55));
+      g.lineTo(cx + k * px(0.04), fy + px(1.08));
+      g.closePath();
+      g.fill();
+    }
+    buttons(g, cx, fy + px(1.12), fy + fh - px(0.12), 2, shade(c1, -0.45), px(0.05));
+    g.fillStyle = shade(c1, -0.3);
+    g.fillRect(cx + px(0.45), fy + px(0.62), px(0.36), px(0.04));
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(cx + px(0.5), fy + px(0.62));
+    g.lineTo(cx + px(0.58), fy + px(0.5));
+    g.lineTo(cx + px(0.66), fy + px(0.62));
+    g.closePath();
+    g.fill();
+    stitch(g, bx + bw / 2, by + px(0.3), bx + bw / 2, by + fh, 'rgba(0,0,0,0.3)');
+    hem(g, 0, fy + fh - px(0.05), W, px(0.05), 'rgba(0,0,0,0.25)');
+  }
+}
+
 // ------------------------------------------------------------------ arms and legs
 
 function drawArm(look, skin, seed) {
@@ -467,15 +807,17 @@ function drawArm(look, skin, seed) {
   const g = c.getContext('2d');
   g.fillStyle = skin;
   g.fillRect(0, 0, c.width, c.height);
-  const sleeve = SLEEVE[look.shirt] ?? SLEEVE.default;
+  const sleeve = sleeveOf(look);
   if (sleeve > 0) {
     const pc = pattern(look, c.width, px(sleeve), seed + 7);
+    const cuff = { floral: shade(look.shirtColor2, -0.15), jersey: look.shirtColor2, hoodie: shade(look.shirtColor, -0.22), sweater: shade(look.shirtColor, -0.22), suit: '#fbfbfb' }[look.shirt] || 'rgba(0,0,0,0.22)';
+    const cuffH = { hoodie: 0.14, sweater: 0.14, jersey: 0.1, suit: 0.1 }[look.shirt] || 0.07;
     for (const side of ['px', 'nx', 'pz', 'nz']) {
       const [x, y, w] = rect(LIMB_ATLAS, side);
       g.drawImage(pc, x, 0, w, pc.height, x, y, w, pc.height);
       // cuff
-      g.fillStyle = look.shirt === 'floral' ? shade(look.shirtColor2, -0.15) : 'rgba(0,0,0,0.22)';
-      g.fillRect(x, y + px(sleeve) - px(0.07), w, px(0.07));
+      g.fillStyle = cuff;
+      g.fillRect(x, y + px(sleeve) - px(cuffH), w, px(cuffH));
       // a soft shadow the sleeve casts on the skin
       const grd = g.createLinearGradient(0, y + px(sleeve), 0, y + px(sleeve) + px(0.12));
       grd.addColorStop(0, 'rgba(0,0,0,0.15)');
@@ -518,9 +860,10 @@ function drawLeg(look, skin, seed) {
   const r = rng(seed);
   g.fillStyle = skin;
   g.fillRect(0, 0, c.width, c.height);
-  const kind = look.shirt === 'dress' ? 'dress' : look.shirt === 'hawaiian' ? 'shorts' : 'pants';
-  const pantsLen = kind === 'dress' ? 0.5 : kind === 'shorts' ? 0.95 : 2;
-  const jeans = kind === 'pants';
+  // 'dress' = the dress's own skirt + sandals; 'skirt' = a skirt with any top (bare legs, socks)
+  const kind = legsOf(look);
+  const pantsLen = kind === 'dress' || kind === 'skirt' ? 0.5 : kind === 'shorts' ? 0.95 : 2;
+  const jeans = kind === 'jeans';
   for (const side of ['px', 'nx', 'pz', 'nz']) {
     const [x, y, w] = rect(LIMB_ATLAS, side);
     const ph = px(pantsLen);
@@ -528,6 +871,24 @@ function drawLeg(look, skin, seed) {
     else {
       g.fillStyle = look.pants;
       g.fillRect(x, y, w, ph);
+    }
+    if (kind === 'pants') {
+      // plain trousers: soft twill, a pressed crease and a turn-up
+      g.fillStyle = 'rgba(255,255,255,0.05)';
+      for (let i = 0; i < w; i += 5) g.fillRect(x + i, y, 1.5, ph);
+      if (side === 'pz' || side === 'nz') {
+        g.fillStyle = 'rgba(0,0,0,0.1)';
+        g.fillRect(x + w / 2 - 1, y + px(0.2), 2, ph - px(0.3));
+      }
+      g.fillStyle = shade(look.pants, -0.2);
+      g.fillRect(x, y + ph - px(0.14), w, px(0.14));
+    }
+    if (kind === 'skirt') {
+      // ankle socks above the shoes
+      g.fillStyle = '#f4f4f4';
+      g.fillRect(x, y + px(1.5), w, px(0.2));
+      g.fillStyle = 'rgba(0,0,0,0.08)';
+      g.fillRect(x, y + px(1.5), w, 3);
     }
     if (kind === 'shorts') {
       // twill texture + cuff
@@ -624,8 +985,8 @@ function drawSkirt(look) {
     g.fillStyle = grd;
     g.fillRect(i * 16, 0, 16, 64);
   }
-  // hem
-  g.fillStyle = look.shirtColor2;
+  // hem (the dress's accent colour; a plain skirt gets a darker band)
+  g.fillStyle = look.shirt === 'dress' ? look.shirtColor2 : shade(look.pants, -0.22);
   g.fillRect(0, 54, 256, 6);
   g.fillStyle = 'rgba(0,0,0,0.12)';
   g.fillRect(0, 60, 256, 4);
@@ -677,6 +1038,23 @@ export function headRects() {
   });
 }
 
+// How each hair style paints the head's sides and back: share of the head height in solid hair colour,
+// where the fade to skin ends, and a stubbly fade ('shaved': mix = how much skin shows through).
+const HEAD_PAINT = {
+  short: { solid: 0.3, fade: 0.72, shaved: 0.6 },
+  'short-thick': { solid: 0.62 },
+  long: { solid: 0.8 },
+  buzz: { solid: 0.16, fade: 0.62, shaved: 0.62, top: 0.25 },
+  bald: { solid: 0, bald: true },
+  ponytail: { solid: 0.5 },
+  bob: { solid: 0.72 },
+  pigtails: { solid: 0.58 },
+  bun: { solid: 0.5 },
+  spiky: { solid: 0.5 },
+  curly: { solid: 0.62 },
+  mohawk: { solid: 0.08, fade: 0.55, shaved: 0.72, top: 0.62, stripe: true },
+};
+
 /** Paints the head atlas around an already composed face canvas (512x512). */
 export function drawHeadAtlas(faceCanvas, look, skin, target) {
   const c = target || canvas(1024, 512);
@@ -685,20 +1063,25 @@ export function drawHeadAtlas(faceCanvas, look, skin, target) {
   const hc = look.hairColor;
   const r = rng(99);
   // how far down the sides/back the hair colour reaches (0..1 of the head height)
-  const style = look.hair;
-  const solid = style === 'short' ? 0.3 : style === 'short-thick' ? 0.62 : 0.8;
-  const fadeTo = style === 'short' ? 0.72 : solid + 0.14;
+  const P = HEAD_PAINT[look.hair] || HEAD_PAINT.long;
+  const solid = P.solid;
+  const fadeTo = P.fade ?? solid + 0.14;
   for (const k of ['px', 'nz']) {
     const [x, y, w, h] = HEAD_ATLAS[k];
+    if (P.bald) {
+      g.fillStyle = skin;
+      g.fillRect(x, y, w, h);
+      continue;
+    }
     const grd = g.createLinearGradient(0, y, 0, y + h);
-    grd.addColorStop(0, hc);
-    grd.addColorStop(solid, hc);
-    grd.addColorStop(fadeTo, style === 'short' ? mix(hc, skin, 0.6) : skin);
+    grd.addColorStop(0, P.top != null ? mix(hc, skin, P.top) : hc);
+    grd.addColorStop(solid, P.top != null ? mix(hc, skin, P.top) : hc);
+    grd.addColorStop(fadeTo, P.shaved ? mix(hc, skin, P.shaved) : skin);
     grd.addColorStop(Math.min(1, fadeTo + 0.08), skin);
     grd.addColorStop(1, skin);
     g.fillStyle = grd;
     g.fillRect(x, y, w, h);
-    if (style === 'short') {
+    if (P.shaved) {
       // stubble speckle in the fade
       g.fillStyle = 'rgba(0,0,0,0.13)';
       for (let i = 0; i < 700; i++) g.fillRect(x + r() * w, y + (0.2 + r() * 0.55) * h, 1.5, 1.5);
@@ -708,8 +1091,13 @@ export function drawHeadAtlas(faceCanvas, look, skin, target) {
     }
   }
   const [tx, ty, tw, th] = HEAD_ATLAS.py;
-  g.fillStyle = hc;
+  g.fillStyle = P.bald ? skin : P.top != null ? mix(hc, skin, P.top) : hc;
   g.fillRect(tx, ty, tw, th);
+  if (P.stripe) {
+    // the mohawk's strip of hair runs front to back over the crown
+    g.fillStyle = hc;
+    g.fillRect(tx + tw * 0.34, ty, tw * 0.32, th);
+  }
   const [bx, by, bw, bh] = HEAD_ATLAS.ny;
   g.fillStyle = skin;
   g.fillRect(bx, by, bw, bh);
@@ -717,17 +1105,139 @@ export function drawHeadAtlas(faceCanvas, look, skin, target) {
 }
 
 /** All outfit canvases for a character. `seed` keeps patterns stable between redraws. */
-export function drawOutfit(char, skin) {
-  const look = char.look;
+export function drawOutfit(char, skin, look = char.look) {
   const seed = [...char.id].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0;
+  const legs = legsOf(look);
   return {
     torso: drawTorso(look, skin, seed),
     arm: drawArm(look, skin, seed),
     leg: drawLeg(look, skin, seed),
     hair: drawHair(look, skin, seed),
-    skirt: look.shirt === 'dress' ? drawSkirt(look) : null,
-    noodle: drawNoodle(char.color),
+    skirt: legs === 'dress' || legs === 'skirt' ? drawSkirt(look) : null,
+    noodle: drawNoodle(look.noodle || char.color),
   };
 }
+
+// ------------------------------------------------------------------ Wardrobe icons (flat, 2D)
+
+// shirt silhouettes in a 100x100 box: [body path, sleeve length 0..1]
+function shirtShape(g, style, s) {
+  const sl = style === 'tank' || style === 'dress' ? 0 : (SHIRT_BY_ID[style]?.sleeve ?? 0.9) / 1.85;
+  g.beginPath();
+  // shoulders -> sleeves -> body
+  g.moveTo(35 * s, 14 * s);
+  g.quadraticCurveTo(50 * s, 24 * s, 65 * s, 14 * s);
+  if (sl > 0) {
+    const len = 12 + sl * 28;
+    g.lineTo(80 * s, 18 * s);
+    g.lineTo((80 + len * 0.45) * s, (18 + len) * s);
+    g.lineTo((68 + len * 0.1) * s, (24 + len * 0.95) * s);
+    g.lineTo(69 * s, 40 * s);
+  } else {
+    g.lineTo(70 * s, 16 * s);
+    g.quadraticCurveTo(66 * s, 34 * s, 72 * s, 40 * s);
+  }
+  if (style === 'dress') {
+    g.lineTo(88 * s, 90 * s);
+    g.lineTo(12 * s, 90 * s);
+  } else {
+    g.lineTo(71 * s, 88 * s);
+    g.lineTo(29 * s, 88 * s);
+  }
+  if (sl > 0) {
+    const len = 12 + sl * 28;
+    g.lineTo(31 * s, 40 * s);
+    g.lineTo((32 - len * 0.1) * s, (24 + len * 0.95) * s);
+    g.lineTo((20 - len * 0.45) * s, (18 + len) * s);
+    g.lineTo(20 * s, 18 * s);
+  } else {
+    g.lineTo(28 * s, 40 * s);
+    g.quadraticCurveTo(34 * s, 34 * s, 30 * s, 16 * s);
+  }
+  g.closePath();
+}
+
+/** Draws a flat shirt icon (the style's silhouette filled with its real fabric) into a square canvas. */
+export function drawShirtIcon(c, look) {
+  const g = c.getContext('2d');
+  const s = c.width / 100;
+  g.clearRect(0, 0, c.width, c.height);
+  g.save();
+  shirtShape(g, look.shirt, s);
+  g.save();
+  g.clip();
+  // the torso atlas front, so every detail (collars, numbers, bibs) shows as it does in 3D
+  const torso = drawTorso(look, look.skin || '#e0ac8a', 7);
+  const [fx, fy, fw, fh] = rect(TORSO_ATLAS, 'pz');
+  g.drawImage(pattern(look, c.width, c.height, 7), 0, 0);
+  g.drawImage(torso, fx, fy, fw, fh, 26 * s, 14 * s, 48 * s, 76 * s);
+  if (look.shirt === 'dress') {
+    g.fillStyle = look.pants;
+    g.fillRect(0, 62 * s, c.width, 30 * s);
+    g.fillStyle = look.shirtColor2;
+    g.fillRect(0, 84 * s, c.width, 6 * s);
+  }
+  g.restore();
+  g.lineWidth = 3.2 * s;
+  g.strokeStyle = '#10163a';
+  g.lineJoin = 'round';
+  g.stroke();
+  g.restore();
+  return c;
+}
+
+/** Flat legwear icon: jeans, trousers, shorts or a skirt in the pants colour. */
+export function drawLegsIcon(c, look, legs) {
+  const g = c.getContext('2d');
+  const s = c.width / 100;
+  g.clearRect(0, 0, c.width, c.height);
+  const col = look.pants;
+  g.beginPath();
+  if (legs === 'skirt') {
+    g.moveTo(32 * s, 22 * s);
+    g.lineTo(68 * s, 22 * s);
+    g.lineTo(86 * s, 74 * s);
+    g.quadraticCurveTo(50 * s, 82 * s, 14 * s, 74 * s);
+  } else {
+    const bottom = legs === 'shorts' ? 58 : 90;
+    g.moveTo(28 * s, 14 * s);
+    g.lineTo(72 * s, 14 * s);
+    g.lineTo(76 * s, bottom * s);
+    g.lineTo(53 * s, bottom * s);
+    g.lineTo(50 * s, 38 * s);
+    g.lineTo(47 * s, bottom * s);
+    g.lineTo(24 * s, bottom * s);
+  }
+  g.closePath();
+  g.save();
+  g.clip();
+  if (legs === 'jeans') denim(g, 0, 0, c.width, c.height, col, rng(3));
+  else {
+    g.fillStyle = col;
+    g.fillRect(0, 0, c.width, c.height);
+  }
+  if (legs === 'skirt') {
+    for (let i = 0; i < 6; i++) {
+      g.fillStyle = i % 2 ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.08)';
+      g.beginPath();
+      g.moveTo((34 + i * 6) * s, 22 * s);
+      g.lineTo((40 + i * 6) * s, 22 * s);
+      g.lineTo((26 + i * 12) * s, 80 * s);
+      g.lineTo((14 + i * 12) * s, 80 * s);
+      g.fill();
+    }
+  }
+  g.fillStyle = 'rgba(0,0,0,0.18)';
+  g.fillRect(0, 14 * s, c.width, (legs === 'skirt' ? 14 : 6) * s);
+  g.restore();
+  g.lineWidth = 3.2 * s;
+  g.strokeStyle = '#10163a';
+  g.lineJoin = 'round';
+  g.stroke();
+  return c;
+}
+
+/** The hair strands/fade atlas on its own (Wardrobe hair thumbnails). */
+export const drawHairTexture = (look, skin) => drawHair(look, skin, 7);
 
 export { canvas as makeCanvas, rng, shade };

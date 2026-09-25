@@ -6,6 +6,8 @@ import { save } from '../core/save.js';
 import { h, uiSound, setMuted } from './dom.js';
 import { ICON } from './icons.js';
 import { resetTutorial } from './tutorial.js';
+import { fsAvailable, isFullscreen, toggleFullscreen, onFullscreenChange, iosNeedsHomeScreen, IOS_TIP } from './fullscreen.js';
+import { openCloudSave } from './cloudsave.js';
 
 export function buildSettings(app) {
   const rows = [];
@@ -79,11 +81,43 @@ export function buildSettings(app) {
   };
 
   const pct = (v) => Math.round(v * 100) + '%';
+
+  // Cloud Save (save codes) lives here; the panel itself comes from the backend module
+  const cloudBtn = h('button', { class: 'btn btn-blue btn-sm set-cloud', type: 'button', html: `<span class="bi">${ICON.cloud}</span><span>Cloud Save</span>` });
+  cloudBtn.addEventListener('click', () => {
+    uiSound(app, 'click');
+    try {
+      openCloudSave(app);
+    } catch (e) {
+      console.warn('[settings] cloud save failed to open', e);
+    }
+  });
+  const who = app.profile?.name;
+  row('Cloud Save', cloudBtn, `Get a save code to keep ${who ? who + "'s" : 'your'} progress safe, or load it on another device.`).classList.add('set-hi');
   const qualityNote = h('span', { class: 'set-note warn', text: 'Applies after you reload the page.', hidden: true });
 
   row('Music', slider('music', 0, 1, 0.05, pct));
   row('Sound effects', slider('sfx', 0, 1, 0.05, pct));
   row('Mute everything', toggleCtl('muted', 'Mute'));
+
+  // Full screen: a live switch where the browser allows it; iPhones get the Home Screen tip instead
+  let offFs = () => {};
+  if (fsAvailable()) {
+    const fs = h('button', { class: 'switch', type: 'button', role: 'switch', 'aria-label': 'Full screen' }, h('i'));
+    const paintFs = (on) => {
+      fs.classList.toggle('on', on);
+      fs.setAttribute('aria-checked', String(on));
+    };
+    paintFs(isFullscreen());
+    fs.addEventListener('click', () => {
+      uiSound(app, 'click');
+      toggleFullscreen();
+    });
+    offFs = onFullscreenChange(paintFs);
+    row('Full screen', fs, 'Hides the browser bars');
+  } else if (iosNeedsHomeScreen()) {
+    row('Full screen', null, IOS_TIP);
+  }
   const q = row('Graphics', seg('quality', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Med'], ['high', 'High']], () => { qualityNote.hidden = false; }), 'Lower = smoother on phones');
   q.querySelector('.set-l').appendChild(qualityNote);
   row('Difficulty', seg('difficulty', Object.entries(DIFFICULTY).map(([id, d]) => [id, d.name])), 'For new games');
@@ -110,5 +144,11 @@ export function buildSettings(app) {
     sliders.forEach((f) => f());
     toggles.forEach((f) => f());
   });
-  return { el, dispose: off };
+  return {
+    el,
+    dispose() {
+      off();
+      offFs();
+    },
+  };
 }
