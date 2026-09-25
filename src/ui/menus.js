@@ -137,6 +137,17 @@ export function createMenus(app) {
     const panel = h('div', { class: 'modal-panel ' + cls, role: 'dialog', 'aria-modal': 'true', 'aria-label': label, tabindex: '-1' }, closeBtn, content);
     const back = h('div', { class: 'modal-back' });
     const wrap = h('div', { class: 'modal' }, back, panel);
+    // The tap that opened this modal (the touch Action button at a shop, a HUD chip...) still ends with a
+    // click on whatever now sits under the finger: a Buy button, or the backdrop (which would close us).
+    // Only clicks whose press (pointer or key) started inside the modal count; scripted clicks always do.
+    let armed = false;
+    wrap.addEventListener('pointerdown', () => (armed = true), true);
+    wrap.addEventListener('keydown', () => (armed = true), true);
+    wrap.addEventListener('click', (e) => {
+      if (armed || !e.isTrusted) return;
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
     layer.appendChild(wrap);
     layer.classList.add('on');
     const m = { wrap, kind, close: null, dispose: null };
