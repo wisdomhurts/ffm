@@ -17,22 +17,37 @@ export class Input {
 
     this._kd = (e) => {
       if (isTyping(e)) return;
+      // E held through a menu (its key state was reset) stays ignored until it is pressed again,
+      // or its auto-repeat would read as a fresh press and reopen the shop that just closed
+      if (e.repeat && e.code === 'KeyE' && !this.keys.has(e.code)) return;
       this.lastDevice = 'keyboard';
       if (!this.keys.has(e.code)) this._edge(e.code);
       this.keys.add(e.code);
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
+      const inUI = e.target instanceof Element && e.target.closest('button, a, input, select, [role="dialog"], [tabindex]');
+      if (!inUI && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
     };
     this._ku = (e) => this.keys.delete(e.code);
     this._blur = () => {
       this.keys.clear();
       this.mouse.right = this.mouse.left = false;
     };
+    // only poll navigator.getGamepads() once a pad has shown up
+    this._gpSeen = false;
+    window.addEventListener('gamepadconnected', () => (this._gpSeen = true));
     window.addEventListener('keydown', this._kd);
     window.addEventListener('keyup', this._ku);
     window.addEventListener('blur', this._blur);
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Browsers synthesize mouse events after touches; ignore them so a camera drag never bonks.
+    this._lastTouch = -1e9;
+    window.addEventListener('touchstart', () => {
+      this._lastTouch = performance.now();
+      this.lastDevice = 'touch';
+    }, { passive: true, capture: true });
+    const fromTouch = () => performance.now() - this._lastTouch < 900;
     canvas.addEventListener('mousedown', (e) => {
+      if (fromTouch()) return;
       this.lastDevice = 'keyboard';
       if (e.button === 2) this.mouse.right = true;
       if (e.button === 0) {
@@ -42,6 +57,7 @@ export class Input {
       }
     });
     window.addEventListener('mouseup', (e) => {
+      if (fromTouch()) return;
       if (e.button === 2) this.mouse.right = false;
       if (e.button === 0) {
         // quick left click (no drag) = bonk; left drag = orbit camera
@@ -50,6 +66,7 @@ export class Input {
       }
     });
     window.addEventListener('mousemove', (e) => {
+      if (fromTouch()) return;
       this.mouse.x = e.clientX;
       this.mouse.y = e.clientY;
       if (this.mouse.right || this.mouse.left || document.pointerLockElement === canvas) {
@@ -170,13 +187,21 @@ export class Input {
   }
 
   gamepad() {
+    if (!this._gpSeen) return null;
+    const now = performance.now();
+    if (now - (this._gpAt || -1e9) < 8) return this._gp; // one poll per frame is plenty
+    this._gpAt = now;
+    this._gp = null;
     try {
       const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      for (const p of pads) if (p && p.connected) return p;
+      for (const p of pads) if (p && p.connected) {
+        this._gp = p;
+        break;
+      }
     } catch {
       /* ignore */
     }
-    return null;
+    return this._gp;
   }
 
   reset() {

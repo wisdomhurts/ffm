@@ -113,10 +113,15 @@ export class PhysicsWorld {
   step(body, dt, extraBoxes) {
     const r = WORLD.playerRadius;
     body.vel.y -= WORLD.gravity * dt;
-    body.pos.x += body.vel.x * dt;
-    body.pos.z += body.vel.z * dt;
     body.pos._grounded = body.onGround;
-    this.resolve(body.pos, r, extraBoxes);
+    // never move more than r/2 between collision resolves, so fast players can't tunnel through thin fences
+    const mx = body.vel.x * dt, mz = body.vel.z * dt;
+    const n = Math.max(1, Math.ceil(Math.hypot(mx, mz) / (r * 0.5)));
+    for (let i = 0; i < n; i++) {
+      body.pos.x += mx / n;
+      body.pos.z += mz / n;
+      this.resolve(body.pos, r, extraBoxes);
+    }
     body.pos.y += body.vel.y * dt;
     const g = this.groundHeight(body.pos.x, body.pos.z, r, body.pos.y + STEP);
     if (body.pos.y <= g) {
@@ -128,28 +133,69 @@ export class PhysicsWorld {
     }
   }
 
-  // Ray (origin o, unit dir d, length L) against boxes; returns hit distance or L.
+  // Follow-camera sight test, stateless so the camera can probe several angles per frame.
+  // Returns the distance along unit dir d from o (the player's head) to the first camera-solid box, or L.
+  // Camera-solid: cliffs, fences and gate posts up to their VISIBLE top (camMaxY), shop counters, the road
+  // arch, signs and big decor. Planters, invisible boundary walls and lasers never block. Thin decor
+  // (poles, trunks) and camera-only canopies never count as hiding the player, but the lens is kept out of them.
   raycast(o, d, L) {
+    const lens = 0.35;
     let best = L;
-    const minX = Math.min(o.x, o.x + d.x * L), maxX = Math.max(o.x, o.x + d.x * L);
-    const minZ = Math.min(o.z, o.z + d.z * L), maxZ = Math.max(o.z, o.z + d.z * L);
+    const minX = Math.min(o.x, o.x + d.x * L) - 1, maxX = Math.max(o.x, o.x + d.x * L) + 1;
+    const minZ = Math.min(o.z, o.z + d.z * L) - 1, maxZ = Math.max(o.z, o.z + d.z * L) + 1;
     const list = this.query(minX, maxX, minZ, maxZ, this._tmp3 || (this._tmp3 = []));
+    const thin = this._camThin || (this._camThin = []);
+    thin.length = 0;
     for (const b of list) {
-      if (b.tag === 'planter') continue;
-      let tmin = 0, tmax = best;
-      for (const [oa, da, mn, mx] of [[o.x, d.x, b.minX, b.maxX], [o.y, d.y, b.minY, b.maxY], [o.z, d.z, b.minZ, b.maxZ]]) {
-        if (Math.abs(da) < 1e-9) {
-          if (oa < mn || oa > mx) { tmin = Infinity; break; }
-        } else {
-          let t1 = (mn - oa) / da, t2 = (mx - oa) / da;
-          if (t1 > t2) [t1, t2] = [t2, t1];
-          tmin = Math.max(tmin, t1);
-          tmax = Math.min(tmax, t2);
-          if (tmin > tmax) { tmin = Infinity; break; }
+      if (b.tag === 'planter' || b.tag === 'wall' || b.tag === 'laser') continue;
+      const y0 = b.camMinY ?? b.minY;
+      const top = Math.min(b.maxY, b.camMaxY ?? b.maxY);
+      if (top <= y0) continue;
+      const w = Math.min(b.maxX - b.minX, b.maxZ - b.minZ);
+      if (b.tag === 'canopy' || (b.tag === 'deco' && (w < 2 || top < 3))) {
+        thin.push(b);
+        continue;
+      }
+      const t = segEntry(o, d, b.minX - lens, b.maxX + lens, y0 - lens, top + lens, b.minZ - lens, b.maxZ + lens);
+      if (t > 0 && t < best) best = t; // t === 0: the head is inside the padded box, ignore it
+    }
+    // keep the lens out of thin decor and canopies: stop in front of any the camera would sit inside
+    for (let pass = 0; pass < 3; pass++) {
+      const t = best - 0.6;
+      const px = o.x + d.x * t, py = o.y + d.y * t, pz = o.z + d.z * t;
+      let moved = false;
+      for (const b of thin) {
+        const y0 = b.camMinY ?? b.minY;
+        const top = Math.min(b.maxY, b.camMaxY ?? b.maxY);
+        const P = 0.6;
+        if (px > b.minX - P && px < b.maxX + P && py > y0 - P && py < top + P && pz > b.minZ - P && pz < b.maxZ + P) {
+          const e = segEntry(o, d, b.minX - P, b.maxX + P, y0 - P, top + P, b.minZ - P, b.maxZ + P);
+          if (e > 0.5 && e < best) {
+            best = e;
+            moved = true;
+          }
         }
       }
-      if (tmin < best) best = tmin;
+      if (!moved) break;
     }
     return best;
   }
+}
+
+// Entry distance of the ray o + t*d into an axis-aligned box (0 if o starts inside, Infinity on a miss).
+function segEntry(o, d, x0, x1, y0, y1, z0, z1) {
+  let tmin = 0, tmax = Infinity;
+  const O = [o.x, o.y, o.z], D = [d.x, d.y, d.z], MN = [x0, y0, z0], MX = [x1, y1, z1];
+  for (let k = 0; k < 3; k++) {
+    if (Math.abs(D[k]) < 1e-9) {
+      if (O[k] < MN[k] || O[k] > MX[k]) return Infinity;
+    } else {
+      let t1 = (MN[k] - O[k]) / D[k], t2 = (MX[k] - O[k]) / D[k];
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      if (t1 > tmin) tmin = t1;
+      if (t2 < tmax) tmax = t2;
+      if (tmin > tmax) return Infinity;
+    }
+  }
+  return tmin;
 }

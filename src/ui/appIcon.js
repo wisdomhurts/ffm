@@ -1,0 +1,44 @@
+// The game's app icon (Home Screen / install icon), as SVG markup. scripts/make-icons.mjs renders it into
+// assets/icons/*.png, and the "Add to Home Screen" guide shows it inline.
+const INK = '#10163a';
+// A smiling golden seed sprouting on a green hill under a sunny sky. `pad` shrinks the seed + sprout
+// towards the middle (maskable icons get cropped to a circle, so they need the extra room).
+export const appIconSvg = (pad = 1) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="aiSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a6ecff"/><stop offset=".62" stop-color="#4cb6ff"/><stop offset="1" stop-color="#2f86ea"/></linearGradient>
+    <linearGradient id="aiSeed" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" stop-color="#fff6c2"/><stop offset=".35" stop-color="#ffd84a"/><stop offset=".78" stop-color="#ffab12"/><stop offset="1" stop-color="#f08a00"/></linearGradient>
+    <linearGradient id="aiHill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7be86f"/><stop offset="1" stop-color="#2fb34a"/></linearGradient>
+    <radialGradient id="aiSun" cx=".82" cy=".14" r=".5"><stop offset="0" stop-color="#fffbe0" stop-opacity=".95"/><stop offset=".35" stop-color="#fff3a8" stop-opacity=".35"/><stop offset="1" stop-color="#fff3a8" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#aiSky)"/>
+  <rect width="512" height="512" fill="url(#aiSun)"/>
+  <g fill="#fff" opacity=".9">
+    <path d="M58 150c0-20 18-32 36-26 8-20 38-22 48-2 18-4 32 10 28 28z"/>
+    <path d="M360 96c0-14 13-23 26-18 6-14 27-15 34-1 13-3 23 7 20 19z" opacity=".8"/>
+  </g>
+  <path d="M-20 408 C 90 350, 190 352, 260 372 S 430 360, 540 392 V 540 H -20 Z" fill="url(#aiHill)" stroke="${INK}" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M-10 470 C 120 440, 260 452, 522 436" fill="none" stroke="#27a043" stroke-width="10" stroke-linecap="round" opacity=".55"/>
+  <g transform="translate(256 300) scale(${pad}) translate(-256 -300)">
+    <g transform="translate(163 30) scale(1.55)" stroke-linejoin="round" stroke-linecap="round">
+      <g stroke="${INK}" stroke-width="6">
+        <path d="M60 104 C 58 84, 60 66, 62 52" fill="none" stroke-width="10"/>
+        <path d="M60 104 C 58 84, 60 66, 62 52" fill="none" stroke="#3fbf5a" stroke-width="5"/>
+        <path d="M62 56 C 60 30, 78 10, 112 8 C 112 38, 94 58, 62 56 Z" fill="#6fe07a"/>
+        <path d="M60 64 C 58 44, 42 26, 10 26 C 10 52, 28 68, 60 64 Z" fill="#4fcf62"/>
+      </g>
+      <path d="M68 50 C 76 36, 88 24, 104 16" fill="none" stroke="#2e9c46" stroke-width="3.5"/>
+      <path d="M54 58 C 44 48, 32 40, 18 34" fill="none" stroke="#2a8a3e" stroke-width="3.5"/>
+      <path d="M74 22 C 80 17, 88 14, 96 13" fill="none" stroke="#c8ffcf" stroke-width="4"/>
+    </g>
+    <path d="M256 186 C 330 186, 364 262, 364 324 C 364 392, 318 432, 256 432 C 194 432, 148 392, 148 324 C 148 262, 182 186, 256 186 Z" fill="url(#aiSeed)" stroke="${INK}" stroke-width="14" stroke-linejoin="round"/>
+    <path d="M190 262 C 200 232, 222 212, 246 206" fill="none" stroke="#fffbe6" stroke-width="14" stroke-linecap="round" opacity=".9"/>
+    <path d="M300 404 C 326 392, 344 368, 348 338" fill="none" stroke="#d97400" stroke-width="10" stroke-linecap="round" opacity=".55"/>
+    <ellipse cx="220" cy="318" rx="15" ry="20" fill="${INK}"/>
+    <ellipse cx="292" cy="318" rx="15" ry="20" fill="${INK}"/>
+    <circle cx="225" cy="310" r="5.5" fill="#fff"/>
+    <circle cx="297" cy="310" r="5.5" fill="#fff"/>
+    <ellipse cx="194" cy="352" rx="17" ry="10" fill="#ff7a8a" opacity=".6"/>
+    <ellipse cx="318" cy="352" rx="17" ry="10" fill="#ff7a8a" opacity=".6"/>
+    <path d="M228 356 C 240 374, 272 374, 284 356" fill="none" stroke="${INK}" stroke-width="10" stroke-linecap="round"/>
+  </g>
+</svg>`;

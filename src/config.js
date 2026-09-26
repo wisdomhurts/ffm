@@ -20,6 +20,8 @@ export const WORLD = {
     gear: { x: -30, z: -50 },
     speed: { x: 0, z: -50 },
     rebirth: { x: 30, z: -50 },
+    pets: { x: -54, z: -52 },
+    wardrobe: { x: 54, z: -52 },
   },
   playerRadius: 1.4,
   playerHeight: 5.2,
@@ -43,7 +45,7 @@ export const PLAYER = {
 };
 
 // Cost of buying speed level L (from L-1).
-export const speedCost = (L) => Math.round(80 * Math.pow(1.55, L));
+export const speedCost = (L) => (L === 1 ? 100 : Math.round(80 * Math.pow(1.55, L)));
 export const speedAt = (level, rebirths = 0) => PLAYER.baseSpeed + level * PLAYER.speedPerLevel + rebirths * 2;
 
 // Planters: first 4 unlocked. Cost to unlock planter index i (0-based).
@@ -66,7 +68,7 @@ export const RARITIES = [
   { id: 'mythic', name: 'Mythic', color: '#ff4d6d', glow: 0xff4d6d, tier: 5 },
   { id: 'secret', name: 'Secret', color: '#111111', glow: 0xffffff, tier: 6 },
 ];
-export const RARITY = Object.fromEntries(RARITIES.map((r) => [r.id, r]));
+export const RARITY = Object.assign(Object.create(null), Object.fromEntries(RARITIES.map((r) => [r.id, r])));
 
 export const MUTATIONS = {
   normal: { id: 'normal', name: '', mult: 1, color: null },
@@ -110,25 +112,25 @@ export const PLANTS = [
   // Secret: the family
   { id: 'dorianfruit', name: "Dorian's Dragonfruit", rarity: 'secret', income: 7000, grow: 300, look: 'dragonfruit', colors: ['#ff3f8e', '#7ee36b'], family: 'dorian' },
   { id: 'estherlotus', name: "Esther's Eternal Lotus", rarity: 'secret', income: 7000, grow: 300, look: 'lotus', colors: ['#ff8fc8', '#ffe066'], family: 'esther' },
-  { id: 'maddiemarigold', name: "Maddie's Magic Marigold", rarity: 'secret', income: 7000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
+  { id: 'maddiemarigold', name: "Mati's Magic Marigold", rarity: 'secret', income: 7000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
   { id: 'micahmelon', name: "Micah's Mega Melon", rarity: 'secret', income: 7000, grow: 300, look: 'melon', colors: ['#3ddc84', '#ff5d5d'], family: 'micah' },
 ];
-export const PLANT = Object.fromEntries(PLANTS.map((p) => [p.id, p]));
+export const PLANT = Object.assign(Object.create(null), Object.fromEntries(PLANTS.map((p) => [p.id, p])));
 export const NAMESAKE_BONUS = 2; // owning your own family secret plant doubles it
 
 export const BIOMES = [
   { id: 'field', name: 'Sunny Field', rarity: 'common', ground: '#7bd35a', wall: '#5aa843', sky: '#8fd3ff', fog: '#bfe7ff',
     monster: null },
   { id: 'greenhollow', name: 'Greenhollow', rarity: 'uncommon', ground: '#3f9e4d', wall: '#2e6b35', sky: '#9fe0c0', fog: '#bfe8d0',
-    monster: { id: 'stump', name: 'Grumpy Stump', speed: 14, aggro: 26, count: 2 } },
+    monster: { id: 'stump', name: 'Grumpy Stump', speed: 14, aggro: 22, count: 2 } },
   { id: 'dustbowl', name: 'Dustbowl', rarity: 'rare', ground: '#e8c27a', wall: '#c9894a', sky: '#ffd9a0', fog: '#f5dcb0',
-    monster: { id: 'crab', name: 'Cactus Crab', speed: 20, aggro: 28, count: 2 } },
+    monster: { id: 'crab', name: 'Cactus Crab', speed: 20, aggro: 24, count: 2 } },
   { id: 'tanglemire', name: 'Tanglemire', rarity: 'epic', ground: '#4b5d3a', wall: '#3a2f4f', sky: '#a58fc9', fog: '#8f86a8',
-    monster: { id: 'snapper', name: 'Swamp Snapper', speed: 26, aggro: 30, count: 3 } },
+    monster: { id: 'snapper', name: 'Swamp Snapper', speed: 26, aggro: 26, count: 2 } },
   { id: 'emberroot', name: 'Emberroot', rarity: 'legendary', ground: '#5a2a22', wall: '#2b1210', sky: '#ff8a5c', fog: '#c2553a',
-    monster: { id: 'lavasprout', name: 'Lava Sprout', speed: 32, aggro: 32, count: 3 } },
+    monster: { id: 'lavasprout', name: 'Lava Sprout', speed: 32, aggro: 28, count: 3 } },
   { id: 'starbloom', name: 'Starbloom', rarity: 'mythic', ground: '#2a2f6b', wall: '#15173d', sky: '#1b1446', fog: '#2a2360',
-    monster: { id: 'lurker', name: 'Star Lurker', speed: 38, aggro: 34, count: 3 } },
+    monster: { id: 'lurker', name: 'Star Lurker', speed: 38, aggro: 30, count: 3 } },
 ];
 export const ROAD_END_Z = WORLD.road.startZ + BIOMES.length * WORLD.road.biomeLength;
 export const biomeIndexAtZ = (z) => {
@@ -152,7 +154,7 @@ export const ITEMS = [
   { id: 'cloak', name: 'Invisibility Cloak', price: 5000, key: '4', desc: 'Invisible for 10 s. Monsters and family ignore you.', duration: 10 },
   { id: 'bucket', name: 'Water Bucket', price: 400, key: '5', desc: 'Halves the growing time left on a nearby plant.' },
 ];
-export const ITEM = Object.fromEntries(ITEMS.map((i) => [i.id, i]));
+export const ITEM = Object.assign(Object.create(null), Object.fromEntries(ITEMS.map((i) => [i.id, i])));
 
 export const EVENTS = {
   firstDelay: 150, // seconds before the first weather event
@@ -168,10 +170,20 @@ export const EVENTS = {
 
 export const MATCH = { showdownSeconds: 480 };
 
+// Bot rubber band (read by ai/, tuned with the headless kid sim): biomeLead = how many biomes past the
+// human's deepest seed grab a bot may farm (only while it trails the human; level or ahead it stays a
+// biome shallower); paceCap = once a bot's net worth or income passes paceCap x the human's it eases
+// off (jogs on errands, farms shallower, ignores shiny seeds; 0 = never; the bots' routing and seed
+// picks out-earn a new player, hence the low values); practiceSteal = one slow, telegraphed steal that
+// teaches a new player to chase and bonk (after: earliest match second; unrobbedOnly: only if nobody
+// has robbed the human yet).
 export const DIFFICULTY = {
-  chill: { name: 'Chill', botSpeedMult: 0.85, stealRate: 0.35, reaction: 0.9, bonkAccuracy: 0.5 },
-  normal: { name: 'Normal', botSpeedMult: 1.0, stealRate: 1.0, reaction: 0.5, bonkAccuracy: 0.75 },
-  chaos: { name: 'Chaos', botSpeedMult: 1.1, stealRate: 1.8, reaction: 0.25, bonkAccuracy: 0.92 },
+  chill: { name: 'Chill', botSpeedMult: 0.85, stealRate: 0.35, reaction: 0.9, bonkAccuracy: 0.5, monsterSpeedMult: 0.85, monsterAggroMult: 0.8,
+    biomeLead: 0, paceCap: 0.4, practiceSteal: { after: 75, unrobbedOnly: false } },
+  normal: { name: 'Normal', botSpeedMult: 1.0, stealRate: 1.0, reaction: 0.5, bonkAccuracy: 0.75, monsterSpeedMult: 1, monsterAggroMult: 1,
+    biomeLead: 1, paceCap: 0.33, practiceSteal: { after: 240, unrobbedOnly: true } },
+  chaos: { name: 'Chaos', botSpeedMult: 1.1, stealRate: 1.8, reaction: 0.25, bonkAccuracy: 0.92, monsterSpeedMult: 1.05, monsterAggroMult: 1.1,
+    biomeLead: 99, paceCap: 0, practiceSteal: null },
 };
 
 export const CHARACTERS = [
@@ -188,7 +200,7 @@ export const CHARACTERS = [
       pants: '#ff3d8b', shoes: '#f2d0b8', build: 'adult', skin: '#d19a82' },
   },
   {
-    id: 'maddie', name: 'Maddie', title: 'The Speedster', color: '#9b5cff', personality: 'speedster',
+    id: 'maddie', name: 'Mati', title: 'The Speedster', color: '#9b5cff', personality: 'speedster',
     tagline: 'Zoom zoom!',
     look: { hair: 'long', hairColor: '#5a3b28', shirt: 'floral', shirtColor: '#8a5cc8', shirtColor2: '#ff7eb6',
       pants: '#3b4b8a', shoes: '#ffffff', build: 'kid', skin: '#d6a08a' },
@@ -200,36 +212,51 @@ export const CHARACTERS = [
       pants: '#c8b48a', shoes: '#2a2a2a', build: 'kid', skin: '#d3a08b' },
   },
 ];
-export const CHARACTER = Object.fromEntries(CHARACTERS.map((c) => [c.id, c]));
+export const CHARACTER = Object.assign(Object.create(null), Object.fromEntries(CHARACTERS.map((c) => [c.id, c])));
 
 // Family banter. {plant} {victim} {thief} {name} are substituted.
 export const CHAT = {
   dorian: {
-    steal: ['Dad tax! Thanks for the {plant}.', 'I\'ll take that {plant}, {victim}.', 'Business opportunity spotted.'],
-    robbed: ['Who took my {plant}?!', '{thief}! Bring that back!', 'Not the {plant}!'],
-    bonk: ['Dad strength!', 'Bonk!', 'Nice try, kiddo.'],
-    rare: ['Look at this {plant}!', 'Jackpot!'],
-    idle: ['Business is booming.', 'Who wants to race to Starbloom?', 'Anyone seen my Sunflower?'],
+    tease: ['Come and get it, {victim}! Dad\'s not THAT fast!', 'Your {plant} is going on a little trip, {victim}!', 'Hehe, try and catch me {victim}!'],
+    caught: ['Okay, okay, you got me!', 'Nice bonk! You\'re a natural.', 'Ha! Fair and square.'],
+    steal: ['Dad tax! Thanks for the {plant}.', 'I\'ll take that {plant}, {victim}.', 'Business opportunity spotted.', 'This {plant} is coming with me.', 'Consider it a loan, {victim}.'],
+    robbed: ['Who took my {plant}?!', '{thief}! Bring that back!', 'Not the {plant}!', '{thief}, we talked about this!', 'That {plant} was my retirement plan!'],
+    bonk: ['Dad strength!', 'Bonk!', 'Nice try, kiddo.', 'Rookie mistake.', 'The noodle never misses.'],
+    rare: ['Look at this {plant}!', 'Jackpot!', 'Found {a_plant}! Daddy\'s rich!'],
+    idle: ['Business is booming.', 'Who wants to race to Starbloom?', 'Anyone seen my Sunflower?', 'Remember Cabo? This is better.',
+      'Speed is money, {human}.', 'I\'m not saying I\'m the best... but I\'m the best.', 'Who ate the last churro?', 'Dad joke incoming: this garden is un-BE-LEAF-able.'],
   },
   esther: {
-    steal: ['Mom privileges. {plant} is mine.', 'Sorry {victim}, this {plant} looked lonely.', 'Borrowing this forever.'],
-    robbed: ['{thief}. Put. It. Back.', 'You did NOT just take my {plant}.', 'Locking up next time!'],
-    bonk: ['Nobody touches my garden!', 'Hands off!', 'Gotcha!'],
-    rare: ['Ooh, a {plant}!', 'So pretty!'],
-    idle: ['Nobody touches my garden.', 'Dinner\'s at 6, I\'m farming.', 'Who left a banana peel here?'],
+    tease: ['Borrowing your {plant}! Catch me if you can, {victim}!', 'Run, {victim}, run! Bonk me to get it back!', 'Hehe, try and catch me {victim}!'],
+    caught: ['You got me! Good job, sweetie!', 'That\'s how you guard a garden!', 'Nice bonk!'],
+    steal: ['Mom privileges. {plant} is mine.', 'Sorry {victim}, this {plant} looked lonely.', 'Borrowing this forever.', 'Finders keepers, {victim}.', 'Mom always wins.'],
+    robbed: ['{thief}. Put. It. Back.', 'You did NOT just take my {plant}.', 'Locking up next time!', '{thief}, you\'re grounded!', 'I saw that, {thief}!'],
+    bonk: ['Nobody touches my garden!', 'Hands off!', 'Gotcha!', 'Don\'t make me count to three.', 'That\'s what you get!'],
+    rare: ['Ooh, {a_plant}!', 'So pretty!', 'Now THAT is a good seed.'],
+    idle: ['Nobody touches my garden.', 'Dinner\'s at 6, I\'m farming.', 'Who left a banana peel here?', 'Sunscreen, everybody!',
+      'Has anyone seen the TV remote?', 'I miss the beach already.', 'Good luck, {human}!', 'Garden looking gorgeous today.'],
   },
   maddie: {
-    steal: ['Zoom! Got your {plant}!', 'Too fast for you, {victim}!', 'Yoink!'],
-    robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!'],
-    bonk: ['Hi-yah!', 'Too slow!', 'Bonk bonk!'],
-    rare: ['I found a {plant}!!', 'Starbloom here I come!'],
-    idle: ['Zoom zoom!', 'I\'m going to Starbloom!', 'Race you!'],
+    tease: ['Slow-mo mode! Catch me, {victim}!', 'Your {plant} is MINE! Unless you bonk me, {victim}!', 'Hehe, try and catch me {victim}!'],
+    caught: ['Nooo, you got me!', 'Okay, THAT was a good bonk!', 'No fair, you\'re quick!'],
+    steal: ['Zoom! Got your {plant}!', 'Too fast for you, {victim}!', 'Yoink!', 'Speedy delivery!', 'Catch me if you can, {victim}!'],
+    robbed: ['{thief}! GIVE IT BACK!', 'My {plant}!!', 'Not fair!', 'Hey {thief}! That\'s MY {plant}!', 'I\'m coming for you, {thief}!'],
+    bonk: ['Hi-yah!', 'Too slow!', 'Bonk bonk!', 'Ninja noodle!', 'Boom!'],
+    rare: ['I found {a_plant}!!', 'Starbloom here I come!', 'Best. Seed. EVER!'],
+    idle: ['Zoom zoom!', 'Watch me find a Mythic!', 'Race you!', 'I\'m the fastest in the family.', 'Can we get ice cream after this?',
+      'Bet you can\'t catch me, {human}!', 'Speed Level: awesome.', 'This is SO fun.'],
   },
   micah: {
-    steal: ['Hehe. Your {plant} is mine now.', 'Can\'t catch me, {victim}!', 'Sneaky sneaky...'],
-    robbed: ['Hey! That was MY {plant}!', '{thief} stole my stuff!', 'Not cool!'],
-    bonk: ['Noodle attack!', 'Ha! Got you!', 'BONK!'],
-    rare: ['WHOA a {plant}!', 'This is so rare!'],
-    idle: ['Hehe.', 'Anyone want a banana?', 'I\'m not up to anything...'],
+    tease: ['Sneaky sneaky... catch me, {victim}!', 'Bonk me if you can, {victim}!', 'Hehe, try and catch me {victim}!'],
+    caught: ['Aww, you caught me!', 'Okay you win this time!', 'Nice noodle!'],
+    steal: ['Hehe. Your {plant} is mine now.', 'Can\'t catch me, {victim}!', 'Sneaky sneaky...', 'Thanks for the {plant}!', 'Ninja mode activated.'],
+    robbed: ['Hey! That was MY {plant}!', '{thief} stole my stuff!', 'Not cool!', 'Okay {thief}, it\'s WAR.', 'I was gonna steal that back anyway.'],
+    bonk: ['Noodle attack!', 'Ha! Got you!', 'BONK!', 'Critical hit!', 'You got noodled!'],
+    rare: ['WHOA, {a_plant}!', 'This is so rare!', 'Is this a secret?!'],
+    idle: ['Hehe.', 'Anyone want a banana?', 'I\'m not up to anything...', 'Nothing to see here.', 'I love this game.',
+      'Watch your garden, {human}...', 'I have a plan. A sneaky plan.', 'Is it snack time yet?'],
   },
 };
+
+// Keyed tables are looked up with ids from saves and the network: no inherited keys ('constructor', 'toString'...).
+for (const t of [MUTATIONS, DIFFICULTY, CHAT]) Object.setPrototypeOf(t, null);

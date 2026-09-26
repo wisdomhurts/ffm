@@ -1,6 +1,6 @@
 # Steal A Seed! — Family Edition
 
-A Roblox-style 3D browser game starring **Dorian, Esther, Maddie and Micah**, based on the
+A Roblox-style 3D browser game starring **Dorian, Esther, Mati and Micah**, based on the
 Roblox hit *Steal A Seed!* (itself a riff on *Steal a Brainrot* and *Grow a Garden*).
 
 > Core loop: **steal a seed → run it home → plant it → it pays forever → buy Speed → reach a
@@ -48,7 +48,7 @@ Top-down, **+Z is north** (towards the road). Y is up.
 |---|---|---|---|---|
 | dorian | Dorian | `#2f80ed` | **Tycoon**: farms hard, upgrades, occasionally steals big | black & white "face-print" party shirt, dark jeans |
 | esther | Esther | `#ff4f9a` | **Guardian**: locks often, chases thieves relentlessly | hot-pink dress |
-| maddie | Maddie | `#9b5cff` | **Speedster**: buys speed first, goes deep for rare seeds | purple top, floral jacket |
+| maddie | Mati | `#9b5cff` | **Speedster**: buys speed first, goes deep for rare seeds | purple top, floral jacket |
 | micah | Micah | `#1ec8a5` | **Sneaky Thief**: steals constantly, banana peels & balloons | mint Hawaiian shirt, khaki shorts |
 
 Avatars are blocky R6-style (legs, torso, arms, big head) with the family member's
@@ -77,7 +77,7 @@ Income accumulates into the garden's cash pile; step on the COLLECT pad to bank 
   Reach your garden → it becomes yours. Owner gets a big alert.
 * **Bonk** (click / F / tap 🟦): swing a **pool noodle**. Hit → target stunned 1 s,
   knocked back, drops what they carry (stolen plants fly home; wild seeds fall on the ground
-  for anyone to grab). Also stuns road monsters for 2 s.
+  for anyone to grab). Also stuns road monsters for 2 s (only with empty hands: bonk the guard before you grab).
 * **Lock** (step on your LOCK pad): laser gate for 40 s (+10 s per rebirth); only the owner passes.
   60 s recharge.
 * **Collect** (step on COLLECT pad): bank your garden's cash pile.

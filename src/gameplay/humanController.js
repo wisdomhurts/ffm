@@ -8,7 +8,7 @@ export class HumanController {
     this.cam = cam;
     this.frameEdges = null;
     this.game = null;
-    this._interactTapFrames = 0;
+    this._tapHold = 0;
   }
 
   // Called once per rendered frame (before game.update) to latch edge actions for this frame.
@@ -23,12 +23,23 @@ export class HumanController {
       interactTap: i.take('interactTap'),
     };
     this.frameEdges = e;
-    this._interactTapFrames = e.interactTap ? 2 : this._interactTapFrames;
+    // a quick tap on E / the Action button counts as a short hold, long enough for 0.25 s grabs;
+    // a new tap during that hold first reports a release so it registers as a fresh press
+    if (e.interactTap) {
+      // a fresh press always follows a release, so if we were still reporting "held" insert one
+      this._tapRelease = !!this._lastInteract;
+      this._tapHold = 0.35;
+    }
   }
 
-  getIntent(game, p) {
+  getIntent(game, p, dt = 1 / 60) {
     const it = emptyIntent();
-    if (!this.input.enabled) return it;
+    if (!this.input.enabled) {
+      // a menu took over: drop any E-tap in flight so it can't re-fire when the menu closes
+      this._tapHold = 0;
+      this.frameEdges = null;
+      return it;
+    }
     const a = this.input.axis();
     const yaw = this.cam.yaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
@@ -36,7 +47,14 @@ export class HumanController {
     it.moveX = fx * a.y + rx * a.x;
     it.moveZ = fz * a.y + rz * a.x;
     // A tap on E / the action button counts as holding for a moment (instant actions fire on it).
-    it.interact = this.input.interactHeld() || this._interactTapFrames > 0;
+    if (this._tapRelease) {
+      this._tapRelease = false;
+      it.interact = false;
+    } else {
+      it.interact = this.input.interactHeld() || this._tapHold > 0;
+      this._tapHold = Math.max(0, (this._tapHold || 0) - dt);
+    }
+    this._lastInteract = it.interact;
     const e = this.frameEdges;
     if (e) {
       it.jump = !!e.jump;
@@ -49,8 +67,17 @@ export class HumanController {
       if (e.select) it.selectSlot = (p.selectedItem + e.select + ITEMS.length) % ITEMS.length;
       // consume edges after the first substep
       this.frameEdges = null;
-      if (this._interactTapFrames > 0) this._interactTapFrames--;
+    }
+    // one-shot requests from the UI (emote wheel, quick chat): delivered with the next intent
+    if (this._queued) {
+      Object.assign(it, this._queued);
+      this._queued = null;
     }
     return it;
+  }
+
+  /** Put a one-shot intent field (emote, say) into the next tick. */
+  queue(field, value) {
+    (this._queued ||= {})[field] = value;
   }
 }

@@ -1,11 +1,14 @@
 // App shell: boots the engine and world once, runs the title "attract mode", and starts/stops matches.
+import * as THREE from 'three';
 import { Engine } from './core/engine.js';
+import { createBanana, createBalloon } from './fx/props.js';
+import { createPlantView, createSeedView, createCarriedPlantView, setPlantQuality } from './plants/plantMeshes.js';
 import { Input } from './core/input.js';
-import { FollowCamera } from './core/camera.js';
+import { FollowCamera, reducedMotion } from './core/camera.js';
 import { bus } from './core/events.js';
 import { settings } from './core/settings.js';
 import { load, save, remove } from './core/save.js';
-import { CHARACTERS, CHARACTER } from './config.js';
+import { CHARACTERS, CHARACTER, PLANTS } from './config.js';
 import { LAYOUT } from './gameplay/layout.js';
 import { Game } from './gameplay/game.js';
 import { HumanController } from './gameplay/humanController.js';
@@ -19,14 +22,40 @@ import { injectStyles } from './ui/styles.js';
 import { createHUD } from './ui/hud.js';
 import { createMenus } from './ui/menus.js';
 import { createTouchControls } from './ui/touch.js';
+import { autoFullscreen } from './ui/fullscreen.js';
+import { watchHudLayout } from './ui/hudLayout.js';
+import { getProfile, activeProfileId, setActiveProfile, updateProfile } from './core/profiles.js';
+import { attachProgress } from './progress/index.js';
+import { createOnline } from './net/session.js';
+import { reactToSocial } from './social/botReact.js';
+import { attachCloudSync } from './online/sync.js';
+import { attachPets } from './ui/pets.js';
+import { sameLook } from './characters/cosmetics.js';
+import { createTradeManager } from './social/trades.js';
 
 const SAVE_EVERY = 12;
+
+// A hidden set of rarely-seen objects compiled up front (see _newGame).
+function buildWarmupGroup() {
+  const g = new THREE.Group();
+  g.name = 'shader-warmup';
+  g.add(createBanana(), createBalloon());
+  // every species in every mutation: plain and skinned plant bodies need different shader programs
+  for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
+    for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);
+    g.add(createSeedView('galaxyorchid', m).object3d, createCarriedPlantView('lavalily', m).object3d);
+  }
+  g.traverse((o) => (o.frustumCulled = false));
+  return g;
+}
 
 class App {
   constructor() {
     injectStyles();
+    watchHudLayout();
     this.container = document.getElementById('app') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'app' });
     this.engine = new Engine(this.container);
+    setPlantQuality(this.engine.qualityId);
     this.root = document.createElement('div');
     this.root.id = 'ui';
     this.container.appendChild(this.root);
@@ -46,7 +75,13 @@ class App {
     this.state = 'boot';
     this.cam = null;
     this.menus = createMenus(this);
+    attachPets(this); // hatching (solo and online) adds pets to the profile
     this.touch = createTouchControls(this);
+    this.profileId = activeProfileId() || CHARACTERS[0].id;
+    this.progress = attachProgress(this);
+    this.online = createOnline(this);
+    this.trades = createTradeManager(this); // host-side trade state machine (docs/ONLINE.md Social)
+    this.cloudSync = attachCloudSync(this); // cloud save + high-score sync; silent when offline or not configured
     this.engine.add((dt, t) => this.frame(dt, t));
     this._saveTimer = 0;
     window.addEventListener('pagehide', () => this.saveNow());
@@ -59,14 +94,201 @@ class App {
     bus.on('shop:open', ({ player, shop }) => {
       if (player === this.human && this.state === 'playing') this.menus.openShop(shop);
     });
+    // Graphics context lost (GPU reset): pause and tell the player instead of showing a white screen.
+    bus.on('engine:contextlost', () => {
+      if (this.state === 'shop') {
+        this.menus.closeShop();
+        this.state = 'playing';
+      }
+      if (this.state === 'playing') this.pause();
+      this._showGfxNotice(true);
+    });
+    bus.on('engine:contextrestored', () => {
+      this._showGfxNotice(false);
+      if (this.state === 'paused') this.resume();
+    });
+    bus.on('player:hit', ({ target }) => {
+      if (target === this.human && this.state === 'shop') this.resume();
+    });
     bus.on('camera:shake', ({ amount = 0.5 } = {}) => this.cam?.addShake(amount));
+    // family bots wave back, dance along and answer quick chat
+    for (const ev of ['emote', 'chat']) {
+      bus.on(ev, (e) => {
+        const g = this.game;
+        if (!g || !e?.player || e.player.kind === 'bot' || (ev === 'chat' && !e.quick)) return;
+        if (this.online?.isClient) return; // the host's bots react; clients just see it
+        for (const b of g.players) if (b.kind === 'bot') reactToSocial(g, b, { type: ev, ...e });
+      });
+    }
+    // the local player's outfit/pet follow their profile
+    bus.on('profile:changed', ({ profile }) => {
+      const p = this.human;
+      if (!p || !this.game || profile.id !== p.profileId) return;
+      if (!sameLook(profile.look, p.look)) this.act('setLook', profile.look);
+      const eq = profile.pets.owned.find((x) => x.uid === profile.pets.equipped)?.id || null;
+      if (eq !== p.pet) this.act('setPet', eq);
+    });
     bus.on('match:end', ({ ranking }) => {
       if (!this.human) return;
+      this._stagePodium(ranking);
       this.state = 'ended';
+      bus.emit('app:state', { state: 'ended' });
       this.touch.setVisible(false);
       this.menus.showEnd(ranking);
       remove('save:showdown');
     });
+  }
+
+  _showGfxNotice(on) {
+    clearTimeout(this._gfxTimer);
+    if (!on) {
+      this._gfxEl?.remove();
+      this._gfxEl = null;
+      return;
+    }
+    if (this._gfxEl) return;
+    const el = document.createElement('div');
+    el.className = 'gfx-notice panel';
+    el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:absolute;inset:0;display:grid;place-items:center;background:rgba(14,18,48,.82);color:#fff;font:700 20px/1.4 system-ui,sans-serif;text-align:center;padding:24px;z-index:9999;pointer-events:auto';
+    el.innerHTML = '<div><div>Graphics paused. Restoring…</div><button type="button" hidden style="margin-top:16px;font:inherit;padding:10px 22px;border-radius:14px;border:3px solid #10163a;background:#3fd65a;color:#10163a;cursor:pointer">Tap to reload</button></div>';
+    const btn = el.querySelector('button');
+    btn.onclick = () => {
+      this.saveNow();
+      location.reload();
+    };
+    this._gfxTimer = setTimeout(() => (btn.hidden = false), 5000);
+    this.container.appendChild(el);
+    this._gfxEl = el;
+  }
+
+  // Showdown finale: the top three stand on podium blocks at the spawn pad; the camera orbits them.
+  _stagePodium(ranking) {
+    const g = this.game;
+    this._clearPodium();
+    const group = new THREE.Group();
+    group.name = 'podium';
+    const spots = [
+      { x: 0, h: 3.2, color: '#ffd23f', label: '1' },
+      { x: -5, h: 2.1, color: '#d9e2f0', label: '2' },
+      { x: 5, h: 1.4, color: '#e0925a', label: '3' },
+    ];
+    spots.forEach((s) => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 128;
+      const x = c.getContext('2d');
+      x.fillStyle = s.color;
+      x.fillRect(0, 0, 128, 128);
+      x.fillStyle = 'rgba(0,0,0,.18)';
+      x.fillRect(0, 118, 128, 10);
+      x.font = '900 84px "Lilita One", "Arial Black", sans-serif';
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      x.lineWidth = 10;
+      x.strokeStyle = '#10163a';
+      x.strokeText(s.label, 64, 66);
+      x.fillStyle = '#fff';
+      x.fillText(s.label, 64, 66);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const side = new THREE.MeshStandardMaterial({ color: s.color, roughness: 0.45, metalness: s.label === '1' ? 0.35 : 0.15 });
+      const front = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 });
+      // BoxGeometry material order: +x, -x, +y, -y, +z, -z (the camera looks from -z)
+      const m = new THREE.Mesh(new THREE.BoxGeometry(4.4, s.h, 4.4), [side, side, side, side, side, front]);
+      m.position.set(s.x, s.h / 2, 0);
+      m.castShadow = m.receiveShadow = true;
+      group.add(m);
+    });
+    this.engine.scene.add(group);
+    this._podium = group;
+    ranking.forEach((r, i) => {
+      const p = r.player;
+      p.carrying = null; // stolen plants already went home in Game._endMatch
+      p.stunUntil = p.invulnUntil = 0;
+      p.cloakUntil = p.coilUntil = 0;
+      p.vel.x = p.vel.y = p.vel.z = 0;
+      const s = spots[i];
+      if (s) {
+        p.pos.x = s.x;
+        p.pos.y = s.h;
+        p.pos.z = 0;
+      } else {
+        // 4th place stands beside the podium, a little behind it
+        p.pos.x = 9.2;
+        p.pos.y = 0;
+        p.pos.z = 2.5;
+      }
+      p.yaw = Math.PI; // face the camera
+      p.celebrateUntil = i === 0 ? g.time + 1e6 : 0;
+    });
+    this._podiumT = 0;
+  }
+
+  _clearPodium() {
+    if (!this._podium) return;
+    this.engine.scene.remove(this._podium);
+    this._podium.traverse((o) => {
+      o.geometry?.dispose();
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+      mats.forEach((m) => {
+        m.map?.dispose();
+        m.dispose();
+      });
+    });
+    this._podium = null;
+  }
+
+  _safe(name, fn) {
+    try {
+      fn();
+    } catch (e) {
+      const n = (this._errCount ||= {});
+      n[name] = (n[name] || 0) + 1;
+      if (n[name] <= 3 || n[name] % 600 === 0) console.warn(`[app] ${name} update failed (${n[name]}x)`, e);
+    }
+  }
+
+  /** The active player profile on this device (see core/profiles.js). */
+  get profile() {
+    return getProfile(this.profileId) || getProfile(CHARACTERS[0].id);
+  }
+
+  setProfile(id) {
+    if (!getProfile(id)) return;
+    this.profileId = id;
+    setActiveProfile(id);
+    bus.emit('profile:active', { profile: this.profile });
+  }
+
+  /**
+   * Every game change the UI asks for goes through here, so it also works as a client in an online
+   * room (the host applies it for the right player). Returns true/false offline, undefined when sent.
+   */
+  act(name, ...args) {
+    if (this.online?.isClient) return this.online.act(name, args);
+    const g = this.game;
+    const p = this.human;
+    if (!g || !p) return false;
+    switch (name) {
+      case 'buyItem': return g.buyItem(p, args[0], args[1] ?? 1);
+      case 'buySpeed': return g.buySpeed(p);
+      case 'rebirth': return g.rebirth(p);
+      case 'buyEgg': return g.buyEgg(p, args[0]);
+      case 'setPet': g.setPet(p, args[0] ?? null); return true;
+      case 'setLook': g.setLook(p, args[0]); return true;
+      case 'gift': return g.giftPlant(p, g.players[args[0]], args[1]);
+      case 'emote':
+      case 'say':
+        this.humanCtrl?.queue(name, args[0]);
+        return true;
+      case 'addCash':
+        // quest/badge rewards (host-authoritative online)
+        if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);
+        return true;
+      default:
+        // trades etc. only exist between people online
+        return this.online?.act?.(name, args);
+    }
   }
 
   start() {
@@ -85,10 +307,29 @@ class App {
     this.game = game;
     this.cam = new FollowCamera(this.engine.camera, game.physics);
     for (const p of game.players) {
-      p.controller = p.isHuman ? (this.humanCtrl = new HumanController(this.input, this.cam)) : new BotController(p.char.personality, game.difficultyId);
+      // remote players get their controller from the online session (src/net)
+      if (p.kind === 'local') p.controller = this.humanCtrl = new HumanController(this.input, this.cam);
+      else if (p.kind === 'bot') p.controller = new BotController(p.char.personality, game.difficultyId);
     }
     this.human = game.human;
     this.view = new GameView({ engine: this.engine, game, world: this.world, labels: this.labels, fx: this.fx });
+    // Build every shader now (incl. far-away monsters and things that only appear later:
+    // items, mutations, carried pots) so nothing hitches the first time it appears.
+    try {
+      const r = this.engine.renderer;
+      const warm = this._warmGroup || (this._warmGroup = buildWarmupGroup());
+      warm.position.set(0, -400, 0);
+      this.engine.scene.add(warm);
+      // stay in the scene for two rendered frames too, so the shadow-map depth variants compile now as well
+      const done = () => requestAnimationFrame(() => requestAnimationFrame(() => this.engine.scene.remove(warm)));
+      if (r.compileAsync) r.compileAsync(this.engine.scene, this.engine.camera).then(done, done);
+      else {
+        r.compile(this.engine.scene, this.engine.camera);
+        done();
+      }
+    } catch {
+      /* optional warm-up */
+    }
     this.fx.attach?.(game);
     this.audio.attach(game);
     return game;
@@ -97,24 +338,39 @@ class App {
   startAttract() {
     this._newGame({ humanId: null, mode: 'endless', difficulty: 'normal' });
     // give the bots a head start so the title screen looks lively
-    for (let i = 0; i < 40 * 20; i++) this.game.update(1 / 40);
+    for (let i = 0; i < 40 * 4; i++) this.game.update(1 / 40);
+    this._warmup = 0;
     this.state = 'title';
     this.touch.setVisible(false);
     this.audio.setMusicMode('title');
-    this._attractAngle = 0;
+    this._attractAngle = 2.2; // opens on the plaza, gardens and ocean (not the back of the road arch)
     bus.emit('app:state', { state: 'title' });
   }
 
-  /** opts: {charId, mode:'endless'|'showdown', difficulty, fresh:boolean} */
+  /** Solo play. opts: {charId (profile id), mode:'endless'|'showdown', difficulty, fresh:boolean} */
   startGame({ charId, mode = 'endless', difficulty = settings.difficulty, fresh = false }) {
-    const saveKey = `save:${mode}:${charId}`;
+    autoFullscreen(); // phones and tablets, while the tap that started the game still counts
+    this.online?.leave?.();
+    if (charId && getProfile(charId)) this.setProfile(charId);
+    const prof = this.profile;
+    const saveKey = `save:${mode}:${prof.id}`;
     const saved = !fresh && mode === 'endless' ? load(saveKey, null) : null;
-    const game = this._newGame({ humanId: charId, mode, difficulty, save: saved });
+    // you play your profile's family slot; the other three are the family bots
+    const mySlot = Math.max(0, CHARACTERS.findIndex((c) => c.id === prof.base));
+    const slots = CHARACTERS.map((c, i) => (i === mySlot ? { kind: 'local', profile: prof } : { kind: 'bot' }));
+    let game;
+    try {
+      game = this._newGame({ mode, difficulty, save: saved, slots });
+    } catch (e) {
+      console.warn('[save] unreadable save, starting fresh', e);
+      game = this._newGame({ mode, difficulty, save: null, slots });
+    }
     game.saveKey = mode === 'endless' ? saveKey : null;
     this.hud = createHUD(this);
     this.menus.hideAll();
     this.cam.snapBehind(this.human.yaw);
     this.cam.yaw = this.human.yaw;
+    this.cam.playIntro(reducedMotion() ? 0.01 : 2.4);
     this.state = 'playing';
     this.input.reset();
     this.input.enabled = true;
@@ -125,8 +381,34 @@ class App {
     bus.emit('app:state', { state: 'playing' });
   }
 
-  hasSave(charId) {
-    return !!load(`save:endless:${charId}`, null);
+  /**
+   * Online rooms (src/net/session.js) build their world through here, so the HUD, camera, touch
+   * controls and app state work exactly like solo play. opts: Game options incl. `slots`.
+   */
+  startOnline(opts) {
+    autoFullscreen();
+    const game = this._newGame({ mode: 'endless', difficulty: settings.difficulty, ...opts });
+    game.saveKey = null; // online gardens are saved into profile.online by the session
+    this.hud = createHUD(this);
+    this.menus.hideAll();
+    if (this.human) {
+      this.cam.snapBehind(this.human.yaw);
+      this.cam.yaw = this.human.yaw;
+      this.cam.playIntro(reducedMotion() ? 0.01 : 1.6);
+    }
+    this.state = 'playing';
+    this.input.reset();
+    this.input.enabled = true;
+    this.touch.setVisible(true);
+    this.audio.unlock();
+    this.audio.setMusicMode('play');
+    bus.emit('game:start', { game, human: this.human, resumed: false, online: true });
+    bus.emit('app:state', { state: 'playing' });
+    return game;
+  }
+
+  hasSave(profileId) {
+    return !!load(`save:endless:${profileId}`, null);
   }
 
   saveNow() {
@@ -138,7 +420,8 @@ class App {
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
-    this.game.paused = true;
+    if (!this.online?.room) this.game.paused = true; // online the world keeps running under the menu
+    else this.input.enabled = false; // ...but your own character stands still while the menu is open
     this.input.reset();
     this.touch.setVisible(false);
     this.menus.showPause();
@@ -147,22 +430,29 @@ class App {
 
   resume() {
     if (this.state !== 'paused' && this.state !== 'shop') return;
+    if (this._gfxEl) return; // graphics are lost: stay paused until they come back
     this.state = 'playing';
     this.game.paused = false;
     this.menus.hidePause();
     this.menus.closeShop();
     this.input.reset();
+    this.input.enabled = true;
+    if (this.humanCtrl) this.humanCtrl._tapHold = 0;
+    // a button still held from the menu (gamepad B, keyboard E) must be released before it acts again
+    if (this.human) this.human.prevInteract = true;
     this.touch.setVisible(true);
     bus.emit('app:state', { state: 'playing' });
   }
 
   quitToTitle() {
+    this.online?.leave?.();
     this.saveNow();
     this.startAttract();
     this.menus.showTitle();
   }
 
   disposeGame() {
+    this._clearPodium();
     if (!this.game) return;
     bus.emit('game:dispose', { game: this.game });
     this.hud?.dispose();
@@ -180,14 +470,40 @@ class App {
   frame(dt, t) {
     const g = this.game;
     if (!g) return;
+    if (this.state === 'paused' || this.state === 'shop') {
+      this.input.pollGamepad(); // Start works in menus too
+      if (this.input.take('interactTap')) this.input.latched.pause = true; // B = back
+    }
     if (this.input.take('pause')) {
       if (this.state === 'playing') this.pause();
       else if (this.state === 'paused' || this.state === 'shop') this.resume();
     }
     if (this.state === 'playing' && this.humanCtrl) this.humanCtrl.beginFrame();
-    if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
+    // online: the session steps the world itself (host) or mirrors the host (client)
+    if (this.online?.room) this.online.update(dt);
+    else if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
+    if (!this.online?.isClient) this.trades?.update?.();
+    if (this.state === 'title' && this._warmup > 0) {
+      for (let i = 0; i < 6 && this._warmup > 0; i++, this._warmup--) g.update(1 / 40);
+    }
     // camera
-    if (this.human && this.state !== 'title') {
+    if (this.state === 'ended' && this._podium) {
+      this._podiumT += dt;
+      const a = Math.sin(this._podiumT * 0.35) * 0.38;
+      const k = Math.min(1, this._podiumT / 1.6);
+      const cam = this.engine.camera;
+      const tanH = Math.tan((cam.fov * Math.PI) / 360) * cam.aspect;
+      // The finishers span x -7.2 (2nd) to 10.4 (4th, beside 3rd place). On narrow screens orbit the middle
+      // of that line and back off far enough for all of it; wide screens keep the winner centred.
+      const cx = 1.6 * Math.min(1, Math.max(0, (1 - tanH) / 0.5));
+      const R = Math.max(17, (10.4 - cx + 1.2) / tanH);
+      const lookY = cam.aspect < 1 ? 1.4 : 2.6; // podium sits between the title banner and the results card
+      const tx = cx + Math.sin(a) * R, ty = 7.2 + (R - 17) * 0.2, tz = -Math.cos(a) * R;
+      if (k < 1) cam.position.lerp({ x: tx, y: ty, z: tz }, 0.08 + k * 0.2);
+      else cam.position.set(tx, ty, tz);
+      cam.lookAt(cx, lookY, 0);
+      this.engine.setFocus(cx, 0, 0);
+    } else if (this.human && this.state !== 'title') {
       const p = this.human;
       const moving = Math.hypot(p.vel.x, p.vel.z) > 2;
       this.cam.update(dt, this.state === 'playing' ? this.input : null, p.pos, p.yaw, moving);
@@ -197,18 +513,20 @@ class App {
       this._attractAngle = (this._attractAngle || 0) + dt * 0.06;
       const a = this._attractAngle;
       const cam = this.engine.camera;
-      cam.position.set(Math.sin(a) * 95, 48, Math.cos(a) * 95 - 5);
-      cam.lookAt(0, 4, 10);
+      cam.position.set(Math.sin(a) * 95, 55, Math.cos(a) * 95 - 5);
+      cam.lookAt(0, 2, 0);
       this.engine.setFocus(0, 0, 0);
     }
-    this.labels.begin();
-    this.view?.update(dt, t, this.engine.camera);
-    this.world.update(dt, { time: t, camera: this.engine.camera, focus: this.human ? this.human.pos : { x: 0, y: 0, z: 0 }, event: g.event, game: g });
-    this.fx.update(dt, t);
-    this.hud?.update(dt, t);
-    this.touch.update(dt);
-    this.audio.update(dt, { game: g, human: this.human, state: this.state });
-    this.labels.end();
+    // each part updates on its own: one bad object (e.g. odd data from another device) must never
+    // freeze the HUD, sound or labels for the rest of the session
+    this._safe('labels', () => this.labels.begin());
+    this._safe('view', () => this.view?.update(dt, t, this.engine.camera));
+    this._safe('world', () => this.world.update(dt, { time: t, camera: this.engine.camera, focus: this.human ? this.human.pos : { x: 0, y: 0, z: 0 }, event: g.event, game: g }));
+    this._safe('fx', () => this.fx.update(dt, t));
+    this._safe('hud', () => this.hud?.update(dt, t));
+    this._safe('touch', () => this.touch.update(dt));
+    this._safe('audio', () => this.audio.update(dt, { game: g, human: this.human, state: this.state }));
+    this._safe('labels', () => this.labels.end());
     if (this.state === 'playing' && g.saveKey) {
       this._saveTimer += dt;
       if (this._saveTimer > SAVE_EVERY) {
