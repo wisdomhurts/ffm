@@ -2,6 +2,14 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
 
+export const reducedMotion = () => {
+  try {
+    return matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+};
+
 export class FollowCamera {
   constructor(camera, physics) {
     this.camera = camera;
@@ -30,7 +38,20 @@ export class FollowCamera {
     this.yaw = playerYaw;
   }
 
+  // Swoop in from a high overview to the follow position over `duration` seconds.
+  playIntro(duration = 2.4) {
+    this.introDur = duration;
+    this.introT = 0;
+    this._introFrom = null;
+  }
+
+  _setDir(pitch) {
+    const cp = Math.cos(pitch);
+    this._dir.set(-Math.sin(this.yaw) * cp, Math.sin(pitch), -Math.cos(this.yaw) * cp);
+  }
+
   addShake(amount) {
+    if (reducedMotion()) return;
     this.shake = Math.min(1.5, this.shake + amount);
   }
 
@@ -47,24 +68,57 @@ export class FollowCamera {
       if (z) this.distance = Math.max(this.minDist, Math.min(this.maxDist, this.distance * (1 + z * 0.1)));
     }
     // Gentle auto-follow: after a moment without manual orbit, drift behind the running player.
+    // Only while the player pushes forward: following a held strafe/diagonal would make them run in circles.
     if (settings.autoRotate && moving && this.time - this.lastManual > 1.4) {
+      const ax = input ? input.axis() : { x: 0, y: 0 };
       const d = Math.atan2(Math.sin(playerYaw - this.yaw), Math.cos(playerYaw - this.yaw));
-      // don't swing around when running towards the camera
-      if (Math.abs(d) < 2.2) this.yaw += d * Math.min(1, dt * 1.6);
+      // mostly-forward input only: a held diagonal would otherwise chase its own tail in circles
+      if (ax.y > 0.2 && Math.abs(ax.x) < 0.25 && Math.abs(d) < 1.0) this.yaw += d * Math.min(1, dt * 0.8) * ax.y;
     }
     this.target.set(focus.x, focus.y + 4.2, focus.z);
     if (this.smoothTarget.lengthSq() === 0) this.smoothTarget.copy(this.target);
     this.smoothTarget.lerp(this.target, 1 - Math.exp(-dt * 14));
 
-    const cp = Math.cos(this.pitch);
-    this._dir.set(-Math.sin(this.yaw) * cp, Math.sin(this.pitch), -Math.cos(this.yaw) * cp);
-    let dist = this.distance;
+    // Occlusion: when a fence or wall blocks the view, first try looking down over it from a bit higher
+    // (like Roblox's camera popping over low walls); only pull in if no higher angle has a clear view.
+    let want = this.distance;
+    let liftGoal = 0;
     if (this.physics) {
-      const hit = this.physics.raycast(this.smoothTarget, this._dir, dist);
-      if (hit < dist) dist = Math.max(3, hit - 0.8);
+      const need = Math.min(want, 9) - 0.3; // a clear first 9 studs is enough; farther hits just pull in a bit
+      for (let k = 0; k <= 8; k++) {
+        const p2 = Math.min(1.3, this.pitch + k * 0.1);
+        this._setDir(p2);
+        if (this.physics.raycast(this.smoothTarget, this._dir, want) >= need) {
+          liftGoal = p2 - this.pitch;
+          break;
+        }
+        if (p2 >= 1.3) break;
+      }
     }
+    this._lift = (this._lift || 0) + (liftGoal - (this._lift || 0)) * (1 - Math.exp(-dt * 7));
+    this._setDir(Math.min(1.3, this.pitch + this._lift));
+    if (this.physics) {
+      // Snap in immediately when something still blocks the view, ease back out when it clears.
+      const hit = this.physics.raycast(this.smoothTarget, this._dir, want);
+      if (hit < want) want = Math.max(2, hit - 0.8);
+    }
+    if (this._dist == null) this._dist = want;
+    this._dist = want <= this._dist ? want : this._dist + (want - this._dist) * (1 - Math.exp(-dt * 5));
+    const dist = this._dist;
     this._pos.copy(this.smoothTarget).addScaledVector(this._dir, dist);
     if (this._pos.y < 1) this._pos.y = 1;
+    if (this.introT != null && this.introT < 1) {
+      if (!this._introFrom) {
+        this._introFrom = new THREE.Vector3(focus.x * 0.4, 70, focus.z - 50);
+        this._introLook = new THREE.Vector3(focus.x * 0.6, 0, focus.z * 0.6 + 10);
+      }
+      this.introT = Math.min(1, this.introT + dt / this.introDur);
+      const k = this.introT < 0.5 ? 4 * this.introT ** 3 : 1 - Math.pow(-2 * this.introT + 2, 3) / 2;
+      this.camera.position.lerpVectors(this._introFrom, this._pos, k);
+      const look = this._introLook.clone().lerp(this.smoothTarget, k);
+      this.camera.lookAt(look);
+      return;
+    }
     if (this.shake > 0) {
       const s = this.shake * 0.6;
       this._pos.x += (Math.random() - 0.5) * s;

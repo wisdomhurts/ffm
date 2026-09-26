@@ -1,7 +1,7 @@
 // The rules of Steal A Seed. Pure simulation: no rendering, no DOM.
 // Views, UI, audio and AI read this state and listen to the events it emits on `bus`.
 import {
-  WORLD, PLAYER, PLANTS, PLANT, RARITIES, RARITY, MUTATIONS, BASE_MUTATION_CHANCE, BIOMES, PODS, ITEMS, ITEM,
+  ROAD_END_Z, WORLD, PLAYER, PLANTS, PLANT, RARITIES, RARITY, MUTATIONS, BASE_MUTATION_CHANCE, BIOMES, PODS, ITEMS, ITEM,
   EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, REBIRTH, NAMESAKE_BONUS, speedCost,
 } from '../config.js';
 import { LAYOUT, gardenContains } from './layout.js';
@@ -9,12 +9,23 @@ import { PhysicsWorld } from '../core/physics.js';
 import { bus } from '../core/events.js';
 import { makeRng } from '../core/rng.js';
 import { Player, emptyIntent } from './player.js';
+import { petMods } from '../pets/effects.js';
+import { PET, EGG } from '../pets/catalog.js';
+import { EMOTE, PHRASE } from '../social/catalog.js';
+import { sanitizeLook, sameLook } from '../characters/cosmetics.js';
 
 let UID = 1;
 const uid = () => UID++;
+// keep locally made ids above any id received from an online host (see applyFull)
+const bumpUid = (n) => {
+  if (Number.isFinite(n) && n >= UID) UID = Math.floor(n) + 1;
+};
 const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// Safety net: anyone who ends up outside the island or the road gets sent home.
+const inPlayArea = ({ x, z }) =>
+  z < WORLD.road.startZ ? Math.abs(x) < 73 && z > -67.5 : Math.abs(x) < WORLD.road.width / 2 + 1 && z < ROAD_END_Z + 1;
 
 export const SELL_SECONDS = 90;
 export const NETWORTH_PLANT_SECONDS = 60;
@@ -28,8 +39,9 @@ export class Game {
    * @param {number} [o.seed] RNG seed
    * @param {object} [o.save] data from serialize()
    * @param {Array}  [o.extraColliders] decorative colliders from the world art
+   * @param {Array}  [o.slots] per slot {kind:'local'|'remote'|'bot', profile?, pid?} (overrides humanId)
    */
-  constructor({ humanId = 'dorian', mode = 'endless', difficulty = 'normal', seed, save = null, extraColliders = [] } = {}) {
+  constructor({ humanId = 'dorian', mode = 'endless', difficulty = 'normal', seed, save = null, extraColliders = [], slots = null } = {}) {
     this.time = 0;
     this.mode = mode;
     this.difficultyId = difficulty;
@@ -40,7 +52,8 @@ export class Game {
     this.paused = false;
     this.over = false;
 
-    this.players = CHARACTERS.map((c, slot) => new Player(slot, c, c.id === humanId));
+    this.players = CHARACTERS.map((c, slot) => new Player(slot, c, !slots && c.id === humanId));
+    if (slots) slots.forEach((cfg, i) => cfg && this._setIdentity(this.players[i], cfg));
     this.human = this.players.find((p) => p.isHuman) || null;
     this.gardens = this.players.map((p, slot) => this._makeGarden(slot, p));
     this.pods = LAYOUT.pods.map((pl) => ({ ...pl, seed: null, respawnAt: 0 }));
@@ -107,7 +120,7 @@ export class Game {
 
   plantIncome(plant, owner = this.players[plant.owner]) {
     const sp = PLANT[plant.speciesId];
-    let v = sp.income * MUTATIONS[plant.mutation].mult * REBIRTH.incomeMult(owner.rebirths);
+    let v = sp.income * MUTATIONS[plant.mutation].mult * REBIRTH.incomeMult(owner.rebirths) * owner.mods.income;
     if (sp.family && sp.family === owner.id) v *= NAMESAKE_BONUS;
     return v;
   }
@@ -167,7 +180,15 @@ export class Game {
   say(player, category, vars = {}) {
     const lines = CHAT[player.id]?.[category];
     if (!lines) return;
-    let text = this.rng.pick(lines);
+    vars = { ...vars };
+    if (vars.plant) vars.a_plant = (/^[aeiou]/i.test(vars.plant) ? 'an ' : 'a ') + vars.plant;
+    vars.human = this.human && this.human !== player ? this.human.name : 'everyone';
+    // don't repeat any of this bot's recent lines
+    const recent = (player._recentLines ||= []);
+    const fresh = lines.filter((l) => !recent.includes(l));
+    let text = this.rng.pick(fresh.length ? fresh : lines);
+    recent.push(text);
+    if (recent.length > 6) recent.shift();
     for (const [k, v] of Object.entries(vars)) text = text.replaceAll(`{${k}}`, v);
     bus.emit('chat', { player, text });
   }
@@ -183,7 +204,8 @@ export class Game {
   }
 
   ranking() {
-    return [...this.players].sort((a, b) => this.netWorth.get(b) - this.netWorth.get(a));
+    // ties go to the local player (nobody likes starting in last place)
+    return [...this.players].sort((a, b) => this.netWorth.get(b) - this.netWorth.get(a) || (b.isHuman ? 1 : 0) - (a.isHuman ? 1 : 0));
   }
 
   // ------------------------------------------------------------------ main update
@@ -194,7 +216,7 @@ export class Game {
     // fixed substeps keep physics stable
     const steps = Math.ceil(dt / (1 / 60));
     const h = dt / steps;
-    for (let i = 0; i < steps; i++) this._step(h);
+    for (let i = 0; i < steps && !this.over && !this.paused; i++) this._step(h);
   }
 
   _step(dt) {
@@ -244,6 +266,14 @@ export class Game {
     const it = p.intent;
     const now = this.time;
     const stunned = now < p.stunUntil;
+    if (p.remoteMotion) {
+      // online: this player's own device simulates their movement and the network code writes
+      // pos/vel/yaw/onGround (after a sanity clamp); the host only runs the rules around it
+      if (it.jump) bus.emit('player:jump', { player: p });
+      this._handleSocial(p, Math.hypot(p.vel.x, p.vel.z) > 1.5, stunned);
+      if (!inPlayArea(p.pos)) this.respawn(p);
+      return;
+    }
     let mx = stunned ? 0 : it.moveX;
     let mz = stunned ? 0 : it.moveZ;
     const len = Math.hypot(mx, mz);
@@ -270,13 +300,24 @@ export class Game {
     } else if (it.aimYaw != null && !stunned) {
       p.yaw = it.aimYaw;
     }
-    if (it.jump && p.onGround && !stunned) {
+    if (it.emote === 'celebrate' && this.time >= p.celebrateUntil) p.celebrateUntil = this.time + 1.5;
+    this._handleSocial(p, len > 0.1, stunned);
+    if (it.jump) p._jumpQ = this.time + 0.12; // buffer: a press just before landing still counts
+    if (p._jumpQ > this.time && p.onGround && !stunned) {
+      p._jumpQ = 0;
       p.vel.y = WORLD.jumpVelocity;
       p.onGround = false;
       bus.emit('player:jump', { player: p });
     }
     this.physics.step(p, dt, this._laserBoxesFor(p));
-    if (!Number.isFinite(p.pos.x) || !Number.isFinite(p.pos.z) || !Number.isFinite(p.pos.y)) this.respawn(p);
+    if (!Number.isFinite(p.pos.x) || !Number.isFinite(p.pos.z) || !Number.isFinite(p.pos.y) || !inPlayArea(p.pos) || p.pos.y > 80) {
+      if (p.carrying?.kind === 'plant') {
+        const c = p.carrying;
+        p.carrying = null;
+        this.returnPlant(c.plant, c.fromSlot, c.fromIndex);
+      }
+      this.respawn(p);
+    }
   }
 
   _separatePlayers() {
@@ -303,8 +344,15 @@ export class Game {
 
   /** Returns the thing this player can interact with right now, or null.
    *  {key, verb, label, hold, action(), target} */
+  // Carrying a seed into your own garden with no free planter: only offer Sell prompts so you can make room.
+  _ownGardenFull(p) {
+    const g = this.gardens[p.slot];
+    return gardenContains(g.L, p.pos.x, p.pos.z) && !g.planters.some((pl) => pl.unlocked && !pl.plant);
+  }
+
   findInteraction(p) {
-    if (p.carrying || this.time < p.stunUntil) return null;
+    const swapping = p.carrying?.kind === 'seed' && this._ownGardenFull(p);
+    if (this.time < p.stunUntil || (p.carrying && !swapping)) return null;
     const pos = p.pos;
     let best = null;
     let bestD = Infinity;
@@ -315,7 +363,7 @@ export class Game {
       }
     };
     // dropped seeds
-    for (const gi of this.ground) {
+    if (!swapping) for (const gi of this.ground) {
       if (gi.kind !== 'seed') continue;
       const d2 = dist2(pos, gi);
       if (d2 < 4.5 * 4.5) {
@@ -326,7 +374,7 @@ export class Game {
       }
     }
     // road pods
-    if (pos.z > LAYOUT.roadGate.z - 2) {
+    if (!swapping && pos.z > LAYOUT.roadGate.z - 2) {
       for (const pod of this.pods) {
         if (!pod.seed) continue;
         const d2 = dist2(pos, pod);
@@ -354,13 +402,18 @@ export class Game {
             consider(d2, { key: 'sell' + pl.index, verb: 'Sell', label: `${this.plantName(pl.plant.speciesId, pl.plant.mutation)} (+$${fmt(value)})`,
               hold: PLAYER.sellHold, rarity: PLANT[pl.plant.speciesId].rarity, target: pl, action: () => this.sellPlant(p, pl) });
           }
-        } else if (pl.plant && pl.plant.growLeft <= 0) {
+        } else if (!swapping && pl.plant && pl.plant.growLeft <= 0) {
           consider(d2, { key: 'steal' + g.slot + '_' + pl.index, verb: 'Steal', label: this.plantName(pl.plant.speciesId, pl.plant.mutation),
             hold: PLAYER.stealHold, rarity: PLANT[pl.plant.speciesId].rarity, target: pl, garden: g, action: () => this.stealPlant(p, g, pl) });
         }
       }
     }
     // shops (human-facing prompts; bots call the buy methods directly)
+    if (swapping) {
+      // nothing to sell or unlock: let them put the seed down instead of carrying it forever
+      if (!best) best = { key: 'drop', verb: 'Drop', label: 'Seed (garden full)', hold: 0.4, action: () => this.dropCarried(p, null, 'drop') };
+      return best;
+    }
     const sh = LAYOUT.shops;
     if (dist2(pos, sh.gear) < sh.gear.r ** 2) consider(dist2(pos, sh.gear) + 1, { key: 'shop:gear', verb: 'Open', label: 'Gear Shop', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'gear' }) });
     if (dist2(pos, sh.speed) < sh.speed.r ** 2) {
@@ -369,6 +422,8 @@ export class Game {
         action: () => { if (!this.buySpeed(p)) bus.emit('shop:open', { player: p, shop: 'speed' }); } });
     }
     if (dist2(pos, sh.rebirth) < sh.rebirth.r ** 2) consider(dist2(pos, sh.rebirth) + 1, { key: 'shop:rebirth', verb: 'Open', label: 'Rebirth Altar', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'rebirth' }) });
+    if (sh.pets && dist2(pos, sh.pets) < sh.pets.r ** 2) consider(dist2(pos, sh.pets) + 1, { key: 'shop:pets', verb: 'Open', label: 'Pet Eggs', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'pets' }) });
+    if (sh.wardrobe && dist2(pos, sh.wardrobe) < sh.wardrobe.r ** 2) consider(dist2(pos, sh.wardrobe) + 1, { key: 'shop:wardrobe', verb: 'Open', label: 'Wardrobe', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'wardrobe' }) });
     return best;
   }
 
@@ -376,6 +431,7 @@ export class Game {
     const it = this.findInteraction(p);
     const st = p.interact;
     const pressed = !!p.intent.interact;
+    if (!pressed) p.holdSpent = false;
     if (!it) {
       if (st.stealPl) this._clearStealer(st.stealPl, p);
       p.interact = { key: null, t: 0, hold: 0, label: '', verb: '', fired: false };
@@ -391,8 +447,8 @@ export class Game {
     if (pressed) {
       if (it.hold <= 0) {
         if (!p.prevInteract) it.action();
-      } else if (!s.fired) {
-        s.t += dt;
+      } else if (!s.fired && !p.holdSpent) {
+        s.t += dt / p.mods.hold; // pets can speed up grabs and steals
         if (it.verb === 'Steal' && !s.stealPl) {
           s.stealPl = it.target;
           it.target.stealer = p.slot;
@@ -400,6 +456,7 @@ export class Game {
         }
         if (s.t >= it.hold) {
           s.fired = true;
+          p.holdSpent = true; // one hold = one action; release before the next one charges
           if (s.stealPl) {
             s.stealPl.stealer = null;
             s.stealPl = null;
@@ -425,7 +482,7 @@ export class Game {
 
   grabPodSeed(p, pod) {
     if (!pod.seed || p.carrying) return false;
-    p.carrying = { kind: 'seed', speciesId: pod.seed.speciesId, mutation: pod.seed.mutation, podId: pod.id };
+    p.carrying = { kind: 'seed', speciesId: pod.seed.speciesId, mutation: pod.seed.mutation, podId: pod.id, lucky: !!pod.seed.lucky };
     pod.seed = null;
     pod.respawnAt = this.time + this.rng.range(PODS.respawnMin, PODS.respawnMax);
     p.stats.seeds++;
@@ -437,7 +494,7 @@ export class Game {
     const i = this.ground.indexOf(gi);
     if (i < 0 || p.carrying) return false;
     this.ground.splice(i, 1);
-    p.carrying = { kind: 'seed', speciesId: gi.speciesId, mutation: gi.mutation, podId: gi.podId };
+    p.carrying = { kind: 'seed', speciesId: gi.speciesId, mutation: gi.mutation, podId: gi.podId, lucky: !!gi.lucky };
     bus.emit('seed:grabbed', { player: p, speciesId: gi.speciesId, mutation: gi.mutation, rarity: PLANT[gi.speciesId].rarity, ground: true });
     return true;
   }
@@ -483,9 +540,10 @@ export class Game {
     const g = this.gardens[p.slot];
     if (Math.abs(p.pos.y) > 2) return;
     const L = g.L;
-    if (dist2(p.pos, L.collectPad) < L.collectPad.r ** 2 && g.cashPile >= 1) {
+    if (dist2(p.pos, L.collectPad) < (L.collectPad.r + p.mods.magnet) ** 2 && g.cashPile >= 1 && (g.cashPile >= 25 || this.time - (g.collectedAt ?? -9) > 0.5)) {
       const amount = Math.floor(g.cashPile);
       g.cashPile -= amount;
+      g.collectedAt = this.time;
       p.cash += amount;
       p.stats.collected += amount;
       bus.emit('cash:collected', { player: p, amount, x: L.collectPad.x, z: L.collectPad.z });
@@ -506,7 +564,10 @@ export class Game {
   _handleAutoPlant(p) {
     if (!p.carrying) return;
     const g = this.gardens[p.slot];
-    if (!gardenContains(g.L, p.pos.x, p.pos.z, 1)) return;
+    if (!gardenContains(g.L, p.pos.x, p.pos.z, 1)) {
+      p._fullWarned = false;
+      return;
+    }
     let best = null;
     let bd = Infinity;
     for (const pl of g.planters) {
@@ -520,8 +581,8 @@ export class Game {
     const c = p.carrying;
     if (c.kind === 'seed') {
       if (!best) {
-        if (this.time > (p._fullWarnAt || 0)) {
-          p._fullWarnAt = this.time + 4;
+        if (!p._fullWarned) {
+          p._fullWarned = true; // once per visit
           bus.emit('garden:full', { player: p });
         }
         return;
@@ -555,8 +616,12 @@ export class Game {
   _handleBonk(p) {
     const it = p.intent;
     const now = this.time;
+    if (it.bonk && p.carrying && now >= (p._blockedAt || 0)) {
+      p._blockedAt = now + 1.2;
+      bus.emit('bonk:blocked', { player: p }); // hands full: the HUD tells you to run
+    }
     if (!it.bonk || now < p.stunUntil || now < p.bonkReadyAt || p.carrying) return;
-    p.bonkReadyAt = now + PLAYER.bonk.cooldown;
+    p.bonkReadyAt = now + PLAYER.bonk.cooldown * p.mods.bonkCd;
     p.swingStart = now;
     bus.emit('bonk:swing', { player: p });
     const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
@@ -615,7 +680,7 @@ export class Game {
     }
     const a = this.rng.range(0, Math.PI * 2);
     const gi = {
-      uid: uid(), kind: 'seed', speciesId: c.speciesId, mutation: c.mutation, podId: c.podId,
+      uid: uid(), kind: 'seed', speciesId: c.speciesId, mutation: c.mutation, podId: c.podId, lucky: !!c.lucky,
       x: q.pos.x + Math.sin(a) * 2, y: 0, z: q.pos.z + Math.cos(a) * 2, expiresAt: this.time + PODS.groundSeedLifetime, droppedAt: this.time,
     };
     // keep it on the walkable road / plaza
@@ -668,10 +733,10 @@ export class Game {
           vx: fx * def.speed + p.vel.x * 0.3, vy: 16, vz: fz * def.speed + p.vel.z * 0.3, born: now });
         break;
       case 'coil':
-        p.coilUntil = now + def.duration;
+        p.coilUntil = Math.max(now, p.coilUntil) + def.duration; // stacking extends the timer
         break;
       case 'cloak':
-        p.cloakUntil = now + def.duration;
+        p.cloakUntil = Math.max(now, p.cloakUntil) + def.duration;
         break;
       case 'bucket': {
         const g = this.gardens[p.slot];
@@ -709,7 +774,7 @@ export class Game {
       if (!pop) {
         for (const q of this.players) {
           if (q.slot === b.owner) continue;
-          if ((q.pos.x - b.x) ** 2 + (q.pos.z - b.z) ** 2 < 2.2 ** 2 && b.y > q.pos.y && b.y < q.pos.y + 6) {
+          if ((q.pos.x - b.x) ** 2 + (q.pos.z - b.z) ** 2 < 2.4 ** 2 && b.y > q.pos.y - 0.5 && b.y < q.pos.y + WORLD.playerHeight + 2.5) {
             pop = true;
             break;
           }
@@ -738,7 +803,7 @@ export class Game {
         if (gi.kind === 'seed') {
           const pod = this.pods[gi.podId];
           if (pod && !pod.seed) {
-            pod.seed = { speciesId: gi.speciesId, mutation: gi.mutation };
+            pod.seed = { speciesId: gi.speciesId, mutation: gi.mutation, lucky: !!gi.lucky };
             pod.respawnAt = 0;
           }
           bus.emit('seed:expired', { item: gi });
@@ -779,7 +844,8 @@ export class Game {
         q.pos.z > r.minZ - 6 && q.pos.z < r.maxZ + 6 && q.pos.z >= LAYOUT.roadGate.z;
       if (target && (!valid(target) || dist2(target.pos, m) > (m.def.aggro * 1.8) ** 2)) target = null;
       if (!target) {
-        let bd = m.def.aggro * m.def.aggro;
+        const aggro = m.def.aggro * (this.difficulty.monsterAggroMult ?? 1);
+        let bd = aggro * aggro;
         for (const q of this.players) {
           if (!valid(q)) continue;
           const d = dist2(q.pos, m);
@@ -796,7 +862,7 @@ export class Game {
       if (target) {
         tx = target.pos.x;
         tz = target.pos.z;
-        spd = m.def.speed;
+        spd = m.def.speed * (this.difficulty.monsterSpeedMult ?? 1);
       } else {
         if (now > m.wanderAt || dist2(m, m.wander) < 4) {
           m.wander = { x: this.rng.range(-halfW, halfW), z: this.rng.range(r.minZ + 12, r.maxZ - 12) };
@@ -822,7 +888,7 @@ export class Game {
         if (c.kind === 'seed') {
           const pod = this.pods[c.podId];
           if (pod && !pod.seed) {
-            pod.seed = { speciesId: c.speciesId, mutation: c.mutation };
+            pod.seed = { speciesId: c.speciesId, mutation: c.mutation, lucky: !!c.lucky };
             pod.respawnAt = 0;
           }
         } else if (c.kind === 'plant') {
@@ -955,9 +1021,360 @@ export class Game {
     return true;
   }
 
+  // ------------------------------------------------------------------ pets, looks, social
+
+  buyEgg(p, eggId) {
+    const egg = EGG[eggId];
+    if (!egg || !LAYOUT.shops.pets || !this.near(p, LAYOUT.shops.pets, 9)) return null;
+    if (p.cash < egg.price) {
+      bus.emit('purchase:fail', { player: p, reason: 'cash', cost: egg.price });
+      return null;
+    }
+    const valid = egg.odds.filter(([id, w]) => PET[id] && w > 0);
+    const total = valid.reduce((a, [, w]) => a + w, 0);
+    if (!total) return null;
+    let r = this.rng.next() * total;
+    let pet = valid[valid.length - 1][0];
+    for (const [id, w] of valid) {
+      if ((r -= w) < 0) {
+        pet = id;
+        break;
+      }
+    }
+    p.cash -= egg.price;
+    bus.emit('purchase', { player: p, what: 'egg:' + eggId, cost: egg.price, qty: 1 });
+    bus.emit('pet:hatched', { player: p, egg: eggId, pet });
+    return pet;
+  }
+
+  setPet(p, petId) {
+    p.pet = petId && PET[petId] ? petId : null;
+    p.mods = petMods(p.pet);
+    bus.emit('pet:equipped', { player: p, pet: p.pet });
+  }
+
+  setLook(p, look) {
+    if (!look || typeof look !== 'object') return;
+    const next = sanitizeLook({ ...p.look, ...look }, p.char.id);
+    if (sameLook(next, p.look)) return;
+    p.look = next;
+    bus.emit('player:look', { player: p });
+  }
+
+  // Emotes (moving, getting hit or carrying ends them) and quick-chat phrases.
+  _handleSocial(p, moving, stunned) {
+    const it = p.intent;
+    const now = this.time;
+    if (it.emote && EMOTE[it.emote] && !stunned && !p.carrying) {
+      p.emote = { id: it.emote, until: now + EMOTE[it.emote].dur, since: now };
+      bus.emit('emote', { player: p, id: it.emote });
+    } else if (p.emote && (moving || stunned || p.carrying || now >= p.emote.until)) p.emote = null;
+    if (it.say && PHRASE[it.say] && now >= (p._sayAt || 0)) {
+      p._sayAt = now + 1.2;
+      bus.emit('chat', { player: p, text: PHRASE[it.say].text, quick: true, phrase: it.say });
+    }
+  }
+
+  /** Give one of your planted plants to another player (lands in their first free planter). */
+  giftPlant(from, to, index) {
+    if (!from || !to || from === to) return false;
+    const pl = this.gardens[from.slot].planters[index];
+    if (!pl?.plant || pl.stealer != null) return false;
+    const dest = this.gardens[to.slot].planters.find((x) => x.unlocked && !x.plant);
+    if (!dest) {
+      bus.emit('gift:fail', { from, to, reason: 'full' });
+      return false;
+    }
+    const plant = pl.plant;
+    pl.plant = null;
+    plant.owner = to.slot;
+    dest.plant = plant;
+    bus.emit('gift', { from, to, plant, planter: dest });
+    return true;
+  }
+
+  /**
+   * Swap plants and cash between two players in one go. offer = {planters: [index...], cash}.
+   * Everything is checked first; nothing changes unless the whole trade fits.
+   */
+  trade(a, b, offerA, offerB) {
+    if (!a || !b || a === b) return false;
+    const norm = (o) => ({
+      planters: [...new Set((Array.isArray(o?.planters) ? o.planters : []).filter((i) => Number.isInteger(i)))].slice(0, 10),
+      cash: Math.max(0, Math.floor(Number(o?.cash) || 0)),
+    });
+    const oa = norm(offerA), ob = norm(offerB);
+    const ga = this.gardens[a.slot], gb = this.gardens[b.slot];
+    const ok = (p, g, o) => p.cash >= o.cash && o.planters.every((i) => g.planters[i]?.plant && g.planters[i].stealer == null);
+    const room = (g, give, get) => g.planters.filter((x) => x.unlocked && !x.plant).length + give >= get;
+    if (!ok(a, ga, oa) || !ok(b, gb, ob) || !room(ga, oa.planters.length, ob.planters.length) || !room(gb, ob.planters.length, oa.planters.length)) {
+      bus.emit('trade:fail', { a, b });
+      return false;
+    }
+    if (!oa.planters.length && !ob.planters.length && !oa.cash && !ob.cash) return false;
+    const take = (g, o) => o.planters.map((i) => {
+      const plant = g.planters[i].plant;
+      g.planters[i].plant = null;
+      return plant;
+    });
+    const fromA = take(ga, oa), fromB = take(gb, ob);
+    const place = (g, slot, plants) => plants.forEach((plant) => {
+      plant.owner = slot;
+      g.planters.find((x) => x.unlocked && !x.plant).plant = plant;
+    });
+    place(ga, a.slot, fromB);
+    place(gb, b.slot, fromA);
+    a.cash += ob.cash - oa.cash;
+    b.cash += oa.cash - ob.cash;
+    bus.emit('trade:done', { a, b, offerA: oa, offerB: ob, plantsA: fromA, plantsB: fromB });
+    return true;
+  }
+
+  // ------------------------------------------------------------------ slots (who plays which garden)
+
+  _setIdentity(p, { kind = 'bot', profile = null, pid = null } = {}) {
+    p.kind = kind;
+    p.isHuman = kind === 'local';
+    p.pid = pid;
+    if (profile && kind !== 'bot') {
+      p.profileId = profile.id;
+      p.faceKey = kind === 'remote' ? 'r_' + pid : profile.id;
+      p.name = profile.name || p.char.name;
+      p.look = sanitizeLook({ ...p.char.look, ...(profile.look || {}) }, p.char.id);
+      const eq = profile.pets?.owned?.find((x) => x.uid === profile.pets.equipped);
+      p.pet = eq && PET[eq.id] ? eq.id : typeof profile.pet === 'string' && PET[profile.pet] ? profile.pet : null;
+    } else {
+      p.profileId = p.char.id;
+      p.faceKey = p.char.id;
+      p.name = p.char.name;
+      p.look = p.char.look;
+      p.pet = null;
+    }
+    p.mods = petMods(p.pet);
+    p.emote = null;
+  }
+
+  /**
+   * Hand a garden slot to someone else at runtime (a friend joins, leaves, or a bot takes over).
+   * The slot starts fresh, then loads `data` ({player, garden} from serializeSlot) if given.
+   */
+  setSlot(slot, cfg = {}) {
+    const p = this.players[slot];
+    if (!p) return null;
+    const c = p.carrying;
+    p.carrying = null;
+    if (c?.kind === 'plant') this.returnPlant(c.plant, c.fromSlot, c.fromIndex);
+    else if (c?.kind === 'seed') {
+      const pod = this.pods[c.podId];
+      if (pod && !pod.seed) {
+        pod.seed = { speciesId: c.speciesId, mutation: c.mutation, lucky: !!c.lucky };
+        pod.respawnAt = 0;
+      }
+    }
+    for (const g of this.gardens) for (const pl of g.planters) if (pl.stealer === slot) pl.stealer = null;
+    // plants someone is carrying away from this garden belong to whoever is leaving (serializeSlot saved
+    // them): they must not fly "home" to the newcomer or be counted twice
+    for (const q of this.players) {
+      if (q === p || q.carrying?.kind !== 'plant' || q.carrying.fromSlot !== slot) continue;
+      const plant = q.carrying.plant;
+      q.carrying = null;
+      bus.emit('steal:cancel', { thief: q, plant, cause: 'left' });
+    }
+    for (const pl of this.gardens[slot].planters) {
+      const thief = pl.stealer != null ? this.players[pl.stealer] : null;
+      if (thief?.interact?.stealPl === pl) this._clearStealer(pl, thief);
+    }
+    for (const m of this.monsters) if (m.target === slot) m.target = null;
+    const fresh = new Player(slot, p.char, false);
+    for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'items', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt',
+      'swingStart', 'coilUntil', 'cloakUntil', 'celebrateUntil', 'interact', 'prevInteract', 'intent', 'lastHitBy', 'stats']) p[k] = fresh[k];
+    p.holdSpent = false;
+    p._jumpQ = 0;
+    const g = this.gardens[slot];
+    const blankG = this._makeGarden(slot, p);
+    g.cashPile = 0;
+    g.lockedUntil = g.lockReadyAt = 0;
+    g.lockActive = false;
+    g.planters.forEach((pl, i) => {
+      pl.unlocked = blankG.planters[i].unlocked;
+      pl.plant = null;
+      pl.stealer = null;
+    });
+    this._setIdentity(p, cfg);
+    if (cfg.data) this.loadSlot(slot, cfg.data);
+    this.respawn(p);
+    this.human = this.players.find((q) => q.isHuman) || null;
+    this._recomputeNetWorth();
+    bus.emit('slot:changed', { slot, player: p });
+    return p;
+  }
+
+  /** This slot's progress ({player, garden}) — what a player takes with them when they leave. */
+  serializeSlot(slot) {
+    const p = this.players[slot];
+    const g = this.gardens[slot];
+    const plantData = (pt) => ({ speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft });
+    const garden = { cashPile: g.cashPile, planters: g.planters.map((pl) => ({ unlocked: pl.unlocked, plant: pl.plant ? plantData(pl.plant) : null })) };
+    // our plants in a thief's hands still count as ours
+    for (const q of this.players) {
+      const c = q.carrying;
+      if (c?.kind !== 'plant' || c.fromSlot !== slot) continue;
+      const orig = garden.planters[c.fromIndex];
+      const spot = orig && orig.unlocked && !orig.plant ? orig : garden.planters.find((x) => x.unlocked && !x.plant);
+      if (spot) spot.plant = plantData(c.plant);
+      else garden.cashPile += Math.round(this.plantIncome(c.plant, p) * SELL_SECONDS); // no room: keep its value
+    }
+    return { v: 1, player: p.serialize(), garden };
+  }
+
+  loadSlot(slot, data) {
+    if (!data || typeof data !== 'object') return;
+    if (data.player && typeof data.player === 'object') this.players[slot].restore(data.player);
+    if (data.garden) this._restoreGarden(slot, data.garden);
+  }
+
+  // ------------------------------------------------------------------ full state (online sync)
+
+  /** Everything needed to show this world on another device or keep it running after a host change. */
+  serializeFull() {
+    const plant = (pt) => pt && { uid: pt.uid, speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft, owner: pt.owner };
+    return {
+      v: 1,
+      time: this.time,
+      over: this.over,
+      mode: this.mode,
+      difficulty: this.difficultyId,
+      uid: UID,
+      nextEventAt: this.nextEventAt,
+      event: this.event ? { type: this.event.type, startedAt: this.event.startedAt, endsAt: this.event.endsAt } : null,
+      match: this.match ? { endsAt: this.match.endsAt } : null,
+      players: this.players.map((p) => {
+        const c = p.carrying;
+        const it = p.interact;
+        return {
+          kind: p.kind === 'bot' ? 'bot' : 'player', pid: p.pid, profileId: p.profileId, name: p.name, look: p.look, pet: p.pet,
+          pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z }, vel: { x: p.vel.x, y: p.vel.y, z: p.vel.z }, yaw: p.yaw, onGround: p.onGround,
+          cash: p.cash, speedLevel: p.speedLevel, rebirths: p.rebirths, upgradeSpend: p.upgradeSpend, items: { ...p.items }, selectedItem: p.selectedItem,
+          carrying: c ? (c.kind === 'plant' ? { kind: 'plant', plant: plant(c.plant), fromSlot: c.fromSlot, fromIndex: c.fromIndex } : { ...c }) : null,
+          stunUntil: p.stunUntil, invulnUntil: p.invulnUntil, bonkReadyAt: p.bonkReadyAt, swingStart: p.swingStart,
+          coilUntil: p.coilUntil, cloakUntil: p.cloakUntil, celebrateUntil: p.celebrateUntil,
+          interact: { key: it.key, t: it.t, hold: it.hold, label: it.label, verb: it.verb, rarity: it.rarity },
+          emote: p.emote, stats: { ...p.stats },
+        };
+      }),
+      gardens: this.gardens.map((g) => ({
+        cashPile: g.cashPile, lockedUntil: g.lockedUntil, lockReadyAt: g.lockReadyAt, lockActive: g.lockActive, collectedAt: g.collectedAt ?? -9,
+        planters: g.planters.map((pl) => ({ unlocked: pl.unlocked, stealer: pl.stealer, plant: plant(pl.plant) })),
+      })),
+      pods: this.pods.map((pod) => ({ seed: pod.seed ? { ...pod.seed } : null, respawnAt: pod.respawnAt })),
+      ground: this.ground.map((gi) => ({ ...gi })),
+      projectiles: this.projectiles.map((b) => ({ ...b })),
+      monsters: this.monsters.map((m) => ({
+        uid: m.uid, x: m.x, y: m.y, z: m.z, yaw: m.yaw, vx: m.vx, vz: m.vz, state: m.state, target: m.target,
+        stunUntil: m.stunUntil, attackAt: m.attackAt, wander: { ...m.wander }, wanderAt: m.wanderAt, ignore: { ...m.ignore },
+      })),
+    };
+  }
+
+  /**
+   * Adopt a full state from serializeFull() (another device). `localSlot` is this device's own player:
+   * its motion (pos/vel/yaw/onGround) stays local unless `force` is set. Existing objects are updated in
+   * place so views keep their references.
+   */
+  applyFull(s, { localSlot = null, force = false, faceKeyOf = null } = {}) {
+    if (!s || s.v !== 1) return;
+    bumpUid(s.uid);
+    this.time = s.time;
+    this.over = !!s.over;
+    this.nextEventAt = s.nextEventAt;
+    const evDef = s.event && EVENTS.types.find((e) => e.id === s.event.type);
+    this.event = evDef ? { type: evDef.id, def: evDef, startedAt: s.event.startedAt, endsAt: s.event.endsAt } : null;
+    this.match = s.match ? { endsAt: s.match.endsAt } : null;
+    const known = new Map();
+    for (const g of this.gardens) for (const pl of g.planters) if (pl.plant) known.set(pl.plant.uid, pl.plant);
+    for (const p of this.players) if (p.carrying?.kind === 'plant') known.set(p.carrying.plant.uid, p.carrying.plant);
+    const plant = (d) => {
+      if (!d || !PLANT[d.speciesId]) return null;
+      const o = known.get(d.uid) || {};
+      Object.assign(o, { uid: d.uid, speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal', growTotal: d.growTotal, growLeft: d.growLeft, owner: d.owner });
+      return o;
+    };
+    s.players.forEach((d, i) => {
+      const p = this.players[i];
+      if (!p || !d) return;
+      const mine = i === localSlot;
+      p.kind = mine ? 'local' : d.kind === 'bot' ? 'bot' : 'remote';
+      p.isHuman = mine;
+      p.pid = d.pid ?? null;
+      p.profileId = d.profileId;
+      p.faceKey = mine ? p.faceKey : p.kind === 'bot' ? p.char.id : faceKeyOf ? faceKeyOf(d) : 'r_' + d.pid;
+      p.name = d.name;
+      if (d.look && !sameLook(d.look, p.look)) p.look = sanitizeLook(d.look, p.char.id);
+      if (d.pet !== p.pet) {
+        p.pet = d.pet && PET[d.pet] ? d.pet : null;
+        p.mods = petMods(p.pet);
+      }
+      if (!mine || force) {
+        Object.assign(p.pos, d.pos);
+        Object.assign(p.vel, d.vel);
+        p.yaw = d.yaw;
+        p.onGround = d.onGround;
+      }
+      for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt', 'swingStart',
+        'coilUntil', 'cloakUntil', 'celebrateUntil']) p[k] = d[k];
+      Object.assign(p.items, d.items);
+      Object.assign(p.stats, d.stats);
+      const c = d.carrying;
+      p.carrying = !c ? null : c.kind === 'plant' ? { kind: 'plant', plant: plant(c.plant), fromSlot: c.fromSlot, fromIndex: c.fromIndex } : { ...c };
+      if (p.carrying?.kind === 'plant' && !p.carrying.plant) p.carrying = null;
+      Object.assign(p.interact, d.interact);
+      p.emote = d.emote;
+    });
+    s.gardens.forEach((d, i) => {
+      const g = this.gardens[i];
+      if (!g || !d) return;
+      g.cashPile = d.cashPile;
+      g.lockedUntil = d.lockedUntil;
+      g.lockReadyAt = d.lockReadyAt;
+      g.lockActive = d.lockActive;
+      g.collectedAt = d.collectedAt;
+      d.planters.forEach((pd, j) => {
+        const pl = g.planters[j];
+        if (!pl || !pd) return;
+        pl.unlocked = pd.unlocked;
+        pl.stealer = pd.stealer;
+        pl.plant = plant(pd.plant);
+      });
+    });
+    s.pods.forEach((d, i) => {
+      const pod = this.pods[i];
+      if (!pod || !d) return;
+      pod.seed = d.seed && PLANT[d.seed.speciesId] ? { ...d.seed } : null;
+      pod.respawnAt = d.respawnAt;
+    });
+    this.ground = s.ground.filter((gi) => gi && (gi.kind === 'banana' || PLANT[gi.speciesId])).map((gi) => ({ ...gi }));
+    this.projectiles = s.projectiles.map((b) => ({ ...b }));
+    s.monsters.forEach((d, i) => {
+      const m = this.monsters[i];
+      if (!m || !d) return;
+      Object.assign(m, d, { wander: { ...d.wander }, ignore: { ...d.ignore } });
+    });
+    this.human = this.players.find((p) => p.isHuman) || null;
+    this._recomputeNetWorth();
+  }
+
   // ------------------------------------------------------------------ match
 
   _endMatch() {
+    if (this.over) return;
+    // A steal only counts once the thief gets it home: plants still in someone's arms at the buzzer go
+    // back to their owner first, so the ranking always matches the gardens on the podium.
+    for (const p of this.players) {
+      const c = p.carrying;
+      if (c?.kind !== 'plant') continue;
+      p.carrying = null;
+      this.returnPlant(c.plant, c.fromSlot, c.fromIndex);
+    }
     this._recomputeNetWorth();
     this.over = true;
     const ranking = this.ranking().map((p) => ({ player: p, netWorth: this.netWorth.get(p) }));
@@ -972,35 +1389,54 @@ export class Game {
   // ------------------------------------------------------------------ save / load
 
   serialize() {
-    return {
-      v: 1,
-      humanId: this.human?.id ?? null,
-      difficulty: this.difficultyId,
-      players: this.players.map((p) => p.serialize()),
-      gardens: this.gardens.map((g) => ({
-        cashPile: g.cashPile,
-        planters: g.planters.map((pl) => ({
-          unlocked: pl.unlocked,
-          plant: pl.plant ? { speciesId: pl.plant.speciesId, mutation: pl.plant.mutation, growTotal: pl.plant.growTotal, growLeft: pl.plant.growLeft } : null,
-        })),
-      })),
-    };
+    const plantData = (pt) => ({ speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft });
+    const gardens = this.gardens.map((g) => ({
+      cashPile: g.cashPile,
+      planters: g.planters.map((pl) => ({ unlocked: pl.unlocked, plant: pl.plant ? plantData(pl.plant) : null })),
+    }));
+    // stolen plants still in someone's hands go home in the save (as if the thief had been bonked)
+    for (const p of this.players) {
+      const c = p.carrying;
+      if (c?.kind !== 'plant') continue;
+      const gs = gardens[c.fromSlot];
+      const orig = gs.planters[c.fromIndex];
+      const spot = orig && orig.unlocked && !orig.plant ? orig : gs.planters.find((x) => x.unlocked && !x.plant);
+      if (spot) spot.plant = plantData(c.plant);
+      else gs.cashPile += Math.round(this.plantIncome(c.plant, this.players[c.fromSlot]) * SELL_SECONDS);
+    }
+    return { v: 1, humanId: this.human?.id ?? null, difficulty: this.difficultyId, players: this.players.map((p) => p.serialize()), gardens };
   }
 
   restore(s) {
     if (!s || s.v !== 1) return;
-    s.players?.forEach((ps, i) => this.players[i]?.restore(ps));
-    s.gardens?.forEach((gs, i) => {
-      const g = this.gardens[i];
-      if (!g) return;
-      g.cashPile = gs.cashPile || 0;
-      gs.planters?.forEach((ps, j) => {
+    const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
+    if (Array.isArray(s.players)) s.players.forEach((ps, i) => ps && typeof ps === 'object' && this.players[i]?.restore(ps));
+    if (!Array.isArray(s.gardens)) return;
+    s.gardens.forEach((gs, i) => this._restoreGarden(i, gs));
+  }
+
+  _restoreGarden(i, gs) {
+    const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
+    const g = this.gardens[i];
+    if (!g || !gs || typeof gs !== 'object') return;
+    {
+      g.cashPile = Math.max(0, num(gs.cashPile));
+      if (!Array.isArray(gs.planters)) return;
+      gs.planters.forEach((ps, j) => {
         const pl = g.planters[j];
-        if (!pl) return;
+        if (!pl || !ps || typeof ps !== 'object') return;
         pl.unlocked = !!ps.unlocked || j < PLANTERS.startUnlocked;
-        pl.plant = ps.plant && PLANT[ps.plant.speciesId] ? { uid: uid(), ...ps.plant, mutation: MUTATIONS[ps.plant.mutation] ? ps.plant.mutation : 'normal', owner: i } : null;
+        const d = ps.plant;
+        const sp = d && PLANT[d.speciesId];
+        if (!sp) {
+          pl.plant = null;
+          return;
+        }
+        const growTotal = num(d.growTotal, sp.grow) > 0 ? num(d.growTotal, sp.grow) : sp.grow;
+        pl.plant = { uid: uid(), speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal', growTotal,
+          growLeft: clamp(num(d.growLeft, 0), 0, growTotal), owner: i };
       });
-    });
+    }
   }
 }
 
@@ -1009,9 +1445,11 @@ export function fmt(n) {
   if (n < 1000) return String(n);
   const units = [['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]];
   for (const [u, v] of units) {
-    if (n >= v) {
+    if (n >= v * 0.9995) {
       const x = n / v;
-      return (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)).replace(/\.?0+$/, '') + u;
+      const str = x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
+      // trim trailing zeros after the decimal point only (640K must stay 640K)
+      return (str.includes('.') ? str.replace(/0+$/, '').replace(/\.$/, '') : str) + u;
     }
   }
   return String(n);

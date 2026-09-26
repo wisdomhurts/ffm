@@ -2,6 +2,18 @@
 // (private windows, sandboxed previews), and the game must run without it.
 const PREFIX = 'steal-a-seed:v1:';
 
+/** False when this browser/sandbox refuses localStorage (progress can't be saved). */
+export const storageOK = (() => {
+  try {
+    const k = PREFIX + '__t';
+    window.localStorage.setItem(k, '1');
+    window.localStorage.removeItem(k);
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 export function load(key, fallback = null) {
   try {
     const raw = window.localStorage.getItem(PREFIX + key);
