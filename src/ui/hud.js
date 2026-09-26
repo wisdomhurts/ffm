@@ -28,10 +28,15 @@ import { fullscreenButton } from './fullscreen.js';
 // activation (Enter/Space, a click with detail 0) still works.
 function onPress(el, fn, when = 'down') {
   let armed = null;
+  let firedAt = -1e9; // the click that trails a press can also report detail 0: it must not fire again
+  const fire = (e) => {
+    firedAt = performance.now();
+    fn(e);
+  };
   el.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
-    if (when === 'down') fn(e);
+    if (when === 'down') fire(e);
     else {
       armed = e.pointerId;
       el.setPointerCapture?.(e.pointerId);
@@ -42,14 +47,16 @@ function onPress(el, fn, when = 'down') {
       if (e.pointerId !== armed) return;
       armed = null;
       const r = el.getBoundingClientRect();
-      if (e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) fn(e);
+      if (e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) fire(e);
     });
     el.addEventListener('pointercancel', () => (armed = null));
   }
   el.addEventListener('click', (e) => {
-    if (e.detail === 0) fn(e);
+    if (e.detail === 0 && performance.now() - firedAt > 600) fn(e);
   });
 }
+
+const ordinal = (n) => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
 
 export function createHUD(app) {
   const game = app.game;
@@ -377,8 +384,21 @@ function createBoard(app, parent, me) {
   const timer = h('span', { class: 'bh-timer' });
   head.append(title, timer);
   const list = h('div', { class: 'board-rows', role: 'list' });
-  const el = h('div', { class: 'board' + (game.match ? ' showdown' : '') }, head, list);
+  // Simple HUD (ui/hudLayout.js): the board folds into a row of faces in ranking order (a crown on the
+  // leader, your place on your face); a tap unfolds the full board for a few seconds
+  const strip = h('div', { class: 'board-strip', 'aria-hidden': 'true' });
+  const el = h('div', { class: 'board' + (game.match ? ' showdown' : ''), style: `--n:${game.players.length}` }, head, strip, list);
   parent.appendChild(el);
+  let openUntil = 0;
+  const setOpen = (on) => {
+    openUntil = on ? performance.now() + 5000 : 0;
+    toggle(el, 'open', on);
+  };
+  onPress(el, () => {
+    if (!document.documentElement.classList.contains('hud-simple')) return;
+    uiSound(app, 'click');
+    setOpen(!el.classList.contains('open'));
+  }, 'up');
   timer.hidden = !game.match;
   let online = null;
   const paintTitle = () => {
@@ -398,7 +418,10 @@ function createBoard(app, parent, me) {
     const dot = h('span', { class: 'br-dot', title: 'Online player' });
     const row = h('div', { class: 'brow' + (p === me ? ' me' : ''), role: 'listitem' }, rank, name, dot, star, flag, val);
     list.appendChild(row);
-    return { p, row, rank, val, star, flag, name, dot, ava: null, face: null };
+    const place = p === me ? h('b', { class: 'bs-place' }) : null;
+    const chip = h('span', { class: 'bs-it' + (p === me ? ' me' : '') }, h('span', { class: 'bs-crown', html: ICON.crown }), place);
+    strip.appendChild(chip);
+    return { p, row, rank, val, star, flag, name, dot, ava: null, face: null, chip, chipAva: null, place };
   });
   // who's in a slot can change mid-game online (a friend joins, a bot takes over): keep the row honest
   function identity(r) {
@@ -409,9 +432,14 @@ function createBoard(app, parent, me) {
       if (r.ava) r.ava.replaceWith(a);
       else r.row.insertBefore(a, r.name);
       r.ava = a;
+      const b = avatarEl(p.faceKey, 'bs-ava');
+      if (r.chipAva) r.chipAva.replaceWith(b);
+      else r.chip.prepend(b);
+      r.chipAva = b;
     }
     setText(r.name, p.name);
     setStyle(r.row, '--c', p.char.color);
+    setStyle(r.chip, '--c', p.char.color);
     toggle(r.row, 'remote', p.kind === 'remote');
     const tip = p.kind === 'remote' ? `${p.name} (online)` : p.kind === 'bot' && app.online?.room ? `${p.name} (computer)` : '';
     if (r.row.title !== tip) r.row.title = tip;
@@ -421,6 +449,7 @@ function createBoard(app, parent, me) {
   let acc = 1;
   return {
     update(dt) {
+      if (openUntil && performance.now() > openUntil) setOpen(false);
       acc += dt;
       if (acc < 0.25) return;
       acc = 0;
@@ -430,8 +459,11 @@ function createBoard(app, parent, me) {
         identity(r);
         const i = order.indexOf(r.p);
         setStyle(r.row, '--i', String(i));
+        setStyle(r.chip, '--i', String(i));
         setText(r.rank, String(i + 1));
         toggle(r.row, 'first', i === 0);
+        toggle(r.chip, 'first', i === 0);
+        if (r.place) setText(r.place, ordinal(i + 1));
         setText(r.val, money(game.netWorth.get(r.p) || 0));
         setHTML(r.star, r.p.rebirths ? ICON.star + r.p.rebirths : '');
         toggle(r.flag, 'on', r.p.carrying?.kind === 'plant');
@@ -668,8 +700,10 @@ function createHotbar(app, parent, me, emoteSlot, hudRoot) {
         }
         sel = me.selectedItem;
       }
+      let any = false;
       slots.forEach((s, i) => {
         const n = me.items[s.it.id] || 0;
+        if (n > 0) any = true;
         setText(s.count, n > 99 ? '99+' : String(n));
         toggle(s.b, 'sel', i === sel);
         toggle(s.b, 'empty', n <= 0);
@@ -684,8 +718,10 @@ function createHotbar(app, parent, me, emoteSlot, hudRoot) {
           f = (until - now) / s.total;
         }
         toggle(s.b, 'active', f > 0);
+        if (f > 0) any = true;
         setStyle(s.timer, 'transform', `scaleX(${Math.max(0, Math.min(1, f)).toFixed(3)})`);
       });
+      toggle(bar, 'none', !any);
     },
     dispose: offTouch,
   };

@@ -13,9 +13,10 @@ const DEFAULTS = {
   tips: true,
   muted: false,
   autoFullscreen: true, // phones and tablets go full screen when a game starts (ui/fullscreen.js)
+  hudLayout: 'auto', // 'auto' | 'simple' | 'full' (ui/hudLayout.js: auto = Simple on small screens)
 };
 
-const ENUMS = { quality: ['low', 'medium', 'high', 'auto'], difficulty: ['chill', 'normal', 'chaos'] };
+const ENUMS = { quality: ['low', 'medium', 'high', 'auto'], difficulty: ['chill', 'normal', 'chaos'], hudLayout: ['auto', 'simple', 'full'] };
 const RANGES = { music: [0, 1], sfx: [0, 1], camSensitivity: [0.2, 3] };
 
 // Stored settings may come from an older/newer version or be hand-edited: keep only known keys with the

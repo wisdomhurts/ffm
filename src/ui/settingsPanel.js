@@ -130,6 +130,7 @@ export function buildSettings(app) {
     });
     row('Full screen', how, 'On iPhone: add the game to your Home Screen');
   }
+  row('Screen layout', seg('hudLayout', [['auto', 'Auto'], ['simple', 'Simple'], ['full', 'Full']]), 'Simple keeps small screens tidy (Auto: on phones)');
   const q = row('Graphics', seg('quality', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Med'], ['high', 'High']], () => { qualityNote.hidden = false; }), 'Lower = smoother on phones');
   q.querySelector('.set-l').appendChild(qualityNote);
   row('Difficulty', seg('difficulty', Object.entries(DIFFICULTY).map(([id, d]) => [id, d.name])), 'For new games');

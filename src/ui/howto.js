@@ -38,6 +38,7 @@ const TIPS = () => [
   `You start with ${PLANTERS.startUnlocked} planters. Walk up to a locked one to unlock more.`,
   `Garden full? Hold ${act()} on a grown plant to sell it for 90 seconds of income.`,
   'Rebirth at the altar for a permanent income boost and a crown star.',
+  'Small screen? The Simple layout (Settings > Screen layout) keeps just the basics. Tap the row of faces at the top to see everyone\'s cash.',
 ];
 
 export function buildHowTo() {

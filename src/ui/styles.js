@@ -1568,6 +1568,98 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .hud-tr > .hud-fs-tr{display:grid;margin:8px 0 0 auto}
 }
 
+/* ------------------------------------------------------------ Simple HUD (ui/hudLayout.js)
+   Small screens (older iPhones, phones with the browser's bars showing) or Settings > Screen layout > Simple:
+   only what you need while playing, and the world gets the rest of the screen. */
+.board-strip{display:none}
+html.hud-simple .board{position:relative;width:auto;padding:4px 7px 4px 5px;border-radius:15px;pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}
+html.hud-simple .board .board-head{display:none}
+html.hud-simple .board.showdown .board-head{display:flex;justify-content:center;padding:1px 0 4px}
+html.hud-simple .board.showdown .bh-title{display:none}
+html.hud-simple .bh-timer{font-size:17px;padding:3px 8px 4px 6px}
+html.hud-simple .board-strip{display:block;position:relative;height:36px;width:calc(var(--n,4)*25px + 7px)}
+.bs-it{position:absolute;top:5px;left:calc(var(--i,0)*25px);transition:left .5s var(--spring)}
+.bs-ava{--s:28px;border-width:2px;box-shadow:0 0 0 2px var(--c,#fff)}
+.bs-it.me{z-index:2}
+.bs-it.me .bs-ava{box-shadow:0 0 0 2.5px #fff,0 0 0 5px var(--c,#fff)}
+.bs-crown{position:absolute;left:50%;top:-8px;width:15px;height:15px;margin-left:-7.5px;color:var(--gold);display:none;z-index:3;filter:drop-shadow(0 1px 0 rgba(0,0,0,.4))}
+.bs-crown svg{width:100%;height:100%}
+.bs-it.first .bs-crown{display:block}
+.bs-place{position:absolute;right:-8px;bottom:-6px;padding:1px 4px 2px;border-radius:7px;background:var(--ink);border:1.5px solid #fff;font:var(--fdw) 10px/1 var(--fd);color:#fff;white-space:nowrap}
+.bs-it.first .bs-place{background:var(--gold);color:var(--ink);border-color:var(--ink)}
+html.hud-simple .board-rows{display:none}
+html.hud-simple .board.open .board-rows{display:block;position:absolute;right:-3px;top:calc(100% + 6px);width:224px;height:calc(var(--rowh)*var(--n,4));padding:6px 0 2px;box-sizing:content-box;
+  background:var(--panel);border:3px solid var(--ink);border-radius:16px;box-shadow:var(--panel-sh);animation:popIn .22s var(--spring);z-index:4}
+html.hud-simple .board.open .brow{left:6px;right:6px;top:calc(var(--i,0)*var(--rowh) + 6px)}
+/* cash and the next goal: one line each; speed and rebirth chips live in the shops (effect timers stay) */
+html.hud-simple .stats{min-width:0;flex-direction:row;align-items:center;gap:7px;padding:4px 10px 5px 5px;border-radius:14px}
+html.hud-simple .st-cash{gap:5px}
+html.hud-simple .st-coin{width:22px;height:22px}
+html.hud-simple .st-val{font-size:22px;text-shadow:var(--o1),0 2px 0 var(--ink)}
+html.hud-simple .st-pop{font-size:17px;top:-10px}
+html.hud-simple .st-sub{flex-direction:row;align-items:center;gap:5px;padding-left:0;margin:0}
+html.hud-simple .st-chips{margin-left:0}
+html.hud-simple .st-inc{font-size:12px}
+html.hud-simple .ch-speed,html.hud-simple .ch-stars{display:none}
+html.hud-simple .nextgoal{max-width:100%;padding:3px 9px 5px 4px;gap:5px;border-radius:12px}
+html.hud-simple .ng-ic{width:20px;height:20px;padding:3px}
+html.hud-simple .ng-k,html.hud-simple .ng-l2,html.hud-simple .ng-word,html.hud-simple .ng-more{display:none}
+html.hud-simple .ng-copy{gap:0;white-space:nowrap}
+html.hud-simple .ng-l1{font-size:13px;gap:3px}
+html.hud-simple .ng-l1 svg{width:13px;height:13px}
+html.hud-simple .ng-bar{height:3px}
+/* the quest tracker is just its ring; the road meter steps aside (the next goal says where to go) */
+html.hud-simple .pg-chip.lay-t .pg-chip-n,html.hud-simple .pg-chip.lay-h .pg-chip-n{display:none}
+html.hud-simple .pg-chip.lay-t .pg-chip-main,html.hud-simple .pg-chip.lay-h .pg-chip-main{padding-right:3px}
+html.hud-simple .meter{display:none}
+/* the hotbar only shows items you have (and hides when you have none) */
+html.hud-simple .slot.empty:not(.active){display:none}
+html.hud-simple .hotbar.none{display:none}
+html.hud-simple .hotbar{gap:5px;padding:4px;border-radius:15px}
+html.hud-simple .slot,html.hud-simple.is-touch .slot{--sz:46px;border-radius:12px}
+html.hud-simple .hb-ic{width:32px;height:32px}
+html.hud-simple .hb-n{font-size:12px;min-width:19px;padding:2px 4px 3px}
+html.hud-simple .hb-tip{display:none}
+/* touch: the Action button already shows the verb and the hold ring, so the prompt is a slim one-liner */
+html.hud-simple .prompt{gap:6px;padding:3px 12px 3px 4px}
+html.hud-simple .prompt.tp{padding-left:12px}
+html.hud-simple .prompt.tp .pp-key{display:none}
+html.hud-simple .pp-key{width:36px;height:36px}
+html.hud-simple .pp-copy{flex-direction:row;align-items:center;gap:6px}
+html.hud-simple .pp-verb{font-size:16px}
+html.hud-simple .pp-label{font-size:12px;max-width:170px}
+html.hud-simple .carry{padding:3px 12px 3px 3px;gap:7px}
+/* thumbs: the emote button joins Pause/Mute up top, the rest shrink a little and hug the corner */
+html.hud-simple.is-touch .soc-emo-hbtn{display:grid}
+html.hud-simple .soc-emobtn{display:none}
+html.hud-simple .tb-jump{width:62px;height:62px;padding:14px}
+html.hud-simple .tb-bonk{width:52px;height:52px;padding:7px}
+html.hud-simple .tb-act{width:58px;height:58px}
+html.hud-simple .ta-verb{font-size:14px}
+html.hud-simple .stick-idle{width:88px;height:88px;margin:0 0 -44px -44px}
+/* standing up: the buttons sit above the hotbar (the pills above them, as in the full HUD) */
+@media (orientation:portrait){
+  html.hud-simple .tb-jump{right:calc(var(--sr) + 6px);bottom:calc(var(--sb) + 76px)}
+  html.hud-simple .tb-bonk{right:calc(var(--sr) + 80px);bottom:calc(var(--sb) + 80px)}
+  html.hud-simple .tb-act{right:calc(var(--sr) + 8px);bottom:calc(var(--sb) + 150px)}
+  html.hud-simple.is-touch .hud-bottom .hotbar{margin-top:150px}
+  html.hud-simple .stick-idle{bottom:calc(var(--sb) + 130px)}
+  html.hud-simple .hud-btns{gap:6px}
+}
+/* on its side: the buttons hug the corner */
+@media (orientation:landscape){
+  html.hud-simple .tb-jump{right:calc(var(--sr) + 4px);bottom:calc(var(--sb) + 12px)}
+  html.hud-simple .tb-bonk{right:calc(var(--sr) + 76px);bottom:calc(var(--sb) + 16px)}
+  html.hud-simple .tb-act{right:calc(var(--sr) + 6px);bottom:calc(var(--sb) + 86px)}
+  html.hud-simple .stick-idle{bottom:calc(var(--sb) + 70px)}
+}
+/* the narrowest phones (iPhone SE 1st gen): a tighter row of faces so the quest ring still fits */
+@media (max-width:360px) and (orientation:portrait){
+  html.hud-simple .board-strip{width:calc(var(--n,4)*21px + 7px)}
+  html.hud-simple .bs-it{left:calc(var(--i,0)*21px)}
+  html.hud-simple .bs-ava{--s:25px}
+}
+
 /* ------------------------------------------------------------ keyframes */
 @keyframes fadeIn{from{opacity:0}}
 @keyframes fadeOut{to{opacity:0}}

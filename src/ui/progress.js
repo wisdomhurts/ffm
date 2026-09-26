@@ -40,6 +40,7 @@ function dateText(ms) {
 // joystick); keyboard activation still works through click with detail 0. Same pattern as ui/hud.js.
 function onPress(el, fn) {
   let armed = null;
+  let firedAt = -1e9; // the click that trails a press can also report detail 0: it must not fire again
   el.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
@@ -51,11 +52,14 @@ function onPress(el, fn) {
     if (e.pointerId !== armed) return;
     armed = null;
     const r = el.getBoundingClientRect();
-    if (e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) fn(e);
+    if (e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) {
+      firedAt = performance.now();
+      fn(e);
+    }
   });
   el.addEventListener('pointercancel', () => (armed = null));
   el.addEventListener('click', (e) => {
-    if (e.detail === 0) fn(e);
+    if (e.detail === 0 && performance.now() - firedAt > 600) fn(e);
   });
 }
 

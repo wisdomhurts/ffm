@@ -181,8 +181,9 @@ try {
     check(steps.length === 3 && /Share/.test(steps[0]) && /Home Screen/.test(steps[1]), 'iphone: guide has the three steps: ' + steps.join(' / '));
     await page.screenshot({ path: path.join(OUT, 'fs-iphone-guide.png') });
     await page.tap('.fs-help .modal-done .btn');
-    await page.waitForTimeout(400);
-    check(!(await visible(page, '.fs-help')), 'iphone: Done closes the guide');
+    // the guide fades out, then leaves the page (timers run late while SwiftShader draws a frame)
+    const closed = await page.waitForFunction(() => !document.querySelector('.modal:not(.out) .fs-help'), null, { timeout: 8000 }).then(() => true, () => false);
+    check(closed, 'iphone: Done closes the guide');
     await page.evaluate(() => window.__app.menus.openSettings());
     await page.waitForTimeout(400);
     const how = await page.evaluate(() => {

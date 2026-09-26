@@ -23,6 +23,7 @@ import { createHUD } from './ui/hud.js';
 import { createMenus } from './ui/menus.js';
 import { createTouchControls } from './ui/touch.js';
 import { autoFullscreen } from './ui/fullscreen.js';
+import { watchHudLayout } from './ui/hudLayout.js';
 import { getProfile, activeProfileId, setActiveProfile, updateProfile } from './core/profiles.js';
 import { attachProgress } from './progress/index.js';
 import { createOnline } from './net/session.js';
@@ -51,6 +52,7 @@ function buildWarmupGroup() {
 class App {
   constructor() {
     injectStyles();
+    watchHudLayout();
     this.container = document.getElementById('app') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'app' });
     this.engine = new Engine(this.container);
     setPlantQuality(this.engine.qualityId);
