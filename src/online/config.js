@@ -1,9 +1,10 @@
 // Supabase project for cloud saves + high scores (docs/ONLINE.md "Online API"). OWNER: backend agent.
 // The URL and the publishable ("anon") key are public by design: every table is locked (RLS on, no
 // policies, no grants) and the game can only call the sas_* RPCs in supabase/migrations.
-// The integrator fills these in; with empty strings every online feature stays quietly off.
-export const SUPABASE_URL = '';
-export const SUPABASE_KEY = '';
+// With empty strings every online feature stays quietly off (the project is "steal-a-seed" in the
+// WisdomHurts organization; supabase/README.md has the setup).
+export const SUPABASE_URL = 'https://mdntplpjsvofzczpfcet.supabase.co';
+export const SUPABASE_KEY = 'sb_publishable_dmzOvMXJJGcICEc-sT57pw_6Fa-LcmH';
 
 /**
  * The active settings. Tests (and dev pages) may point the game at a fake backend by defining

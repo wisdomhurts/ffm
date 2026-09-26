@@ -17,8 +17,11 @@ separate and need no tables.
    `pass = true`** (the header of the file lists every row and its expected detail).
 3. Put the project URL and the **publishable** key (`sb_publishable_...`, or the legacy anon key) in
    `src/online/config.js` (`SUPABASE_URL`, `SUPABASE_KEY`). Both are public by design.
-4. Optional: run `get_advisors` (security). Three INFO notices "RLS enabled, no policy" on `sas_players`,
-   `sas_scores`, `sas_guard` are expected: that is the design (see below).
+4. Optional: run `get_advisors` (security). These are expected, by design (see below):
+   * three INFO notices "RLS enabled, no policy" on `sas_players`, `sas_scores`, `sas_guard`;
+   * WARN "Public / Signed-in users can execute SECURITY DEFINER function" for the 8 RPCs in the table
+     below (and only those 8): they are the game's API. Each checks its inputs, the write RPCs need the
+     player's secret, and lookups and sign-ups are rate limited. The 14 helpers are not executable.
 
 ## Tables (public, RLS on, no policies, no grants to anon/authenticated)
 

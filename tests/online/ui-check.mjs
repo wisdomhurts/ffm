@@ -164,9 +164,13 @@ async function runViewport(label, opts) {
   await browser.close();
 }
 
-// No backend configured (the shipped default until the project exists): quiet "coming soon" states.
+// No backend configured (a build with empty SUPABASE_URL/KEY): quiet "coming soon" states. The shipped
+// build has a project, so the page is told there is none (the same test hook the fake backend uses).
 async function runUnconfigured(label, opts) {
   const { browser, page, errors } = await launch(opts);
+  await page.addInitScript(() => {
+    window.__SAS_ONLINE__ = { url: '', key: '' };
+  });
   let requests = 0;
   page.on('request', (r) => /^https?:/.test(r.url()) && requests++);
   await page.goto('file://' + path.join(GALLERY, 'index.html'));
