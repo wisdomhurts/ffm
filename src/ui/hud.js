@@ -82,6 +82,13 @@ export function createHUD(app) {
   if (me) parts.push(createNextGoal(app, tl, tutorial));
   tl.appendChild(anchors.quest);
   parts.push(createBoard(app, tr, me));
+  // portrait phones: the top-left row is Pause + Mute + the quest tracker, so full screen hangs under the board
+  // there (CSS shows one of the two full screen buttons; the meter below steps down for it, see floors())
+  const fsTr = fullscreenButton('hbtn hud-fs-tr', { hud: true, bind: (el, fn) => onPress(el, fn, 'up'), onToggle: () => uiSound(app, 'click') });
+  if (fsTr) {
+    tr.appendChild(fsTr);
+    parts.push({ dispose: () => fsTr._dispose?.() });
+  }
   tr.appendChild(anchors.room);
   parts.push(createEventChip(app, top));
   const alerts = createAlerts(top, root);
@@ -284,7 +291,8 @@ function createMenuButtons(app, parent) {
     paint();
   }, 'up');
   const off = bus.on('settings:changed', ({ key }) => (key === 'muted' || key === 'music' || key === 'sfx') && paint());
-  // full screen (hidden where the browser can't do it: iPhone Safari, sandboxed frames)
+  // full screen (hidden where the browser can't do it: iPhone Safari, sandboxed frames; on portrait phones the
+  // one under the family board shows instead)
   const fs = fullscreenButton('hbtn', { hud: true, bind: (el, fn) => onPress(el, fn, 'up'), onToggle: () => uiSound(app, 'click') });
   parent.appendChild(h('div', { class: 'hud-btns' }, pause, mute, fs));
   return {

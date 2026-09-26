@@ -21,6 +21,17 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 | Items | 1–5 | tap hotbar | Y / bumpers |
 | Pause | Esc | pause button | Start |
 
+## Full screen on phones
+* **Android** (and iPads and computers): tap the full screen button on the title, in the pause menu or
+  in the game. On phones and tablets the game also goes full screen by itself when you tap Start (switch
+  this off in Settings under "Full screen when playing").
+* **iPhone**: Safari can't hide its bars for a web page, so the full screen button shows how to add the
+  game to the Home Screen (Share, then Add to Home Screen). Opened from its Home Screen icon, the game
+  fills the whole screen. The Home Screen copy keeps its own save, separate from Safari's.
+
+The build writes `dist/manifest.webmanifest` and the app icons (`assets/icons`, drawn by
+`node scripts/make-icons.mjs`) next to `index.html` for this.
+
 ## Family photos (kept private)
 Real faces are **not** in this repository. Put aligned face crops in `private/faces/`
 (`<id>_face.jpg` 512×512 with eyes at 42% height, `<id>_avatar.jpg` 256×256, optional `skin.json`),
@@ -33,5 +44,6 @@ in the in-game **Photo Booth**; it stays on their device.
 npm install
 node build.mjs            # dist/index.html (public), dist/family.html + dist/artifact.html (with photos)
 node tests/smoke.mjs      # headless Playwright smoke test of the core loop
+node tests/fullscreen.test.mjs   # full screen on Android, iPhone and computers
 ```
 Read `docs/DESIGN.md` for the game design and `docs/ARCHITECTURE.md` for how the code fits together.

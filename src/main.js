@@ -22,6 +22,7 @@ import { injectStyles } from './ui/styles.js';
 import { createHUD } from './ui/hud.js';
 import { createMenus } from './ui/menus.js';
 import { createTouchControls } from './ui/touch.js';
+import { autoFullscreen } from './ui/fullscreen.js';
 import { getProfile, activeProfileId, setActiveProfile, updateProfile } from './core/profiles.js';
 import { attachProgress } from './progress/index.js';
 import { createOnline } from './net/session.js';
@@ -346,6 +347,7 @@ class App {
 
   /** Solo play. opts: {charId (profile id), mode:'endless'|'showdown', difficulty, fresh:boolean} */
   startGame({ charId, mode = 'endless', difficulty = settings.difficulty, fresh = false }) {
+    autoFullscreen(); // phones and tablets, while the tap that started the game still counts
     this.online?.leave?.();
     if (charId && getProfile(charId)) this.setProfile(charId);
     const prof = this.profile;
@@ -382,6 +384,7 @@ class App {
    * controls and app state work exactly like solo play. opts: Game options incl. `slots`.
    */
   startOnline(opts) {
+    autoFullscreen();
     const game = this._newGame({ mode: 'endless', difficulty: settings.difficulty, ...opts });
     game.saveKey = null; // online gardens are saved into profile.online by the session
     this.hud = createHUD(this);

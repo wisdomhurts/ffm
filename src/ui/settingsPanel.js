@@ -6,7 +6,7 @@ import { save } from '../core/save.js';
 import { h, uiSound, setMuted } from './dom.js';
 import { ICON } from './icons.js';
 import { resetTutorial } from './tutorial.js';
-import { fsAvailable, isFullscreen, toggleFullscreen, onFullscreenChange, iosNeedsHomeScreen, IOS_TIP } from './fullscreen.js';
+import { fsMode, isFullscreen, toggleFullscreen, onFullscreenChange, autoFullscreenApplies } from './fullscreen.js';
 import { openCloudSave } from './cloudsave.js';
 import { onlineConfigured } from '../online/config.js';
 
@@ -104,9 +104,11 @@ export function buildSettings(app) {
   row('Sound effects', slider('sfx', 0, 1, 0.05, pct));
   row('Mute everything', toggleCtl('muted', 'Mute'));
 
-  // Full screen: a live switch where the browser allows it; iPhones get the Home Screen tip instead
+  // Full screen: a live switch where the browser allows it (plus "go full screen by yourself" on phones and
+  // tablets); iPhones get a button that opens the Add to Home Screen guide instead
   let offFs = () => {};
-  if (fsAvailable()) {
+  const fsKind = fsMode();
+  if (fsKind === 'api') {
     const fs = h('button', { class: 'switch', type: 'button', role: 'switch', 'aria-label': 'Full screen' }, h('i'));
     const paintFs = (on) => {
       fs.classList.toggle('on', on);
@@ -119,8 +121,14 @@ export function buildSettings(app) {
     });
     offFs = onFullscreenChange(paintFs);
     row('Full screen', fs, 'Hides the browser bars');
-  } else if (iosNeedsHomeScreen()) {
-    row('Full screen', null, IOS_TIP);
+    if (autoFullscreenApplies()) row('Full screen when playing', toggleCtl('autoFullscreen', 'Full screen when playing'), 'Goes full screen as a game starts');
+  } else if (fsKind === 'home') {
+    const how = h('button', { class: 'btn btn-blue btn-sm', type: 'button', html: `<span class="bi">${ICON.expand}</span><span>Show me how</span>` });
+    how.addEventListener('click', () => {
+      uiSound(app, 'click');
+      app.menus?.openFullscreenHelp?.();
+    });
+    row('Full screen', how, 'On iPhone: add the game to your Home Screen');
   }
   const q = row('Graphics', seg('quality', [['auto', 'Auto'], ['low', 'Low'], ['medium', 'Med'], ['high', 'High']], () => { qualityNote.hidden = false; }), 'Lower = smoother on phones');
   q.querySelector('.set-l').appendChild(qualityNote);

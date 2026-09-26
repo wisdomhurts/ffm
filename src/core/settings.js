@@ -12,6 +12,7 @@ const DEFAULTS = {
   autoRotate: true,
   tips: true,
   muted: false,
+  autoFullscreen: true, // phones and tablets go full screen when a game starts (ui/fullscreen.js)
 };
 
 const ENUMS = { quality: ['low', 'medium', 'high', 'auto'], difficulty: ['chill', 'normal', 'chaos'] };

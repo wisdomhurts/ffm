@@ -1,5 +1,5 @@
 // Menus. Contract: createMenus(app) -> { showTitle(), showSelect(), showMode(), showPause(), hidePause(), showEnd(ranking),
-//   openShop(shop), closeShop(), hideAll(), isBlocking() }  (+ extras: openSettings(), openPhotoBooth(), openHowTo(),
+//   openShop(shop), closeShop(), hideAll(), isBlocking() }  (+ extras: openSettings(), openPhotoBooth(), openHowTo(), openFullscreenHelp(),
 //   openPlayerEditor(profile?), and the shared building blocks listed at the bottom; see docs/ONLINE.md)
 //
 // The title is a "Who's playing?" screen: the family and friends' profiles on this device (app.profile is the
@@ -23,6 +23,7 @@ import { openLobby } from './lobby.js';
 import { openProgress } from './progress.js';
 import { openLeaderboard } from './leaderboard.js';
 import { fullscreenButton } from './fullscreen.js';
+import { buildHomeScreenGuide } from './homescreen.js';
 import { rarityColor } from '../view/gameView.js';
 
 const DIFF_DESC = {
@@ -205,6 +206,12 @@ export function createMenus(app) {
     const m = openModal(body, { cls: 'howto', label: 'How to play' });
     body.appendChild(doneRow(() => m.close()));
   };
+  // iPhones: the full screen buttons open the "Add to Home Screen" guide (ui/fullscreen.js, mode 'home')
+  const openFullscreenHelp = () => {
+    const body = buildHomeScreenGuide();
+    const m = openModal(body, { cls: 'fs-help', label: 'Play full screen' });
+    body.appendChild(doneRow(() => m.close()));
+  };
 
   // ------------------------------------------------------------------ title
 
@@ -303,7 +310,7 @@ export function createMenus(app) {
       btn(iconLabel(ICON.gear, 'Settings'), 'btn-ghost', openSettings),
       btn(iconLabel(ICON.camera, 'Photo Booth'), 'btn-ghost', openPhotoBooth),
       btn(iconLabel(ICON.help, 'How to Play'), 'btn-ghost', openHowTo));
-    const fs = fullscreenButton('btn btn-ghost btn-round title-fs');
+    const fs = fullscreenButton('btn btn-ghost btn-round title-fs', { onHelp: openFullscreenHelp });
     const s = setScreen('title',
       fs ? h('div', { class: 'title-corner' }, fs) : null,
       h('div', { class: 'title-hero' }, logo(), h('div', { class: 'edition' }, h('span', { text: 'Family Edition' }))),
@@ -702,7 +709,7 @@ export function createMenus(app) {
         app.quitToTitle();
       })
       : btn(iconLabel(ICON.home, g?.match || !storageOK ? 'Quit to Title' : 'Save & Quit'), 'btn-red pb-quit', () => app.quitToTitle());
-    const fs = fullscreenButton('btn btn-ghost btn-round pp-fs');
+    const fs = fullscreenButton('btn btn-ghost btn-round pp-fs', { onHelp: openFullscreenHelp });
     const panel = h('div', { class: 'panel pause-panel' + (online ? ' online' : '') },
       fs,
       online ? h('div', { class: 'pp-live' }, h('i'), h('span', { text: code ? `Live in room ${code}` : 'Live online game' })) : null,
@@ -880,6 +887,7 @@ export function createMenus(app) {
     openSettings,
     openPhotoBooth,
     openHowTo,
+    openFullscreenHelp,
     openPlayerEditor,
     // shared building blocks for feature panels (docs/ONLINE.md): openModal(content, {cls, label, onClose, kind})
     // -> {wrap, close(silent), dispose}; btn(label, cls, onclick, attrs); iconLabel(svg, text); doneRow(onDone); click()

@@ -527,6 +527,32 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .mh h2{margin:0;font:var(--fdw) 30px/1 var(--fd);letter-spacing:.02em;text-shadow:var(--o1)}
 .mh-ic{width:46px;height:46px;flex:none;border-radius:14px;padding:9px;display:grid;place-items:center;background:linear-gradient(180deg,#5cb8ff,#2a6fe6);border:3px solid var(--ink);--ico-hole:#2a6fe6}
 
+/* "Play full screen" guide (iPhone: Add to Home Screen) */
+.modal-panel.fs-help{width:min(520px,100%)}
+.fsh-head{display:flex;align-items:center;gap:14px;margin:0 0 14px;padding-right:48px}
+.fsh-head h2{margin:0;font:var(--fdw) 30px/1 var(--fd);letter-spacing:.02em;text-shadow:var(--o1)}
+.fsh-sub{margin:6px 0 0;font:700 14px/1.3 var(--fb);color:var(--txt2)}
+.fsh-app{width:64px;height:64px;flex:none;border-radius:15px;overflow:hidden;border:3px solid var(--ink);box-shadow:0 4px 0 var(--ink)}
+.fsh-app svg,.fsh-mini svg{display:block;width:100%;height:100%}
+.fsh-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.fsh-step{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:16px;background:rgba(10,15,40,.32)}
+.fsh-n{width:28px;height:28px;flex:none;display:grid;place-items:center;border-radius:50%;border:2.5px solid var(--ink);background:var(--gold);color:var(--ink);font:var(--fdw) 16px/1 var(--fd)}
+.fsh-ic{width:44px;height:44px;flex:none;display:grid;place-items:center;padding:8px;border-radius:12px;background:#fff;color:#1a7cf5;border:2.5px solid var(--ink)}
+.fsh-ic svg{width:100%;height:100%}
+.fsh-ic.fsh-mini{padding:0;overflow:hidden;border-radius:11px}
+.fsh-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fsh-copy b{font:var(--fdw) 18px/1.1 var(--fd);letter-spacing:.01em}
+.fsh-copy span{font:700 13px/1.3 var(--fb);color:var(--txt2)}
+.fsh-note{display:flex;align-items:flex-start;gap:8px;margin:12px 2px 0;font:700 12.5px/1.35 var(--fb);color:var(--txt3)}
+.fsh-note .bi{width:17px;height:17px;margin-top:1px}
+@media (max-width:420px){
+  .fsh-head{gap:11px}
+  .fsh-head h2{font-size:25px}
+  .fsh-app{width:54px;height:54px;border-radius:13px}
+  .fsh-step{gap:10px;padding:10px}
+  .fsh-ic{width:40px;height:40px;padding:7px}
+}
+
 /* settings */
 .set-rows{display:flex;flex-direction:column;gap:8px}
 .set-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 14px;padding:10px 12px;border-radius:15px;background:rgba(10,15,40,.32)}
@@ -1534,9 +1560,13 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 @media (min-width:761px) and (min-height:501px){
   .hud > .hud-slot-emote{right:calc(var(--sr) + 118px);bottom:calc(var(--sb) + 196px)}
 }
-/* portrait phones: the top row is Pause + Mute + the daily quest tracker; full screen lives on the title,
-   in the pause menu and in Settings instead */
-@media (max-width:640px) and (orientation:portrait){.hud-btns .fs-btn{display:none}}
+/* portrait phones: the top row is Pause + Mute + the daily quest tracker, so the full screen button moves
+   under the family board (it waits while the first-game tutorial card is up, like the rest of that column) */
+.hud-fs-tr{display:none}
+@media (max-width:640px) and (orientation:portrait){
+  .hud-btns .fs-btn{display:none}
+  .hud-tr > .hud-fs-tr{display:grid;margin:8px 0 0 auto}
+}
 
 /* ------------------------------------------------------------ keyframes */
 @keyframes fadeIn{from{opacity:0}}

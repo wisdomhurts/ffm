@@ -2,6 +2,8 @@
 //   dist/index.html     full document, cartoon faces (safe to share publicly)
 //   dist/family.html    full document with the family photos from private/faces (NOT committed)
 //   dist/artifact.html  body-only page with photos, for publishing as a private claude.ai artifact
+//   dist/manifest.webmanifest + icons: "Add to Home Screen" / install opens the game full screen (the icons are
+//                       rendered by scripts/make-icons.mjs into assets/icons)
 // Usage: node build.mjs [--dev] [--watch]
 import * as esbuild from 'esbuild';
 import fs from 'node:fs';
@@ -54,7 +56,40 @@ const HEAD = `<meta charset="utf-8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Steal A Seed">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <title>${TITLE}</title>`;
+
+// Web app manifest for the public page: from the Home Screen (iPhone) or once installed (Android) the game
+// opens without the browser's bars
+const ICONS = ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
+const MANIFEST = {
+  name: TITLE,
+  short_name: 'Steal A Seed',
+  description: 'Grab seeds, grow them for cash and steal from the family!',
+  id: './',
+  start_url: './',
+  scope: './',
+  display: 'fullscreen',
+  display_override: ['fullscreen', 'standalone'],
+  orientation: 'any',
+  background_color: '#1b2440',
+  theme_color: '#1b2440',
+  icons: [
+    { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+  ],
+};
+
+function writeAppFiles() {
+  for (const f of ICONS) {
+    const src = path.join(root, 'assets', 'icons', f);
+    if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dist, f));
+    else console.warn(`missing ${path.relative(root, src)} (run node scripts/make-icons.mjs)`);
+  }
+  fs.writeFileSync(path.join(dist, 'manifest.webmanifest'), JSON.stringify(MANIFEST, null, 2) + '\n');
+}
 
 async function bundle() {
   const res = await esbuild.build({
@@ -76,7 +111,9 @@ function page(js, faces, bodyOnly) {
   const scripts = `${faces ? `<script>${faces}</script>\n` : ''}<script>${js}</script>`;
   const body = `<div id="app"></div>\n${scripts}`;
   if (bodyOnly) return `<title>${TITLE}</title>\n<style>html,body{height:100%;margin:0;overflow:hidden;background:#1b2440}:root{padding:0!important}</style>\n${body}\n`;
-  return `<!doctype html>\n<html lang="en">\n<head>\n${HEAD}\n<style>html,body{height:100%;margin:0;overflow:hidden;background:#1b2440}</style>\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
+  // the manifest's start_url is the public page, so only that one links it
+  const head = faces ? HEAD : HEAD.replace('<title>', '<link rel="manifest" href="manifest.webmanifest">\n<title>');
+  return `<!doctype html>\n<html lang="en">\n<head>\n${head}\n<style>html,body{height:100%;margin:0;overflow:hidden;background:#1b2440}</style>\n</head>\n<body>\n${body}\n</body>\n</html>\n`;
 }
 
 async function buildAll() {
@@ -84,6 +121,7 @@ async function buildAll() {
   const js = await bundle();
   const faces = faceScript();
   fs.writeFileSync(path.join(dist, 'index.html'), page(js, null, false));
+  writeAppFiles();
   if (faces) {
     fs.writeFileSync(path.join(dist, 'family.html'), page(js, faces, false));
     fs.writeFileSync(path.join(dist, 'artifact.html'), page(js, faces, true));
