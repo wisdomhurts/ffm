@@ -1,6 +1,7 @@
 // Sky dome (gradient, sun/moon, stars, galaxy), blocky clouds, per-biome ambience blending and
 // weather (Golden Hour, Diamond Night, Rainbow Rain) with camera-following particle fields.
 import * as THREE from 'three';
+import { BIOMES } from '../config.js';
 import { Merger, makeRand, uTime } from './kit.js';
 
 // ------------------------------------------------------------------ palettes
@@ -13,19 +14,29 @@ function palette(p) {
     sunDir: new THREE.Vector3(...(p.sunDir || [40, 80, -30])).normalize(), sunGlow: C(p.sunGlow || p.sun),
     stars: p.stars || 0, galaxy: p.galaxy || 0, night: p.night || 0,
     cloud: C(p.cloud || '#ffffff'), cloudEm: C(p.cloudEm || '#8595a8'), exposure: p.exposure ?? 1.05,
+    resist: p.resist || 0, // how much a strong biome mood holds out against the weather (0..1)
   };
 }
 
-// 0 = plaza, 1..6 = biomes in road order.
-const ZONES = [
-  palette({ skyTop: '#2f8fff', skyHorizon: '#bfe9ff', fog: '#c4ebff', fogNear: 140, fogFar: 560, hemiSky: '#e3f3ff', hemiGround: '#9cc37a', hemi: 1.3, sun: '#fff0d4', sunI: 2.35, sunGlow: '#fff4d6' }),
-  palette({ skyTop: '#3f9dff', skyHorizon: '#c6ecff', fog: '#cdeeff', fogNear: 110, fogFar: 460, hemiSky: '#e3f3ff', hemiGround: '#8fc46a', hemi: 1.3, sun: '#fff0d4', sunI: 2.3 }),
-  palette({ skyTop: '#4aa9cf', skyHorizon: '#cdeedb', fog: '#b9e0c6', fogNear: 60, fogFar: 330, hemiSky: '#d8f6e2', hemiGround: '#3f7a45', hemi: 1.2, sun: '#fff1c8', sunI: 2.0 }),
-  palette({ skyTop: '#4f9be0', skyHorizon: '#ffe0ae', fog: '#f1d6a8', fogNear: 80, fogFar: 380, hemiSky: '#fff0d8', hemiGround: '#c9955a', hemi: 1.25, sun: '#ffe6b0', sunI: 2.5, sunGlow: '#ffd98a' }),
-  palette({ skyTop: '#4b3a86', skyHorizon: '#a893cc', fog: '#8c80a8', fogNear: 30, fogFar: 240, hemiSky: '#cbb8f2', hemiGround: '#3d4a2c', hemi: 1.05, sun: '#e9d6ff', sunI: 1.35, cloud: '#c9b8e8', cloudEm: '#4a3d6a' }),
-  palette({ skyTop: '#3a1210', skyHorizon: '#ff7440', fog: '#a3442c', fogNear: 40, fogFar: 270, hemiSky: '#ffb08a', hemiGround: '#4a1a12', hemi: 1.05, sun: '#ffb070', sunI: 1.9, sunGlow: '#ff6a2a', cloud: '#7a4a44', cloudEm: '#3a1410', exposure: 1.1 }),
-  palette({ skyTop: '#05051c', skyHorizon: '#3b2b7c', fog: '#2a2362', fogNear: 60, fogFar: 320, hemiSky: '#8f90ff', hemiGround: '#2a1f5a', hemi: 1.0, sun: '#b8c4ff', sunI: 0.95, stars: 1, galaxy: 1, night: 1, sunDir: [-30, 70, -40], cloud: '#3a3478', cloudEm: '#161238', exposure: 1.15 }),
-];
+// Ambience per zone: the plaza, then one per biome (ZONES[0] = plaza, ZONES[1..] = BIOMES in road order).
+const ZONE = {
+  plaza: palette({ skyTop: '#2f8fff', skyHorizon: '#bfe9ff', fog: '#c4ebff', fogNear: 140, fogFar: 560, hemiSky: '#e3f3ff', hemiGround: '#9cc37a', hemi: 1.3, sun: '#fff0d4', sunI: 2.35, sunGlow: '#fff4d6' }),
+  field: palette({ skyTop: '#3f9dff', skyHorizon: '#c6ecff', fog: '#cdeeff', fogNear: 110, fogFar: 460, hemiSky: '#e3f3ff', hemiGround: '#8fc46a', hemi: 1.3, sun: '#fff0d4', sunI: 2.3 }),
+  greenhollow: palette({ skyTop: '#4aa9cf', skyHorizon: '#cdeedb', fog: '#b9e0c6', fogNear: 60, fogFar: 330, hemiSky: '#d8f6e2', hemiGround: '#3f7a45', hemi: 1.2, sun: '#fff1c8', sunI: 2.0 }),
+  dustbowl: palette({ skyTop: '#4f9be0', skyHorizon: '#ffe0ae', fog: '#f1d6a8', fogNear: 80, fogFar: 380, hemiSky: '#fff0d8', hemiGround: '#c9955a', hemi: 1.25, sun: '#ffe6b0', sunI: 2.5, sunGlow: '#ffd98a' }),
+  tanglemire: palette({ skyTop: '#4b3a86', skyHorizon: '#a893cc', fog: '#8c80a8', fogNear: 30, fogFar: 240, hemiSky: '#cbb8f2', hemiGround: '#3d4a2c', hemi: 1.05, sun: '#e9d6ff', sunI: 1.35, cloud: '#c9b8e8', cloudEm: '#4a3d6a' }),
+  emberroot: palette({ skyTop: '#3a1210', skyHorizon: '#ff7440', fog: '#a3442c', fogNear: 40, fogFar: 270, hemiSky: '#ffb08a', hemiGround: '#4a1a12', hemi: 1.05, sun: '#ffb070', sunI: 1.9, sunGlow: '#ff6a2a', cloud: '#7a4a44', cloudEm: '#3a1410', exposure: 1.1, resist: 1 }),
+  starbloom: palette({ skyTop: '#05051c', skyHorizon: '#3b2b7c', fog: '#2a2362', fogNear: 60, fogFar: 320, hemiSky: '#8f90ff', hemiGround: '#2a1f5a', hemi: 1.0, sun: '#b8c4ff', sunI: 0.95, stars: 1, galaxy: 1, night: 1, sunDir: [-30, 70, -40], cloud: '#3a3478', cloudEm: '#161238', exposure: 1.15, resist: 1 }),
+  // crisp bright winter day: deep blue overhead, pale icy haze, cool bounce light off the snow
+  frostfall: palette({ skyTop: '#2f86e8', skyHorizon: '#d8efff', fog: '#d6ebfb', fogNear: 90, fogFar: 420, hemiSky: '#e8f4ff', hemiGround: '#c2d6ee', hemi: 1.4, sun: '#fff6ea', sunI: 1.9, sunGlow: '#ffffff', sunDir: [50, 60, -40], cloud: '#ffffff', cloudEm: '#8aa6c8', exposure: 0.98, resist: 0.5 }),
+  // pastel pink sky and sugary haze in warm sunshine
+  candy: palette({ skyTop: '#ff8fd0', skyHorizon: '#ffe4f2', fog: '#ffd4ea', fogNear: 80, fogFar: 400, hemiSky: '#fff0f8', hemiGround: '#e89cc2', hemi: 1.25, sun: '#fff0dc', sunI: 2.1, sunGlow: '#fff2c8', cloud: '#ffe6f4', cloudEm: '#d88ab8', exposure: 1.02, resist: 0.5 }),
+  // heavenly golden light high above the clouds: bright, warm and soft, white-gold haze
+  cloud: palette({ skyTop: '#4aa2ff', skyHorizon: '#fff0c8', fog: '#fff5e2', fogNear: 110, fogFar: 460, hemiSky: '#fffaf0', hemiGround: '#f4e8cc', hemi: 1.65, sun: '#ffe6b0', sunI: 2.1, sunGlow: '#ffd27a', sunDir: [60, 50, -50], cloud: '#ffffff', cloudEm: '#c8b48a', exposure: 1.08, resist: 0.5 }),
+};
+const ZONES = [ZONE.plaza, ...BIOMES.map((b) => ZONE[b.id] || ZONE.field)];
+// zone index of a biome id (0 = plaza if unknown)
+const zoneOf = (id) => 1 + BIOMES.findIndex((b) => b.id === id);
 
 const WEATHER = {
   golden: palette({ skyTop: '#f07a5a', skyHorizon: '#ffd38a', fog: '#ffcf98', fogNear: 110, fogFar: 460, hemiSky: '#ffd9a8', hemiGround: '#a8703a', hemi: 1.25, sun: '#ffb25a', sunI: 2.7, sunDir: [70, 26, -60], sunGlow: '#ff9a3a', cloud: '#ffd0a8', cloudEm: '#a0583a' }),
@@ -174,8 +185,9 @@ function createClouds(count) {
 /**
  * Camera-following point sprites computed entirely on the GPU (no per-frame CPU work).
  * anchor: 'world' keeps y in [y0, y0+box.y] in world space (fireflies, embers); 'camera' centres on the camera.
+ * colors: a list of up to 3 colours picked per particle (sprinkles) instead of a blend of color..color2.
  */
-function particleField({ count, box, size, color, color2, vel = [0, 0, 0], twinkle = 0.5, wobble = 1, anchor = 'camera', y0 = 0, seed = 1, blending = THREE.AdditiveBlending }) {
+function particleField({ count, box, size, color, color2, colors = null, vel = [0, 0, 0], twinkle = 0.5, wobble = 1, anchor = 'camera', y0 = 0, seed = 1, blending = THREE.AdditiveBlending }) {
   const r = makeRand(seed);
   const pos = new Float32Array(count * 3);
   const rnd = new Float32Array(count * 4);
@@ -197,7 +209,9 @@ function particleField({ count, box, size, color, color2, vel = [0, 0, 0], twink
       uSize: { value: size },
       uOpacity: { value: 0 },
       uColor: { value: new THREE.Color(color) },
-      uColor2: { value: new THREE.Color(color2 || color) },
+      uColor2: { value: new THREE.Color(colors ? colors[1] : color2 || color) },
+      uColor3: { value: new THREE.Color(colors ? colors[2] || colors[1] : color2 || color) },
+      uPick: { value: colors ? 1 : 0 },
       uTwinkle: { value: twinkle },
       uWobble: { value: wobble },
       uWorld: { value: anchor === 'world' ? 1 : 0 },
@@ -226,7 +240,7 @@ function particleField({ count, box, size, color, color2, vel = [0, 0, 0], twink
         gl_PointSize = min(uSize * (0.6 + aRand.z*0.8) * uScale / max(1.0, -mv.z), 40.0);
       }`,
     fragmentShader: `
-      uniform vec3 uColor, uColor2; uniform float uOpacity;
+      uniform vec3 uColor, uColor2, uColor3; uniform float uOpacity, uPick;
       varying float vA; varying float vMix;
       void main(){
         vec2 c = gl_PointCoord - 0.5;
@@ -234,7 +248,8 @@ function particleField({ count, box, size, color, color2, vel = [0, 0, 0], twink
         float core = smoothstep(0.5, 0.0, d);
         float a = core*core * vA * uOpacity;
         if (a < 0.01) discard;
-        vec3 col = mix(uColor, uColor2, vMix) * (0.8 + core);
+        vec3 pick = vMix < 0.34 ? uColor : (vMix < 0.67 ? uColor2 : uColor3);
+        vec3 col = (uPick > 0.5 ? pick : mix(uColor, uColor2, vMix)) * (0.8 + core);
         gl_FragColor = vec4(col, a);
         #include <colorspace_fragment>
       }`,
@@ -346,6 +361,9 @@ export function createAmbience(engine, quality, layout) {
     pollen: particleField({ count: Math.round(120 * dens + 30), box: [80, 12, 80], size: 0.5, color: '#fffbe0', color2: '#fff2a0', vel: [0.8, 0.1, 0.5], twinkle: 0.3, wobble: 1.5, anchor: 'world', y0: 0.8, seed: 14, blending: THREE.NormalBlending }),
     sparkles: particleField({ count: Math.round(260 * dens + 60), box: [90, 40, 90], size: 1.0, color: '#ffffff', color2: '#8ff0ff', vel: [0, -0.3, 0], twinkle: 1, wobble: 0.4, anchor: 'camera', seed: 15 }),
     goldmotes: particleField({ count: Math.round(160 * dens + 40), box: [80, 30, 80], size: 0.8, color: '#ffe08a', color2: '#ffb347', vel: [0.5, 0.6, 0.2], twinkle: 0.7, wobble: 1.2, anchor: 'camera', seed: 16 }),
+    snow: particleField({ count: Math.round(320 * dens + 90), box: [80, 40, 80], size: 0.75, color: '#ffffff', color2: '#e4f4ff', vel: [1.2, -5.5, 0.6], twinkle: 0.1, wobble: 1.6, anchor: 'camera', seed: 17, blending: THREE.NormalBlending }),
+    sprinkles: particleField({ count: Math.round(220 * dens + 60), box: [80, 30, 80], size: 0.6, colors: ['#ff4f9a', '#4fd8ff', '#ffe14d'], vel: [0.3, -1.2, 0.2], twinkle: 0.5, wobble: 1.4, anchor: 'camera', seed: 18, blending: THREE.NormalBlending }),
+    heaven: particleField({ count: Math.round(200 * dens + 60), box: [90, 30, 90], size: 0.9, color: '#ffe27a', color2: '#ffffff', vel: [0.3, 0.9, 0.2], twinkle: 0.9, wobble: 1.3, anchor: 'world', y0: 0.5, seed: 19, blending: THREE.NormalBlending }),
   };
   for (const k in fx) root.add(fx[k]);
   const rain = createRain(Math.round(900 * dens + 300));
@@ -357,7 +375,9 @@ export function createAmbience(engine, quality, layout) {
   const tmp = palette({ skyTop: '#000', skyHorizon: '#000', fog: '#000', fogNear: 0, fogFar: 0, hemiSky: '#000', hemiGround: '#000', hemi: 0, sun: '#000', sunI: 0 });
   const weather = { golden: 0, diamond: 0, rainbow: 0 };
   let target = null;
-  const zoneW = new Float32Array(7);
+  const N = BIOMES.length;
+  const zoneW = new Float32Array(N + 1);
+  const Z = Object.fromEntries(BIOMES.map((b) => [b.id, zoneOf(b.id)]));
   const ranges = layout.biomeRanges;
   const B0 = ranges[0].minZ;
   const BL = ranges[0].maxZ - ranges[0].minZ;
@@ -369,8 +389,8 @@ export function createAmbience(engine, quality, layout) {
   function zoneBlend(z) {
     zoneW.fill(0);
     // boundaries between zone k-1 and k at B0 + (k-1)*BL
-    const idx = z < B0 ? 0 : Math.min(6, 1 + Math.floor((z - B0) / BL));
-    for (let k = 1; k <= 6; k++) {
+    const idx = z < B0 ? 0 : Math.min(N, 1 + Math.floor((z - B0) / BL));
+    for (let k = 1; k <= N; k++) {
       const b = B0 + (k - 1) * BL;
       if (Math.abs(z - b) < T) {
         const t = THREE.MathUtils.smoothstep(z, b - T, b + T);
@@ -412,7 +432,8 @@ export function createAmbience(engine, quality, layout) {
       const zp = zoneBlend(cp.z);
       cur.skyTop.copy(zp.skyTop);
       lerpPalette(cur, zp, zp, 0);
-      const deep = Math.max(zoneW[5], zoneW[6]); // strong biome moods resist weather a little
+      let deep = 0; // strong biome moods resist weather a little
+      for (let k = 0; k <= N; k++) deep += zoneW[k] * ZONES[k].resist;
       for (const k in weather) {
         const w = weather[k];
         if (w <= 0) continue;
@@ -456,16 +477,19 @@ export function createAmbience(engine, quality, layout) {
       camPos = cp;
       const scale = engine.renderer.domElement.height * 0.83;
       for (const k in fx) fx[k].material.uniforms.uScale.value = scale;
-      setFx(fx.pollen, (zoneW[0] * 0.5 + zoneW[1]) * (1 - weather.rainbow));
-      setFx(fx.fireflies, zoneW[4] + weather.diamond * 0.3 * zoneW[2]);
-      setFx(fx.embers, zoneW[5]);
-      setFx(fx.stardust, zoneW[6]);
+      setFx(fx.pollen, (zoneW[0] * 0.5 + zoneW[Z.field]) * (1 - weather.rainbow));
+      setFx(fx.fireflies, zoneW[Z.tanglemire] + weather.diamond * 0.3 * zoneW[Z.greenhollow]);
+      setFx(fx.embers, zoneW[Z.emberroot]);
+      setFx(fx.stardust, zoneW[Z.starbloom]);
+      setFx(fx.snow, zoneW[Z.frostfall] * 0.9);
+      setFx(fx.sprinkles, zoneW[Z.candy] * 0.85);
+      setFx(fx.heaven, zoneW[Z.cloud] * 0.8);
       setFx(fx.sparkles, weather.diamond);
       setFx(fx.goldmotes, weather.golden * 0.8);
       rain.material.uniforms.uOpacity.value = weather.rainbow;
       rain.visible = weather.rainbow > 0.01;
       if (rain.visible) rain.material.uniforms.uCam.value.copy(cp);
-      rainbow.material.uniforms.uOpacity.value = weather.rainbow * (1 - zoneW[6] * 0.5);
+      rainbow.material.uniforms.uOpacity.value = weather.rainbow * (1 - zp.night * 0.5);
       rainbow.visible = weather.rainbow > 0.01;
       if (rainbow.visible) rainbow.position.set(cp.x, -110, cp.z + 620);
       first = false;

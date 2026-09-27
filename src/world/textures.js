@@ -184,6 +184,58 @@ export function sandDetail() {
   }));
 }
 
+/**
+ * Layered cake for the Candy Canyon cliffs. Coloured (vertex colours tint each terrace's flavour), one tile =
+ * 12 studs: box-projected, the sponge, cream, jam, wafer and chocolate layers run level along the whole canyon.
+ */
+export function cakeDetail() {
+  return once('cake', () => drawTexture(256, 256, (g, w, h) => {
+    const n = tileNoise(61, 6);
+    // layers from the bottom of the tile up, in studs: [top edge, colour, kind]
+    const L = [[3.2, [246, 214, 160], 'sponge'], [3.9, [255, 249, 240], 'cream'], [4.5, [236, 76, 122], 'jam'], [5.1, [255, 249, 240], 'cream'],
+      [8.6, [255, 176, 206], 'wafer'], [9.3, [122, 70, 42], 'choc'], [9.9, [255, 249, 240], 'cream'], [12, [246, 214, 160], 'sponge']];
+    pixels(g, w, h, (x, y) => {
+      const v = n(x, y, w, h);
+      const hs = ((h - y - 0.5) / h) * 12 + Math.sin((x / w) * Math.PI * 6) * 0.1 + (v - 0.5) * 0.25;
+      const hh = ((hs % 12) + 12) % 12;
+      let i = 0;
+      while (i < L.length - 1 && hh >= L[i][0]) i++;
+      const [, c, kind] = L[i];
+      let k = 0.94 + (v - 0.5) * 0.12;
+      // wafer: a diagonal waffle grid
+      if (kind === 'wafer' && (Math.abs(((x + y) % 21) - 10.5) > 9.3 || Math.abs(((x - y + 512) % 21) - 10.5) > 9.3)) k *= 0.86;
+      if (kind === 'cream' || kind === 'jam') k = 1 + (v - 0.5) * 0.06;
+      return [c[0] * k, c[1] * k, c[2] * k];
+    });
+    // sponge pores
+    const r = makeRand(62);
+    for (let i = 0; i < 700; i++) {
+      const x = r() * w, y = r() * h;
+      const hh = ((h - y) / h) * 12;
+      if (!(hh < 3.1 || hh > 10)) continue;
+      g.fillStyle = r() < 0.7 ? 'rgba(160,110,50,0.28)' : 'rgba(255,255,255,0.35)';
+      g.beginPath();
+      g.arc(x, y, 0.8 + r() * 1.6, 0, Math.PI * 2);
+      g.fill();
+    }
+  }));
+}
+
+/** Soft billowy cloud detail (Cloud Kingdom cliffs and cloud floor, Candy Canyon frosting): grey, mean ~0.94. */
+export function fluffDetail() {
+  return once('fluff', () => drawTexture(256, 256, (g, w, h) => {
+    const n = tileNoise(81, 3);
+    const n2 = tileNoise(82, 8);
+    pixels(g, w, h, (x, y) => {
+      const b = n(x, y, w, h, 3);
+      const v = 222 + Math.max(0, Math.min(1, (b - 0.35) * 2.4)) * 30 + (n2(x, y, w, h, 2) - 0.5) * 14;
+      return [v, v, v];
+    });
+    const r = makeRand(83);
+    blobs(g, w, h, 34, r, { rMin: 10, rMax: 26, colors: ['rgba(255,255,255,0.10)', 'rgba(210,215,235,0.10)'] });
+  }));
+}
+
 /** Soil for planters. Coloured. */
 export function soilTexture() {
   return once('soil', () => drawTexture(128, 128, (g, w, h) => {
@@ -240,6 +292,9 @@ const ROAD_STYLE = {
   tanglemire: { side: ['#4d5e3a', '#3e4d31', '#5d6f45'], path: 'boards', pathCol: ['#7a5a3a', '#6a4c30', '#8c6a46'], moss: '#7a8f3a' },
   emberroot: { side: ['#4a2520', '#3a1c18', '#5c2e26'], path: 'hex', pathCol: ['#2e2a2e', '#3a3438', '#252226'], glow: '#ff7a1a' },
   starbloom: { side: ['#262a66', '#1e2256', '#30357a'], path: 'crystal', pathCol: ['#3b3f8f', '#4a4fa8', '#2f3378'], glow: '#9fe8ff' },
+  frostfall: { side: ['#e8f2fc', '#d3e3f4', '#f9fcff'], path: 'ice', pathCol: ['#b8e4fa', '#a2d8f4', '#cdeefd'], glow: '#ffffff' },
+  candy: { side: ['#ffc6e2', '#ffb2d7', '#ffdcee'], path: 'candy', pathCol: ['#ff8cc6', '#7fe0cc', '#ffe97a', '#c4a4ff', '#86d0ff', '#ffb27a'], sprinkles: ['#ff3b6b', '#ffd23f', '#3fd0ff', '#7ee36b', '#b36bff', '#ffffff'] },
+  cloud: { side: ['#f2f6ff', '#e4ebfa', '#ffffff'], path: 'marble', pathCol: ['#fffcf4', '#f5efe2', '#fbf7ee'], glow: '#ffd23f' },
 };
 
 /** Returns {map, emissiveMap?} for a biome road: 512px = 40 studs wide, 40 studs long. */
@@ -357,6 +412,45 @@ export function roadTexture(biomeId) {
         g.fillRect(x, y, s, s);
         gg.fillStyle = colr;
         gg.globalAlpha = 0.5 + r() * 0.5;
+        gg.fillRect(x - s * 0.5, y - s * 0.5, s * 2, s * 2);
+        gg.globalAlpha = 1;
+      }
+    }
+    if (biomeId === 'frostfall') {
+      // wind-swept drifts and glinting snow crystals
+      blobs(g, W, H, 70, r, { rMin: 6, rMax: 18, colors: ['rgba(140,180,225,0.16)', 'rgba(255,255,255,0.45)'], shape: 'ellipse' });
+      for (let i = 0; i < 240; i++) {
+        const x = r() * W, y = r() * H, s = 0.8 + r() * 1.4;
+        g.fillStyle = '#ffffff';
+        g.fillRect(x, y, s, s);
+        gg.fillStyle = r() < 0.6 ? '#ffffff' : '#9fe8ff';
+        gg.globalAlpha = 0.25 + r() * 0.4;
+        gg.fillRect(x - s * 0.5, y - s * 0.5, s * 2, s * 2);
+        gg.globalAlpha = 1;
+      }
+    }
+    if (biomeId === 'candy') {
+      // pink frosting with sprinkles
+      blobs(g, W, H, 50, r, { rMin: 8, rMax: 20, colors: ['rgba(255,255,255,0.22)', 'rgba(255,120,190,0.12)'] });
+      for (let i = 0; i < 560; i++) {
+        g.save();
+        g.translate(r() * W, r() * H);
+        g.rotate(r() * Math.PI);
+        g.fillStyle = S.sprinkles[Math.floor(r() * S.sprinkles.length)];
+        roundRect(g, -3.4, -1.2, 6.8, 2.4, 1.2);
+        g.fill();
+        g.restore();
+      }
+    }
+    if (biomeId === 'cloud') {
+      // cloud fluff with golden glints
+      blobs(g, W, H, 90, r, { rMin: 8, rMax: 22, colors: ['rgba(255,255,255,0.6)', 'rgba(196,206,240,0.22)'] });
+      for (let i = 0; i < 90; i++) {
+        const x = r() * W, y = r() * H, s = 1 + r() * 1.6;
+        g.fillStyle = '#ffe27a';
+        g.fillRect(x, y, s, s);
+        gg.fillStyle = '#ffd23f';
+        gg.globalAlpha = 0.3 + r() * 0.4;
         gg.fillRect(x - s * 0.5, y - s * 0.5, s * 2, s * 2);
         gg.globalAlpha = 1;
       }
@@ -527,6 +621,125 @@ export function roadTexture(biomeId) {
           }
         }
       }
+    } else if (S.path === 'ice') {
+      // packed snow with rows of glassy ice slabs (11 rows per tile so it wraps)
+      g.fillStyle = '#e4eef9';
+      g.fillRect(0, 0, W, H);
+      const RH = H / 11;
+      for (let j = 0; j < 11; j++) {
+        let x = cx - pathHalf - 30 + r() * 12;
+        while (x < cx + pathHalf + 30) {
+          const w = 34 + r() * 26;
+          const x0 = x + 3, y0 = j * RH + 3, sw = w - 6, sh = RH - 6;
+          g.fillStyle = pc[Math.floor(r() * pc.length)];
+          roundRect(g, x0, y0, sw, sh, 10);
+          g.fill();
+          const gr = g.createLinearGradient(x0, y0, x0 + sw, y0 + sh);
+          gr.addColorStop(0, 'rgba(255,255,255,0.6)');
+          gr.addColorStop(0.35, 'rgba(255,255,255,0)');
+          gr.addColorStop(0.62, 'rgba(255,255,255,0.18)');
+          gr.addColorStop(0.75, 'rgba(255,255,255,0)');
+          g.fillStyle = gr;
+          g.fill();
+          g.strokeStyle = 'rgba(255,255,255,0.85)';
+          g.lineWidth = 2;
+          g.stroke();
+          // a crack or two
+          g.strokeStyle = 'rgba(255,255,255,0.7)';
+          g.lineWidth = 1.2;
+          for (let k = r.int(0, 2); k > 0; k--) {
+            let px2 = x0 + r() * sw, py2 = y0 + r() * sh;
+            g.beginPath();
+            g.moveTo(px2, py2);
+            for (let q = 0; q < 3; q++) g.lineTo((px2 += (r() - 0.5) * 16), (py2 += (r() - 0.5) * 12));
+            g.stroke();
+          }
+          if (r() < 0.5) {
+            gg.fillStyle = '#bff4ff';
+            gg.globalAlpha = 0.35;
+            gg.fillRect(x0 + 4 + r() * (sw - 10), y0 + 3 + r() * (sh - 8), 3, 3);
+            gg.globalAlpha = 1;
+          }
+          x += w;
+        }
+      }
+    } else if (S.path === 'candy') {
+      // glossy candy tiles in a board-game rainbow (16 rows per tile)
+      const T = H / 16;
+      g.fillStyle = '#fff3fa';
+      g.fillRect(0, 0, W, H);
+      for (let j = 0; j < 16; j++) {
+        for (let i = -9; i <= 9; i++) {
+          const x = cx + i * T - T / 2, y = j * T;
+          g.fillStyle = pc[(((i + j * 2) % pc.length) + pc.length) % pc.length];
+          roundRect(g, x + 2.5, y + 2.5, T - 5, T - 5, 9);
+          g.fill();
+          g.strokeStyle = 'rgba(120,40,90,0.18)';
+          g.lineWidth = 2;
+          g.stroke();
+          g.fillStyle = 'rgba(255,255,255,0.5)';
+          roundRect(g, x + 7, y + 6, T - 18, 5, 2.5);
+          g.fill();
+          g.beginPath();
+          g.arc(x + T - 9, y + T - 10, 2.2, 0, Math.PI * 2);
+          g.fillStyle = 'rgba(255,255,255,0.35)';
+          g.fill();
+        }
+      }
+    } else if (S.path === 'marble') {
+      // white marble slabs with golden inlay and golden stars down the middle (10 rows per tile)
+      const T = H / 10;
+      for (let j = 0; j < 10; j++) {
+        for (let i = -3; i < 3; i++) {
+          const x = cx + i * T, y = j * T;
+          g.fillStyle = pc[Math.floor(r() * pc.length)];
+          g.fillRect(x, y, T, T);
+          g.strokeStyle = 'rgba(170,160,190,0.28)';
+          g.lineWidth = 1.2;
+          for (let k = 0; k < 2; k++) {
+            let px2 = x + r() * T, py2 = y;
+            g.beginPath();
+            g.moveTo(px2, py2);
+            for (let q = 0; q < 4; q++) g.lineTo((px2 += (r() - 0.5) * 22), (py2 += T / 4));
+            g.stroke();
+          }
+        }
+      }
+      gg.save();
+      gg.beginPath();
+      gg.moveTo(cx - edge(0), 0);
+      for (let y = 0; y <= H; y += 8) gg.lineTo(cx - edge(y), y);
+      for (let y = H; y >= 0; y -= 8) gg.lineTo(cx + edge(y + 50), y);
+      gg.closePath();
+      gg.clip();
+      for (const [ctx, colr, a, lw] of [[g, '#e0ac2c', 1, 3.5], [gg, '#ffd23f', 0.45, 3.5]]) {
+        ctx.globalAlpha = a;
+        ctx.strokeStyle = colr;
+        ctx.lineWidth = lw;
+        ctx.beginPath();
+        for (let i = -3; i <= 3; i++) {
+          ctx.moveTo(cx + i * T, 0);
+          ctx.lineTo(cx + i * T, H);
+        }
+        for (let j = 0; j <= 10; j++) {
+          ctx.moveTo(0, j * T);
+          ctx.lineTo(W, j * T);
+        }
+        ctx.stroke();
+        // four-point stars on the slab corners down the middle
+        ctx.fillStyle = colr;
+        for (let j = 0; j <= 10; j++) {
+          ctx.beginPath();
+          for (let k = 0; k < 8; k++) {
+            const aa = (k / 8) * Math.PI * 2, rr = k % 2 ? 3.5 : 11;
+            ctx.lineTo(cx + Math.cos(aa) * rr, j * T + Math.sin(aa) * rr);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      gg.restore();
     }
     g.restore();
     const map = canvasTexture(c);
