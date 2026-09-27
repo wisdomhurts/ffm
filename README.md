@@ -7,6 +7,7 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * Nine worlds up the Seed Road, from Sunny Field to Frostfall, Candy Canyon and the Cloud Kingdom.
 * Train Speed as high as you like (there is no top level), and buy the three FOR SALE lots at the back of
   your garden for up to 25 planters.
+* Online rooms with up to 4 players; the host picks how many computer players fill the empty gardens (None to All).
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.
