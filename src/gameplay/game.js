@@ -2,7 +2,7 @@
 // Views, UI, audio and AI read this state and listen to the events it emits on `bus`.
 import {
   ROAD_END_Z, WORLD, PLAYER, PLANTS, PLANT, RARITIES, RARITY, MUTATIONS, BASE_MUTATION_CHANCE, BIOMES, PODS, ITEMS, ITEM,
-  EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, REBIRTH, NAMESAKE_BONUS, speedCost,
+  EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, REBIRTH, NAMESAKE_BONUS, speedCost, TOP_TIER,
 } from '../config.js';
 import { LAYOUT, gardenContains } from './layout.js';
 import { PhysicsWorld } from '../core/physics.js';
@@ -154,8 +154,8 @@ export class Game {
     const biome = BIOMES[biomeIndex];
     let tier = RARITY[biome.rarity].tier;
     let rarity = biome.rarity;
-    if (biome.id === 'starbloom' && this.rng.chance(PODS.secretChance)) rarity = 'secret';
-    else if (tier < 5 && this.rng.chance(PODS.luckyChance)) rarity = RARITIES[tier + 1].id;
+    if (biome.secret && this.rng.chance(biome.secret)) rarity = 'secret';
+    else if (tier < TOP_TIER && this.rng.chance(PODS.luckyChance)) rarity = RARITIES[tier + 1].id;
     const species = this.rng.pick(this.speciesOfRarity(rarity));
     return { speciesId: species.id, mutation: this.rollMutation(), lucky: rarity !== biome.rarity };
   }

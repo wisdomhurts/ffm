@@ -128,8 +128,9 @@ export const SFX = {
   },
 
   // ---------------------------------------------------------------- seeds & plants
-  /** o.tier 0..6 (rarity), o.mutation */
+  /** o.tier 0..9 (rarity; 9 = Secret, the sound tops out at 6), o.mutation */
   grab(ac, out, t, o) {
+    const secret = (o.tier ?? 0) >= 9;
     const tier = clamp(o.tier ?? 0, 0, 6);
     const mut = o.mutation || 'normal';
     const base = 76 + tier * 2;
@@ -148,7 +149,7 @@ export const SFX = {
     } else if (mut === 'rainbow') {
       [0, 2, 4, 5, 7, 9, 11, 12].forEach((d, i) => harp(ac, out, t + 0.2 + i * 0.045, base + d, 0.5 * (o.vol ?? 1), { decay: 0.6, send: o.send }));
     }
-    if (tier >= 6) SFX.secret(ac, out, t + 0.3, o);
+    if (secret) SFX.secret(ac, out, t + 0.3, o);
   },
   /** Secret seed: a magical lydian arpeggio over a soft swell. */
   secret(ac, out, t, o) {
