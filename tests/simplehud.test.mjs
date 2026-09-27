@@ -109,10 +109,13 @@ try {
     await page.screenshot({ path: path.join(OUT, `simple-${w}x${hgt}-play.png`) });
     // tap the faces: the full board unfolds, then folds away by itself
     await page.tap('.board-strip');
-    // wait for it (not a fixed delay: a busy machine runs SwiftShader frames slowly)
+    // wait until it has faded in (not a fixed delay: a busy machine runs SwiftShader frames slowly)
     await page.waitForFunction(() => {
-      const r = document.querySelector('.board.open .board-rows')?.getBoundingClientRect();
-      return r && r.width > 0 && r.height > 0;
+      const e = document.querySelector('.board.open .board-rows');
+      if (!e) return false;
+      const r = e.getBoundingClientRect();
+      const cs = getComputedStyle(e);
+      return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && +cs.opacity > 0.5;
     }, null, { timeout: 5000 }).catch(() => {});
     check(await shown(page, '.board.open .board-rows'), `${name}: tapping the faces shows the full board`);
     await page.screenshot({ path: path.join(OUT, `simple-${w}x${hgt}-board.png`) });
