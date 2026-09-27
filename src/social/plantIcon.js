@@ -12,6 +12,9 @@ const KIND = {
   pea: 'pod', berry: 'berry', melon: 'fruit', tater: 'tater', pepper: 'pepper', dragonfruit: 'dragon', bubble: 'bubble',
   fern: 'fern', clover: 'clover', aloe: 'aloe', phoenix: 'flame',
   cactus: 'cactus', flytrap: 'trap',
+  snowflake: 'snowflake', icerose: 'crystal', frostbell: 'bells',
+  lollipop: 'lollipop', gumdrop: 'gumdrop', candycane: 'cane',
+  cloudpuff: 'cloud', halolily: 'halo', thunder: 'bolt',
 };
 
 const POT = `${st('<rect x="14" y="45" width="36" height="7" rx="2.5"/>', '#e8894b')}${st('<path d="M17 51 H47 L44 61 H20 Z"/>', '#d06a33')}
@@ -19,6 +22,12 @@ const POT = `${st('<rect x="14" y="45" width="36" height="7" rx="2.5"/>', '#e889
 const stem = (top = 24) => `<path d="M32 46 V${top}" stroke="${INK}" stroke-width="7" stroke-linecap="round"/><path d="M32 46 V${top}" stroke="#3aa655" stroke-width="3.2" stroke-linecap="round"/>`;
 const leaves = (y = 38, c = LEAF) =>
   st(`<path d="M32 ${y} C24 ${y} 19 ${y - 4} 16 ${y - 9} C23 ${y - 10} 29 ${y - 7} 32 ${y - 2} Z"/><path d="M32 ${y} C40 ${y} 45 ${y - 4} 48 ${y - 9} C41 ${y - 10} 35 ${y - 7} 32 ${y - 2} Z"/>`, c, 5.5);
+
+// A candy-coloured line with an ink outline (arms, sticks, canes).
+const stroke = (d, c, w = 3.4) => `${ink(d, w + 3.6)}<path d="${d}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+const bellAt = (x, y, k = 1) =>
+  `<path d="M${x - 6 * k} ${y + 10 * k} C${x - 6 * k} ${y + 2 * k} ${x - 4 * k} ${y} ${x} ${y} C${x + 4 * k} ${y} ${x + 6 * k} ${y + 2 * k} ${x + 6 * k} ${y + 10 * k} L${x + 8 * k} ${y + 13 * k} H${x - 8 * k} Z"/>`;
+const dropAt = (x, y, k = 1) => `<path d="M${x - 4 * k} ${y + 3 * k} C${x - 4 * k} ${y - 4 * k} ${x + 4 * k} ${y - 4 * k} ${x + 4 * k} ${y + 3 * k} Z"/>`;
 
 function petals(n, r, rx, ry, cy, c) {
   let s = '';
@@ -82,6 +91,46 @@ function body(kind, c0, c1) {
       return `${stem(30)}${leaves(42)}${st('<path d="M14 26 C14 14 24 8 32 8 C40 8 50 14 50 26 C44 20 38 19 32 19 C26 19 20 20 14 26 Z"/>', c0)}
         ${st('<path d="M16 29 C22 23 27 22 32 22 C37 22 42 23 48 29 C44 35 38 37 32 37 C26 37 20 35 16 29 Z"/>', c1)}
         <path d="M20 25 l2 4 l2 -4 l2 4 l2 -4 l2 4 l2 -4 l2 4 l2 -4 l2 4 l2 -4 l2 4" stroke="#fff" stroke-width="1.6" fill="none"/>`;
+    case 'snowflake': {
+      let arms = '';
+      for (let i = 0; i < 6; i++) arms += `<path transform="rotate(${i * 60} 32 20)" d="M32 20 V6 M32 10.5 L27.5 7 M32 10.5 L36.5 7 M32 14.5 L29 12 M32 14.5 L35 12"/>`;
+      return `${stem(32)}${leaves(42, '#7fd8d0')}<g fill="none" stroke="${INK}" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round">${arms}</g>
+        <g fill="none" stroke="${c1}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${arms}</g>${st('<path d="M32 14 L37.2 17 V23 L32 26 L26.8 23 V17 Z"/>', c0, 4.5)}`;
+    }
+    case 'crystal':
+      return `${stem(28)}${leaves(40, '#5fc0c8')}${st('<path d="M32 31 L17 21 L20 8 L27 14 L32 4 L37 14 L44 8 L47 21 Z"/>', c1)}
+        ${st('<path d="M32 29 L24 20 L28 13 L32 17 L36 13 L40 20 Z"/>', c0, 4)}<path d="M21 11 L24 17 M31 8 L32 12" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".85"/>`;
+    case 'bells':
+      return `${leaves(44, '#5fb8a8')}${stroke('M31 46 C29 30 31 12 41 10 C47 9 49 13 48 17', '#5fb8a8', 3)}${stroke('M33 46 C33 34 28 25 20 23 C16 22 14 24 15 27', '#5fb8a8', 2.6)}
+        ${st(`${bellAt(48, 17, 1.05)}${bellAt(15, 27, 0.8)}`, c0, 5)}
+        <circle cx="48" cy="33" r="2.2" fill="${c1}" stroke="${INK}" stroke-width="1.6"/><circle cx="15" cy="40" r="1.8" fill="${c1}" stroke="${INK}" stroke-width="1.5"/>
+        <path d="M44 21 C44 24 44 26 45 28" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity=".8"/>`;
+    case 'lollipop':
+      return `${stroke('M32 46 V30', '#fff', 3.2)}${leaves(41, '#45d488')}${st('<circle cx="32" cy="18" r="14"/>', c0)}
+        <path d="M32 18 a2 2 0 0 1 4 0 a4 4 0 0 1 -8 0 a6 6 0 0 1 12 0 a8 8 0 0 1 -16 0 a10 10 0 0 1 20 0 a12 12 0 0 1 -24 0" fill="none" stroke="${c1}" stroke-width="3.4" stroke-linecap="round"/>
+        <ellipse cx="25" cy="10" rx="3.2" ry="1.8" transform="rotate(-35 25 10)" fill="#fff" opacity=".75"/>`;
+    case 'gumdrop':
+      return `${st('<rect x="29" y="35" width="6" height="11" rx="2"/>', '#c98a5a', 5)}${st('<circle cx="32" cy="23" r="14"/><circle cx="19" cy="30" r="9"/><circle cx="45" cy="30" r="9"/>', c0)}
+        ${st(dropAt(32, 9, 1.3), c1, 4)}${st(dropAt(21, 22), '#ffd84a', 4)}${st(dropAt(42, 21), '#b77bff', 4)}${st(dropAt(26, 32), '#4fc3ff', 4)}${st(dropAt(40, 33), '#ff8a3d', 4)}
+        <circle cx="30" cy="7" r="1.2" fill="#fff"/><circle cx="20" cy="21" r="1" fill="#fff"/><circle cx="41" cy="20" r="1" fill="#fff"/>`;
+    case 'cane': {
+      const big = 'M27 46 V19 C27 9 40 7 41 15 C42 19 39 21 37 19', small = 'M41 46 V32 C41 26 48 24 50 29 C51 32 48 33 47 31';
+      const cane = (d, w) => `${ink(d, w + 3.8)}<path d="${d}" stroke="${c1}" stroke-width="${w}" fill="none" stroke-linecap="round"/><path d="${d}" stroke="${c0}" stroke-width="${w}" fill="none" stroke-dasharray="3.4 3.4"/>`;
+      let mint = '';
+      for (let i = 0; i < 4; i++) mint += `<path transform="rotate(${i * 90} 18 34)" d="M18 34 L18 27.5 A6.5 6.5 0 0 1 22.6 29.4 Z"/>`;
+      return `${leaves(44, '#56dc9c')}${cane(small, 4.2)}${cane(big, 5)}${st('<circle cx="18" cy="34" r="6.5"/>', '#fff', 4)}<g fill="${c0}">${mint}</g>`;
+    }
+    case 'cloud':
+      return `${stem(32)}${leaves(43, '#8fcfb0')}${st('<path d="M14 31 C8 31 7 22 14 21 C13 13 22 10 26 15 C28 7 39 7 41 14 C46 11 53 16 50 22 C56 23 55 31 49 31 Z"/>', c0)}
+        ${st('<circle cx="22" cy="37" r="3.2"/><circle cx="27" cy="39.5" r="2.8"/><circle cx="41" cy="37" r="3.2"/><circle cx="29" cy="11" r="3"/><circle cx="41" cy="12.5" r="2.6"/>', c1, 4)}
+        <circle cx="21" cy="36" r="1" fill="#fff"/><circle cx="40" cy="36" r="1" fill="#fff"/><circle cx="28" cy="10" r="1" fill="#fff"/>`;
+    case 'halo':
+      return `${stem(30)}${leaves(41)}${st('<path d="M32 34 C26 34 20 29 15 20 C21 21 25 23 28 26 C27 20 28 16 32 11 C36 16 37 20 36 26 C39 23 43 21 49 20 C44 29 38 34 32 34 Z"/>', c0)}
+        <path d="M32 32 V24" stroke="${c1}" stroke-width="2.4" stroke-linecap="round"/><circle cx="32" cy="23" r="2.2" fill="${c1}"/>
+        <ellipse cx="32" cy="6.5" rx="10" ry="3.2" fill="none" stroke="${INK}" stroke-width="6"/><ellipse cx="32" cy="6.5" rx="10" ry="3.2" fill="none" stroke="${c1}" stroke-width="2.6"/>`;
+    case 'bolt':
+      return `${stem(24)}${leaves(40, '#4a6fd0')}${petals(8, 10, 4.2, 7.5, 19, c0)}${st('<path d="M35 8 L26 21 H31 L28 31 L39 16 H33.5 Z"/>', c1, 4.5)}
+        ${ink('M8 14 L12 12 L10 17 L14 15', 2.2).replaceAll(INK, c1)}${ink('M52 26 L56 24 L54 29 L58 27', 2.2).replaceAll(INK, c1)}`;
     default:
       return `${stem(22)}${leaves()}${st('<circle cx="32" cy="20" r="10"/>', c0)}`;
   }
