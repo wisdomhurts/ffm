@@ -517,9 +517,10 @@ export function buildGardens(ctx) {
       planters: planterApis,
       setOwner(ch, avatarUrl) {
         if (ch) owner = ch;
-        accMat.color.set(owner.color);
-        if (ownerColor[slot] !== owner.color) {
-          ownerColor[slot] = owner.color;
+        const col = owner.vacant ? VACANT : owner.color;
+        accMat.color.set(col);
+        if (ownerColor[slot] !== col) {
+          ownerColor[slot] = col;
           lotsDirty = true;
         }
         const key = avatarUrl || null;
@@ -704,10 +705,13 @@ export function buildGardens(ctx) {
 
 // ------------------------------------------------------------------ billboard
 
+// An online room's garden nobody plays (fewer computer players): grey trim and a FREE GARDEN sign.
+const VACANT = '#9aa3b2';
+
 function drawSign(canvas, char, img, tex) {
   const g = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
-  const col = char.color;
+  const col = char.vacant ? VACANT : char.color;
   g.fillStyle = '#1b2440';
   g.fillRect(0, 0, W, H);
   // board
@@ -770,12 +774,12 @@ function drawSign(canvas, char, img, tex) {
     gr.addColorStop(1, '#1b2440');
     g.fillStyle = gr;
     g.fillRect(cx - R, cy - R, 2 * R, 2 * R);
-    const initials = char.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    const initials = char.vacant ? '?' : char.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
     chunkyText(g, initials, cx, cy + 6, { size: 120, fill: '#ffffff', stroke: '#1b2440', strokeW: 16 });
   }
   g.restore();
   // "DORIAN'S" / "GARDEN"
-  chunkyText(g, char.name.toUpperCase() + "'S", cx, 344, { size: 76, fill: col, stroke: '#1b2440', strokeW: 15, maxW: W - 80 });
+  chunkyText(g, char.vacant ? 'FREE' : char.name.toUpperCase() + "'S", cx, 344, { size: 76, fill: col, stroke: '#1b2440', strokeW: 15, maxW: W - 80 });
   chunkyText(g, 'GARDEN', cx, 400, { size: 40, fill: '#1b2440', stroke: '#ffffff', strokeW: 8, shadow: false });
   tex.needsUpdate = true;
 }

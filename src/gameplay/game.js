@@ -39,7 +39,7 @@ export class Game {
    * @param {number} [o.seed] RNG seed
    * @param {object} [o.save] data from serialize()
    * @param {Array}  [o.extraColliders] decorative colliders from the world art
-   * @param {Array}  [o.slots] per slot {kind:'local'|'remote'|'bot', profile?, pid?} (overrides humanId)
+   * @param {Array}  [o.slots] per slot {kind:'local'|'remote'|'bot'|'empty', profile?, pid?} (overrides humanId)
    */
   constructor({ humanId = 'dorian', mode = 'endless', difficulty = 'normal', seed, save = null, extraColliders = [], slots = null } = {}) {
     this.time = 0;
@@ -67,6 +67,8 @@ export class Game {
     this.nextEventAt = EVENTS.firstDelay;
     this.match = mode === 'showdown' ? { endsAt: MATCH.showdownSeconds } : null;
     this.netWorth = new Map();
+    // online rooms: how many gardens nobody plays may get a computer player (the rest stay empty; see net/host.js)
+    this.maxBots = CHARACTERS.length - 1;
 
     for (const pod of this.pods) pod.seed = this.rollSeed(pod.biome);
     this.players.forEach((p) => this.respawn(p));
@@ -111,6 +113,14 @@ export class Game {
   }
 
   respawn(p) {
+    if (!p.present) {
+      // nobody plays this garden: park the body far out at sea, out of every range check
+      p.pos.x = -30 + p.slot * 20;
+      p.pos.y = 0;
+      p.pos.z = -700;
+      p.vel.x = p.vel.y = p.vel.z = 0;
+      return;
+    }
     const g = LAYOUT.gardens[p.slot];
     p.pos.x = g.inside.x;
     p.pos.y = 0;
@@ -215,8 +225,8 @@ export class Game {
   }
 
   ranking() {
-    // ties go to the local player (nobody likes starting in last place)
-    return [...this.players].sort((a, b) => this.netWorth.get(b) - this.netWorth.get(a) || (b.isHuman ? 1 : 0) - (a.isHuman ? 1 : 0));
+    // ties go to the local player (nobody likes starting in last place); empty gardens are not in the race
+    return this.players.filter((p) => p.present).sort((a, b) => this.netWorth.get(b) - this.netWorth.get(a) || (b.isHuman ? 1 : 0) - (a.isHuman ? 1 : 0));
   }
 
   // ------------------------------------------------------------------ main update
@@ -237,9 +247,10 @@ export class Game {
       p._now = now;
       p.intent = p.controller ? p.controller.getIntent(this, p, dt) || emptyIntent() : emptyIntent();
     }
-    for (const p of this.players) this._movePlayer(p, dt);
+    for (const p of this.players) if (p.present) this._movePlayer(p, dt);
     this._separatePlayers();
     for (const p of this.players) {
+      if (!p.present) continue;
       this._handleItems(p);
       this._handleBonk(p);
       this._handleInteraction(p, dt);
@@ -1309,11 +1320,12 @@ export class Game {
       nextEventAt: this.nextEventAt,
       event: this.event ? { type: this.event.type, startedAt: this.event.startedAt, endsAt: this.event.endsAt } : null,
       match: this.match ? { endsAt: this.match.endsAt } : null,
+      maxBots: this.maxBots,
       players: this.players.map((p) => {
         const c = p.carrying;
         const it = p.interact;
         return {
-          kind: p.kind === 'bot' ? 'bot' : 'player', pid: p.pid, profileId: p.profileId, name: p.name, look: p.look, pet: p.pet,
+          kind: p.kind === 'bot' || p.kind === 'empty' ? p.kind : 'player', pid: p.pid, profileId: p.profileId, name: p.name, look: p.look, pet: p.pet,
           pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z }, vel: { x: p.vel.x, y: p.vel.y, z: p.vel.z }, yaw: p.yaw, onGround: p.onGround,
           cash: p.cash, speedLevel: p.speedLevel, rebirths: p.rebirths, upgradeSpend: p.upgradeSpend, items: { ...p.items }, selectedItem: p.selectedItem,
           carrying: c ? (c.kind === 'plant' ? { kind: 'plant', plant: plant(c.plant), fromSlot: c.fromSlot, fromIndex: c.fromIndex } : { ...c }) : null,
@@ -1351,6 +1363,7 @@ export class Game {
     const evDef = s.event && EVENTS.types.find((e) => e.id === s.event.type);
     this.event = evDef ? { type: evDef.id, def: evDef, startedAt: s.event.startedAt, endsAt: s.event.endsAt } : null;
     this.match = s.match ? { endsAt: s.match.endsAt } : null;
+    if (Number.isInteger(s.maxBots)) this.maxBots = clamp(s.maxBots, 0, CHARACTERS.length - 1);
     const known = new Map();
     for (const g of this.gardens) for (const pl of g.planters) if (pl.plant) known.set(pl.plant.uid, pl.plant);
     for (const p of this.players) if (p.carrying?.kind === 'plant') known.set(p.carrying.plant.uid, p.carrying.plant);
@@ -1364,11 +1377,11 @@ export class Game {
       const p = this.players[i];
       if (!p || !d) return;
       const mine = i === localSlot;
-      p.kind = mine ? 'local' : d.kind === 'bot' ? 'bot' : 'remote';
+      p.kind = mine ? 'local' : d.kind === 'bot' || d.kind === 'empty' ? d.kind : 'remote';
       p.isHuman = mine;
       p.pid = d.pid ?? null;
       p.profileId = d.profileId;
-      p.faceKey = mine ? p.faceKey : p.kind === 'bot' ? p.char.id : faceKeyOf ? faceKeyOf(d) : 'r_' + d.pid;
+      p.faceKey = mine ? p.faceKey : p.kind === 'bot' || p.kind === 'empty' ? p.char.id : faceKeyOf ? faceKeyOf(d) : 'r_' + d.pid;
       p.name = d.name;
       if (d.look && !sameLook(d.look, p.look)) p.look = sanitizeLook(d.look, p.char.id);
       if (d.pet !== p.pet) {

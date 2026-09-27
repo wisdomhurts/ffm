@@ -4,6 +4,7 @@
 //   mountRoomPanel(app, hudRoot, anchors)   small chip under the leaderboard while in a room: code (+ copy),
 //                                           who's here (mute, host-only remove), Leave; join/leave toasts
 import { bus } from '../core/events.js';
+import { settings, setSetting } from '../core/settings.js';
 import { listProfiles, updateProfile, profileColor } from '../core/profiles.js';
 import { familyFaceData } from '../characters/faces.js';
 import { h, setText, toggle, uiSound } from './dom.js';
@@ -64,6 +65,13 @@ const CSS = `
 .lobby .lb-face .set-note{font:700 12.5px/1.3 var(--fb);color:var(--txt3)}
 .lobby .lb-face .switch{pointer-events:auto}
 .lobby .lb-face.off{opacity:.6}
+.lobby .lb-bots{flex-wrap:wrap}
+.lobby .lb-bots .set-l{min-width:180px}
+.bots-seg .seg-b{min-height:40px;padding:8px 13px 10px;font-size:16px}
+.room-chip .rc-bots{margin:6px 0 2px;padding:6px 8px 8px;border-radius:12px;background:rgba(10,15,40,.45)}
+.room-chip .rc-bots .rc-cl{display:block;margin:0 0 5px 2px;font:800 10.5px/1.1 var(--fb);letter-spacing:.1em;text-transform:uppercase;color:var(--txt3)}
+.room-chip .rc-bots .seg{display:flex;border-width:2px}
+.room-chip .rc-bots .seg-b{flex:1;min-height:34px;padding:6px 4px 8px;font-size:14px}
 .lobby .lb-status{display:flex;align-items:center;gap:10px;min-height:0;margin-top:14px;padding:0 12px;border-radius:14px;font:800 15px/1.3 var(--fb);transition:padding .15s}
 .lobby .lb-status:empty{display:none}
 .lobby .lb-status.busy,.lobby .lb-status.err,.lobby .lb-status.ok{padding:10px 12px}
@@ -303,6 +311,16 @@ export function openLobby(app) {
     btn([h('span', { class: 'lbm' }, h('span', { class: 'bi', html: ICON.lock }), h('span', { text: 'Private room' })), h('small', { text: 'Only friends with your secret code.' })],
       'btn-purple lb-mk lb-act', () => run(() => on.createRoom({ private: true }))));
 
+  // ---- computer players in rooms you make
+  const bots = botsSeg(() => Math.round(settings.onlineBots ?? 3), (v) => {
+    menus.click();
+    setSetting('onlineBots', v);
+  });
+  const botsRow = h('div', { class: 'lb-face lb-bots lb-card' },
+    h('span', { class: 'set-l' }, h('span', { class: 'set-name', text: 'Computer players' }),
+      h('span', { class: 'set-note', text: 'In rooms you make: how many empty gardens get a family bot. None = just you and your friends.' })),
+    bots.el);
+
   // ---- join with a code
   const input = h('input', {
     class: 'lb-code', type: 'text', inputmode: 'text', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false',
@@ -405,6 +423,7 @@ export function openLobby(app) {
     list,
     h('div', { class: 'lb-sec', text: 'Make a room' }),
     make,
+    botsRow,
     h('div', { class: 'lb-sec', text: "Join a friend's room" }),
     h('div', { class: 'lb-join' }, input, joinBtn),
     faceRow,
@@ -426,6 +445,25 @@ export function openLobby(app) {
     for (const f of offs) f();
   };
   return m;
+}
+
+// "Computer players" picker: how many gardens nobody plays get a family bot (the rest wait for friends).
+const BOT_CHOICES = [[0, 'None'], [1, '1'], [2, '2'], [3, 'All']];
+function botsSeg(get, set) {
+  const wrap = h('div', { class: 'seg bots-seg', role: 'radiogroup', 'aria-label': 'Computer players' });
+  const paint = () => wrap.querySelectorAll('button').forEach((b) => {
+    const on = Number(b.dataset.v) === get();
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  for (const [v, label] of BOT_CHOICES) {
+    wrap.appendChild(h('button', { class: 'seg-b', type: 'button', role: 'radio', 'data-v': String(v), text: label, onclick: () => {
+      set(v);
+      paint();
+    } }));
+  }
+  paint();
+  return { el: wrap, paint };
 }
 
 const PALETTE = ['#2f80ed', '#ff4f9a', '#9b5cff', '#1ec8a5', '#ff9f1c', '#3fd65a', '#ff5a5a'];
@@ -463,6 +501,13 @@ export function mountRoomPanel(app, hudRoot, anchors = {}) {
   const codeRow = room.private ? h('div', { class: 'rc-code' }, h('span', { class: 'rc-cl', text: 'Room code' }), h('b', { text: room.code }), copyBtn) : null;
   const listEl = h('div', { role: 'list' });
   const note = h('div', { class: 'rc-note' });
+  // the host can change how many computer players the room has at any time
+  const botsCtl = botsSeg(() => on.maxBots, (v) => {
+    menus.click();
+    if (on.setBots(v)) toast(v === 0 ? 'No computer players: empty gardens wait for friends.' : `Computer players: ${v >= 3 ? 'all empty gardens' : v}`, ICON.family);
+    paint();
+  });
+  const botsRow = h('div', { class: 'rc-bots' }, h('span', { class: 'rc-cl', text: 'Computer players' }), botsCtl.el);
   const leave = btn(menus.iconLabel(ICON.exit, 'Leave room'), 'btn-red btn-sm rc-leave', () => {
     if (!leave.classList.contains('sure')) {
       leave.classList.add('sure');
@@ -476,7 +521,7 @@ export function mountRoomPanel(app, hudRoot, anchors = {}) {
     on.leave();
     app.quitToTitle();
   });
-  const pop = h('div', { class: 'rc-pop' }, codeRow, listEl, note, leave);
+  const pop = h('div', { class: 'rc-pop' }, codeRow, listEl, botsRow, note, leave);
   chip.append(bar, pop);
   parent.appendChild(chip);
   function setOpen(open) {
@@ -547,7 +592,11 @@ export function mountRoomPanel(app, hudRoot, anchors = {}) {
     });
     listEl.replaceChildren(...rows);
     const free = 4 - ms.length;
-    setText(note, `${room.private ? 'Share the code with friends. ' : ''}${free > 0 ? `${free} more can join. ` : ''}Computer players look after empty gardens.`);
+    const nb = on.maxBots;
+    botsRow.hidden = !on.isHost;
+    botsCtl.paint();
+    const bots = nb <= 0 ? 'No computer players: empty gardens wait for friends.' : nb >= 3 ? 'Computer players look after empty gardens.' : `Up to ${nb} computer player${nb === 1 ? '' : 's'}.`;
+    setText(note, `${room.private ? 'Share the code with friends. ' : ''}${free > 0 ? `${free} more can join. ` : ''}${bots}`);
   }
   paint();
 

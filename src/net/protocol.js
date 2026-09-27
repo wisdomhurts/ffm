@@ -35,7 +35,7 @@ import { Player } from '../gameplay/player.js';
 /** Own keys only: catalog lookups must never match 'toString', '__proto__' and friends. */
 export const own = (obj, k) => typeof k === 'string' && !!obj && Object.prototype.hasOwnProperty.call(obj, k);
 
-export const PROTO = 1;
+export const PROTO = 2; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots
 
 // Two builds can only share a room when their rules agree (ids of everything that crosses the wire).
 function fnv(str) {
@@ -477,7 +477,7 @@ export class EventCodec {
 // on their own: clients advance them locally and every few ticks get the exact values.
 export function sectionize(full) {
   const S = {};
-  S.m = { over: full.over, mode: full.mode, difficulty: full.difficulty, uid: full.uid, nextEventAt: full.nextEventAt, event: full.event, match: full.match };
+  S.m = { over: full.over, mode: full.mode, difficulty: full.difficulty, uid: full.uid, nextEventAt: full.nextEventAt, event: full.event, match: full.match, maxBots: full.maxBots };
   full.players.forEach((p, i) => (S['p' + i] = p));
   full.gardens.forEach((g, i) => (S['g' + i] = g));
   S.pd = full.pods;
@@ -496,7 +496,7 @@ export function signature(key, v) {
     return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0]])]);
   }
   if (key === 'mo') return stringifyR(v.map((m) => [m.stunUntil, m.attackAt]));
-  if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match]); // uid: only for promotion
+  if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match, v.maxBots]); // uid: only for promotion
   return stringifyR(v);
 }
 

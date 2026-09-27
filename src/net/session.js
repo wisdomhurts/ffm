@@ -14,7 +14,7 @@
 // Real play: src/online/config.js (or window.__SAS_ONLINE__ = {url, key}).
 import { CHARACTERS } from '../config.js';
 import { bus } from '../core/events.js';
-import { settings } from '../core/settings.js';
+import { settings, setSetting } from '../core/settings.js';
 import { getProfile, updateProfile } from '../core/profiles.js';
 import { sanitizeName } from '../core/names.js';
 import { registerFace, forgetFace } from '../characters/faces.js';
@@ -47,6 +47,7 @@ export const NET_ERRORS = {
   busy: "Couldn't make a room right now. Try again!",
 };
 
+const clampBots = (n) => Math.max(0, Math.min(CHARACTERS.length - 1, Math.round(Number.isFinite(+n) ? +n : CHARACTERS.length - 1)));
 const netErr = (code) => Object.assign(new Error(NET_ERRORS[code] || code), { code });
 const nonce = () => b64(sha256(utf8(Math.random() + ':' + Date.now() + ':' + (typeof performance !== 'undefined' ? performance.now() : 0)))).slice(0, 16);
 
@@ -601,8 +602,12 @@ class Online {
       const name = sanitizeName(prof.name, 'Player');
       this.room = { code, private: !!priv, faceOk: !!priv, name: `${name}'s Garden`, hostPid: this.pid, hostName: name, createdAt: Date.now() };
       const mySlot = Math.max(0, CHARACTERS.findIndex((c) => c.id === prof.base));
-      const slots = CHARACTERS.map((c, i) => (i === mySlot ? { kind: 'local', profile: prof, pid: this.pid } : { kind: 'bot' }));
+      // Settings > Computer players: how many of the other gardens get a bot (the rest wait for friends, empty)
+      const maxBots = clampBots(settings.onlineBots);
+      let bots = 0;
+      const slots = CHARACTERS.map((c, i) => (i === mySlot ? { kind: 'local', profile: prof, pid: this.pid } : { kind: bots++ < maxBots ? 'bot' : 'empty' }));
       const game = this._enterWorld({ mode: 'endless', difficulty: settings.difficulty, slots });
+      game.maxBots = maxBots;
       if (prof.online) {
         try {
           game.loadSlot(mySlot, prof.online);
@@ -830,7 +835,7 @@ class Online {
     if (!game) {
       const prof = this._profile();
       const slots = full.players.map((d, i) => (i === slot ? { kind: 'local', profile: prof, pid: this.pid }
-        : d.kind === 'bot' ? { kind: 'bot' }
+        : d.kind === 'bot' || d.kind === 'empty' ? { kind: d.kind }
           : { kind: 'remote', pid: d.pid, profile: { id: d.profileId, name: d.name, look: d.look, pet: d.pet } }));
       game = this._enterWorld({ mode: 'endless', difficulty: full.difficulty || 'normal', slots });
     }
@@ -1010,7 +1015,7 @@ class Online {
     const list = [];
     if (g && room) {
       for (const p of g.players) {
-        if (p.kind === 'bot') continue;
+        if (!p.isPlayer) continue;
         const pid = p.kind === 'local' ? this.pid : p.pid;
         if (!pid) continue;
         list.push({
@@ -1037,6 +1042,21 @@ class Online {
     else this.muted.delete(pid);
     this._refreshMembers(true);
     return on;
+  }
+
+  /** How many computer players this room allows (0..3); the host can change it (setBots). */
+  get maxBots() {
+    return this.world ? this.world.maxBots : clampBots(settings.onlineBots);
+  }
+
+  /** Host only: change the room's number of computer players (also remembered for the next room). */
+  setBots(n) {
+    const v = clampBots(n);
+    setSetting('onlineBots', v);
+    if (!this.isHost) return false;
+    const changed = this.role.setMaxBots(v);
+    if (changed) this._announce();
+    return changed;
   }
 
   /** Host only: remove someone from the room (they can't come back to this room). */

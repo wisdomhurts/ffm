@@ -99,7 +99,7 @@ export class GameView {
     getFace(key).then((f) => {
       if (this.disposed || this.game.players[i].faceKey !== key) return;
       this.avatars[i]?.setFace(f.face, f.skin);
-      this.world.gardens?.[p.slot]?.setOwner?.({ ...p.char, name: p.name }, f.avatarUrl);
+      this.world.gardens?.[p.slot]?.setOwner?.({ ...p.char, name: p.name, vacant: !p.present }, p.present ? f.avatarUrl : null);
     });
   }
 
@@ -116,6 +116,12 @@ export class GameView {
       if (this._avatarKey[i] !== p.faceKey + '|' + p.kind) this._makeAvatar(i);
       const av = this.avatars[i];
       const o = av.object3d;
+      // an empty garden (online, fewer computer players): nobody to draw
+      o.visible = p.present;
+      if (!p.present) {
+        this._updatePet(i, p, dt, time, now, 0);
+        return;
+      }
       o.position.set(p.pos.x, p.pos.y, p.pos.z);
       o.rotation.y = p.yaw;
       const c = p.carrying;

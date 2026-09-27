@@ -71,9 +71,13 @@ export function updateHuman(game) {
   const nw = game.netWorth;
   s.net = nw.get(h) || 0;
   s.inc = game.gardenIncome(game.gardens[h.slot]);
-  let above = 0;
-  for (const p of game.players) if (p !== h && (nw.get(p) || 0) > s.net) above++;
-  s.last = above === game.players.length - 1;
+  let above = 0, rivals = 0;
+  for (const p of game.players) {
+    if (p === h || !p.present) continue;
+    rivals++;
+    if ((nw.get(p) || 0) > s.net) above++;
+  }
+  s.last = rivals > 0 && above === rivals;
   return s;
 }
 

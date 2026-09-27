@@ -20,7 +20,7 @@ export class Player {
     this.char = char;
     this.name = char.name;
     this.isHuman = isHuman; // the LOCAL human on this device
-    // who is playing this slot: 'local' (this device), 'remote' (someone else online) or 'bot'
+    // who is playing this slot: 'local' (this device), 'remote' (someone else online), 'bot' or 'empty' (nobody)
     this.kind = isHuman ? 'local' : 'bot';
     this.profileId = char.id;
     this.faceKey = char.id; // avatars/faces are looked up by this key (see characters/faces.js)
@@ -69,9 +69,15 @@ export class Player {
     return s * this.mods.speed * (this.kind === 'bot' ? diffMult : 1);
   }
 
-  /** Controlled by a person (this device or online), not a bot. */
+  /** Controlled by a person (this device or online), not a bot (or nobody). */
   get isPlayer() {
-    return this.kind !== 'bot';
+    return this.kind === 'local' || this.kind === 'remote';
+  }
+
+  /** In the world: someone (a person or a bot) plays this garden. 'empty' slots (an online room with fewer
+   *  computer players) sit out of sight and out of the rules. */
+  get present() {
+    return this.kind !== 'empty';
   }
 
   invisible(now) {

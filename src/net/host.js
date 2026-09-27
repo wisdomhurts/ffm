@@ -1,7 +1,7 @@
 // The room host: runs the real Game for everyone. Remote players move on their own devices; the host
 // takes their positions after a sanity check, runs every rule, and streams the world back ~5x a second (and right away when something happens).
 // Everything a member sends arrives sealed on its own uplink (session.open checks it is really them).
-import { PLAYER, WORLD, ITEMS } from '../config.js';
+import { PLAYER, WORLD, ITEMS, CHARACTERS } from '../config.js';
 import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
@@ -130,11 +130,13 @@ export class HostRole {
     let m = this.members.get(pid);
     if (!m) {
       const g = this.game;
-      const free = g.players.filter((p) => p.kind === 'bot');
+      const free = g.players.filter((p) => p.kind === 'bot' || p.kind === 'empty');
       if (!free.length || this.humans >= MAX_HUMANS) return reject('full');
       const who = msg.who;
-      const pref = free.find((p) => p.char.id === who.base) || free[0];
+      // their own character's garden if nobody plays it, else an empty garden before a computer player's
+      const pref = free.find((p) => p.char.id === who.base) || free.find((p) => p.kind === 'empty') || free[0];
       m = this._addMember(pid, pref.slot, who, vetSlotData(msg.data));
+      this.fillSlots();
       // the uplink must be open before we answer on it
       try {
         await m.up.subscribe();
@@ -214,6 +216,7 @@ export class HostRole {
         } else {
           this.s.forgetWho(p.pid);
           this._toBot(p.slot);
+          this.fillSlots();
         }
       } else if (p.kind === 'bot' && !(p.controller instanceof BotController)) {
         p.controller = new BotController(p.char.personality, g.difficultyId);
@@ -235,6 +238,42 @@ export class HostRole {
     return p;
   }
 
+  /**
+   * Gardens nobody plays get a computer player, up to game.maxBots (the room's "Computer players" setting);
+   * the rest stay empty. Bots that are over the limit leave (the last gardens first).
+   */
+  fillSlots() {
+    const g = this.game;
+    const open = g.players.filter((p) => !p.isPlayer);
+    const want = Math.max(0, Math.min(g.maxBots, open.length));
+    let bots = open.filter((p) => p.kind === 'bot').length;
+    for (const p of [...open].reverse()) {
+      if (bots <= want) break;
+      if (p.kind !== 'bot') continue;
+      const e = g.setSlot(p.slot, { kind: 'empty' });
+      e.remoteMotion = false;
+      e.controller = null;
+      bots--;
+    }
+    for (const p of open) {
+      if (bots >= want) break;
+      if (p.kind !== 'empty') continue;
+      this._toBot(p.slot);
+      bots++;
+    }
+    this.forceKey = true;
+  }
+
+  /** The host changed the room's number of computer players. */
+  setMaxBots(n) {
+    const g = this.game;
+    const v = Math.max(0, Math.min(CHARACTERS.length - 1, Math.round(Number(n) || 0)));
+    if (v === g.maxBots) return false;
+    g.maxBots = v;
+    this.fillSlots();
+    return true;
+  }
+
   removeMember(pid, reason = 'left') {
     const m = this.members.get(pid);
     if (!m) return;
@@ -244,6 +283,7 @@ export class HostRole {
     this.order = this.order.filter((x) => x !== pid);
     this.orderDirty = true;
     this._toBot(m.slot);
+    this.fillSlots();
     this.s.forgetWho(pid);
     this.s.onMembersChanged({ left: pid, reason });
   }
