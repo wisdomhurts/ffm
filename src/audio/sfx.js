@@ -24,6 +24,12 @@ export const GROWLS = {
   snapper: { gain: 0.9, f0: 86, rough: 16, formant: 720, q: 6, noise: 0.2, dur: 0.62, contour: [1, 1.18, 0.68] },
   lavasprout: { gain: 0.65, f0: 112, rough: 34, formant: 1250, q: 3, noise: 0.75, dur: 0.7, contour: [0.85, 1.3, 0.8] },
   lurker: { gain: 1.25, f0: 52, rough: 11, formant: 460, q: 7, noise: 0.4, dur: 1.1, contour: [0.8, 1.12, 0.58], ethereal: true },
+  // deep roar with a big huffy breath
+  yeti: { gain: 1.3, f0: 58, rough: 19, formant: 540, q: 5, noise: 0.6, dur: 1.0, contour: [0.85, 1.25, 0.6] },
+  // squishy, resonant "boing" that swoops up
+  gummy: { gain: 0.6, f0: 185, rough: 58, formant: 1350, q: 9, noise: 0.1, dur: 0.5, contour: [0.7, 1.6, 1.15] },
+  // slow thunder rumble with electric crackle
+  storm: { gain: 1.3, f0: 44, rough: 9, formant: 400, q: 3, noise: 0.9, dur: 1.3, contour: [1, 1.12, 0.55], clicks: true },
 };
 
 function oof(ac, out, t, o) {

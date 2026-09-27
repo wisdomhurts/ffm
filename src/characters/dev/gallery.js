@@ -1,8 +1,8 @@
 // Dev gallery for the characters module: the four family avatars (with photo faces when the page is
-// family.html) and the five road monsters on a studded baseplate, plus contact sheets of every
+// family.html) and the eight road monsters on a studded baseplate, plus contact sheets of every
 // Wardrobe look, hat, accessory, hair style, face, trail and emote.
 // URL hash (or window.__gallery.apply({...})) controls what is shown:
-//   view=family|lineup|lineup34|monsters|all|close:<id>|close34:<id>|side:<id>|back:<id>|backr:<id>|back34:<id>|rside:<id>|lside:<id>|game[:dist]|game34|behind|monster:<type>|faces
+//   view=family|lineup|lineup34|all|close:<id>|close34:<id>|side:<id>|back:<id>|backr:<id>|back34:<id>|rside:<id>|lside:<id>|game[:dist]|game34|behind|monsters[:<type>]|monster:<type>|faces
 //   state=idle|walk|run|sprint|jump|fall|carry|swing|stunned|celebrate|steal|grab|invisible|coil|mix|cycle|emote:<id>
 //   swing=<0..1> (frozen swing phase)   mstate=patrol|chase|stunned|attack   freeze=1   t=<seconds>
 //   settle=<seconds> (animation simulated before the shot, default 1)
@@ -20,7 +20,8 @@ import { HATS, ACCS, HAIR, SHIRTS, FACES, TRAILS, randomLook, baseLook } from '.
 import { EMOTE_ANIM } from '../emotes.js';
 import { createBoutique } from '../../world/boutique.js';
 
-const MONSTERS = ['stump', 'crab', 'snapper', 'lavasprout', 'lurker'];
+const MONSTERS = ['stump', 'crab', 'snapper', 'lavasprout', 'lurker', 'yeti', 'gummy', 'storm'];
+const monsterX = (i) => (i - (MONSTERS.length - 1) / 2) * 10;
 
 document.body.style.margin = '0';
 const container = document.getElementById('app') || document.body.appendChild(document.createElement('div'));
@@ -88,7 +89,7 @@ const avatars = CHARACTERS.map((c, i) => {
 const faceInfo = {};
 const monsters = MONSTERS.map((type, i) => {
   const m = createMonster(type);
-  m.object3d.position.set((i - 2) * 10, 0, -12);
+  m.object3d.position.set(monsterX(i), 0, -12);
   scene.add(m.object3d);
   return { m, type };
 });
@@ -235,12 +236,18 @@ function setCamera(view) {
       break;
     }
     case 'monsters':
-      camera.position.set(0, 8, 16);
-      camera.lookAt(0, 2.2, -12);
+      // the whole row (arg = a type: just it and its neighbours, for scale)
+      if (arg) {
+        const mx = monsterX(Math.max(0, MONSTERS.indexOf(arg)));
+        camera.position.set(mx, 7, 18);
+        camera.lookAt(mx, 2.6, -12);
+      } else {
+        camera.position.set(0, 11, 34);
+        camera.lookAt(0, 2.2, -12);
+      }
       break;
     case 'monster': {
-      const mi = Math.max(0, MONSTERS.indexOf(arg));
-      const mx = (mi - 2) * 10;
+      const mx = monsterX(Math.max(0, MONSTERS.indexOf(arg)));
       camera.position.set(mx + 3.5, 4.5, -3.5);
       camera.lookAt(mx, 2.4, -12);
       break;

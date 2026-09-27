@@ -36,6 +36,8 @@ const EVENT_COLORS = {
   diamond: ['#7ee8ff', '#ffffff', '#b8f3ff', '#4fc3ff'],
   rainbow: RAINBOW,
 };
+// Dizzy-star ring height over a stunned monster (default 4.6: head height of the smaller critters).
+const STUN_STARS_Y = { yeti: 6.4, storm: 5.9 };
 const HIT_TEXT = { bonk: 'BONK!', balloon: 'SPLAT!', banana: 'SLIP!' };
 const HIT_BURST = { bonk: '#ff3d2e', balloon: '#2f8bff', banana: '#ff9f1a' };
 
@@ -1133,7 +1135,7 @@ export function createEffects(engine, container) {
       if (now >= m.stunUntil || camDist(m.x, 4, m.z) > 80) continue;
       for (let k = 0; k < 3; k++) {
         const a = clock * 5.5 + (k * TAU) / 3;
-        S.immediate(SHAPE.star, m.x + Math.cos(a) * 1.6, (m.y || 0) + 4.6, m.z + Math.sin(a) * 1.6, 0.6, 0, 1, 0, -a, '#ffe14d', 0.5);
+        S.immediate(SHAPE.star, m.x + Math.cos(a) * 1.6, (m.y || 0) + (STUN_STARS_Y[m.type] ?? 4.6), m.z + Math.sin(a) * 1.6, 0.6, 0, 1, 0, -a, '#ffe14d', 0.5);
       }
     }
   }
