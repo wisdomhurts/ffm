@@ -3,3 +3,4 @@ dist/
 private/
 tests/output/
 *.log
+.claude/worktrees/

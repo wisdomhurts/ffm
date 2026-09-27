@@ -88,7 +88,7 @@ export function mountSocial(app, hudRoot, parts = {}) {
 
   const player = (x) => game.players[slotOf(x)] || null;
   const isMe = (x) => slotOf(x) === me.slot;
-  const people = () => game.players.filter((p) => p !== me && p.kind !== 'bot');
+  const people = () => game.players.filter((p) => p !== me && p.isPlayer);
   const dist = (p) => Math.hypot(p.pos.x - me.pos.x, p.pos.z - me.pos.z);
   const freeIn = (p) => game.gardens[p.slot].planters.filter((x) => x.unlocked && !x.plant).length;
   const toast = (html, kind = 'info', face = null) => app.hud?.alerts?.toast(html, kind, face ? { face, duration: 3400 } : { icon: SOCIAL_ICONS.trade, duration: 3400 });
@@ -319,7 +319,7 @@ export function mountSocial(app, hudRoot, parts = {}) {
     render();
     s.tick = () => {
       if (giftSig() !== sig) render();
-      if (dist(to) > TRADE.keepRange || to.kind === 'bot') closeSheet();
+      if (dist(to) > TRADE.keepRange || !to.isPlayer) closeSheet();
     };
     s.escape = () => (chosen != null ? back() : closeSheet());
   }
@@ -696,7 +696,7 @@ export function mountSocial(app, hudRoot, parts = {}) {
     }),
     bus.on('chat', (e) => {
       // someone nearby says "Trade?": make the chip wiggle
-      if (e?.quick && e.phrase === 'trade' && e.player && e.player !== me && e.player.kind !== 'bot' && dist(e.player) < NEAR * 1.5) {
+      if (e?.quick && e.phrase === 'trade' && e.player && e.player !== me && e.player.isPlayer && dist(e.player) < NEAR * 1.5) {
         pulseUntil = performance.now() + 3000;
         chipKey = null;
       }

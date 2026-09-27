@@ -269,7 +269,7 @@ export class ClientRole {
     const p = this.me;
     // even our host can only put us somewhere we could stand, moving no faster than a bonk, briefly stunned
     const z = clamp(k.p[2], -67, ROAD_END_Z + 0.5);
-    const xMax = z < WORLD.road.startZ ? 72.5 : WORLD.road.width / 2 + 0.5;
+    const xMax = z < WORLD.road.startZ ? WORLD.homeHalfW + 0.5 : WORLD.road.width / 2 + 0.5;
     p.pos.x = clamp(k.p[0], -xMax, xMax);
     p.pos.y = clamp(k.p[1], 0, 60);
     p.pos.z = z;

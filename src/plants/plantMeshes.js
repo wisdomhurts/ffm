@@ -1,7 +1,7 @@
 // Plant art: planted plants (4 growth stages), seeds, carried pots and the road seed stands.
 // Contract:
 //   createPlantView(speciesId, mutation) -> { object3d, setGrowth(p 0..1), update(dt, time) }
-//      object3d origin = soil surface; fully grown plant roughly 4-6.5 studs tall (rarer = taller).
+//      object3d origin = soil surface; fully grown plant roughly 4-7 studs tall (rarer = taller).
 //   createSeedView(speciesId, mutation)  -> { object3d, update(dt, time) }   // glowing seed (~1.5 studs) for pods, ground and carrying
 //      origin = bottom of the seed (so it sits above a head / floats above the ground)
 //   createCarriedPlantView(speciesId, mutation) -> { object3d, update(dt, time) } // potted grown plant held overhead (origin = pot bottom, ~3 studs)
@@ -34,6 +34,15 @@ const speciesOf = (id) => PLANT[id] || PLANTS[0];
 const mutOf = (m) => (MUTATIONS[m] ? m : 'normal');
 const tierOf = (sp) => RARITY[sp.rarity]?.tier ?? 0;
 const lookOf = (sp) => LOOKS[sp.look] || LOOKS.daisy;
+const isSecret = (sp) => sp.rarity === 'secret';
+// Celestial, Cosmic and Divine (tiers 6-8): the top road rarities, above Mythic and below the family Secrets.
+const isTop = (sp, tier = tierOf(sp)) => tier >= 6 && !isSecret(sp);
+// Per top tier: sparkle flavour on top of the Mythic-style aura (index = tier - 6).
+const TOP_FX = [
+  { spark: '#e6fbff', mode: 'twinkle', rise: '#9ff0ff' }, // Celestial: icy star glints
+  { spark: '#ffc2f4', mode: 'orbit', rise: '#ff9fe8' }, // Cosmic: candy-pink orbiters
+  { spark: '#fff3b0', mode: 'orbit', rise: '#ffe66e' }, // Divine: golden motes
+];
 
 const SEED_SIZE = 1.34; // seeds are ~1.5 studs tall
 const MUT_FX = { gold: '#ffe27a', diamond: '#dffcff', rainbow: 'rainbow' };
@@ -108,7 +117,10 @@ const FIT = [
   { hmax: 5.4, rmax: 2.3, hmin: 4.9, kmax: 1.6 },
   { hmax: 6.0, rmax: 2.4, hmin: 5.4, kmax: 1.9 },
   { hmax: 6.6, rmax: 2.5, hmin: 6.0, kmax: 1.9 },
-  { hmax: 7.1, rmax: 2.6, hmin: 6.5, kmax: 1.9 },
+  { hmax: 6.8, rmax: 2.55, hmin: 6.2, kmax: 1.9 }, // celestial
+  { hmax: 6.9, rmax: 2.55, hmin: 6.3, kmax: 1.9 }, // cosmic
+  { hmax: 7.0, rmax: 2.6, hmin: 6.4, kmax: 1.9 }, // divine
+  { hmax: 7.1, rmax: 2.6, hmin: 6.5, kmax: 1.9 }, // secret
 ];
 const R_HARD = 2.75;
 const fitCache = new Map();
@@ -117,7 +129,7 @@ export function plantScale(speciesId) {
   let k = fitCache.get(sp.id);
   if (k == null) {
     const t = plantTemplate(sp.id, 'normal', 3);
-    const f = FIT[tierOf(sp)];
+    const f = FIT[Math.min(FIT.length - 1, tierOf(sp))];
     const kr = Math.max(f.rmax / t.radius, Math.min(R_HARD / t.radius, f.hmin / t.height));
     k = Math.max(1.05, Math.min(f.kmax, f.hmax / t.height, kr));
     fitCache.set(sp.id, k);
@@ -172,11 +184,13 @@ function addPlantFx(rig, sp, mut, tpl, stage, groundNode, fxNode, ph) {
   if (tier >= 1 && tier <= 2) {
     rig.ground(groundNode, 'radial', rc, tier === 1 ? 3.4 : 3.9, tier === 1 ? 0.3 : 0.45);
   }
-  if (tier >= 3 && tier <= 5) {
-    rig.ground(groundNode, 'radial', rc, 3.4, 0.22);
-    rig.ground(groundNode, 'ring', rc, tier >= 4 ? 4.5 : 4.2, grown ? 0.85 : 0.5, { pulse: 0.05, phase: ph });
+  const secret = isSecret(sp);
+  const top = isTop(sp, tier);
+  if (tier >= 3 && !secret) {
+    rig.ground(groundNode, 'radial', rc, top ? 3.8 : 3.4, top ? 0.3 : 0.22);
+    rig.ground(groundNode, 'ring', rc, top ? 4.7 : tier >= 4 ? 4.5 : 4.2, grown ? (top ? 0.95 : 0.85) : 0.5, { pulse: top ? 0.07 : 0.05, phase: ph });
   }
-  if (tier >= 6) {
+  if (secret) {
     rig.ground(groundNode, 'void', '#ffffff', 4.4, 0.85);
     rig.ground(groundNode, 'rainbow', '#ffffff', 4.6, grown ? 1 : 0.6, { pulse: 0.05, phase: ph });
   }
@@ -190,7 +204,13 @@ function addPlantFx(rig, sp, mut, tpl, stage, groundNode, fxNode, ph) {
     rig.sparkles(fxNode, 'rise', '#ffb3c6', 16, rx * 1.1, h * 1.3, 0, { size: 0.2, star: false, seed: 5 });
     rig.sparkles(fxNode, 'twinkle', '#ffffff', 6, rx, h * 0.9, h * 0.2, { size: 0.4, seed: 6 });
   }
-  if (tier >= 6) {
+  if (top) {
+    const tf = TOP_FX[tier - 6];
+    rig.column(fxNode, rc, Math.min(2.0, rx * 1.15), h + 1.8, 0.34);
+    rig.sparkles(fxNode, 'rise', tf.rise, 12, rx * 1.1, h * 1.3, 0, { size: 0.2, star: false, seed: 5 });
+    rig.sparkles(fxNode, tf.mode, tf.spark, 8, rx * 1.05, h * 0.85, h * 0.2, { size: tf.mode === 'orbit' ? 0.34 : 0.44, seed: 6 });
+  }
+  if (secret) {
     rig.column(fxNode, 'rainbow', Math.min(2.0, rx * 1.15), h + 2, 0.35);
     rig.sparkles(fxNode, 'orbit', 'rainbow', 14, rx * 1.15, h * 0.9, h * 0.15, { size: 0.36, seed: 7 });
     rig.sparkles(fxNode, 'rise', '#1a0b2e', 12, rx * 1.1, h * 1.2, 0, { size: 0.3, star: false, dark: true, intensity: 1.3, seed: 8, fine: true });
@@ -309,8 +329,9 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
 
 // ------------------------------------------------------------------ seeds
 
-const SEED_HALO = [2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.8];
-const SEED_HALO_A = [0.45, 0.6, 0.7, 0.8, 0.9, 0.95, 0.9];
+// Seed halo size / opacity per rarity tier (common .. divine, secret).
+const SEED_HALO = [2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.7, 3.8, 3.9, 3.8];
+const SEED_HALO_A = [0.45, 0.6, 0.7, 0.8, 0.9, 0.95, 0.95, 0.95, 1.0, 0.9];
 
 export function createSeedView(speciesId, mutation = 'normal') {
   const sp = speciesOf(speciesId);
@@ -326,10 +347,12 @@ export function createSeedView(speciesId, mutation = 'normal') {
   spin.add(inst.root);
   const rig = new FxRig(root, () => inst.dispose());
   const cy = 0.56 * SEED_SIZE;
-  rig.halo(root, rc === 'rainbow' ? '#ffffff' : rc, SEED_HALO[tier], SEED_HALO_A[tier], 'halo', [0, cy, 0]);
+  const ht = Math.min(SEED_HALO.length - 1, tier);
+  rig.halo(root, rc === 'rainbow' ? '#ffffff' : rc, SEED_HALO[ht], SEED_HALO_A[ht], 'halo', [0, cy, 0]);
   if (tier >= 4) rig.sparkles(root, 'twinkle', tier >= 6 ? '#ffffff' : '#fff0a0', 6, 0.85, 1.5, 0.05, { size: 0.4, seed: 31 });
   if (tier === 5) rig.sparkles(root, 'rise', '#ff9fb4', 7, 0.6, 2.2, 0, { size: 0.16, star: false, seed: 32 });
-  if (tier >= 6) {
+  if (isTop(sp, tier)) rig.sparkles(root, 'orbit', TOP_FX[tier - 6].spark, 8, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
+  if (isSecret(sp)) {
     rig.sparkles(root, 'orbit', 'rainbow', 10, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
     rig.sparkles(root, 'rise', '#1a0b2e', 7, 0.6, 2.0, 0, { size: 0.26, star: false, dark: true, intensity: 1.3, seed: 34 });
   }
@@ -374,7 +397,7 @@ export function createCarriedPlantView(speciesId, mutation = 'normal') {
   const tpl = plantTemplate(sp.id, mut, 3);
   const inst = tpl.instantiate();
   const plantNode = new THREE.Group();
-  const S = Math.min(0.58, 2.3 / Math.max(2.5, tpl.height)) * (sp.rarity === 'secret' ? 1.08 : 1);
+  const S = Math.min(0.58, 2.3 / Math.max(2.5, tpl.height)) * (isSecret(sp) ? 1.08 : 1);
   plantNode.scale.setScalar(S);
   plantNode.position.y = potTemplate().meta.soilY - 0.02;
   plantNode.add(inst.root);
@@ -389,7 +412,8 @@ export function createCarriedPlantView(speciesId, mutation = 'normal') {
   const ph = Math.random() * 100;
   if (tier >= 4) rig.sparkles(fxNode, 'twinkle', '#fff0a0', 7, 1.4, h, h * 0.2, { size: 0.5, seed: 41 });
   if (tier === 5) rig.sparkles(fxNode, 'rise', '#ffb3c6', 8, 1.2, h * 1.2, 0, { size: 0.26, star: false, seed: 42 });
-  if (tier >= 6) {
+  if (isTop(sp, tier)) rig.sparkles(fxNode, 'orbit', TOP_FX[tier - 6].spark, 9, 1.6, h * 0.8, h * 0.2, { size: 0.45, seed: 43 });
+  if (isSecret(sp)) {
     rig.sparkles(fxNode, 'orbit', 'rainbow', 10, 1.8, h * 0.8, h * 0.2, { size: 0.5, seed: 43 });
     rig.crown(fxNode, h + 0.6, 1.6, { bob: 0.15, bobSpeed: 2, spin: 1, phase: ph });
   }
@@ -458,12 +482,13 @@ export function createPodView(biomeIndex = 0) {
       const tier = seed.tier ?? tierOf(sp);
       const mut = seed.mutation || 'normal';
       const rc = rarityColor(sp);
-      rig.setGround(top, rc === 'rainbow' ? '#ffffff' : rc, 2.4, 0.35 + tier * 0.08);
+      rig.setGround(top, rc === 'rainbow' ? '#ffffff' : rc, 2.4, Math.min(0.85, 0.35 + tier * 0.08));
       top.on = true;
-      // Loot beam for anything special: lucky (above this biome), mutated, mythic or secret.
+      // Loot beam for anything special: lucky (above this biome), mutated, mythic and up, or secret.
       if (tier > biomeTier || tier >= 5 || mut !== 'normal') {
         const col = MUT_BEAM[mut] || rc;
-        bm = rig.column(root, col, tier >= 6 ? 1.0 : 0.8, tier >= 5 ? 22 : 16, tier >= 6 ? 0.7 : 0.55, { beam: true, y: tpl.meta.topY });
+        const secret = isSecret(sp), topTier = isTop(sp, tier);
+        bm = rig.column(root, col, secret ? 1.0 : topTier ? 0.9 : 0.8, tier >= 5 ? 22 : 16, secret ? 0.7 : topTier ? 0.62 : 0.55, { beam: true, y: tpl.meta.topY });
       }
     },
     update(dt, t) {

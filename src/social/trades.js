@@ -33,7 +33,7 @@ export const TRADE = {
   declineCooldown: 8, // seconds before you may ask the same person again after a "no"
 };
 
-const isPerson = (p) => !!p && p.kind !== 'bot';
+const isPerson = (p) => !!p && (p.kind === 'local' || p.kind === 'remote');
 const dist = (a, b) => Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
 const toSlot = (v) => (Number.isInteger(v) ? v : typeof v === 'object' && v ? v.slot : Number.isFinite(Number(v)) ? Math.floor(Number(v)) : -1);
 

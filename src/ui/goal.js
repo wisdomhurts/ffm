@@ -1,7 +1,8 @@
 // "Next goal" chip (shown once the tutorial is done) + the speed maths the Speed Shop shares.
-// The goal is always the next biome: how much Speed you need to outrun its monster while carrying a
-// seed, what that costs, and how much more its seeds pay. Once every monster is beaten: Rebirth.
-import { BIOMES, PLANTS, PLAYER, RARITY, REBIRTH, speedAt, speedCost } from '../config.js';
+// The goal is the next biome: how much Speed you need to outrun its monster while carrying a seed, what that
+// costs, and how much more its seeds pay. Once the garden's own 10 planters are open, the next FOR SALE lot
+// takes over when it is cheaper. Once every monster is beaten and every lot bought: Rebirth.
+import { BIOMES, PLANTS, PLAYER, RARITY, REBIRTH, PLANTERS, LOTS, speedAt, speedCost } from '../config.js';
 import { settings } from '../core/settings.js';
 import { h, esc, setHTML, setStyle, toggle, money } from './dom.js';
 import { ICON } from './icons.js';
@@ -12,7 +13,7 @@ export const monsterSpeed = (game, biome) => (biome.monster ? biome.monster.spee
 /** Can you outrun a monster of speed `ms` while carrying a seed? (strictly faster; float-safe) */
 export const outruns = (speed, ms) => speed * PLAYER.carrySeedMult > ms + 1e-6;
 
-/** Lowest Speed level whose carrying speed beats `ms` (may exceed the max level). */
+/** Lowest Speed level whose carrying speed beats `ms`. */
 export function levelToOutrun(ms, rebirths = 0) {
   let L = 0;
   while (L < 99 && !outruns(speedAt(L, rebirths), ms)) L++;
@@ -36,17 +37,21 @@ export function nextGoal(game, me) {
     if (outruns(speed, monsterSpeed(game, BIOMES[i]))) reach = i;
     else break;
   }
+  let lot = null;
+  const g = game.gardens?.[me.slot];
+  if (g && game.lotsOwned) {
+    const k = game.lotsOwned(g);
+    if (k < LOTS.count && g.planters.slice(0, PLANTERS.base).every((pl) => pl.unlocked)) lot = { kind: 'lot', lot: k, cost: LOTS.cost[k] };
+  }
   const next = BIOMES[reach + 1];
   if (next) {
     const level = levelToOutrun(monsterSpeed(game, next), me.rebirths);
-    if (level <= PLAYER.maxSpeedLevel) {
-      let cost = 0;
-      for (let L = me.speedLevel + 1; L <= level; L++) cost += speedCost(L);
-      const ratio = (avgIncome[next.rarity] || 1) / (avgIncome[BIOMES[reach].rarity] || 1);
-      return { kind: 'speed', level, cost, biome: next, ratio };
-    }
+    let cost = 0;
+    for (let L = me.speedLevel + 1; L <= level; L++) cost += speedCost(L);
+    const ratio = (avgIncome[next.rarity] || 1) / (avgIncome[BIOMES[reach].rarity] || 1);
+    if (!lot || cost <= lot.cost) return { kind: 'speed', level, cost, biome: next, ratio };
   }
-  return { kind: 'rebirth', cost: REBIRTH.threshold(me.rebirths), mult: REBIRTH.incomeMult(me.rebirths + 1) };
+  return lot || { kind: 'rebirth', cost: REBIRTH.threshold(me.rebirths), mult: REBIRTH.incomeMult(me.rebirths + 1) };
 }
 
 const times = (r) => (r >= 2 ? `${Math.round(r)}×` : `${r.toFixed(1)}×`);
@@ -81,7 +86,7 @@ export function createNextGoal(app, parent, tutorial) {
       }
       if (!show) return;
       const g = nextGoal(game, me);
-      const k = g.kind === 'speed' ? `s${g.level}|${g.cost}|${g.biome.id}` : `r${g.cost}`;
+      const k = g.kind === 'speed' ? `s${g.level}|${g.cost}|${g.biome.id}` : g.kind === 'lot' ? `l${g.lot}|${g.cost}` : `r${g.cost}`;
       if (k !== key) {
         key = k;
         if (g.kind === 'speed') {
@@ -89,6 +94,9 @@ export function createNextGoal(app, parent, tutorial) {
           // the copy shrinks with the screen: "Rare seeds pay 3× more" / ": 3× the cash" / just the biome
           setHTML(line1, `${ICON.bolt}<span><span class="ng-word">Speed </span>Lv ${g.level} <b class="cash">${money(g.cost)}</b></span>`);
           setHTML(line2, `<span class="ng-arrow">→</span> <b style="--rc:${r.color}">${esc(g.biome.name)}</b><span class="ng-more">: <span class="ng-long">${esc(r.name)} seeds<br>pay </span><b class="x">${times(g.ratio)}</b><span class="ng-long"> more</span><span class="ng-short"> the cash</span></span>`);
+        } else if (g.kind === 'lot') {
+          setHTML(line1, `${ICON.sprout}<span><span class="ng-word">Expand </span>Garden <b class="cash">${money(g.cost)}</b></span>`);
+          setHTML(line2, `<span class="ng-arrow">→</span> <b class="x">+${LOTS.planters}</b><span class="ng-more"> planters</span>`);
         } else {
           setHTML(line1, `${ICON.crown}<span>Rebirth <b class="cash">${money(g.cost)}</b></span>`);
           setHTML(line2, `<span class="ng-arrow">→</span> <b class="x">×${g.mult}</b><span class="ng-more"> income forever</span>`);

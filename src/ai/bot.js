@@ -657,7 +657,6 @@ export class BotController {
   }
 
   wantsMoreSpeed(game, p, eager, avail = p.cash) {
-    if (p.speedLevel >= PLAYER.maxSpeedLevel) return false;
     const cost = speedCost(p.speedLevel + 1);
     if (avail < cost * eager) return false;
     const need = this.speedNeed(game, p);

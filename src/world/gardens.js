@@ -1,9 +1,10 @@
 // The four family gardens: lawn floors with owner-colour trim, bamboo fences, gate posts with laser
-// beams, planter boxes (crated when locked), COLLECT / LOCK pads, a growing cash pile, owner billboard.
+// beams, planter boxes (crated when locked), COLLECT / LOCK pads, a growing cash pile, owner billboard,
+// and the FOR SALE lots at the far end (unmown grass, a dashed boundary, fence signs) until they are bought.
 import * as THREE from 'three';
-import { CHARACTERS, PLANTERS } from '../config.js';
+import { CHARACTERS, PLANTERS, LOTS } from '../config.js';
 import { bus } from '../core/events.js';
-import { Merger, makeRand, makeCanvas, canvasTexture, drawTexture, chunkyText, roundRect, uTime, withColors, signMaterial, mergedGeometry, onDisplayFont } from './kit.js';
+import { Merger, makeRand, makeCanvas, canvasTexture, drawTexture, chunkyText, roundRect, uTime, withColors, signMaterial, mergedGeometry, onDisplayFont, trs } from './kit.js';
 import { lawnTexture, soilTexture, collectTexture, lockTexture } from './textures.js';
 import { bush, flower } from './props.js';
 
@@ -178,8 +179,9 @@ export function buildGardens(ctx) {
   const collectMat = new THREE.MeshBasicMaterial({ map: collectTexture() });
   const padGeo = (rad) => new THREE.CircleGeometry(rad, 28).rotateX(-Math.PI / 2);
 
-  const crateMesh = new THREE.InstancedMesh(crateGeometry(), mats.flat, layout.gardens.length * 10);
-  const lockMesh = new THREE.InstancedMesh(padlockGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x3a2800 }), layout.gardens.length * 10);
+  // crates + padlocks on the garden's own 10 planters (instance = slot * 10 + index); lots have FOR SALE signs instead
+  const crateMesh = new THREE.InstancedMesh(crateGeometry(), mats.flat, layout.gardens.length * PLANTERS.base);
+  const lockMesh = new THREE.InstancedMesh(padlockGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x3a2800 }), layout.gardens.length * PLANTERS.base);
   crateMesh.castShadow = quality.shadows;
   crateMesh.receiveShadow = true;
   crateMesh.name = 'crates';
@@ -214,6 +216,73 @@ export function buildGardens(ctx) {
   bus.on('planter:unlocked', (e) => {
     if (e?.player) liveUnlocks.add(e.player.slot + ':' + e.index);
   });
+  // FOR SALE dressing of every garden's unbought lots, in two meshes shared by all gardens: unmown grass with a
+  // dashed boundary, and boards with a sign on each side fence. Rebuilt when a lot opens or closes (rare), so the
+  // lots cost no extra draw calls. The signs are one atlas: one row per lot (the price is the same everywhere).
+  const SIGN_W = 384, SIGN_H = 240;
+  const saleCanvas = makeCanvas(SIGN_W, SIGN_H * LOTS.count);
+  const saleTex = canvasTexture(saleCanvas, { clamp: true });
+  const drawSale = () => {
+    for (let k = 0; k < LOTS.count; k++) drawSaleSign(saleCanvas, k, k * SIGN_H, SIGN_H);
+    saleTex.needsUpdate = true;
+  };
+  drawSale();
+  onDisplayFont(drawSale);
+  const saleGeo = Array.from({ length: LOTS.count }, (_, k) => {
+    const g = new THREE.PlaneGeometry(4.0, 2.5);
+    const U = g.attributes.uv;
+    for (let i = 0; i < U.count; i++) U.setY(i, 1 - (k + 1 - U.getY(i)) / LOTS.count);
+    return g;
+  });
+  const forSale = layout.gardens.map((L) => L.lots.map(() => true));
+  const ownerColor = CHARACTERS.map((c) => c.color);
+  const lotGrass = new THREE.Mesh(new THREE.BufferGeometry(), lawnMat);
+  const lotSigns = new THREE.Mesh(new THREE.BufferGeometry(), signMaterial(saleTex, 0.28));
+  const lotWood = new THREE.Mesh(new THREE.BufferGeometry(), mats.flat);
+  const lotSoil = new THREE.Mesh(new THREE.BufferGeometry(), soilMat);
+  lotGrass.name = 'lot-grass';
+  lotSigns.name = 'lot-signs';
+  lotWood.name = 'lot-planters';
+  lotSoil.name = 'lot-soil';
+  lotWood.castShadow = quality.shadows;
+  for (const m of [lotGrass, lotSigns, lotWood, lotSoil]) {
+    m.receiveShadow = true;
+    m.matrixAutoUpdate = false;
+    group.add(m);
+  }
+  let lotsDirty = true;
+  function buildLots() {
+    const grass = new Merger({ uv: 'studs', uvScale: 1 / 16 });
+    const signs = new Merger(); // boards sample the sign atlas' brown corner (flat uv)
+    const planters = new Merger({ uv: 'studs', uvScale: 0.125 });
+    const dirt = new Merger({ uv: 'studs', uvScale: 0.22 });
+    layout.gardens.forEach((L, slot) => {
+      const b = L.bounds, T = 1.5;
+      const outerX = L.west ? b.minX : b.maxX;
+      for (const lot of L.lots) {
+        if (!forSale[slot][lot.index]) {
+          // bought: its 5 planters (the owner band baked in the owner's colour)
+          const lr = makeRand(900 + slot * 10 + lot.index);
+          for (const P of L.planters) if (P.lot === lot.index) planterBox(planters, dirt, planters, P.x, P.z, L.inward, ownerColor[slot], 3, lr);
+          continue;
+        }
+        const last = lot.index === LOTS.count - 1;
+        const xa = lot.edgeX, xb = last ? outerX + L.inward * (T + 0.3) : lot.farX;
+        const z0 = b.minZ + T + 0.3, z1 = b.maxZ - T - 0.3;
+        grass.box((xa + xb) / 2, 0.05, L.center.z, Math.abs(xb - xa), 0.03, z1 - z0, '#cfc873', { ao: 0 });
+        for (let z = z0 + 1; z < z1 - 0.5; z += 3.2) grass.box(xa, 0.075, z + 0.9, 0.45, 0.03, 1.8, '#ffffff', { ao: 0 });
+        for (const [fz, face] of [[b.minZ, 1], [b.maxZ, -1]]) {
+          signs.box(lot.x, 3.7, fz + face * 0.62, 4.4, 2.9, 0.16, '#ffffff', { ao: 0 });
+          signs.add(saleGeo[lot.index], trs(lot.x, 3.7, fz + face * 0.71, 1, 1, 1, 0, face > 0 ? 0 : Math.PI), '#ffffff', { ao: 0, uv: 'geo' });
+        }
+      }
+    });
+    for (const [mesh, m] of [[lotGrass, grass], [lotSigns, signs], [lotWood, planters], [lotSoil, dirt]]) {
+      mesh.geometry.dispose();
+      mesh.geometry = m.count ? m.buildGeometry() : new THREE.BufferGeometry();
+      mesh.visible = m.count > 0;
+    }
+  }
 
   layout.gardens.forEach((L, slot) => {
     const char = CHARACTERS[slot];
@@ -294,24 +363,23 @@ export function buildGardens(ctx) {
     }
 
     // ---------------------------------------------------------- planters
+    // (a lot's planters are built into the shared lot meshes once it is bought: see buildLots)
     const planterApis = L.planters.map((P, i) => {
       const x = P.x, z = P.z;
-      // frame boards
-      const bw = 4.8, bh = 1.2, t = 0.34;
-      for (const s of [-1, 1]) {
-        wood.block(x + s * (bw / 2 - t / 2), 0, z, t, bh, bw, '#b0743e', { ao: 0.35 });
-        wood.block(x, 0, z + s * (bw / 2 - t / 2), bw - 2 * t, bh, t, '#b0743e', { ao: 0.35 });
-        // rim
-        wood.block(x + s * (bw / 2 - 0.2), bh, z, 0.5, 0.18, bw + 0.2, '#d09058', { ao: 0 });
-        wood.block(x, bh, z + s * (bw / 2 - 0.2), bw - 0.6, 0.18, 0.5, '#d09058', { ao: 0 });
+      if (P.lot >= 0) {
+        // the first planter of a lot stands for the whole lot
+        const first = i === PLANTERS.base + P.lot * LOTS.planters;
+        return {
+          setUnlocked(v) {
+            if (first && forSale[slot][P.lot] !== !v) {
+              forSale[slot][P.lot] = !v;
+              lotsDirty = true;
+            }
+          },
+        };
       }
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) wood.block(x + sx * 2.3, 0, z + sz * 2.3, 0.5, 1.5, 0.5, '#8a5a2a', { ao: 0.2 });
-      // owner band on the aisle-facing board + a little number tag
-      acc.box(x - inw * (bw / 2 + 0.02), 0.62, z, 0.06, 0.34, bw - 0.9, WH, { ao: 0 });
-      soil.box(x, 1.1, z, bw - 2 * t, 0.2, bw - 2 * t, '#ffffff', { ao: 0 });
-      // soil lumps
-      for (let k = 0; k < 3; k++) soil.prim('sphere:6', x + r.range(-1.4, 1.4), 1.18, z + r.range(-1.4, 1.4), r.range(0.5, 0.9), 0.22, r.range(0.5, 0.9), '#ffffff', { ao: 0 });
-      const idx = slot * 10 + i;
+      planterBox(wood, soil, acc, x, z, inw, WH, 3, r);
+      const idx = slot * PLANTERS.base + i;
       const st = { unlocked: i < PLANTERS.startUnlocked, synced: false, anim: 1, idx, x, z, yaw: inw < 0 ? Math.PI / 2 : -Math.PI / 2 };
       placeCrate(st, st.unlocked ? 1 : 0);
       return {
@@ -424,7 +492,7 @@ export function buildGardens(ctx) {
     // tropical planting in the far corners (low, non-solid)
     for (const fz of [b.minZ + 2.4, b.maxZ - 2.4]) {
       bush(wood, outerX + inw * 2.2, 0, fz, 1.3, r);
-      for (let k = 0; k < 3; k++) flower(wood, outerX + inw * r.range(1.2, 3.5), 0, fz + r.range(-2, 2), r.pick(['#ff4f7a', '#ffd23f', '#ff8a3a', '#ffffff']), 1.4);
+      for (let k = 0; k < 3; k++) flower(wood, outerX + inw * r.range(1.2, 2.6), 0, fz + r.range(-2, 2), r.pick(['#ff4f7a', '#ffd23f', '#ff8a3a', '#ffffff']), 1.4);
     }
 
     // accent mesh coloured by the owner
@@ -449,7 +517,12 @@ export function buildGardens(ctx) {
       planters: planterApis,
       setOwner(ch, avatarUrl) {
         if (ch) owner = ch;
-        accMat.color.set(owner.color);
+        const col = owner.vacant ? VACANT : owner.color;
+        accMat.color.set(col);
+        if (ownerColor[slot] !== col) {
+          ownerColor[slot] = col;
+          lotsDirty = true;
+        }
         const key = avatarUrl || null;
         if (key === avatarKey) return redrawSign();
         avatarKey = key;
@@ -608,6 +681,10 @@ export function buildGardens(ctx) {
   return {
     gardens: apis,
     update(dt, t) {
+      if (lotsDirty) {
+        lotsDirty = false;
+        buildLots();
+      }
       for (const a of apis) a._update(dt, t);
       for (const st of animating) {
         st.anim = Math.min(1, st.anim + dt * 1.8);
@@ -628,10 +705,13 @@ export function buildGardens(ctx) {
 
 // ------------------------------------------------------------------ billboard
 
+// An online room's garden nobody plays (fewer computer players): grey trim and a FREE GARDEN sign.
+const VACANT = '#9aa3b2';
+
 function drawSign(canvas, char, img, tex) {
   const g = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
-  const col = char.color;
+  const col = char.vacant ? VACANT : char.color;
   g.fillStyle = '#1b2440';
   g.fillRect(0, 0, W, H);
   // board
@@ -694,13 +774,58 @@ function drawSign(canvas, char, img, tex) {
     gr.addColorStop(1, '#1b2440');
     g.fillStyle = gr;
     g.fillRect(cx - R, cy - R, 2 * R, 2 * R);
-    const initials = char.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    const initials = char.vacant ? '?' : char.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
     chunkyText(g, initials, cx, cy + 6, { size: 120, fill: '#ffffff', stroke: '#1b2440', strokeW: 16 });
   }
   g.restore();
   // "DORIAN'S" / "GARDEN"
-  chunkyText(g, char.name.toUpperCase() + "'S", cx, 344, { size: 76, fill: col, stroke: '#1b2440', strokeW: 15, maxW: W - 80 });
+  chunkyText(g, char.vacant ? 'FREE' : char.name.toUpperCase() + "'S", cx, 344, { size: 76, fill: col, stroke: '#1b2440', strokeW: 15, maxW: W - 80 });
   chunkyText(g, 'GARDEN', cx, 400, { size: 40, fill: '#1b2440', stroke: '#ffffff', strokeW: 8, shadow: false });
   tex.needsUpdate = true;
 }
 
+// ------------------------------------------------------------------ FOR SALE sign
+
+function drawSaleSign(canvas, lot, oy, H) {
+  const g = canvas.getContext('2d');
+  const W = canvas.width;
+  g.save();
+  g.translate(0, oy);
+  g.fillStyle = '#6b4424';
+  g.fillRect(0, 0, W, H);
+  roundRect(g, 8, 8, W - 16, H - 16, 26);
+  g.fillStyle = '#e8364a';
+  g.fill();
+  g.lineWidth = 8;
+  g.strokeStyle = '#1b2440';
+  g.stroke();
+  roundRect(g, 24, 118, W - 48, 98, 18);
+  g.fillStyle = '#fffdf6';
+  g.fill();
+  chunkyText(g, 'FOR SALE', W / 2, 66, { size: 70, fill: '#ffffff', stroke: '#1b2440', strokeW: 13, maxW: W - 50 });
+  chunkyText(g, `LOT ${lot + 1}: +${LOTS.planters} PLANTERS`, W / 2, 146, { size: 30, fill: '#1b2440', stroke: '#fffdf6', strokeW: 4, shadow: false, maxW: W - 70 });
+  chunkyText(g, '$' + short(LOTS.cost[lot]), W / 2, 188, { size: 42, fill: '#1f9c46', stroke: '#fffdf6', strokeW: 5, shadow: false, maxW: W - 70 });
+  g.restore();
+}
+
+// 500000 -> 500K, 3000000 -> 3M (the sign only needs round prices)
+const short = (n) => (n >= 1e9 ? n / 1e9 + 'B' : n >= 1e6 ? n / 1e6 + 'M' : n >= 1e3 ? n / 1e3 + 'K' : String(n));
+
+// ------------------------------------------------------------------ planter box
+
+// One planter at (x, z): frame boards, rim, corner posts (into `woodM`), the owner band on the aisle-facing board
+// (into `bandM`, colour `band`) and the soil with `lumps` little mounds (into `soilM`).
+function planterBox(woodM, soilM, bandM, x, z, inw, band, lumps, r) {
+  const bw = 4.8, bh = 1.2, t = 0.34;
+  for (const s of [-1, 1]) {
+    woodM.block(x + s * (bw / 2 - t / 2), 0, z, t, bh, bw, '#b0743e', { ao: 0.35 });
+    woodM.block(x, 0, z + s * (bw / 2 - t / 2), bw - 2 * t, bh, t, '#b0743e', { ao: 0.35 });
+    // rim
+    woodM.block(x + s * (bw / 2 - 0.2), bh, z, 0.5, 0.18, bw + 0.2, '#d09058', { ao: 0 });
+    woodM.block(x, bh, z + s * (bw / 2 - 0.2), bw - 0.6, 0.18, 0.5, '#d09058', { ao: 0 });
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) woodM.block(x + sx * 2.3, 0, z + sz * 2.3, 0.5, 1.5, 0.5, '#8a5a2a', { ao: 0.2 });
+  bandM.box(x - inw * (bw / 2 + 0.02), 0.62, z, 0.06, 0.34, bw - 0.9, band, { ao: 0 });
+  soilM.box(x, 1.1, z, bw - 2 * t, 0.2, bw - 2 * t, '#ffffff', { ao: 0 });
+  for (let k = 0; k < lumps; k++) soilM.prim('sphere:6', x + r.range(-1.4, 1.4), 1.18, z + r.range(-1.4, 1.4), r.range(0.5, 0.9), 0.22, r.range(0.5, 0.9), '#ffffff', { ao: 0 });
+}

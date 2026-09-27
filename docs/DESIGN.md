@@ -34,11 +34,13 @@ Top-down, **+Z is north** (towards the road). Y is up.
 
 * **Plaza**: 120×120 studs (x∈[-60,60], z∈[-60,60]), classic Roblox studded baseplate.
   Spawn pad at the centre. Shops along the south edge.
-* **Gardens** (one per family member, index = player slot): 36 (x) × 44 (z), fenced,
-  entrance gate facing the central aisle. Centres: slot0 (-48,-24), slot1 (48,-24),
-  slot2 (-48,24), slot3 (48,24). Each has 10 planters (2 columns × 5), a COLLECT pad,
-  a LOCK pad, a sign with the owner's photo + name.
-* **The Seed Road**: 40 studs wide, from z=60 to z=960 — six biomes of 150 studs each,
+* **Gardens** (one per family member, index = player slot): 60 (x) × 44 (z), fenced,
+  entrance gate facing the central aisle (|x| = 30). Centres: slot0 (-60,-24), slot1 (60,-24),
+  slot2 (-60,24), slot3 (60,24). Each has 10 planters (2 columns × 5), a COLLECT pad,
+  a LOCK pad, a sign with the owner's photo + name, and at the far end three **FOR SALE lots**
+  (one column of 5 planters each: $500K, $3M, $15M, bought in order; their planters are built and
+  become solid only once bought; rebirth sells them back). The home island is 192 studs wide.
+* **The Seed Road**: 40 studs wide, from z=60 to z=1410 — nine biomes of 150 studs each,
   walled by biome-themed cliffs. Seed pods sit against both walls (never in the centre
   lane). Distance is difficulty: rarer seeds are visibly further away.
 
@@ -58,10 +60,13 @@ accessory. Photos are private (never committed); without them a classic cartoon 
 ## 3. Seeds, plants, rarity
 
 Rarity colours: Common `#b8c0cc`, Uncommon `#4cd964`, Rare `#3d9bff`, Epic `#b36bff`,
-Legendary `#ffb627`, Mythic `#ff4d6d`, Secret (black with rainbow text).
+Legendary `#ffb627`, Mythic `#ff4d6d`, Celestial `#6ff3ff`, Cosmic `#ff5ce1`, Divine `#ffe75e`,
+Secret (black with rainbow text).
 
-Each biome's pods drop that biome's rarity (small chance of a "lucky" +1 tier).
-Starbloom also has a ~3% chance of a **Secret** family seed.
+Biomes in road order: Sunny Field (Common), Greenhollow (Uncommon), Dustbowl (Rare), Tanglemire (Epic),
+Emberroot (Legendary), Starbloom (Mythic), Frostfall (Celestial), Candy Canyon (Cosmic), Cloud Kingdom (Divine).
+Each biome's pods drop that biome's rarity (small chance of a "lucky" +1 tier, never past Divine).
+Starbloom and the three biomes beyond it have a 3–5% chance of a **Secret** family seed (best odds at the end).
 
 Mutations (rolled when a seed spawns; much more likely during weather events):
 Normal ×1, **Gold** ×2, **Diamond** ×3, **Rainbow** ×5.
@@ -82,14 +87,16 @@ Income accumulates into the garden's cash pile; step on the COLLECT pad to bank 
   60 s recharge.
 * **Collect** (step on COLLECT pad): bank your garden's cash pile.
 * **Sell** (hold E on your own grown plant): +90 s worth of its income.
-* **Train** (Speed Shop treadmill): buy the next Speed level (+2 studs/s).
+* **Train** (Speed Shop treadmill): buy the next Speed level (+2 studs/s). There is no top level: each one
+  costs 55% more than the last. Grip grows with top speed (above 50 studs/s) so fast players still steer.
+* **Expand** (walk into your next FOR SALE lot): +5 planters.
 * **Items** (Gear Shop, hotbar 1–5): Banana Peel, Water Balloon, Speed Coil, Invisibility Cloak,
   Water Bucket (halves remaining growth time of the plant you stand next to).
 * **Rebirth** (Rebirth Altar): at a net-worth threshold, reset for a permanent income
   multiplier, base speed and a crown.
 
 ## 5. Dangers
-Road monsters guard biomes 2–6. They only chase players **carrying a seed**, never leave their
+Road monsters guard biomes 2–9 (the far worlds' Snowball Yeti, Gummy Bear and Storm Puff are the fastest). They only chase players **carrying a seed**, never leave their
 biome, and knock the seed out of your hands if they catch you. Out-run them (Speed!) or bonk them.
 
 ## 6. Weather events (every 3–5 min, 60 s)

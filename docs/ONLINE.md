@@ -42,7 +42,7 @@ Solo Endless saves stay per profile under `save:endless:<profileId>` (whole 4-ga
 ## Player identity in the Game (`src/gameplay/*`, integrator)
 `Player` gains: `profileId`, `faceKey` (key for faces/avatars; = profile id, or `r_<pid>` for remote
 players), `name`, `look` (full Look), `pet` (equipped pet species id or null), `kind`
-(`'local'|'remote'|'bot'`), `pid` (network id, remote/local online players), `emote` (`{id, until}` or null).
+(`'local'|'remote'|'bot'|'empty'`), `pid` (network id, remote/local online players), `emote` (`{id, until}` or null).
 `p.char` stays the slot's family character (garden colours, bot personality, chat lines).
 UI must use `p.faceKey` (not `p.id`) for avatars and `p.name` for names, `p.char.color` for colour.
 
@@ -73,7 +73,11 @@ client in an online room (the host applies it for the right player):
 
 ## Multiplayer (`src/net/**`, net agent)
 Host-authoritative rooms with **client-authoritative movement**:
-* The room host's browser runs the real `Game` (bots fill empty slots). Up to 4 humans per room (4 gardens).
+* The room host's browser runs the real `Game`. Up to 4 humans per room (4 gardens). Gardens nobody plays get a
+  bot, up to the room's **Computer players** setting (`game.maxBots`, 0-3: None / 1 / 2 / All; chosen in Play Online,
+  changeable by the host from the room panel, synced in the full state so it survives a host change). The rest are
+  `'empty'` slots: parked out at sea, hidden, off the board and out of the rules (`Player.present`); a joiner takes
+  their own character's garden or an empty one before a bot's (`HostRole.fillSlots`).
 * Remote players have `p.remoteMotion = true` on the host: `_movePlayer` skips physics for them (emits their
   jump + social intents only); the net code writes their pos/vel/yaw/onGround from `in` messages.
 * Every client keeps a mirror `Game` updated from the host; its OWN player's position/velocity/yaw/onGround

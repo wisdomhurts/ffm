@@ -5,6 +5,7 @@
 // Each LOOKS entry: {
 //   build(b, o)        o = {c0, c1, bud, secret, sid, mutation}; o.bud=true draws the closed-bud stage
 //   sprout             seedling style for stage 1 ('leafy' | 'cactus' | 'shroom' | 'bubble' | 'rosette' | 'curl' | 'ember' | 'vine')
+//   sproutTop(b, o, p) optional: what a 'leafy' sprout wears on its head at p (instead of the seed coat)
 //   leaf(o)            leaf colour for seedlings; glowy: seedlings glow too
 //   anim(parts, t, ph) cheap per-frame animation of named groups (optional)
 //   lookAll            whole plant turns to face the camera (instead of just 'look' groups); lookClamp limits the turn
@@ -189,6 +190,8 @@ export function buildSeedling(b, look, stage, o) {
     b.add(P.sphere(6, 5), { p: [0.02, H + 0.12, 0.06], s: [0.14, 0.2, 0.14], c: o.c0, glow: 1 });
   } else if (style === 'vine') {
     b.add(P.torus(0.12, 3, 8, 4.5), { p: [0.2, 0.85, 0.08], r: [0, 0.4, 0.5], s: 0.14, c: leaf });
+  } else if (look.sproutTop) {
+    look.sproutTop(b, o, [0.02, H + 0.06, 0.06]);
   } else {
     // the seed coat still stuck on its head, like a little hat
     seedBody(b, o.c0, o.c1, [0.1, H + 0.12, 0.1], 0.3, [0.2, 0.3, -0.5]);
@@ -204,6 +207,106 @@ function sphereFace(b, expr, c, r, size, tilt = 0.25, yaw = 0) {
   const d = [Math.sin(yaw) * Math.cos(tilt), Math.sin(tilt), Math.cos(yaw) * Math.cos(tilt)];
   const k = r + 0.015;
   b.face(expr, { p: [c[0] + d[0] * k, c[1] + d[1] * k, c[2] + d[2] * k], r: [-tilt, yaw, 0], s: size, bend: r });
+}
+
+// ------------------------------------------------------------------ top-tier helpers (Frostfall, Candy Canyon, Cloud Kingdom)
+
+const SNOW = '#f2faff';
+const ICE_STEM = '#86cfdc';
+const MINT = '#56dc9c';
+const GUMMY = '#45d488';
+const CANDY = ['#ff5ca8', '#ffd84a', '#ff8a3d', '#b77bff', '#4fc3ff', '#ff4d5e'];
+// Grown heights of the blooms, shared by build() and fx()
+const FLAKE_H = 2.85;
+const ICEROSE_H = 2.75;
+const LILY_H = 2.75;
+const THUNDER_H = 2.9;
+
+/**
+ * Arm k of an n-arm flat swirl (lollipop / peppermint) in the XY plane facing +Z, radius 1: one spiral band that
+ * winds `turns` times from the centre to the rim. The n arms tile the disc; colour each one with its own add().
+ */
+function swirlArm(k, n, turns, perTurn = 18) {
+  return cachedGeo(`swirl${k}_${n}_${turns}_${perTurn}`, () => {
+    const w = 1 / (n * turns);
+    const f0 = -(k + 1) / n, f1 = turns - k / n;
+    const steps = Math.max(4, Math.ceil((f1 - f0) * perTurn));
+    const pos = [], idx = [];
+    for (let s = 0; s <= steps; s++) {
+      const f = f0 + ((f1 - f0) * s) / steps;
+      const a = f * TAU;
+      const rIn = (f + k / n) / turns;
+      const r0 = Math.max(0, Math.min(1, rIn)), r1 = Math.max(0, Math.min(1, rIn + w));
+      pos.push(Math.cos(a) * r0, Math.sin(a) * r0, 0, Math.cos(a) * r1, Math.sin(a) * r1, 0);
+      if (s) {
+        const q = (s - 1) * 2;
+        idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+/** A swirl candy disc centred at p facing +Z (in the current frame): coloured arms, striped rim, plain back. */
+function candyDisc(b, p, R, cols, turns, th = 0.22, o = {}) {
+  const glow = o.glow ?? 0.1, n = cols.length;
+  for (let k = 0; k < n; k++) b.add(swirlArm(k, n, turns, o.perTurn), { p: [p[0], p[1], p[2] + th / 2], s: R, c: cols[k], glow });
+  const segs = o.segs ?? 20;
+  const stripes = (x, y, z) => (Math.floor(((Math.atan2(x, z) + PI) / TAU) * segs * 0.5) % 2 ? cols[1 % n] : null);
+  b.add(P.cyl(1, 1, segs, true), { p: [p[0], p[1], p[2] - th / 2], r: [PI / 2, 0, 0], s: [R, th, R], c: cols[0], cf: stripes, glow });
+  b.add(P.disc(segs), { p: [p[0], p[1], p[2] - th / 2], r: [-PI / 2, 0, 0], s: R, c: shade(cols[0], -0.08), glow });
+  if (o.shine !== false) {
+    b.add(P.sphere(6, 4), { p: [p[0] - R * 0.42, p[1] + R * 0.46, p[2] + th / 2 + 0.02], r: [0, 0, 0.75], s: [R * 0.09, R * 0.2, 0.02], c: '#ffffff', glow: 0.8, keep: true });
+  }
+}
+
+// Red-and-white barber-pole stripes for a stem() tube built with `radial` sides (per-triangle, from its index).
+const candyStripes = (radial, c, period = 4) => (x, y, z, k) => {
+  const seg = Math.floor(k / (2 * radial)), j = Math.floor(k / 2) % radial;
+  return (seg + j) % period < period / 2 ? c : null;
+};
+
+/** Points of a candy-cane fiddlehead: straight up from base to height H, then a shrinking spiral toward yaw. */
+function canePts(base, yaw, H, R0, S, lean = 0) {
+  const dx = Math.sin(yaw), dz = Math.cos(yaw);
+  const at = (u, v) => [base[0] + dx * u, v, base[2] + dz * u];
+  const pts = [at(-lean, 0), at(-lean * 0.5, H * 0.45), at(0, H * 0.82)];
+  const n = Math.ceil(S / 0.42);
+  for (let i = 0; i <= n; i++) {
+    const s = (S * i) / n, r = R0 * (1 - 0.52 * (s / S));
+    pts.push(at(R0 + r * Math.cos(PI - s), H + r * Math.sin(PI - s)));
+  }
+  return pts;
+}
+
+// A zig-zag lightning bolt along +Y (base at 0, tip at 1), roughly 0.6 wide.
+function boltShape() {
+  const s = new THREE.Shape();
+  const pts = [[-0.1, 0], [0.2, 0], [0.05, 0.38], [0.36, 0.38], [-0.08, 1], [0.05, 0.56], [-0.27, 0.56]];
+  s.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
+  s.closePath();
+  return s;
+}
+const boltGeo = () => shapeGeo('bolt', boltShape, 0.08);
+
+// Hanging bell (top at y = 0, rim at y = -1), opening downward.
+const BELL = [[0.5, -1.0], [0.63, -0.97], [0.57, -0.86], [0.47, -0.62], [0.43, -0.38], [0.34, -0.14], [0.17, -0.02], [0, 0]];
+function frostBell(b, top, s, o, expr) {
+  const rim = mixCol(o.c0, '#ffffff', 0.55);
+  b.add(latheGeo(s > 0.7 ? 'bell12' : 'bell9', BELL, s > 0.7 ? 12 : 9), { p: top, s, c: rim, c2: shade(o.c0, -0.08), gy: [-1, 0], glow: 0.45, glow2: 0.12 });
+  b.add(P.sphere(5, 3), { p: [top[0], top[1] - 0.9 * s, top[2]], s: 0.14 * s, c: '#ffffff', glow: 0.9 });
+  b.add(P.cone(5), { p: [top[0], top[1] - 0.95 * s, top[2]], r: [PI, 0, 0], s: [0.1 * s, 0.6 * s, 0.1 * s], c: '#ffffff', c2: o.c0, gy: [0, 1], glow: 0.6, glow2: 0.3 });
+  if (expr) face(b, expr, [top[0], top[1] - 0.56 * s, top[2] + 0.455 * s + 0.012], 0.5 * s, 0.45 * s, [-0.16, 0, 0]);
+}
+
+// Gumdrop sitting on a surface point p with outward normal n, with sugar sparkles.
+function gumdrop(b, p, n, s, c, i) {
+  b.add(P.dome(7, 3), { p, q: aim(n), s: [s, s * 1.2, s], c: shade(c, -0.08), c2: shade(c, 0.28), gy: [0, 1], glow: 0.18, glow2: 0.4, cf: (x, y, z, k) => (hash(k * 3.7 + i * 11) > 0.72 ? shade(c, 0.6) : null) });
 }
 
 export const LOOKS = {
@@ -1085,6 +1188,533 @@ export const LOOKS = {
         p.wingL.rotation.z = f;
         p.wingR.rotation.z = -f;
       }
+    },
+  },
+
+  // ---------------------------------------------------------------- Celestial: Frostfall
+
+  snowflake: {
+    lookAll: true,
+    leaf: () => '#7fd8d0',
+    sproutTop(b, o, p) {
+      for (let k = 0; k < 3; k++) b.add(P.oct(), { p: [p[0], p[1] + 0.16, p[2]], r: [0, 0, (k * PI) / 3], s: [0.05, 0.2, 0.045], c: o.c1, c2: '#ffffff', gy: [-1, 1], glow: 0.5, glow2: 0.9 });
+      b.add(P.oct(), { p: [p[0], p[1] + 0.16, p[2] + 0.02], s: 0.06, c: '#ffffff', glow: 1 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, FLAKE_H + 0.35, 0.2], size: 4.8, color: o.c1, opacity: 0.4 },
+      { kind: 'sparkle', mode: 'twinkle', color: '#ffffff', count: 12, rx: 1.7, h: 3.0, y0: FLAKE_H - 1.3, size: 0.34, star: true },
+    ],
+    build(b, o) {
+      const ice = o.c1, frost = o.c0;
+      const pale = mixCol(ice, '#ffffff', 0.55);
+      // snow drift with ice crystals poking out
+      b.add(P.dome(12, 3), { s: [1.2, 0.34, 1.1], c: '#cfe9f8', c2: SNOW, gy: [0, 1] });
+      [[0.85, 0.35, 0.35, 0.55], [-0.82, -0.3, -0.4, 0.46], [0.3, -0.85, 0.3, 0.4], [-0.5, 0.72, -0.3, 0.32]].forEach(([x, z, lean, h]) =>
+        b.add(P.oct(), { p: [x, h * 0.55, z], r: [lean, 0, -lean * 0.8], s: [0.13, h, 0.13], c: ice, c2: frost, gy: [-1, 1], glow: 0.25, glow2: 0.7 }));
+      const H = o.bud ? 2.2 : FLAKE_H;
+      stem(b, [[0, 0.1, 0], [0.07, H * 0.35, 0.02], [-0.05, H * 0.7, 0.05], [0, H, 0.1]], 0.1, 0.07, ICE_STEM, { c2: '#e0f8ff', gy: [0, H], glow: 0.05, glow2: 0.3 });
+      // crystal leaves: faceted diamonds
+      [[0.55, 0.6, 0.95], [0.78, 3.8, 0.85], [1.35, 2.1, 0.75], [1.6, 5.2, 0.62]].forEach(([y, a, l]) =>
+        blade(b, { p: [0, y * (H / FLAKE_H), 0.02], a, up: 0.55, len: l, wid: l * 0.52, shape: 'point', segL: 2, segW: 2, cup: 0.35, bend: 0, c: shade(ice, -0.12), c2: pale, glow: 0.1, glow2: 0.45 }));
+      if (o.bud) {
+        // a hexagonal crystal point, fast asleep
+        b.use('head', [0, H, 0.1]);
+        b.add(P.cyl(0.82, 1, 6), { p: [0, H - 0.08, 0.1], r: [0, PI / 6, 0], s: [0.42, 0.66, 0.42], c: ice, c2: pale, gy: [0, 1], glow: 0.2, glow2: 0.45 });
+        b.add(P.cone(6), { p: [0, H + 0.58, 0.1], r: [0, PI / 6, 0], s: [0.345, 0.55, 0.345], c: pale, c2: '#ffffff', gy: [0, 1], glow: 0.45, glow2: 0.85 });
+        for (let k = 0; k < 6; k++) blade(b, { p: [0, H - 0.05, 0.1], a: (k / 6) * TAU + PI / 6, up: 1.05, len: 0.45, wid: 0.3, shape: 'point', segL: 2, c: shade(ice, -0.15), c2: pale, glow: 0.15 });
+        face(b, 'sleepy', [0, H + 0.24, 0.1 + 0.334], 0.46, 0, [-0.1, 0, 0]);
+        return;
+      }
+      // the snowflake: six crystal arms with branches, spinning around a hexagon hub that wears the face
+      const C = [0, H + 0.3, 0.22], R = 1.25;
+      b.use('flake', C);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * TAU;
+        const dx = -Math.sin(a), dy = Math.cos(a);
+        const at = (d) => [C[0] + dx * d, C[1] + dy * d, C[2]];
+        b.add(P.box(), { p: at(R * 0.5), r: [0, 0, a], s: [0.16, R, 0.09], c: shade(ice, -0.05), c2: frost, gy: [-0.5, 0.5], glow: 0.25, glow2: 0.6 });
+        b.add(P.oct(), { p: at(R + 0.03), r: [0, 0, a], s: [0.15, 0.27, 0.11], c: '#ffffff', glow: 0.9 });
+        for (const [d, l] of [[0.44, 0.44], [0.74, 0.3]]) {
+          for (const side of [-1, 1]) {
+            const ab = a + side * 0.95;
+            const base = at(R * d);
+            b.add(P.oct(), { p: [base[0] - Math.sin(ab) * l * 0.5, base[1] + Math.cos(ab) * l * 0.5, base[2]], r: [0, 0, ab], s: [0.08, l * 0.55, 0.06], c: mixCol(ice, '#ffffff', 0.25), c2: '#ffffff', gy: [-1, 1], glow: 0.3, glow2: 0.7 });
+          }
+        }
+        // inner hexagon frame between the arms
+        const ae = a + PI / 6, re = 0.6 * Math.cos(PI / 6);
+        b.add(P.box(), { p: [C[0] - Math.sin(ae) * re, C[1] + Math.cos(ae) * re, C[2]], r: [0, 0, ae + PI / 2], s: [0.07, 0.6, 0.06], c: mixCol(ice, '#ffffff', 0.3), glow: 0.4 });
+      }
+      b.use('head', C);
+      b.add(P.cyl(1, 1, 6), { p: [C[0], C[1], C[2] - 0.1], r: [PI / 2, 0, 0], s: [0.47, 0.2, 0.47], c: mixCol(ice, '#ffffff', 0.3), c2: mixCol(ice, '#ffffff', 0.75), glow: 0.3, glow2: 0.45 });
+      face(b, 'happy', [C[0], C[1] - 0.02, C[2] + 0.115], 0.64, 0);
+    },
+    anim(p, t, ph) {
+      if (p.flake) {
+        const y = p.head.userData.base.y + Math.sin(t * 1.4 + ph) * 0.06;
+        p.flake.rotation.x = p.head.rotation.x = -0.22;
+        p.flake.rotation.z = t * 0.5 + ph;
+        p.head.rotation.z = Math.sin(t * 1.1 + ph) * 0.08;
+        p.head.position.y = p.flake.position.y = y;
+      } else p.head.rotation.z = Math.sin(t * 1.3 + ph) * 0.06;
+    },
+  },
+
+  icerose: {
+    leaf: () => '#5fc0c8',
+    sproutTop(b, o, p) {
+      b.add(P.oct(), { p: [p[0], p[1] + 0.12, p[2]], s: [0.11, 0.24, 0.11], c: o.c1, c2: '#ffffff', gy: [-1, 1], glow: 0.5, glow2: 0.9 });
+      b.add(P.oct(), { p: [p[0] + 0.1, p[1] + 0.04, p[2] + 0.02], r: [0, 0, -0.6], s: [0.055, 0.13, 0.055], c: o.c0, glow: 0.6 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, ICEROSE_H + 0.5, 0.45], size: 4.2, color: o.c1, opacity: 0.35 },
+      { kind: 'sparkle', mode: 'twinkle', color: '#ffffff', count: 10, rx: 1.45, h: 2.4, y0: ICEROSE_H - 0.9, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const ice = o.c1, frost = o.c0;
+      const deep = shade(ice, -0.3), sg = '#5fb4c4', pale = mixCol(ice, '#ffffff', 0.55);
+      b.add(P.dome(12, 3), { s: [1.15, 0.26, 1.05], c: '#cfe9f8', c2: SNOW, gy: [0, 1] });
+      // glassy ice clusters in the snow
+      [[0.85, 0.45, 0.4, 2], [-0.85, -0.2, -0.3, 5], [-0.2, -0.9, 0.2, 8]].forEach(([x, z, lean, i]) => {
+        b.add(P.oct(), { p: [x, 0.3, z], r: [lean, i, -lean], s: [0.2, 0.52, 0.2], ch: 'trans', c: frost, c2: ice, gy: [-1, 1], glow: 0.2 });
+        b.add(P.oct(), { p: [x + 0.18, 0.18, z + 0.1], r: [0.2, i, 0.7], s: [0.1, 0.28, 0.1], c: pale, glow: 0.5 });
+      });
+      const H = ICEROSE_H;
+      stem(b, [[0, 0, 0], [0.08, 1.0, 0.02], [-0.05, 1.9, 0.05], [0, H, 0.12]], 0.09, 0.07, sg, { c2: '#bff0f8', gy: [0, H] });
+      [[0.55, 0.4], [0.95, 2.8], [1.45, 1.1], [1.9, 4.0], [2.3, 5.5]].forEach(([y, a]) =>
+        b.add(P.oct(), { p: [Math.sin(a) * 0.08, y, Math.cos(a) * 0.08], q: aim([Math.sin(a), 0.4, Math.cos(a)]), s: [0.05, 0.16, 0.05], c: '#ffffff', glow: 0.6 }));
+      [[0.85, 0.6, 0.9], [1.35, 3.6, 0.85], [1.95, 1.8, 0.72]].forEach(([y, a, l]) => {
+        stem(b, [[0, y, 0], [Math.sin(a) * 0.3, y + 0.12, Math.cos(a) * 0.3]], 0.035, 0.03, sg);
+        blade(b, { p: [Math.sin(a) * 0.3, y + 0.12, Math.cos(a) * 0.3], a, up: 0.35, len: l, wid: l * 0.58, shape: 'point', serrate: 0.22, segL: 4, c: deep, c2: pale, bend: -0.2, cup: 0.35, glow: 0.1, glow2: 0.4 });
+        blade(b, { p: [Math.sin(a) * 0.2, y + 0.08, Math.cos(a) * 0.2], a: a + 0.9, up: 0.4, len: l * 0.7, wid: l * 0.42, shape: 'point', serrate: 0.22, segL: 4, c: deep, c2: pale, bend: -0.2, cup: 0.35, glow: 0.1, glow2: 0.4 });
+      });
+      if (o.bud) return bud(b, [0, H, 0.12], 0.46, shade(ice, -0.05), { tip: frost, glow: 0.3, sepal: sg });
+      b.use('head', [0, H, 0.12], { look: true });
+      b.frame(fm([0, H + 0.02, 0.14], 0.72, 0, 0, 1.2));
+      ring(b, 5, { r0: 0.1, up: -0.3, len: 0.5, wid: 0.22, shape: 'point', c: sg, c2: pale });
+      // a crown of glassy ice shards behind the petals
+      ring(b, 6, { r0: 0.3, y: -0.03, up: 0.3, len: 0.95, wid: 0.4, shape: 'point', segL: 2, ch: 'trans', c: '#ffffff', c2: ice, bend: 0, cup: 0.45, off: 0.8, glow: 0.3, glow2: 0.5 });
+      // the rose: cupped, faceted petals of glowing ice, darker toward the heart
+      ring(b, 6, { r0: 0.26, y: 0.02, up: 0.5, len: 0.88, wid: 0.95, shape: 'round', segL: 3, c: shade(ice, -0.12), c2: frost, bend: -0.3, cup: 0.4, off: 0.3, glow: 0.15, glow2: 0.5 });
+      ring(b, 5, { r0: 0.17, y: 0.1, up: 1.0, len: 0.82, wid: 0.88, shape: 'round', segL: 3, c: deep, c2: mixCol(ice, '#ffffff', 0.45), bend: 0.05, cup: 0.55, off: 0.9, glow: 0.2, glow2: 0.5 });
+      ring(b, 4, { r0: 0.09, y: 0.16, up: 1.3, len: 0.68, wid: 0.72, shape: 'round', segL: 3, c: shade(ice, -0.4), c2: shade(ice, -0.05), bend: 0.3, cup: 0.7, off: 0.2, glow: 0.25, glow2: 0.4 });
+      b.add(P.sphere(6, 4), { p: [0, 0.42, 0], s: [0.2, 0.3, 0.2], c: shade(ice, -0.45), c2: shade(ice, -0.15), gy: [-1, 1], glow: 0.3 });
+      b.add(P.oct(), { p: [0, 0.72, 0], s: [0.07, 0.16, 0.07], c: '#ffffff', glow: 1 });
+      b.frame(null);
+      // three ice shards orbiting the bloom
+      const O = [0, H + 0.45, 0.35];
+      b.use('orbit', O);
+      for (let k = 0; k < 3; k++) {
+        const a = (k / 3) * TAU + 0.4;
+        b.add(P.oct(), { p: [O[0] + Math.sin(a) * 1.2, O[1] + (k === 1 ? 0.3 : -0.08), O[2] + Math.cos(a) * 1.2], r: [0.35, a, 0.25], s: [0.1, 0.24, 0.1], c: frost, c2: '#ffffff', gy: [-1, 1], glow: 0.6, glow2: 1 });
+      }
+    },
+    anim(p, t, ph) {
+      p.head.rotation.z = Math.sin(t * 1.0 + ph) * 0.05;
+      if (p.orbit) {
+        p.orbit.rotation.y = t * 0.9 + ph;
+        p.orbit.position.y = p.orbit.userData.base.y + Math.sin(t * 1.3 + ph) * 0.08;
+      }
+    },
+  },
+
+  frostbell: {
+    leaf: () => '#5fb8a8',
+    sproutTop(b, o, p) {
+      stem(b, [[p[0], p[1] - 0.04, p[2]], [p[0] + 0.1, p[1] + 0.2, p[2]], [p[0] + 0.24, p[1] + 0.16, p[2]]], 0.03, 0.025, '#5fb8a8', { radial: 4, segs: 4 });
+      b.add(latheGeo('bell9', BELL, 9), { p: [p[0] + 0.25, p[1] + 0.15, p[2]], s: 0.2, c: mixCol(o.c0, '#ffffff', 0.6), c2: o.c0, gy: [-1, 0], glow: 0.45 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 2.9, 0.8], size: 4.2, color: o.c0, opacity: 0.38 },
+      { kind: 'sparkle', mode: 'rise', color: '#ffffff', count: 12, rx: 1.5, h: 4.0, y0: 0.2, size: 0.18, star: false },
+      { kind: 'sparkle', mode: 'twinkle', color: '#e8fbff', count: 8, rx: 1.6, h: 2.6, y0: 1.4, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const lf = '#3f9f8f', lf2 = '#a8ece2', sg = '#5fb8a8';
+      b.add(P.dome(12, 3), { s: [1.1, 0.26, 1.0], c: '#cfe9f8', c2: SNOW, gy: [0, 1] });
+      // broad lily-of-the-valley leaves with snowy tips
+      const snowy = (x, y, z, i) => (y > 0.74 || (y > 0.45 && hash(i * 1.3) > 0.72) ? SNOW : null);
+      [[0.45, 1.95, 1.0], [2.6, 1.7, 1.08], [4.3, 1.85, 0.98], [5.5, 1.35, 1.2]].forEach(([a, l, up]) =>
+        blade(b, { p: [0, 0.05, 0], a, up, len: l, wid: 0.95, shape: 'leaf', segL: 5, bend: -0.35, cup: 0.3, c: lf, c2: lf2, cf: snowy }));
+      const k = o.bud ? 0.82 : 1;
+      const sy = (pts) => pts.map(([x, y, z]) => [x, y * k, z]);
+      // three arching stems, each ringing a bell
+      const main = sy([[0, 0, -0.05], [0.02, 1.5, -0.25], [0.0, 2.8, -0.3], [0.05, 3.5, 0.05], [0.05, 3.55, 0.55], [0.03, 3.3, 0.95]]);
+      const left = sy([[-0.05, 0, 0], [-0.15, 1.25, -0.1], [-0.35, 2.4, -0.1], [-0.65, 2.85, 0.0], [-0.98, 2.72, 0.1], [-1.1, 2.42, 0.15]]);
+      const right = sy([[0.05, 0, 0], [0.18, 1.15, -0.05], [0.4, 2.1, -0.1], [0.72, 2.55, -0.05], [1.02, 2.4, 0.05], [1.14, 2.1, 0.08]]);
+      stem(b, main, 0.1, 0.05, sg, { segs: 10, radial: 4 });
+      stem(b, left, 0.08, 0.045, sg, { segs: 8, radial: 4 });
+      stem(b, right, 0.08, 0.045, sg, { segs: 8, radial: 4 });
+      // snow resting on the arches, and a little icicle hanging from each
+      [[main[3], 0.26], [left[3], 0.2], [right[3], 0.2]].forEach(([q, s], i) => {
+        b.add(P.blob(i + 3, 0.2, 0), { p: [q[0], q[1] + 0.08, q[2]], s: [s, s * 0.5, s * 1.1], c: SNOW });
+        b.add(P.cone(5), { p: [q[0], q[1] - 0.05, q[2]], r: [PI, 0, 0], s: [0.05, 0.3, 0.05], c: '#ffffff', c2: o.c0, glow: 0.5 });
+      });
+      const bells = [['head', main[5], o.bud ? 0.55 : 0.9, o.bud ? 'sleepy' : 'joy'], ['bellL', left[5], o.bud ? 0.4 : 0.6], ['bellR', right[5], o.bud ? 0.4 : 0.62]];
+      bells.forEach(([name, q, s, expr]) => {
+        b.use(name, q, { look: name === 'head' });
+        if (o.bud) {
+          b.add(P.sphere(8, 6), { p: [q[0], q[1] - s * 0.6, q[2]], s: [s * 0.5, s * 0.62, s * 0.5], c: mixCol(o.c0, '#ffffff', 0.3), c2: o.c0, gy: [-1, 1], glow: 0.25 });
+          if (expr) sphereFace(b, expr, [q[0], q[1] - s * 0.6, q[2]], s * 0.5, s * 0.62, 0.15);
+        } else frostBell(b, q, s, o, expr);
+      });
+    },
+    anim(p, t, ph) {
+      p.head.rotation.z = Math.sin(t * 1.9 + ph) * 0.14;
+      p.head.rotation.x = Math.sin(t * 1.3 + ph) * 0.06;
+      p.bellL.rotation.z = Math.sin(t * 2.2 + ph + 1.5) * 0.18;
+      p.bellR.rotation.z = Math.sin(t * 2.0 + ph + 3) * 0.18;
+    },
+  },
+
+  // ---------------------------------------------------------------- Cosmic: Candy Canyon
+
+  lollipop: {
+    leaf: () => GUMMY,
+    sproutTop(b, o, p) {
+      b.add(P.cyl(1, 1, 4), { p: [p[0], p[1] - 0.05, p[2]], s: [0.025, 0.2, 0.025], c: '#ffffff' });
+      candyDisc(b, [p[0], p[1] + 0.3, p[2]], 0.17, [o.c0, o.c1], 1.2, 0.07, { segs: 10, perTurn: 12, shine: false });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 3.7, 0.2], size: 4.4, color: o.c0, opacity: 0.32 },
+      { kind: 'sparkle', mode: 'orbit', color: o.c1, count: 8, rx: 1.5, h: 1.8, y0: 2.8, size: 0.32, star: true },
+    ],
+    build(b, o) {
+      const pink = o.c0, yel = o.c1;
+      // glossy gummy leaves and sprinkles on the soil
+      for (let i = 0; i < 5; i++) blade(b, { p: [0, 0.04, 0], a: i * 1.26 + 0.3, up: 0.3, len: 1.0, wid: 0.64, shape: 'round', segL: 3, c: GUMMY, c2: '#b8ffd8', bend: -0.05, cup: 0.3, glow: 0.12, glow2: 0.3 });
+      for (let i = 0; i < 10; i++) {
+        const a = hash(i + 70) * TAU, r = 0.5 + hash(i + 90) * 1.0;
+        b.add(P.box(), { p: [Math.sin(a) * r, 0.03, Math.cos(a) * r], r: [0, a * 3, 0], s: [0.07, 0.05, 0.2], c: CANDY[i % 6], keep: true });
+      }
+      const H = o.bud ? 2.2 : 2.75;
+      stem(b, [[0, 0, 0], [0.03, H * 0.5, 0.02], [0, H, 0.08]], 0.085, 0.08, '#fff7f2');
+      blade(b, { p: [0.02, H * 0.38, 0.03], a: 1.3, up: 0.55, len: 0.7, wid: 0.46, shape: 'round', segL: 3, c: GUMMY, c2: '#b8ffd8', bend: -0.1, cup: 0.3, glow: 0.12 });
+      blade(b, { p: [0.02, H * 0.5, 0.03], a: -1.9, up: 0.6, len: 0.62, wid: 0.42, shape: 'round', segL: 3, c: GUMMY, c2: '#b8ffd8', bend: -0.1, cup: 0.3, glow: 0.12 });
+      // two little lollipops on their own sticks
+      [[-1, 1.75 * (H / 2.75), 0.44, [yel, '#ffffff']], [1, 1.4 * (H / 2.75), 0.4, ['#6ff0c0', '#ffffff']]].forEach(([side, y, R, cols]) => {
+        const top = [side * 0.95, y, 0.05];
+        stem(b, [[side * 0.25, 0, -0.08], [side * 0.55, y * 0.55, -0.02], top], 0.05, 0.045, '#fff7f2', { radial: 4 });
+        b.frame(fm([top[0] + side * 0.05, top[1] + R * 0.9, top[2]], -0.15, side * 0.45, -side * 0.15));
+        candyDisc(b, [0, 0, 0], R, cols, 1.4, 0.13, { segs: 14, perTurn: 14 });
+        b.frame(null);
+      });
+      if (o.bud) {
+        // still in its wrapper, with a bow
+        const R = 0.55, C = [0, H + R * 1.05, 0.1];
+        b.use('head', [0, H, 0.1], { look: true });
+        candyDisc(b, C, R, [pink, yel], 1.3, 0.16, { segs: 14, perTurn: 14 });
+        b.add(P.sphere(10, 7), { p: [C[0], C[1] + 0.04, C[2]], s: [R * 1.22, R * 1.26, R * 0.6], ch: 'trans', c: '#ffffff', c2: '#ffe0f0', gy: [-1, 1] });
+        b.add(P.cone(8), { p: [C[0], C[1] - R * 1.45, C[2]], s: [0.2, 0.36, 0.14], ch: 'trans', c: '#ffffff' });
+        for (const s of [-1, 1]) b.add(P.cone(5), { p: [C[0] + s * 0.06, C[1] - R * 1.12, C[2] + 0.04], r: [0, 0, s * 1.9], s: [0.12, 0.26, 0.07], c: '#ff5ca8' });
+        face(b, 'sleepy', [C[0], C[1] - 0.02, C[2] + 0.1], 0.55, 0);
+        return;
+      }
+      // the big spinning swirl, with a face that stays put
+      const R = 1.0, C = [0, H + R * 0.92, 0.12];
+      b.use('swirl', C, { look: true });
+      candyDisc(b, C, R, [pink, '#ffffff', yel], 1.55, 0.24, { segs: 22, perTurn: 18, glow: 0.12 });
+      b.use('head', C, { look: true });
+      b.add(P.sphere(6, 4), { p: [C[0] - R * 0.5, C[1] + R * 0.5, C[2] + 0.14], r: [0, 0, 0.75], s: [R * 0.09, R * 0.22, 0.02], c: '#ffffff', glow: 0.9, keep: true });
+      face(b, 'joy', [C[0], C[1] - 0.04, C[2] + 0.135], 0.92, 0);
+    },
+    anim(p, t, ph) {
+      if (p.swirl) {
+        const y = p.head.userData.base.y + Math.sin(t * 1.6 + ph) * 0.05;
+        p.swirl.rotation.x = p.head.rotation.x = -0.18;
+        p.swirl.rotation.z = -t * 1.1 + ph;
+        p.head.rotation.z = Math.sin(t * 1.2 + ph) * 0.06;
+        p.swirl.position.y = p.head.position.y = y;
+      } else p.head.rotation.z = Math.sin(t * 1.3 + ph) * 0.07;
+    },
+  },
+
+  gumdrop: {
+    lookAll: true,
+    leaf: (o) => o.c0,
+    sproutTop(b, o, p) {
+      gumdrop(b, [p[0], p[1] + 0.02, p[2]], [0, 1, 0], 0.17, o.c1, 1);
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 2.8, 0], size: 4.6, color: o.c1, opacity: 0.3 },
+      { kind: 'sparkle', mode: 'orbit', color: '#ffffff', count: 8, rx: 1.7, h: 2.2, y0: 1.6, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const lf = o.c0;
+      const cols = [o.c1, ...CANDY.slice(1)];
+      const sc = o.bud ? 0.78 : 1;
+      const L = 0.6; // trunk lift
+      stem(b, [[0, 0, 0], [0.08, 0.7 * sc, 0], [-0.04, 1.1 * sc, 0], [0, 1.5 * sc, -0.1]], 0.21, 0.15, '#c98a5a', { radial: 6 });
+      for (let i = 0; i < 5; i++) {
+        const a = i * 1.3 + 0.4;
+        blade(b, { p: [Math.sin(a) * 0.85 * sc, (1.0 + L) * sc, Math.cos(a) * 0.7 * sc], a, up: -0.8, len: 0.62, wid: 0.36, shape: 'round', segL: 3, c: shade(lf, -0.2), c2: lf, bend: 0.1, cup: 0.3 });
+      }
+      // the round gummy bush on its little trunk (a smooth front puff wears the face)
+      const puffs = [[0, 1.8 + L, 0.05, 1.1], [-0.9, 1.35 + L, -0.05, 0.72], [0.92, 1.4 + L, -0.1, 0.74], [0.05, 2.6 + L, -0.35, 0.8], [0, 1.6 + L, -0.72, 0.88]];
+      puffs.forEach(([x, y, z, r], i) => {
+        const p = [x * sc, y * sc, z * sc];
+        const g = i === 0 ? P.sphere(11, 7) : P.blob(i + 60, 0.1, 1);
+        b.add(g, { p, s: r * sc, c: shade(lf, -0.2 + 0.07 * (i % 3)), c2: shade(lf, 0.25), gy: [-1, 1], glow: 0.08 });
+      });
+      sphereFace(b, o.bud ? 'sleepy' : 'grin', [0, (1.8 + L) * sc, 0.05 * sc], 1.1 * sc, 0.95 * sc, 0.2);
+      // gumdrops studded all over (none on the face)
+      const spots = o.bud
+        ? [[1, 1.0, 1.2], [2, -0.9, 1.1], [3, 0.2, 0.4]]
+        : [[0, 1.05, 1.3], [0, -1.05, 1.25], [0, 0.75, 0.62], [0, -0.7, 0.6], [1, -0.55, 1.05], [1, -1.5, 1.35], [2, 0.6, 1.0], [2, 1.55, 1.3], [3, 0.95, 1.05], [3, -0.95, 1.0], [3, 0.05, 1.3], [4, 2.4, 1.1]];
+      spots.forEach(([bi, th, phi], i) => {
+        const [x, y, z, r] = puffs[bi];
+        const n = [Math.sin(phi) * Math.sin(th), Math.cos(phi), Math.sin(phi) * Math.cos(th)];
+        gumdrop(b, [(x + n[0] * r * 0.93) * sc, (y + n[1] * r * 0.93) * sc, (z + n[2] * r * 0.93) * sc], n, (0.22 + hash(i + 5) * 0.06) * sc, cols[i % cols.length], i);
+      });
+      // a couple fell off
+      gumdrop(b, [0.95, 0.02, 0.85], [0.1, 1, 0.1], 0.2, cols[1], 30);
+      gumdrop(b, [-0.8, 0.02, 0.95], [-0.1, 1, 0.05], 0.18, cols[3], 31);
+      if (o.bud) return;
+      // the big pink gumdrop hat on top
+      const T = [0.05, 2.6 + L + 0.8 * 0.9, -0.35];
+      b.use('hat', T);
+      gumdrop(b, T, [0, 1, 0.12], 0.46, o.c1, 40);
+      b.add(P.oct(), { p: [T[0] - 0.14, T[1] + 0.42, T[2] + 0.3], s: [0.05, 0.1, 0.05], c: '#ffffff', glow: 1, keep: true });
+    },
+    anim(p, t, ph) {
+      const k = Math.sin(t * 2.4 + ph) * 0.025;
+      p.body.scale.set(1 + k, 1 - k, 1 + k);
+      if (p.hat) {
+        const j = Math.max(0, Math.sin(t * 2.4 + ph + 0.6));
+        p.hat.position.y = p.hat.userData.base.y + j * j * 0.18 - 0.04;
+        p.hat.rotation.y = t * 0.7;
+      }
+    },
+  },
+
+  candycane: {
+    leaf: () => MINT,
+    sproutTop(b, o, p) {
+      stem(b, canePts([p[0], 0, p[2]], 0.3, 0.2, 0.11, 1.5 * PI).map(([x, y, z]) => [x, y + p[1] - 0.05, z]), 0.06, 0.05, o.c1, { radial: 4, segs: 8, cf: candyStripes(4, o.c0, 2), cap: true });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 2.4, 0.3], size: 4.4, color: o.c0, opacity: 0.3 },
+      { kind: 'sparkle', mode: 'orbit', color: '#ffe0e6', count: 8, rx: 1.6, h: 2.2, y0: 1.2, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const red = o.c0, white = o.c1;
+      for (let i = 0; i < 5; i++) blade(b, { p: [0, 0.04, 0.1], a: i * 1.26 + 0.3, up: 0.3, len: 0.95, wid: 0.66, shape: 'round', segL: 4, c: shade(MINT, -0.25), c2: shade(MINT, 0.35), bend: -0.1, cup: 0.3, glow: 0.08 });
+      const k = o.bud ? 0.7 : 1;
+      // striped canes uncurling from the soil like fiddleheads
+      const canes = [
+        ['body', [0, 0, -0.35], 0.12, 2.95, 0.6, 1.75 * PI, 0.17, 22],
+        ['caneL', [-0.62, 0, -0.02], -1.2, 2.05, 0.45, 1.7 * PI, 0.14, 17],
+        ['caneR', [0.64, 0, -0.1], 1.3, 2.35, 0.48, 1.7 * PI, 0.15, 19],
+      ];
+      canes.forEach(([g, base, yaw, H, R0, S, r, segs]) => {
+        b.use(g, base);
+        const pts = canePts(base, yaw, H * k, R0 * (o.bud ? 0.75 : 1), o.bud ? S + 0.5 * PI : S, 0.05);
+        stem(b, pts, r, r * 0.8, white, { radial: 5, segs, cap: true, cf: candyStripes(5, red), glow: 0.06 });
+      });
+      b.use('body');
+      // the peppermint flower in front
+      const F = [0, (o.bud ? 1.25 : 1.55), 0.55];
+      stem(b, [[0, 0, 0.3], [0.05, F[1] * 0.5, 0.4], [0, F[1], F[2] - 0.05]], 0.07, 0.06, shade(MINT, -0.3));
+      blade(b, { p: [0.02, F[1] * 0.45, 0.42], a: 1.2, up: 0.5, len: 0.6, wid: 0.4, shape: 'round', segL: 3, c: shade(MINT, -0.2), c2: '#c8ffe4', bend: -0.1, cup: 0.3 });
+      if (o.bud) return bud(b, F, 0.36, MINT, { tip: '#ffffff', sepal: shade(MINT, -0.3) });
+      const R = 0.6, C = [F[0], F[1] + 0.38, F[2] + 0.05];
+      b.use('head', C, { look: true });
+      b.frame(fm(C, -0.2));
+      for (let i = 0; i < 6; i++) flatBlade(b, { p: [0, 0, -0.1], ang: (i / 6) * TAU + PI / 6, len: 0.95, wid: 0.7, shape: 'round', segL: 3, c: MINT, c2: shade(MINT, 0.55), cup: 0.15, bend: 0.1, glow: 0.12 });
+      face(b, 'happy', [0, 0, 0.1], 0.6, 0);
+      b.frame(null);
+      b.use('swirl', C, { look: true });
+      b.frame(fm(C, -0.2));
+      candyDisc(b, [0, 0, 0], R, [red, white, red, white, red, white, red, white], 0.45, 0.16, { segs: 16, perTurn: 16 });
+      b.frame(null);
+    },
+    anim(p, t, ph) {
+      if (p.caneL) p.caneL.rotation.z = Math.sin(t * 1.3 + ph) * 0.05;
+      if (p.caneR) p.caneR.rotation.z = Math.sin(t * 1.1 + ph + 2) * 0.05;
+      if (p.swirl) p.swirl.rotation.z = -t * 0.9 + ph;
+      p.head.rotation.z = Math.sin(t * 1.4 + ph) * 0.06;
+    },
+  },
+
+  // ---------------------------------------------------------------- Divine: Cloud Kingdom
+
+  cloudpuff: {
+    leaf: () => '#8fcfb0',
+    sproutTop(b, o, p) {
+      [[0, 0.12, 0, 0.13], [-0.13, 0.06, 0, 0.09], [0.13, 0.07, 0.01, 0.1]].forEach(([x, y, z, s]) =>
+        b.add(P.sphere(6, 4), { p: [p[0] + x, p[1] + y, p[2] + z], s: [s, s * 0.85, s], c: '#ffffff', glow: 0.2 }));
+      b.add(P.sphere(5, 3), { p: [p[0] + 0.05, p[1] - 0.02, p[2] + 0.06], s: 0.05, c: o.c1, glow: 0.8 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 2.75, 0.1], size: 4.8, color: o.c1, opacity: 0.3 },
+      { kind: 'sparkle', mode: 'rise', color: o.c1, count: 10, rx: 1.3, h: 3.6, y0: 0.4, size: 0.2, star: false },
+      { kind: 'sparkle', mode: 'twinkle', color: '#ffffff', count: 8, rx: 1.7, h: 1.8, y0: 2.2, size: 0.34, star: true },
+    ],
+    build(b, o) {
+      const puff = o.c0, berry = o.c1;
+      const under = mixCol('#dfe6ff', berry, 0.12);
+      for (let i = 0; i < 5; i++) blade(b, { p: [0, 0.04, 0], a: i * 1.26 + 0.5, up: 0.35, len: 0.95, wid: 0.58, shape: 'round', segL: 3, c: '#6fb894', c2: '#dcfff0', bend: -0.1, cup: 0.3 });
+      // a little ground mist
+      [[0.8, 0.5, 0.36], [-0.75, 0.55, 0.3]].forEach(([x, z, s]) =>
+        b.add(P.sphere(7, 4), { p: [x, 0.1, z], s: [s, s * 0.5, s], c: '#ffffff', glow: 0.15 }));
+      const sc = o.bud ? 0.66 : 1;
+      const C = [0, o.bud ? 2.05 : 2.75, 0.05];
+      stem(b, [[0, 0, 0], [0.25, 0.9, 0.05], [-0.15, 1.6, 0.0], [0.05, C[1] - 0.5 * sc, 0.05]], 0.1, 0.07, '#79b98c');
+      stem(b, [[0.12, 0, -0.1], [-0.3, 0.8, -0.1], [-0.3, 1.5, -0.1], [-0.35, C[1] - 0.45 * sc, -0.05]], 0.07, 0.05, '#79b98c', { radial: 4 });
+      b.use('cloud', C, { look: true });
+      const puffs = [[0, 0, 0, 0.95], [-0.95, -0.22, 0.02, 0.66], [0.97, -0.2, -0.02, 0.7], [-0.45, 0.58, -0.2, 0.66], [0.5, 0.52, -0.22, 0.72]];
+      puffs.forEach(([x, y, z, r], i) => {
+        const g = i === 0 ? P.sphere(11, 7) : P.blob(i + 40, 0.07, 1);
+        b.add(g, { p: [C[0] + x * sc, C[1] + y * sc, C[2] + z * sc], s: [r * sc, r * sc * (i ? 0.88 : 1), r * sc], c: under, c2: puff, gy: [-1, 0.6], glow: 0.3 });
+      });
+      sphereFace(b, o.bud ? 'sleepy' : 'happy', C, 0.95 * sc, 0.92 * sc, 0.18);
+      if (o.bud) return;
+      // glowing berries: hanging below like raindrops, and sitting on top like blueberries on cream
+      const berryAt = (p, s, shine) => {
+        b.add(P.sphere(5, 4), { p, s, c: shade(berry, -0.35), c2: shade(berry, 0.1), gy: [-1, 1], glow: 0.35, glow2: 0.7 });
+        if (shine) b.add(P.oct(), { p: [p[0] - s * 0.35, p[1] + s * 0.4, p[2] + s * 0.75], s: s * 0.22, c: '#ffffff', glow: 1, keep: true });
+      };
+      [[-0.62, 0.35, 0.42], [0.08, 0.55, 0.62], [0.7, 0.3, 0.46]].forEach(([x, z, len], i) => {
+        const top = [x, C[1] - 0.5, z];
+        const end = [x + 0.02, top[1] - len, z + 0.02];
+        stem(b, [top, [x + 0.04, top[1] - len * 0.5, z + 0.02], end], 0.025, 0.02, '#9fd8a8', { radial: 3, segs: 2 });
+        berryAt([end[0], end[1] - 0.12, end[2]], 0.19, true);
+        berryAt([end[0] - 0.17, end[1] - 0.02, end[2] - 0.05], 0.15, false);
+        if (i !== 1) berryAt([end[0] + 0.16, end[1] - 0.04, end[2] - 0.04], 0.15, false);
+      });
+      [[-0.35, 0.98, 0.1, 0.2], [0.32, 1.02, -0.04, 0.21], [0.78, 0.66, 0.3, 0.18], [-0.85, 0.52, 0.26, 0.18]].forEach(([x, y, z, s], i) =>
+        berryAt([C[0] + x, C[1] + y, C[2] + z], s, i < 3));
+    },
+    anim(p, t, ph) {
+      const k = Math.sin(t * 2.2 + ph) * 0.022;
+      p.cloud.position.y = p.cloud.userData.base.y + Math.sin(t * 1.1 + ph) * 0.1;
+      p.cloud.rotation.z = Math.sin(t * 0.8 + ph) * 0.05;
+      p.cloud.scale.set(1 + k, 1 - k, 1 + k);
+    },
+  },
+
+  halolily: {
+    leaf: () => '#4caf5a',
+    sproutTop(b, o, p) {
+      b.add(P.sphere(7, 5), { p: [p[0], p[1] + 0.08, p[2]], s: [0.1, 0.14, 0.1], c: o.c0, c2: o.c1, gy: [-1, 1], glow: 0.2 });
+      b.add(P.torus(0.18, 4, 12), { p: [p[0], p[1] + 0.36, p[2]], r: [PI / 2 + 0.2, 0, 0], s: 0.15, c: o.c1, glow: 0.8 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, LILY_H + 2.1, 0.12], size: 3.4, color: o.c1, opacity: 0.5 },
+      { kind: 'halo', p: [0, LILY_H + 0.9, 0.2], size: 4.0, color: '#fff3c4', opacity: 0.32 },
+      { kind: 'sparkle', mode: 'twinkle', color: '#ffe680', count: 10, rx: 1.45, h: 2.8, y0: LILY_H - 0.4, size: 0.32, star: true },
+    ],
+    build(b, o) {
+      const white = o.c0, gold = o.c1, green = '#46a85a';
+      const tipGold = (x, y) => (y > 0.86 ? [gold, 0.6] : null);
+      [[0.3, 1.9, 1.08], [1.6, 1.6, 1.0], [2.9, 1.75, 1.12], [4.1, 1.5, 0.98], [5.3, 1.7, 1.05]].forEach(([a, l, up]) =>
+        blade(b, { p: [0, 0.04, 0], a, up, len: l, wid: 0.5, shape: 'blade', segL: 6, bend: -0.45, cup: 0.35, c: shade(green, -0.2), c2: '#8fdc8a', cf: tipGold }));
+      const H = LILY_H;
+      stem(b, [[0, 0, 0], [0.08, 1.0, 0], [-0.06, 2.0, 0.05], [0, H, 0.12]], 0.1, 0.075, green);
+      // two little angel-wing leaves
+      for (const side of [-1, 1]) {
+        const piv = [side * 0.05, 1.55, 0.02];
+        b.use(side < 0 ? 'wingL' : 'wingR', piv);
+        for (let k = 0; k < 3; k++) blade(b, { p: piv, a: side * (PI / 2 + 0.25) - side * k * 0.3, up: 0.35 + k * 0.32, len: 0.85 - k * 0.15, wid: 0.3, shape: 'feather', serrate: 0.25, segL: 5, bend: 0.2, cup: 0.1, c: '#ffffff', c2: mixCol(gold, '#ffffff', 0.55), glow: 0.25, glow2: 0.5 });
+      }
+      b.use('body');
+      const halo = (y, s) => {
+        const Hc = [0, y, 0.12];
+        b.use('halo', Hc);
+        b.add(P.torus(0.17, 5, 20), { p: Hc, r: [PI / 2 + 0.22, 0, 0], s, c: gold, c2: '#fff4b0', gy: [-1, 1], glow: 0.7, glow2: 1 });
+      };
+      if (o.bud) {
+        bud(b, [0, H, 0.12], 0.5, white, { tip: mixCol(gold, white, 0.5), glow: 0.15, sepal: green });
+        return halo(H + 1.55, 0.36);
+      }
+      b.use('head', [0, H, 0.12], { look: true });
+      b.frame(fm([0, H, 0.12], -0.3, 0, 0, 1.15));
+      // golden-throated trumpet with a face, six recurved petals opening from its rim
+      const cup = [[0.08, 0], [0.2, 0.1], [0.3, 0.35], [0.38, 0.62], [0.5, 0.85], [0.64, 1.02]];
+      b.add(latheGeo('lilyTrumpet', cup, 12), { c: mixCol(gold, white, 0.35), c2: white, gy: [0, 0.8], glow: 0.2, glow2: 0.35 });
+      const vein = (x, y) => (Math.abs(x) < 0.08 && y < 0.55 ? [gold, 0.5] : null);
+      ring(b, 3, { center: [0, 0.92, 0], r0: 0.52, up: 0.62, len: 1.15, wid: 0.72, shape: 'point', segL: 5, bend: -0.5, cup: 0.35, off: PI / 6, c: mixCol(gold, white, 0.6), c2: white, glow: 0.25, glow2: 0.45, cf: vein });
+      ring(b, 3, { center: [0, 0.9, 0], r0: 0.5, up: 0.78, len: 1.08, wid: 0.68, shape: 'point', segL: 5, bend: -0.45, cup: 0.35, off: PI / 2, c: mixCol(gold, white, 0.6), c2: white, glow: 0.25, glow2: 0.45, cf: vein });
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * TAU + 0.3;
+        const tip = [Math.sin(a) * 0.32, 1.32, Math.cos(a) * 0.32];
+        stem(b, [[0, 0.3, 0], [Math.sin(a) * 0.14, 0.85, Math.cos(a) * 0.14], tip], 0.022, 0.018, '#ffe680', { glow: 0.6, radial: 3, segs: 3 });
+        b.add(P.sphere(5, 3), { p: tip, s: [0.05, 0.1, 0.05], c: '#ffb020', glow: 1 });
+      }
+      face(b, 'happy', [0, 0.5, 0.356], 0.46, 0.34, [0.29, 0, 0]);
+      b.frame(null);
+      halo(H + 2.1, 0.7);
+    },
+    anim(p, t, ph) {
+      p.head.rotation.z = Math.sin(t * 1.0 + ph) * 0.05;
+      p.halo.rotation.y = t * 1.2 + ph;
+      p.halo.position.y = p.halo.userData.base.y + Math.sin(t * 1.5 + ph) * 0.12;
+      const f = Math.sin(t * 3 + ph) * 0.16;
+      p.wingL.rotation.z = f;
+      p.wingR.rotation.z = -f;
+    },
+  },
+
+  thunder: {
+    leaf: (o) => shade(o.c0, -0.2),
+    sproutTop(b, o, p) {
+      b.add(boltGeo(), { p: [p[0] + 0.02, p[1] - 0.02, p[2]], r: [0, 0, -0.15], s: [0.36, 0.42, 1], c: o.c1, glow: 0.9 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, THUNDER_H + 0.2, 0.4], size: 4.4, color: o.c0, opacity: 0.32 },
+      { kind: 'sparkle', mode: 'twinkle', color: o.c1, count: 14, rx: 1.6, h: 3.2, y0: THUNDER_H - 1.4, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const blue = o.c0, zap = o.c1;
+      const navy = shade(blue, -0.5);
+      // a grumpy little storm cloud at the roots
+      [[0.55, 0.26, 0.25, 0.5], [-0.58, 0.24, 0.18, 0.46], [0.02, 0.28, -0.55, 0.52], [-0.1, 0.2, 0.62, 0.38], [0.05, 0.5, 0.0, 0.46]].forEach(([x, y, z, s], i) =>
+        b.add(P.sphere(7, 5), { p: [x, y, z], s: [s, s * 0.75, s], c: '#6f7bb0', c2: '#dde3fb', gy: [-1, 1], glow: 0.05 }));
+      b.add(boltGeo(), { p: [0.62, 0.08, 0.75], r: [0.3, 0.5, PI], s: [0.4, 0.5, 1], c: zap, glow: 0.7 });
+      const H = o.bud ? 2.3 : THUNDER_H;
+      // zig-zag stem and jagged leaves with electric tips
+      stem(b, [[0, 0, 0], [0.22, H * 0.28, 0], [-0.18, H * 0.55, 0.04], [0.16, H * 0.8, 0.06], [0, H, 0.12]], 0.1, 0.075, shade(blue, -0.4), { segs: 10, radial: 5, c2: shade(blue, -0.15), gy: [0, H] });
+      [[0.55, 0.5, 1.2], [1.0, 3.6, 1.05], [1.6, 1.8, 0.85], [2.1, 4.6, 0.7]].forEach(([y, a, l]) =>
+        blade(b, { p: [0, y * (H / THUNDER_H), 0.03], a, up: 0.5, len: l, wid: l * 0.42, shape: 'point', serrate: 0.5, segL: 5, bend: -0.25, cup: 0.25, c: navy, c2: zap, glow: 0.05, glow2: 0.6 }));
+      const zaps = (name, list, s) => {
+        b.use(name, [0, H, 0.2], { look: true });
+        list.forEach(([a, d, rot]) => b.add(boltGeo(), { p: [-Math.sin(a) * d, H + Math.cos(a) * d, 0.35], r: [0, 0, a + rot], s: [0.5 * s, 0.62 * s, 1], c: zap, c2: '#ffffff', gy: [0, 1], glow: 0.7 }));
+      };
+      if (o.bud) {
+        bud(b, [0, H, 0.12], 0.46, blue, { tip: zap, glow: 0.35, sepal: navy });
+        zaps('zap', [[0.9, 0.85, 0.3], [-2.2, 0.8, -0.2]], 0.7);
+        zaps('zap2', [[2.4, 0.8, 0.2], [-0.7, 0.9, -0.3]], 0.7);
+        return;
+      }
+      b.use('head', [0, H, 0.12], { look: true });
+      b.frame(fm([0, H + 0.08, 0.16], 1.15));
+      b.add(P.dome(8, 3), { p: [0, -0.06, 0], r: [PI, 0, 0], s: [0.42, 0.22, 0.42], c: navy });
+      ring(b, 8, { r0: 0.3, y: -0.03, up: 0.06, len: 1.0, wid: 0.48, shape: 'point', segL: 3, c: shade(blue, -0.35), c2: blue, bend: 0.12, cup: 0.25, off: PI / 8, glow: 0.1, glow2: 0.3 });
+      ring(b, 8, { r0: 0.28, y: 0.02, up: 0.2, len: 0.78, wid: 0.42, shape: 'point', segL: 3, c: shade(blue, -0.1), c2: shade(blue, 0.3), bend: 0.12, cup: 0.25, off: 0, glow: 0.15, glow2: 0.35 });
+      // lightning-bolt stamens between the petals
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * TAU;
+        b.add(boltGeo(), { p: [Math.sin(a) * 0.3, 0.05, Math.cos(a) * 0.3], r: [-PI / 2 + 0.14, a + PI, 0], s: [0.66, 1.25, 1], c: shade(zap, -0.05), c2: shade(zap, 0.4), gy: [0, 1], glow: 0.45, glow2: 0.8 });
+      }
+      b.add(P.dome(12, 4), { s: [0.5, 0.26, 0.5], c: zap, c2: '#fffbe0', gy: [0, 1], glow: 0.35 });
+      face(b, 'cool', [0, 0.27, 0.0], 0.7, 0.9, [-PI / 2, 0, 0]);
+      b.frame(null);
+      // crackling sparks that flicker around the bloom
+      zaps('zap', [[0.75, 1.3, 0.4], [3.4, 1.25, -0.3]], 0.8);
+      zaps('zap2', [[1.9, 1.35, -0.35], [4.9, 1.3, 0.25]], 0.8);
+    },
+    anim(p, t, ph) {
+      const f = (x) => {
+        const v = Math.sin(x * 12.9898 + ph) * 43758.5453;
+        return v - Math.floor(v);
+      };
+      const k1 = Math.floor(t * 9), k2 = Math.floor(t * 7 + 0.5);
+      const on1 = f(k1) > 0.45, on2 = f(k2 + 11) > 0.55;
+      p.zap.scale.setScalar(on1 ? 1 : 0.001);
+      p.zap.rotation.z = (f(k1 + 3) - 0.5) * 1.4;
+      p.zap2.scale.setScalar(on2 ? 1 : 0.001);
+      p.zap2.rotation.z = (f(k2 + 5) - 0.5) * 1.4;
+      p.head.rotation.z = Math.sin(t * 1.3 + ph) * 0.05 + (on1 && on2 ? (f(k1 + 7) - 0.5) * 0.08 : 0);
     },
   },
 };

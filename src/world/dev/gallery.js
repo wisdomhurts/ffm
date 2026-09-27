@@ -1,7 +1,8 @@
 // Dev page for the world art: fly between viewpoints and weather without running the game.
 // Build: node build.mjs --entry src/world/dev/gallery.js --out <dir>
-// Keys: 1-9/0 viewpoints, W cycle weather, L toggle garden lasers, C grow cash piles, U toggle planter crates,
-// arrow keys orbit, +/- zoom. window.__gallery exposes {engine, world, go(i), setWeather(id)} for tests.
+// Keys: 1-9/0 the first ten viewpoints, [ and ] (or PageUp/PageDown) step through all of them, W cycle weather,
+// L toggle garden lasers, C grow cash piles, U toggle planter crates, arrow keys orbit, +/- zoom.
+// window.__gallery exposes {engine, world, go(i), setWeather(id), VIEWS} for tests (go also takes a view name).
 import * as THREE from 'three';
 import { Engine } from '../../core/engine.js';
 import { LAYOUT } from '../../gameplay/layout.js';
@@ -20,6 +21,10 @@ const VIEWS = [
   { name: 'Tanglemire', pos: [0, 13, 550], look: [0, 6, 660] },
   { name: 'Emberroot', pos: [0, 13, 700], look: [0, 6, 810] },
   { name: 'Starbloom', pos: [0, 13, 850], look: [0, 9, 960] },
+  { name: 'Frostfall', pos: [0, 13, 1000], look: [0, 6, 1110] },
+  { name: 'Candy Canyon', pos: [0, 13, 1150], look: [0, 6, 1260] },
+  { name: 'Cloud Kingdom', pos: [0, 13, 1300], look: [0, 9, 1410] },
+  { name: 'End of the road', pos: [0, 12, 1362], look: [0, 17, 1410] },
 ];
 const WEATHER = [null, 'golden', 'diamond', 'rainbow'];
 
@@ -38,6 +43,7 @@ const cam = engine.camera;
 const state = { view: 0, weather: 0, lasers: false, cash: 0, crates: true, yaw: 0, dist: 1 };
 const target = new THREE.Vector3();
 function go(i) {
+  if (typeof i === 'string') i = Math.max(0, VIEWS.findIndex((v) => v.name === i));
   state.view = (i + VIEWS.length) % VIEWS.length;
   state.yaw = 0;
   state.dist = 1;
@@ -54,6 +60,8 @@ function place() {
 addEventListener('keydown', (e) => {
   if (e.key >= '1' && e.key <= '9') go(+e.key - 1);
   else if (e.key === '0') go(9);
+  else if (e.key === ']' || e.key === 'PageDown') go(state.view + 1);
+  else if (e.key === '[' || e.key === 'PageUp') go(state.view - 1);
   else if (e.key === 'w' || e.key === 'W') state.weather = (state.weather + 1) % WEATHER.length;
   else if (e.key === 'l' || e.key === 'L') state.lasers = !state.lasers;
   else if (e.key === 'c' || e.key === 'C') state.cash = state.cash ? state.cash * 12 : 10;
@@ -74,7 +82,7 @@ engine.add((dt, t) => {
     g.planters.forEach((p, i) => p.setUnlocked(!state.crates || i < 4));
   });
   world.update(dt, { time: t, camera: cam, focus: target, event: null });
-  hud.textContent = `${VIEWS[state.view].name}  |  weather: ${WEATHER[state.weather] || 'clear'}  |  calls ${engine.renderer.info.render.calls}  fps ${engine.fps.toFixed(0)}\n1-0 views  W weather  L lasers  C cash  U crates  arrows orbit  +/- zoom`;
+  hud.textContent = `${VIEWS[state.view].name}  |  weather: ${WEATHER[state.weather] || 'clear'}  |  calls ${engine.renderer.info.render.calls}  fps ${engine.fps.toFixed(0)}\n1-0 [ ] views  W weather  L lasers  C cash  U crates  arrows orbit  +/- zoom`;
 });
 engine.start();
 window.__gallery = { engine, world, go, setWeather: (id) => world.setWeather(id), VIEWS };

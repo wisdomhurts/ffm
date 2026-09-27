@@ -36,6 +36,8 @@ const EVENT_COLORS = {
   diamond: ['#7ee8ff', '#ffffff', '#b8f3ff', '#4fc3ff'],
   rainbow: RAINBOW,
 };
+// Dizzy-star ring height over a stunned monster (default 4.6: head height of the smaller critters).
+const STUN_STARS_Y = { yeti: 6.4, storm: 5.9 };
 const HIT_TEXT = { bonk: 'BONK!', balloon: 'SPLAT!', banana: 'SLIP!' };
 const HIT_BURST = { bonk: '#ff3d2e', balloon: '#2f8bff', banana: '#ff9f1a' };
 
@@ -909,6 +911,22 @@ export function createEffects(engine, container) {
       if (player === H() && allowFloat()) floatText('UNLOCKED!', at(pl.x, 5, pl.z), { style: 'gold', size: 'l', duration: 1.5 });
     },
 
+    'garden:expanded'({ player, planters }) {
+      const g = game.gardens[player.slot];
+      const isH = player === H();
+      const list = (planters || []).map((i) => g?.planters[i]).filter(Boolean);
+      if (!list.length) return;
+      const mid = list[Math.floor(list.length / 2)];
+      const L = lodAt(mid.x, 1.5, mid.z, isH ? 400 : 80);
+      if (!L || !allowBurst()) return;
+      list.forEach((pl, k) => {
+        burst('poof', at(pl.x, 1.4, pl.z), { lod: L });
+        if (k % 2 === 0) burst('sparkle', at(pl.x, 2.4, pl.z), { color: '#ffe36b', count: 12, lod: L });
+      });
+      burst('confetti', at(mid.x, 5, mid.z), { count: 40, lod: L });
+      if (isH && allowFloat()) floatText('GARDEN EXPANDED!', at(mid.x, 6.5, mid.z), { style: 'gold', size: 'xl', duration: 2 });
+    },
+
     'item:used'({ player, item }) {
       const { x, y, z } = player.pos;
       const L = lodAt(x, y + 2, z, player === H() ? 400 : 80);
@@ -1117,7 +1135,7 @@ export function createEffects(engine, container) {
       if (now >= m.stunUntil || camDist(m.x, 4, m.z) > 80) continue;
       for (let k = 0; k < 3; k++) {
         const a = clock * 5.5 + (k * TAU) / 3;
-        S.immediate(SHAPE.star, m.x + Math.cos(a) * 1.6, (m.y || 0) + 4.6, m.z + Math.sin(a) * 1.6, 0.6, 0, 1, 0, -a, '#ffe14d', 0.5);
+        S.immediate(SHAPE.star, m.x + Math.cos(a) * 1.6, (m.y || 0) + (STUN_STARS_Y[m.type] ?? 4.6), m.z + Math.sin(a) * 1.6, 0.6, 0, 1, 0, -a, '#ffe14d', 0.5);
       }
     }
   }

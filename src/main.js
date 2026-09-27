@@ -513,7 +513,7 @@ class App {
       this._attractAngle = (this._attractAngle || 0) + dt * 0.06;
       const a = this._attractAngle;
       const cam = this.engine.camera;
-      cam.position.set(Math.sin(a) * 95, 55, Math.cos(a) * 95 - 5);
+      cam.position.set(Math.sin(a) * 118, 64, Math.cos(a) * 118 - 5); // just outside the island (|x| <= 96.5)
       cam.lookAt(0, 2, 0);
       this.engine.setFocus(0, 0, 0);
     }

@@ -1,6 +1,6 @@
 // Turns gameplay events that concern the local player into banners, toasts and reveals.
 import { bus } from '../core/events.js';
-import { PLANT, RARITY, MUTATIONS, ITEM, speedAt, REBIRTH } from '../config.js';
+import { PLANT, RARITY, MUTATIONS, ITEM, LOTS, speedAt, REBIRTH } from '../config.js';
 import { rarityColor } from '../view/gameView.js';
 import { esc, money } from './dom.js';
 import { who } from './alerts.js';
@@ -201,6 +201,12 @@ export function wireNotifications(app, alerts) {
   });
   on('planter:unlocked', ({ player }) => {
     if (player === me) alerts.show({ kind: 'good', icon: ICON.sprout, duration: 2600, html: 'New planter unlocked!<small>More room for more plants.</small>' });
+  });
+  on('garden:expanded', ({ player, lot }) => {
+    if (player === me) {
+      const more = lot + 1 < LOTS.count ? `Lot ${lot + 2} is next.` : 'Your garden is as big as it gets!';
+      alerts.show({ kind: 'good', icon: ICON.sprout, duration: 3400, html: `Garden expanded! <b>+${LOTS.planters} planters</b><small>${more}</small>` });
+    } else alerts.toast(`${who(player)}'s garden got bigger!`, 'info', { icon: ICON.sprout });
   });
   on('speed:up', ({ player, level }) => {
     if (player !== me) return;

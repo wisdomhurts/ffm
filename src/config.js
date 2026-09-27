@@ -7,15 +7,19 @@ export const WORLD = {
   plaza: { minX: -60, maxX: 60, minZ: -60, maxZ: 60 },
   spawn: { x: 0, z: 0 },
   road: { startZ: 60, width: 40, biomeLength: 150 },
-  garden: { w: 36, d: 44 }, // w along X, d along Z
-  // Garden centres by player slot. Gates face the central aisle (x = 0).
+  // w along X (gate side to the far fence), d along Z. The far 24 studs are the three buyable lots (LOTS).
+  garden: { w: 60, d: 44 },
+  // Garden centres by player slot. Gates face the central aisle (x = 0), at |x| = 30.
   gardenCenters: [
-    { x: -48, z: -24 },
-    { x: 48, z: -24 },
-    { x: -48, z: 24 },
-    { x: 48, z: 24 },
+    { x: -60, z: -24 },
+    { x: 60, z: -24 },
+    { x: -60, z: 24 },
+    { x: 60, z: 24 },
   ],
-  planterCount: 10,
+  // The home island (plaza, gardens, shops): walkable |x| < homeHalfW, z from homeMinZ up to the road gate.
+  homeHalfW: 96,
+  homeMinZ: -66,
+  planterCount: 25, // 10 in the garden + LOTS.count lots of LOTS.planters
   shops: {
     gear: { x: -30, z: -50 },
     speed: { x: 0, z: -50 },
@@ -30,11 +34,12 @@ export const WORLD = {
 export const PLAYER = {
   baseSpeed: 16,
   speedPerLevel: 2,
-  maxSpeedLevel: 25,
+  // No top Speed level: every level costs more (speedCost) and keeps adding speed.
   carrySeedMult: 0.85,
   carryPlantMult: 0.7,
-  accel: 90, // studs/s^2 on ground
+  accel: 90, // studs/s^2 on ground (up to accelRefSpeed: faster players get more grip, see accelFor)
   airAccel: 35,
+  accelRefSpeed: 50,
   turnRate: 14, // rad/s visual turn smoothing
   startCash: 100,
   bonk: { range: 6, arcDeg: 110, cooldown: 0.8, stun: 1.0, knockback: 26, invuln: 1.6, monsterStun: 2.2 },
@@ -47,9 +52,21 @@ export const PLAYER = {
 // Cost of buying speed level L (from L-1).
 export const speedCost = (L) => (L === 1 ? 100 : Math.round(80 * Math.pow(1.55, L)));
 export const speedAt = (level, rebirths = 0) => PLAYER.baseSpeed + level * PLAYER.speedPerLevel + rebirths * 2;
+// Acceleration for a body whose top speed is `top`: constant up to accelRefSpeed, then it grows with the
+// top speed so very fast players still turn and stop crisply (the same time to full speed, not ice skating).
+export const accelFor = (top, onGround = true) => (onGround ? PLAYER.accel : PLAYER.airAccel) * Math.max(1, top / PLAYER.accelRefSpeed);
+// The Speed Demon badge's levels (the shop has no top level any more).
+export const SPEED_MILESTONES = [25, 35, 45];
 
-// Planters: first 4 unlocked. Cost to unlock planter index i (0-based).
-export const PLANTERS = { startUnlocked: 4, unlockCost: [0, 0, 0, 0, 250, 900, 3500, 14000, 60000, 250000] };
+// Planters: first 4 unlocked. Cost to unlock planter index i (0-based) of the 10 in the garden.
+export const PLANTERS = { startUnlocked: 4, base: 10, unlockCost: [0, 0, 0, 0, 250, 900, 3500, 14000, 60000, 250000] };
+// Garden lots: the far end of every garden is three FOR SALE lots of 5 crated planters each (planters
+// 10-14, 15-19, 20-24). Buying a lot (in order) opens all 5 at once. Rebirth sells them back like the rest.
+export const LOTS = { count: 3, planters: 5, cost: [500_000, 3_000_000, 15_000_000] };
+/** Which lot planter index i belongs to (0..LOTS.count-1), or -1 for the garden's own 10. */
+export const lotOf = (i) => (i >= PLANTERS.base ? Math.floor((i - PLANTERS.base) / LOTS.planters) : -1);
+/** What opening planter i costs: its own unlock price, or the whole lot's price for a lot planter. */
+export const planterCost = (i) => (i >= PLANTERS.base ? LOTS.cost[lotOf(i)] ?? Infinity : PLANTERS.unlockCost[i] ?? Infinity);
 
 export const LOCK = { duration: 40, perRebirth: 10, recharge: 60 };
 
@@ -66,9 +83,14 @@ export const RARITIES = [
   { id: 'epic', name: 'Epic', color: '#b36bff', glow: 0xb36bff, tier: 3 },
   { id: 'legendary', name: 'Legendary', color: '#ffb627', glow: 0xffb627, tier: 4 },
   { id: 'mythic', name: 'Mythic', color: '#ff4d6d', glow: 0xff4d6d, tier: 5 },
-  { id: 'secret', name: 'Secret', color: '#111111', glow: 0xffffff, tier: 6 },
+  { id: 'celestial', name: 'Celestial', color: '#6ff3ff', glow: 0x6ff3ff, tier: 6 },
+  { id: 'cosmic', name: 'Cosmic', color: '#ff5ce1', glow: 0xff5ce1, tier: 7 },
+  { id: 'divine', name: 'Divine', color: '#ffe75e', glow: 0xffe75e, tier: 8 },
+  { id: 'secret', name: 'Secret', color: '#111111', glow: 0xffffff, tier: 9 },
 ];
 export const RARITY = Object.assign(Object.create(null), Object.fromEntries(RARITIES.map((r) => [r.id, r])));
+// The top rarity a road seed can have without being a Secret (a lucky seed goes up one tier, never past it).
+export const TOP_TIER = RARITY.divine.tier;
 
 export const MUTATIONS = {
   normal: { id: 'normal', name: '', mult: 1, color: null },
@@ -109,11 +131,23 @@ export const PLANTS = [
   { id: 'starlotus', name: 'Star Lotus', rarity: 'mythic', income: 1500, grow: 180, look: 'lotus', colors: ['#ffd6f5', '#b48cff'] },
   { id: 'moonmelon', name: 'Moon Melon', rarity: 'mythic', income: 1800, grow: 210, look: 'melon', colors: ['#cfd8ff', '#5b6cff'] },
   { id: 'galaxyorchid', name: 'Galaxy Orchid', rarity: 'mythic', income: 2200, grow: 240, look: 'orchid', colors: ['#2a1b5c', '#ff66d9'] },
+  // Celestial: Frostfall
+  { id: 'snowflake', name: 'Snowflake Star', rarity: 'celestial', income: 3000, grow: 260, look: 'snowflake', colors: ['#e8fbff', '#6fd3ff'] },
+  { id: 'icerose', name: 'Ice Crystal Rose', rarity: 'celestial', income: 3400, grow: 280, look: 'icerose', colors: ['#bff4ff', '#3fa9e8'] },
+  { id: 'frostbell', name: 'Frost Bell', rarity: 'celestial', income: 3800, grow: 300, look: 'frostbell', colors: ['#9fe3ff', '#ffffff'] },
+  // Cosmic: Candy Canyon
+  { id: 'lollibloom', name: 'Lollipop Bloom', rarity: 'cosmic', income: 4800, grow: 320, look: 'lollipop', colors: ['#ff5ca8', '#fff27a'] },
+  { id: 'gumdrop', name: 'Gumdrop Bush', rarity: 'cosmic', income: 5400, grow: 340, look: 'gumdrop', colors: ['#7ee36b', '#ff7ab8'] },
+  { id: 'candycane', name: 'Candy Cane Curl', rarity: 'cosmic', income: 6000, grow: 360, look: 'candycane', colors: ['#ff3b4f', '#ffffff'] },
+  // Divine: Cloud Kingdom
+  { id: 'cloudberry', name: 'Cloudberry Puff', rarity: 'divine', income: 7600, grow: 380, look: 'cloudpuff', colors: ['#ffffff', '#b07cff'] },
+  { id: 'halolily', name: 'Halo Lily', rarity: 'divine', income: 8500, grow: 400, look: 'halolily', colors: ['#fffaf0', '#ffd23f'] },
+  { id: 'thunderbloom', name: 'Thunder Bloom', rarity: 'divine', income: 9500, grow: 420, look: 'thunder', colors: ['#3d6bff', '#fff04d'] },
   // Secret: the family
-  { id: 'dorianfruit', name: "Dorian's Dragonfruit", rarity: 'secret', income: 7000, grow: 300, look: 'dragonfruit', colors: ['#ff3f8e', '#7ee36b'], family: 'dorian' },
-  { id: 'estherlotus', name: "Esther's Eternal Lotus", rarity: 'secret', income: 7000, grow: 300, look: 'lotus', colors: ['#ff8fc8', '#ffe066'], family: 'esther' },
-  { id: 'maddiemarigold', name: "Mati's Magic Marigold", rarity: 'secret', income: 7000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
-  { id: 'micahmelon', name: "Micah's Mega Melon", rarity: 'secret', income: 7000, grow: 300, look: 'melon', colors: ['#3ddc84', '#ff5d5d'], family: 'micah' },
+  { id: 'dorianfruit', name: "Dorian's Dragonfruit", rarity: 'secret', income: 12000, grow: 300, look: 'dragonfruit', colors: ['#ff3f8e', '#7ee36b'], family: 'dorian' },
+  { id: 'estherlotus', name: "Esther's Eternal Lotus", rarity: 'secret', income: 12000, grow: 300, look: 'lotus', colors: ['#ff8fc8', '#ffe066'], family: 'esther' },
+  { id: 'maddiemarigold', name: "Mati's Magic Marigold", rarity: 'secret', income: 12000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
+  { id: 'micahmelon', name: "Micah's Mega Melon", rarity: 'secret', income: 12000, grow: 300, look: 'melon', colors: ['#3ddc84', '#ff5d5d'], family: 'micah' },
 ];
 export const PLANT = Object.assign(Object.create(null), Object.fromEntries(PLANTS.map((p) => [p.id, p])));
 export const NAMESAKE_BONUS = 2; // owning your own family secret plant doubles it
@@ -129,9 +163,16 @@ export const BIOMES = [
     monster: { id: 'snapper', name: 'Swamp Snapper', speed: 26, aggro: 26, count: 2 } },
   { id: 'emberroot', name: 'Emberroot', rarity: 'legendary', ground: '#5a2a22', wall: '#2b1210', sky: '#ff8a5c', fog: '#c2553a',
     monster: { id: 'lavasprout', name: 'Lava Sprout', speed: 32, aggro: 28, count: 3 } },
-  { id: 'starbloom', name: 'Starbloom', rarity: 'mythic', ground: '#2a2f6b', wall: '#15173d', sky: '#1b1446', fog: '#2a2360',
+  { id: 'starbloom', name: 'Starbloom', rarity: 'mythic', ground: '#2a2f6b', wall: '#15173d', sky: '#1b1446', fog: '#2a2360', secret: 0.03,
     monster: { id: 'lurker', name: 'Star Lurker', speed: 38, aggro: 30, count: 3 } },
+  { id: 'frostfall', name: 'Frostfall', rarity: 'celestial', ground: '#e6f4ff', wall: '#8fb8e0', sky: '#bfe6ff', fog: '#e2f2ff', secret: 0.035,
+    monster: { id: 'yeti', name: 'Snowball Yeti', speed: 44, aggro: 32, count: 3 } },
+  { id: 'candy', name: 'Candy Canyon', rarity: 'cosmic', ground: '#ffb8dc', wall: '#ff7eb8', sky: '#ffd1ea', fog: '#ffe3f2', secret: 0.04,
+    monster: { id: 'gummy', name: 'Gummy Bear', speed: 50, aggro: 34, count: 3 } },
+  { id: 'cloud', name: 'Cloud Kingdom', rarity: 'divine', ground: '#f4f8ff', wall: '#c8d8ff', sky: '#8fd0ff', fog: '#eaf4ff', secret: 0.05,
+    monster: { id: 'storm', name: 'Storm Puff', speed: 56, aggro: 36, count: 3 } },
 ];
+// `secret`: chance that a seed in that biome is a Secret family seed (the deepest biomes only).
 export const ROAD_END_Z = WORLD.road.startZ + BIOMES.length * WORLD.road.biomeLength;
 export const biomeIndexAtZ = (z) => {
   if (z < WORLD.road.startZ) return -1;
@@ -142,8 +183,7 @@ export const PODS = {
   perSide: 5, // per biome per wall
   respawnMin: 18,
   respawnMax: 32,
-  luckyChance: 0.08, // chance of +1 rarity tier
-  secretChance: 0.03, // in Starbloom only
+  luckyChance: 0.08, // chance of +1 rarity tier (up to TOP_TIER)
   groundSeedLifetime: 15, // dropped seeds return to their pod after this
 };
 

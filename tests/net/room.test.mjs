@@ -4,6 +4,7 @@ import { StubApp, MemoryHub } from './stub.mjs';
 import { bus } from '../../src/core/events.js';
 import { LAYOUT } from '../../src/gameplay/layout.js';
 import { PLANTS, ITEM } from '../../src/config.js';
+import { settings } from '../../src/core/settings.js';
 import { familyFaceData, faceInfo } from '../../src/characters/faces.js';
 import { createTransport } from '../../src/net/transport.js';
 import { roomTopic, VERSION, normalizeCode, makeCode, isCode, isCleanLine } from '../../src/net/protocol.js';
@@ -424,6 +425,39 @@ try {
   H = C;
   check(C.online.isHost && D.online.room?.hostPid === C.online.pid, 'a leaving host hands the room to the next member right away');
   check(B.profile.online?.garden, 'the old host saved its online garden');
+
+  // ---------------------------------------------------------------- 14. fewer (or no) computer players
+  settings.onlineBots = 0; // the host's choice in Play Online > Computer players
+  const X = add(new StubApp('Xena', { hub, base: 'micah' }));
+  const Y = add(new StubApp('Yuri', { hub, base: 'esther' }));
+  const codeX = await X.online.createRoom({ private: true });
+  settings.onlineBots = 3;
+  H = X;
+  const kinds = (a) => a.game.players.map((p) => p.kind).join();
+  check(kinds(X) === 'empty,empty,empty,local' && X.online.maxBots === 0, 'None: the host plays alone, the other gardens are empty: ' + kinds(X));
+  check(X.game.ranking().length === 1 && X.game.players.filter((p) => !p.present).every((p) => p.pos.z < -500), 'empty gardens sit out of the race, their bodies parked out of reach');
+  check(await Y.online.joinRoom(codeX, { typed: true }), 'Yuri joins the no-bots room');
+  await step(1);
+  check(kinds(X) === 'empty,remote,empty,local' && slotOf(Y) === 1, 'Yuri takes her own empty garden, still no bots: ' + kinds(X));
+  check(kinds(Y) === 'empty,local,empty,remote' && Y.game.maxBots === 0, "Yuri's device sees the same: " + kinds(Y));
+  check(Y.online.members.length === 2 && Y.game.ranking().length === 2, 'two people on the board, nobody else');
+  const parked = { ...X.game.players[0].pos };
+  await step(2);
+  check(d2(X.game.players[0].pos, parked) < 0.01 && X.game.players[0].pos.z < -500, 'an empty garden never wakes up on its own');
+  check(!Y.online.setBots(2), 'only the host can change the number of computer players');
+  check(X.online.setBots(1), 'the host allows one computer player');
+  await step(1);
+  check(kinds(X) === 'bot,remote,empty,local' && kinds(Y) === 'bot,local,empty,remote' && Y.game.maxBots === 1, 'one bot moves in, everyone sees it: ' + kinds(Y));
+  check(X.game.players[0].pos.z > -100 && X.game.players[0].controller, 'the bot is in its garden and playing');
+  Y.online.leave();
+  live.delete(Y);
+  await step(1.5);
+  check(kinds(X) === 'bot,empty,empty,local', "Yuri leaves: the room keeps one bot, her garden stays empty: " + kinds(X));
+  check(X.online.setBots(3), 'the host switches computer players back to all');
+  await step(0.5);
+  check(kinds(X) === 'bot,bot,bot,local' && settings.onlineBots === 3, 'All: every free garden has a bot again: ' + kinds(X));
+  X.online.leave();
+  live.delete(X);
 
   const perSec = hub.sent / (hub.now || 1);
   console.log(`INFO ${hub.sent} messages sent (${perSec.toFixed(1)}/s over the run), ${(hub.bytes / 1024).toFixed(0)} KB`);

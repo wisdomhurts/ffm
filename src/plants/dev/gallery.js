@@ -1,12 +1,14 @@
 // Dev gallery for the plant module: every species grown, growth stages, mutations, seeds per rarity,
 // every biome's pod with a seed, and carried pots. Build:
 //   node build.mjs --entry src/plants/dev/gallery.js --out <dir>
-// window.__gallery.view(name) jumps the camera to a section: all | grid | grid2 | stages | mut | seeds | pods | carry | secret | rainbow | tiers
+// window.__gallery.view(name) jumps the camera to a section: all | grid | grid2 | grid3 | stages | mut | seeds | pods | carry | secret |
+// rainbow | tiers | top (the Celestial / Cosmic / Divine species: every stage + mutations; topN, topNa, topNb, topN_c close-ups),
+// plus close-ups: spN / spNxM (species N of the grid), rowN(L|R), seedsL|M|R|2, podsL|M|R, podN, carryL|R, tiersA-D.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PLANTS, RARITIES, RARITY } from '../../config.js';
+import { PLANTS, PLANT, RARITIES, RARITY, BIOMES } from '../../config.js';
 import { camPos } from '../materials.js';
-import { createPlantView, createSeedView, createCarriedPlantView, createPodView, plantTemplate, seedTemplate } from '../plantMeshes.js';
+import { createPlantView, createSeedView, createCarriedPlantView, createPodView, plantTemplate, seedTemplate, plantScale } from '../plantMeshes.js';
 import { podTemplate, potTemplate } from '../pods.js';
 
 const app = document.getElementById('app') || document.body;
@@ -112,52 +114,51 @@ if (want('mut')) {
   ['normal', 'gold', 'diamond', 'rainbow'].forEach((m, i) => addPlant('glowcap', m, 1, -26 - i * SP, -28, m));
 }
 
-// 4) seeds per rarity + mutations (z = -40)
+// 4) seeds per rarity + mutations (z = -40), and every Celestial / Cosmic / Divine seed (z = -34)
 const seedViews = [];
-const seedSpecies = ['daisy', 'mushroom', 'cactus', 'flytrap', 'lavalily', 'starlotus', 'dorianfruit'];
-if (want('seeds')) seedSpecies.forEach((sid, i) => {
-  const v = createSeedView(sid, 'normal');
-  v.object3d.position.set(15 - i * 5, 1.2, -40);
+function addSeed(sid, m, x, z, text, color) {
+  const v = createSeedView(sid, m);
+  v.object3d.position.set(x, 1.2, z);
   scene.add(v.object3d);
   seedViews.push(v);
-  label(RARITIES[i].name, [15 - i * 5, 3.9, -40], rcol(RARITIES[i].id));
-});
-if (want('seeds')) ['gold', 'diamond', 'rainbow'].forEach((m, i) => {
-  const v = createSeedView('sunflower', m);
-  v.object3d.position.set(-22 - i * 5, 1.2, -40);
-  scene.add(v.object3d);
-  seedViews.push(v);
-  label(m, [-22 - i * 5, 3.9, -40]);
-});
-if (want('seeds')) ['estherlotus', 'maddiemarigold', 'micahmelon'].forEach((sid, i) => {
-  const v = createSeedView(sid, 'normal');
-  v.object3d.position.set(-40 - i * 5, 1.2, -40);
-  scene.add(v.object3d);
-  seedViews.push(v);
-});
+  if (text) label(text, [x, 3.9, z], color);
+}
+// the first species of each rarity, in rarity order (common .. divine, secret)
+const seedSpecies = RARITIES.map((r) => PLANTS.find((p) => p.rarity === r.id).id);
+const TOP_SPECIES = PLANTS.filter((p) => RARITY[p.rarity].tier >= 6 && p.rarity !== 'secret').map((p) => p.id);
+if (want('seeds')) {
+  seedSpecies.forEach((sid, i) => addSeed(sid, 'normal', 24 - i * 5, -40, RARITIES[i].name, rcol(RARITIES[i].id)));
+  ['gold', 'diamond', 'rainbow'].forEach((m, i) => addSeed('sunflower', m, -30 - i * 5, -40, m));
+  ['estherlotus', 'maddiemarigold', 'micahmelon'].forEach((sid, i) => addSeed(sid, 'normal', -48 - i * 5, -40));
+  TOP_SPECIES.forEach((sid, i) => addSeed(sid, 'normal', 18 - i * 4.5, -34, PLANT[sid].name, rcol(PLANT[sid].rarity)));
+}
 
-// 5) pods (z = -56)
-const podSeeds = [['tulip', 'normal'], ['clover', 'normal'], ['desertrose', 'gold'], ['bogberry', 'normal'], ['emberpepper', 'normal'], ['galaxyorchid', 'rainbow']];
-if (want('pods')) podSeeds.forEach(([sid, m], i) => {
+// 5) pods, one per biome (z = -56)
+const podSeeds = [['tulip', 'normal'], ['clover', 'normal'], ['desertrose', 'gold'], ['bogberry', 'normal'], ['emberpepper', 'normal'], ['galaxyorchid', 'rainbow'],
+  ['snowflake', 'normal'], ['gumdrop', 'diamond'], ['halolily', 'normal']];
+const podX = (i) => 32 - i * 8;
+if (want('pods')) BIOMES.forEach((bm, i) => {
   const pod = createPodView(i);
-  pod.object3d.position.set(20 - i * 8, 0, -56);
+  pod.object3d.position.set(podX(i), 0, -56);
+  const [sid, m] = podSeeds[i] || podSeeds[0];
   pod.setSeed(createSeedView(sid, m));
   scene.add(pod.object3d);
   views.push(pod);
-  label(['Sunny Field', 'Greenhollow', 'Dustbowl', 'Tanglemire', 'Emberroot', 'Starbloom'][i], [20 - i * 8, 5.6, -56]);
+  label(bm.name, [podX(i), 5.6, -56]);
 });
 if (want('pods')) {
   const emptyPod = createPodView(2);
-  emptyPod.object3d.position.set(-30, 0, -56);
+  emptyPod.object3d.position.set(podX(BIOMES.length) - 2, 0, -56);
   scene.add(emptyPod.object3d);
   views.push(emptyPod);
-  label('empty', [-30, 4.2, -56]);
+  label('empty', [podX(BIOMES.length) - 2, 4.2, -56]);
 }
 
 // 6) carried pots on stand-in avatars (z = -70)
 const avatarMat = new THREE.MeshLambertMaterial({ color: 0x2f80ed });
-if (want('carry')) ['sunflower', 'flytrap', 'lavalily', 'starlotus', 'micahmelon'].forEach((sid, i) => {
-  const x = 16 - i * 8;
+const CARRY = ['sunflower', 'flytrap', 'lavalily', 'starlotus', 'micahmelon', 'icerose', 'gumdrop', 'thunderbloom'];
+if (want('carry')) CARRY.forEach((sid, i) => {
+  const x = 28 - i * 8;
   const body = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 1), avatarMat);
   body.position.set(x, 2, -70);
   const head = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshLambertMaterial({ color: 0xd19a82 }));
@@ -169,7 +170,7 @@ if (want('carry')) ['sunflower', 'flytrap', 'lavalily', 'starlotus', 'micahmelon
   views.push(c);
 });
 if (want('carry')) {
-  const x = -26;
+  const x = 28 - CARRY.length * 8;
   const body = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 1), avatarMat);
   body.position.set(x, 2, -70);
   const head = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.6, 1.6), new THREE.MeshLambertMaterial({ color: 0xd19a82 }));
@@ -187,12 +188,27 @@ if (want('rainbow')) ['daisy', 'cactus', 'mushroom'].forEach((sid, i) => {
 });
 
 // Size by rarity (z = 72): one row, commons on the left, secrets on the right; labels show the grown height.
-const TIER_ROW = ['daisy', 'sunflower', 'clover', 'tater', 'aloe', 'flytrap', 'glowcap', 'phoenixfern', 'lavalily', 'moonmelon', 'starlotus', 'micahmelon', 'dorianfruit'];
+const TIER_ROW = ['daisy', 'sunflower', 'clover', 'tater', 'aloe', 'flytrap', 'glowcap', 'phoenixfern', 'lavalily', 'moonmelon', 'starlotus',
+  'snowflake', 'frostbell', 'lollibloom', 'candycane', 'cloudberry', 'thunderbloom', 'micahmelon', 'dorianfruit'];
+const tierX = (i) => ((TIER_ROW.length - 1) / 2 - i) * 5.6;
 if (want('tiers')) TIER_ROW.forEach((sid, i) => {
-  const sp = PLANTS.find((p) => p.id === sid);
-  const v = addPlant(sid, 'normal', 1, 33.6 - i * 5.6, 72);
-  label(`${sp.name}<br><span style="color:${rcol(sp.rarity)}">${RARITY[sp.rarity].name}</span><br>${v.topY.toFixed(2)}`, [33.6 - i * 5.6, 1.2 + v.topY + 1.2, 72]);
+  const sp = PLANT[sid];
+  const v = addPlant(sid, 'normal', 1, tierX(i), 72);
+  label(`${sp.name}<br><span style="color:${rcol(sp.rarity)}">${RARITY[sp.rarity].name}</span><br>${v.topY.toFixed(2)}`, [tierX(i), 1.2 + v.topY + 1.2, 72]);
 });
+
+// Celestial / Cosmic / Divine showcase (z = 92, one row per species every 14 studs): seed mound, sprout, bud,
+// grown, then grown gold / diamond / rainbow.
+const TOP_Z = 92, TOP_DZ = 14, TOP_DX = 6;
+const TOP_COLS = [[0.1, 'normal', 'seed'], [0.45, 'normal', 'sprout'], [0.8, 'normal', 'bud'], [1, 'normal', null], [1, 'gold', 'gold'], [1, 'diamond', 'diamond'], [1, 'rainbow', 'rainbow']];
+const topX = (c) => ((TOP_COLS.length - 1) / 2 - c) * TOP_DX;
+// ?species=snowflake,gumdrop limits the showcase to those rows (they keep their places)
+const TOP_ONLY = params.get('species') ? new Set(params.get('species').split(',')) : null;
+if (want('top')) TOP_SPECIES.forEach((sid, r) => TOP_COLS.forEach(([p, m, text], c) => {
+  if (TOP_ONLY && !TOP_ONLY.has(sid)) return;
+  const sp = PLANT[sid];
+  addPlant(sid, m, p, topX(c), TOP_Z + r * TOP_DZ, text || `${sp.name}<br><span style="color:${rcol(sp.rarity)}">${RARITY[sp.rarity].name}</span>`);
+}));
 
 // Secret showcase (z = 40)
 if (want('secret')) ['dorianfruit', 'estherlotus', 'maddiemarigold', 'micahmelon'].forEach((sid, i) => addPlant(sid, 'normal', 1, 12 - i * 8, 40, PLANTS.find((p) => p.id === sid).name));
@@ -218,25 +234,46 @@ const PRESETS = {
   row2R: [[-11, 9, 5], [-11, 2.6, 14]],
   row3L: [[11, 9, 12], [11, 2.6, 21]],
   row3R: [[-11, 9, 12], [-11, 2.6, 21]],
+  row4: [[0, 17, 16], [0, 2, 29]],
+  row4L: [[11, 9, 19], [11, 2.6, 28]],
+  row4R: [[-11, 9, 19], [-11, 2.6, 28]],
+  grid3: [[0, 24, 2], [0, 2.5, 26]],
   stages: [[-4, 16, -46], [-4, 2, -21]],
   mut: [[-36, 16, -46], [-36, 2, -21]],
-  seeds: [[-12, 7, -54], [-12, 2, -40]],
-  seedsL: [[5, 5, -48], [5, 2, -40]],
-  seedsR: [[-30, 5, -48], [-30, 2, -40]],
-  pods: [[0, 14, -86], [0, 2, -56]],
-  podsL: [[12, 6.5, -68], [12, 2.2, -56]],
-  podsR: [[-12, 6.5, -68], [-12, 2.2, -56]],
-  carry: [[-4, 11, -88], [-4, 5, -70]],
+  seeds: [[-17, 10, -52], [-17, 2, -37]],
+  seedsL: [[14, 5, -52], [14, 2, -40]],
+  seedsM: [[-9, 5, -52], [-9, 2, -40]],
+  seedsR: [[-42, 5, -52], [-42, 2, -40]],
+  seeds2: [[0, 12, -52], [0, 1.5, -34]],
+  pods: [[-4, 16, -100], [-4, 2, -56]],
+  podsL: [[24, 6.5, -70], [24, 2.2, -56]],
+  podsM: [[0, 6.5, -70], [0, 2.2, -56]],
+  podsR: [[-24, 6.5, -70], [-24, 2.2, -56]],
+  carry: [[-4, 18, -106], [-4, 6, -70]],
+  carryL: [[12, 12, -86], [12, 6.5, -70]],
+  carryR: [[-20, 12, -86], [-20, 6.5, -70]],
   secret: [[0, 11, 24], [0, 3, 40]],
   rainbow: [[-3, 11, 36], [-3, 2.8, 56]],
-  tiers: [[0, 4.5, 31], [0, 3.6, 72]],
-  tiersA: [[22, 6.5, 53], [22, 3.4, 72]],
-  tiersB: [[0, 6.5, 53], [0, 3.4, 72]],
-  tiersC: [[-22, 7, 52], [-22, 3.8, 72]],
+  tiers: [[0, 14, 16], [0, 3.6, 72]],
+  tiersA: [[36, 6.5, 53], [36, 3.4, 72]],
+  tiersB: [[14, 6.5, 53], [14, 3.4, 72]],
+  tiersC: [[-8, 7, 52], [-8, 3.8, 72]],
+  tiersD: [[-34, 7, 52], [-34, 3.8, 72]],
+  top: [[0, 46, 58], [0, 2, 132]],
   far: [[0, 40, -60], [0, 2, 3]],
 };
 function view(name) {
   let p = PRESETS[name] || PRESETS.all;
+  const t = /^top(\d+)(?:([ab])|_(\d))?$/.exec(name);
+  if (t) {
+    // row N of the top showcase: whole row, a = seed..grown, b = grown..rainbow, _c = one planter
+    const z = TOP_Z + +t[1] * TOP_DZ;
+    if (t[3] != null) p = [[topX(+t[3]), 8.8, z - 10], [topX(+t[3]), 3.4, z]];
+    else if (t[2]) p = t[2] === 'a' ? [[topX(1.5), 10, z - 13], [topX(1.5), 2.8, z]] : [[topX(4.5), 10.5, z - 13], [topX(4.5), 3.4, z]];
+    else p = [[0, 16, z - 13.5], [0, 2.5, z + 6]];
+  }
+  const pm = /^pod(\d)$/.exec(name);
+  if (pm) p = [[podX(+pm[1]), 5, -65], [podX(+pm[1]), 2.3, -56]];
   const m = /^sp(\d+)(?:x(\d+))?$/.exec(name);
   if (m) {
     // close-up of species i (optionally spanning n neighbours)
@@ -290,9 +327,13 @@ window.__gallery = {
   ready: true,
   stats() {
     const out = {};
-    for (const sp of PLANTS) out[sp.id] = [0, 1, 2, 3].map((s) => plantTemplate(sp.id, 'normal', s).tris) .concat([plantTemplate(sp.id, 'normal', 3).height.toFixed(2), plantTemplate(sp.id, 'normal', 3).radius.toFixed(2)]);
+    // per species: triangles per stage, then grown template height, radius, and the height it is shown at in a planter
+    for (const sp of PLANTS) {
+      const t = plantTemplate(sp.id, 'normal', 3);
+      out[sp.id] = [0, 1, 2, 3].map((s) => plantTemplate(sp.id, 'normal', s).tris).concat([t.height.toFixed(2), t.radius.toFixed(2), (t.height * plantScale(sp.id)).toFixed(2)]);
+    }
     out.seed = seedTemplate('daisy').tris;
-    out.pods = [0, 1, 2, 3, 4, 5].map((i) => podTemplate(i).tris);
+    out.pods = BIOMES.map((b, i) => podTemplate(i).tris);
     out.pot = potTemplate().tris;
     return out;
   },
@@ -309,7 +350,7 @@ window.__gallery = {
     const t2 = performance.now();
     for (const sp of PLANTS) seedTemplate(sp.id, 'normal');
     const t3 = performance.now();
-    for (let i = 0; i < 6; i++) podTemplate(i);
+    for (let i = 0; i < BIOMES.length; i++) podTemplate(i);
     const t4 = performance.now();
     const views = [];
     for (let i = 0; i < 40; i++) views.push(createPlantView(PLANTS[i % PLANTS.length].id, 'normal'));

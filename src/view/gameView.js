@@ -1,6 +1,6 @@
 // Binds the pure Game state to 3D objects and world labels every frame.
 import * as THREE from 'three';
-import { PLANT, RARITY, MUTATIONS, LOCK, PLANTERS, BIOMES } from '../config.js';
+import { PLANT, RARITY, MUTATIONS, LOCK, PLANTERS, LOTS, BIOMES } from '../config.js';
 import { createAvatar } from '../characters/avatar.js';
 import { getFace } from '../characters/faces.js';
 import { createMonster } from '../characters/monsters.js';
@@ -99,7 +99,7 @@ export class GameView {
     getFace(key).then((f) => {
       if (this.disposed || this.game.players[i].faceKey !== key) return;
       this.avatars[i]?.setFace(f.face, f.skin);
-      this.world.gardens?.[p.slot]?.setOwner?.({ ...p.char, name: p.name }, f.avatarUrl);
+      this.world.gardens?.[p.slot]?.setOwner?.({ ...p.char, name: p.name, vacant: !p.present }, p.present ? f.avatarUrl : null);
     });
   }
 
@@ -116,6 +116,12 @@ export class GameView {
       if (this._avatarKey[i] !== p.faceKey + '|' + p.kind) this._makeAvatar(i);
       const av = this.avatars[i];
       const o = av.object3d;
+      // an empty garden (online, fewer computer players): nobody to draw
+      o.visible = p.present;
+      if (!p.present) {
+        this._updatePet(i, p, dt, time, now, 0);
+        return;
+      }
       o.position.set(p.pos.x, p.pos.y, p.pos.z);
       o.rotation.y = p.yaw;
       const c = p.carrying;
@@ -180,6 +186,7 @@ export class GameView {
     }
     g.gardens.forEach((gd) => {
       const signs = this.world.gardens?.[gd.slot];
+      const lotsOwned = g.lotsOwned ? g.lotsOwned(gd) : 0;
       gd.planters.forEach((pl) => {
         const k = gd.slot + ':' + pl.index;
         signs?.planters?.[pl.index]?.setUnlocked(pl.unlocked);
@@ -225,8 +232,14 @@ export class GameView {
               : `<div class="pl-bar"><i style="width:${(p01 * 100).toFixed(0)}%"></i></div>`;
             L.set('pt' + k, { x: pl.x, y: labelY - 0.6, z: pl.z }, chip, { cls: 'plantlbl compact' + (grown ? ' grown' : ''), maxDist: 70 });
           }
-        } else if (!pl.unlocked && gd.owner === human) {
+        } else if (!pl.unlocked && gd.owner === human && pl.lot < 0) {
           L.set('pt' + k, { x: pl.x, y: 3, z: pl.z }, `<div class="pl-lock"><i class="ic-lock"></i> $${fmt(PLANTERS.unlockCost[pl.index])}</div>`, { cls: 'plantlbl locked', maxDist: 40 });
+        } else if (!pl.unlocked && gd.owner === human && pl.index === PLANTERS.base + pl.lot * LOTS.planters + (LOTS.planters >> 1)) {
+          // one sign per FOR SALE lot, over its middle planter: the next lot shows its price, later ones wait their turn
+          const html = pl.lot === lotsOwned
+            ? `<div class="pl-sale">FOR SALE</div><div class="pl-lock">+${LOTS.planters} planters <b>$${fmt(LOTS.cost[pl.lot])}</b></div>`
+            : `<div class="pl-lock"><i class="ic-lock"></i> LOT ${pl.lot + 1}</div>`;
+          L.set('pt' + k, { x: pl.x, y: 3.4, z: pl.z }, html, { cls: 'plantlbl locked lot' + (pl.lot === lotsOwned ? ' next' : ''), maxDist: 70 });
         }
       });
       // collect pad + lock pad labels

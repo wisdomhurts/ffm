@@ -77,7 +77,7 @@ function pickLine(game, table, bot, who) {
   let lines = table?.[bot.id] || table?.dorian;
   if (!lines?.length) return null;
   // "find a friend online" makes no sense when a friend is already here
-  if (game.players.filter((p) => p.kind !== 'bot').length > 1) lines = lines.filter((l) => !/online/i.test(l)).length ? lines.filter((l) => !/online/i.test(l)) : lines;
+  if (game.players.filter((p) => p.isPlayer).length > 1) lines = lines.filter((l) => !/online/i.test(l)).length ? lines.filter((l) => !/online/i.test(l)) : lines;
   return game.rng.pick(lines).replaceAll('{name}', who.name || 'friend');
 }
 

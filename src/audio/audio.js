@@ -276,6 +276,11 @@ class GameAudio {
     on('planter:unlocked', (e, H) => {
       if (e.player === H) this.play('unlock', { important: true });
     });
+    on('garden:expanded', (e, H) => {
+      if (e.player !== H) return;
+      this.play('unlock', { important: true });
+      setTimeout(() => this.play('purchase', { important: true, vol: 0.8 }), 180);
+    });
     on('cash:collected', (e, H) => {
       if (e.player === H && e.amount >= 1) this.play('coins', { amount: e.amount, important: true });
     });

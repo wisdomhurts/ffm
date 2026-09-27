@@ -455,9 +455,12 @@ function createBoard(app, parent, me) {
       acc = 0;
       paintTitle();
       const order = game.ranking();
+      setStyle(el, '--n', String(order.length)); // empty gardens (online, fewer computer players) have no row
       for (const r of rows) {
         identity(r);
         const i = order.indexOf(r.p);
+        if (r.row.hidden !== i < 0) r.row.hidden = r.chip.hidden = i < 0;
+        if (i < 0) continue;
         setStyle(r.row, '--i', String(i));
         setStyle(r.chip, '--i', String(i));
         setText(r.rank, String(i + 1));
@@ -763,7 +766,7 @@ function createRoadMeter(app, parent, me) {
         const f = home ? 0 : Math.max(0, Math.min(1, (z - start) / len));
         setStyle(m, '--f', f.toFixed(4));
         toggle(m, 'home', home);
-        toggle(m, 'hide', p.invisible(game.time) && p !== me);
+        toggle(m, 'hide', (p.invisible(game.time) || !p.present) && p !== me);
         setStyle(m, '--k', String(p.slot));
       }
       const bi = biomeIndexAtZ(me.pos.z);

@@ -1,9 +1,9 @@
-// The Seed Road: gate arch, six themed biomes walled by cliffs (props kept out of the lane),
-// biome entrance banners, distance markers and the Starbloom end cap. One group per biome for culling.
+// The Seed Road: gate arch, nine themed biomes walled by cliffs (props kept out of the lane),
+// biome entrance banners, distance markers and the Cloud Kingdom end cap. One group per biome for culling.
 import * as THREE from 'three';
 import { BIOMES, RARITY } from '../config.js';
-import { Merger, makeRand, drawTexture, chunkyText, roundRect, signMaterial, signFont } from './kit.js';
-import { roadTexture } from './textures.js';
+import { Merger, makeRand, drawTexture, chunkyText, roundRect, signMaterial, signFont, trs } from './kit.js';
+import { roadTexture, cakeDetail, fluffDetail } from './textures.js';
 import { liquidMaterial } from './water.js';
 import { roundTree, pine, rock, bush, flower, leaf, palm } from './props.js';
 
@@ -17,7 +17,34 @@ const STYLE = {
   tanglemire: { H: 13, rock: ['#51465e', '#433a50', '#5d5070'], top: '#56703a', ledge: '#648040', ground: 'grass', frame: '#6b3fa0', frame2: '#7a8f3a', text: '#ffffff', channel: 'swamp' },
   emberroot: { H: 22, rock: ['#4a3a3c', '#3c2e30', '#574446'], top: '#3a2622', ledge: '#4a2c24', ground: 'rock', frame: '#ff5a1f', frame2: '#2b1210', text: '#ffffff', channel: 'lava' },
   starbloom: { H: 18, rock: ['#454ba0', '#3a3f8c', '#5258b4'], topTint: '#8a6ae0', top: '#2e3478', ledge: '#3c44a8', ground: 'rock', frame: '#8f6bff', frame2: '#15173d', text: '#ffffff' },
+  frostfall: { H: 20, rock: ['#b2c5e2', '#a0b5d8', '#c3d2ea'], top: '#f2f8ff', ledge: '#ffffff', ground: 'snow', frame: '#38b4ef', frame2: '#e8f6ff', text: '#ffffff', pool: 'ice' },
+  candy: { H: 18, rock: ['#ffffff', '#ffd6ea', '#ffeed6'], cliff: 'cake', top: '#ffcfe6', ledge: '#fff7fb', ground: 'frosting', frame: '#ff5cb8', frame2: '#fff4fa', text: '#ffffff', channel: 'chocolate', pool: 'chocolate' },
+  cloud: { H: 16, rock: ['#eaeeff', '#dfe6fb', '#ede7fb'], topTint: '#fff1c8', cliff: 'cloud', top: '#ffffff', ledge: '#ffffff', ground: 'cloud', frame: '#ffc53a', frame2: '#fffbef', text: '#ffffff' },
 };
+
+// Liquids by style key: the channel between the curb and the cliff face, and plateau pools.
+const CHANNEL = {
+  lava: { c1: '#b3200a', c2: '#ff6a1a', c3: '#ffe07a', scale: 0.18, flow: [0.02, 0.25], glow: 1.35 },
+  swamp: { c1: '#2a3a24', c2: '#4a5a34', c3: '#9ab86a', scale: 0.2, flow: [0.05, 0.08], glow: 1.0, bubbles: 1 },
+  chocolate: { c1: '#3e1c0c', c2: '#6e3a1c', c3: '#b0703e', scale: 0.2, flow: [0.03, 0.3], glow: 1.0, ripple: 1 },
+};
+const POOL = {
+  swamp: { c1: '#2a3a24', c2: '#4a4a5a', c3: '#9ab86a', scale: 0.15, flow: [0.04, 0.06], bubbles: 1 },
+  ice: { c1: '#8ecff5', c2: '#bfe8ff', c3: '#ffffff', scale: 0.08, flow: [0.01, 0.01], glow: 1.05 },
+  chocolate: { c1: '#3e1c0c', c2: '#6e3a1c', c3: '#b0703e', scale: 0.15, flow: [0.03, 0.05], ripple: 1 },
+};
+
+// Cliff and plateau materials by style key: the shared world ones, or a biome's own detail map (vertex colour x map).
+const ownMats = {};
+function surfaceMat(kind, mats) {
+  if (kind === 'sand' || kind === 'snow') return mats.sand;
+  if (kind === 'grass') return mats.grass;
+  if (kind === 'cake') return (ownMats.cake ||= new THREE.MeshLambertMaterial({ vertexColors: true, map: cakeDetail() }));
+  if (kind === 'frosting') return (ownMats.fluff ||= new THREE.MeshLambertMaterial({ vertexColors: true, map: fluffDetail() }));
+  // clouds glow softly from within so their shady sides stay a pale lavender-white instead of turning grey
+  if (kind === 'cloud') return (ownMats.cloud ||= new THREE.MeshLambertMaterial({ vertexColors: true, map: fluffDetail(), emissive: 0xc6d0ec, emissiveMap: fluffDetail(), emissiveIntensity: 0.5 }));
+  return kind === 'rock' ? mats.rock : mats.rockTop;
+}
 
 // ---------------------------------------------------------------- canvas signs
 
@@ -78,19 +105,23 @@ function bannerTextures(bi) {
   const front = drawTexture(W, H, (g) => {
     bg(g, st.frame, shadeHex(st.frame, 0.6));
     chunkyText(g, b.name.toUpperCase(), W / 2, 84, { size: 96, fill: '#ffffff', stroke: '#1b2440', strokeW: 18, maxW: W - 100 });
-    const rarityText = (b.rarity === 'mythic' ? 'MYTHIC + SECRET' : rar.name.toUpperCase()) + ' SEEDS';
+    const rarityText = rar.name.toUpperCase() + (b.secret ? ' + SECRET' : '') + ' SEEDS';
     const monster = b.monster ? `${b.monster.name.toUpperCase()}S AHEAD!` : 'SAFE ZONE - NO MONSTERS';
+    // both pills on one line: shrink the text when long names would not fit the board
     g.font = signFont(40);
-    const w1 = g.measureText(rarityText).width + 48;
-    const w2 = g.measureText(monster).width + 48 + (b.monster ? 50 : 0);
-    const gap = 26;
+    const need = g.measureText(rarityText).width + g.measureText(monster).width + 96 + (b.monster ? 50 : 0) + 26;
+    const fs = Math.min(40, Math.floor((40 * (W - 96)) / need));
+    g.font = signFont(fs);
+    const w1 = g.measureText(rarityText).width + fs * 1.2;
+    const w2 = g.measureText(monster).width + fs * 1.2 + (b.monster ? fs * 1.25 : 0);
+    const gap = fs * 0.65;
     const x0 = W / 2 - (w1 + w2 + gap) / 2;
-    pill(g, x0 + w1 / 2, 175, rarityText, rar.color === '#111111' ? '#222' : rar.color, '#ffffff', 40);
+    pill(g, x0 + w1 / 2, 175, rarityText, rar.color === '#111111' ? '#222' : rar.color, '#ffffff', fs);
     const mx = x0 + w1 + gap + w2 / 2;
     if (b.monster) {
-      pill(g, mx + 25, 175, monster, '#e8323c', '#ffffff', 40);
-      warnTriangle(g, x0 + w1 + gap + 40, 172, 28);
-    } else pill(g, mx, 175, monster, '#3fbf5a', '#ffffff', 40);
+      pill(g, mx + fs * 0.625, 175, monster, '#e8323c', '#ffffff', fs);
+      warnTriangle(g, x0 + w1 + gap + fs, 172, fs * 0.7);
+    } else pill(g, mx, 175, monster, '#3fbf5a', '#ffffff', fs);
   }, { clamp: true });
   const prev = bi > 0 ? BIOMES[bi - 1].name.toUpperCase() : 'THE GARDENS';
   const back = drawTexture(W, H, (g) => {
@@ -169,7 +200,8 @@ function markerAtlas(values) {
 
 // ---------------------------------------------------------------- cliffs
 
-function cliffs(rockM, topM, s, z0, z1, st, r, face, inset = 0, backM = rockM) {
+// Records every terrace block's lane-facing top edge in `ledges` ({s, x, top, zc, len, k, tiers}) for decor.
+function cliffs(rockM, topM, s, z0, z1, st, r, face, inset = 0, backM = rockM, ledges = null) {
   const H = st.H;
   const back = face + 3.2;
   // backing mass reaching out to the horizon (does not cast shadows: only the face blocks do)
@@ -190,6 +222,7 @@ function cliffs(rockM, topM, s, z0, z1, st, r, face, inset = 0, backM = rockM) {
       const col = k === 0 && st.base ? st.base : st.rock[(tierIdx + k) % st.rock.length];
       const topCol = st.topTint ? new THREE.Color(col).lerp(new THREE.Color(st.topTint), 0.45) : new THREE.Color(col).multiplyScalar(1.12);
       rockM.box(s * (x + depth / 2), (top - 2) / 2, zc, depth, top + 2, len + r.range(-0.2, 0.4), col, { topFace: st.ledge, top: topCol, ao: 0.35 });
+      if (ledges) ledges.push({ s, x, top, zc, len, k, tiers });
       x += r.range(0.7, 1.5);
     }
     tierIdx += r.int(0, 1);
@@ -570,7 +603,396 @@ function floatingIslands(ctx, B, r) {
   B.bob.push({ obj: mesh, amp: 1.6, speed: 0.5, base: 0 });
 }
 
-const DECOR = { field: decorateField, greenhollow: decorateGreenhollow, dustbowl: decorateDustbowl, tanglemire: decorateTanglemire, emberroot: decorateEmberroot, starbloom: decorateStarbloom };
+const ICE = ['#bff4ff', '#8fe3ff', '#dff9ff', '#a8dcff'];
+
+// An oval plateau pool (frozen pond, chocolate lake) ringed by a soft bank (a squashed torus).
+function roundPool(B, x, y, z, w, d, rim) {
+  B.pools.push({ x, z, w, d, y: y + 0.08, round: true });
+  B.props.add('torus:20', trs(x, y + 0.05, z, (w + 0.4) / 0.8, (d + 0.4) / 0.8, 4, Math.PI / 2), rim, { ao: 0.1 });
+}
+
+function snowyPine(m, x, y, z, h, r) {
+  const col = r.pick(['#2f7a5c', '#2a6c54', '#378466']);
+  m.cyl(x, y, z, 0.5, h * 0.3, '#6e4a2c', { seg: 6 });
+  for (let i = 0; i < 3; i++) {
+    const w = (1 - (i / 3) * 0.55) * h * 0.42;
+    const cy = y + h * 0.43 + (i / 3) * h * 0.55;
+    m.prim('cone:8', x, cy, z, w, h * 0.36, w, col, { ao: 0.3, ry: i });
+    // snow cap, turned a little so its corners poke out like drifts
+    m.prim('cone:8', x, cy + h * 0.075, z, w * 0.68, h * 0.22, w * 0.68, '#ffffff', { ao: 0, ry: i + 0.2 });
+  }
+}
+
+// face: +1/-1 looks along +x/-x (towards the lane from the left/right plateau)
+function snowman(m, x, y, z, s, face, r) {
+  m.prim('sphere:10', x, y + 1.25 * s, z, 3 * s, 2.7 * s, 3 * s, '#ffffff', { ao: 0.3 });
+  m.prim('sphere:10', x, y + 3.3 * s, z, 2.2 * s, 2.1 * s, 2.2 * s, '#ffffff', { ao: 0.15 });
+  m.prim('sphere:10', x, y + 4.9 * s, z, 1.6 * s, 1.55 * s, 1.6 * s, '#ffffff', { ao: 0.05 });
+  const scarf = r.pick(['#e8323c', '#3f7bff', '#2fbf5a', '#ff8a1a', '#b36bff']);
+  m.cyl(x, y + 4.05 * s, z, 0.85 * s, 0.4 * s, scarf, { seg: 10, ao: 0 });
+  m.box(x + face * 0.6 * s, y + 3.6 * s, z + 0.45 * s, 0.3 * s, 1.1 * s, 0.45 * s, scarf, { rx: 0.25, ao: 0 });
+  // carrot nose, coal eyes and buttons, stick arms, top hat
+  m.beam(x + face * 0.7 * s, y + 4.9 * s, z, x + face * 1.7 * s, y + 4.85 * s, z, 0.36 * s, '#ff8a1a', { prim: 'cone:6', ao: 0 });
+  for (const e of [-1, 1]) m.prim('sphere:6', x + face * 0.66 * s, y + 5.25 * s, z + e * 0.3 * s, 0.22 * s, 0.26 * s, 0.22 * s, '#1b2440', { ao: 0 });
+  for (let k = 0; k < 3; k++) m.prim('sphere:6', x + face * 1.05 * s, y + (2.8 + k * 0.5) * s, z, 0.26 * s, 0.26 * s, 0.26 * s, '#1b2440', { ao: 0 });
+  for (const e of [-1, 1]) m.beam(x, y + 3.5 * s, z + e * 0.9 * s, x + face * 0.2 * s, y + 4.7 * s, z + e * 2.5 * s, 0.18 * s, '#6b4424', { ao: 0 });
+  m.cyl(x, y + 5.55 * s, z, 1.0 * s, 0.14 * s, '#1b2440', { seg: 10, ao: 0 });
+  m.cyl(x, y + 5.6 * s, z, 0.62 * s, 1.1 * s, '#1b2440', { seg: 10, ao: 0 });
+  m.cyl(x, y + 5.72 * s, z, 0.64 * s, 0.22 * s, scarf, { seg: 10, ao: 0 });
+}
+
+function penguin(m, x, y, z, s, face) {
+  m.prim('sphere:8', x, y + 0.8 * s, z, 1.2 * s, 1.6 * s, 1.1 * s, '#1f2a44', { ao: 0.2 });
+  m.prim('sphere:8', x + face * 0.22 * s, y + 0.75 * s, z, 0.8 * s, 1.25 * s, 0.85 * s, '#ffffff', { ao: 0 });
+  m.prim('sphere:8', x, y + 1.75 * s, z, 0.9 * s, 0.85 * s, 0.9 * s, '#1f2a44', { ao: 0 });
+  for (const e of [-1, 1]) {
+    m.prim('sphere:6', x + face * 0.34 * s, y + 1.85 * s, z + e * 0.2 * s, 0.24 * s, 0.28 * s, 0.24 * s, '#ffffff', { ao: 0 });
+    m.prim('sphere:6', x + face * 0.43 * s, y + 1.85 * s, z + e * 0.2 * s, 0.12 * s, 0.16 * s, 0.12 * s, '#1b2440', { ao: 0 });
+    m.box(x + face * 0.25 * s, y + 0.06 * s, z + e * 0.25 * s, 0.6 * s, 0.12 * s, 0.35 * s, '#ff9a1a', { ao: 0 });
+    leaf(m, x, y + 1.2 * s, z + e * 0.5 * s, e > 0 ? 0.3 : Math.PI - 0.3, 1.1, 0.8 * s, 0.35 * s, '#1f2a44', 0.12 * s);
+  }
+  m.beam(x + face * 0.38 * s, y + 1.68 * s, z, x + face * 0.8 * s, y + 1.64 * s, z, 0.26 * s, '#ff9a1a', { prim: 'cone:4', ao: 0 });
+}
+
+function igloo(m, x, y, z, R, face) {
+  m.prim('hemi:14', x, y, z, R * 2, R * 1.7, R * 2, '#f4faff', { ao: 0.25 });
+  // block rows and an entrance tunnel with a dark doorway facing the lane
+  for (const f of [0.3, 0.58, 0.82]) m.cyl(x, y + f * 0.85 * R - 0.06, z, R * Math.sqrt(1 - f * f) * 1.01, 0.12, '#cfe2f4', { seg: 14, open: true, ao: 0 });
+  m.prim('cyl:12', x + face * R * 0.95, y, z, R * 0.9, R * 0.9, R * 0.9, '#f4faff', { rz: Math.PI / 2, ao: 0.1 });
+  m.prim('cyl:12', x + face * R * 1.4, y, z, R * 0.62, 0.1, R * 0.62, '#2a3a5c', { rz: Math.PI / 2, ao: 0 });
+}
+
+// A waterfall frozen solid down the cliff face: glassy strands, a snow cap and icicles at the bottom.
+function frozenFall(B, s, z, w, r) {
+  const { glowLit, props, st } = B;
+  const H = st.H;
+  const n = Math.max(3, Math.round(w / 1.1));
+  for (let i = 0; i < n; i++) {
+    const zz = z - w / 2 + (i + 0.5) * (w / n);
+    const x = 20.1 + r.range(0, 0.4);
+    const bottom = i % 2 ? r.range(0.8, 2.6) : 0;
+    glowLit.box(s * (x + 1.7), (H + 0.6 + bottom) / 2, zz, 3.4, H + 0.6 - bottom, w / n + 0.08, r.pick(['#7fd4f5', '#62c4ee', '#9ee0fa']), { top: '#d8f6ff', ao: 0.2 });
+    if (bottom) glowLit.prim('cone:5', s * (x + 0.3), bottom - 0.5, zz, 0.7, 1.0, 0.7, '#dff9ff', { rx: Math.PI, ao: 0 });
+  }
+  props.box(s * 21.6, H + 0.8, z, 3.4, 0.9, w + 1.2, '#ffffff', { ao: 0.1 });
+  for (let k = 0; k < 6; k++) crystal(glowLit, s * r.range(19.4, 20.2), 0, z + r.range(-w / 2, w / 2), r.range(0.8, 1.8), r.range(0.5, 0.8), r.pick(ICE), r);
+}
+
+function decorateFrostfall(ctx, B, s, r) {
+  const { props, glowLit, topM, rockM, z0, z1, st, dens } = B;
+  const H = st.H;
+  // snow lips on every terrace, icicles hanging from the upper ones and penguins on a few ledges
+  for (const L of B.ledges) {
+    if (L.s !== s) continue;
+    props.box(s * (L.x + 0.6), L.top + 0.12, L.zc, 1.9, 0.5, L.len + 0.1, '#ffffff', { ao: 0.12 });
+    if (L.k === 0) continue;
+    for (let i = r.int(1, 3); i > 0; i--) {
+      const len = r.range(0.8, 2.6);
+      glowLit.prim('cone:5', s * (L.x - 0.15), L.top - 0.13 - len / 2, L.zc + r.range(-0.45, 0.45) * L.len, r.range(0.35, 0.6), len, r.range(0.35, 0.6), '#dff8ff', { rx: Math.PI, ao: 0 });
+    }
+    if (L.k < L.tiers - 1 && r() < 0.12) penguin(props, s * (L.x + 0.45), L.top + 0.37, L.zc, 1.1, -s);
+  }
+  // snowdrifts and little ice crystals at the wall base (non-solid)
+  for (let z = z0 + 2; z < z1; z += r.range(3, 6) / dens) {
+    props.prim('hemi:8', s * r.range(19.9, 20.3), 0, z, r.range(1.4, 2.2), r.range(0.6, 1.1), r.range(2, 4), '#ffffff', { ao: 0.1 });
+    if (r() < 0.4) for (let k = 0; k < 3; k++) crystal(glowLit, s * r.range(19.4, 19.9), 0, z + r.range(-0.6, 0.6), r.range(0.8, 1.6), r.range(0.35, 0.55), r.pick(ICE), r);
+  }
+  // frozen waterfalls down the face
+  for (let z = z0 + 22; z < z1 - 12; z += r.range(34, 48)) frozenFall(B, s, z, r.range(4, 6), r);
+  // snowy pines on the rim and beyond, snowmen watching the road
+  for (let z = z0 + 4; z < z1; z += r.range(8, 13) / dens) snowyPine(props, s * r.range(27, 40), H, z, r.range(10, 17), r);
+  for (let i = 0; i < 18 * dens; i++) snowyPine(props, s * r.range(45, 150), H, r.range(z0, z1), r.range(12, 22), r);
+  for (let z = z0 + 14 + (s > 0 ? 20 : 0); z < z1 - 10; z += r.range(40, 55)) snowman(props, s * r.range(26.5, 29), H, z, r.range(1.5, 1.9), -s, r);
+  // ice spires out on the snowfield
+  for (let z = z0 + 10; z < z1; z += r.range(18, 30) / dens) {
+    const x = s * r.range(30, 44);
+    crystal(glowLit, x, H - 1, z, r.range(10, 18), r.range(2.5, 4), r.pick(ICE), r);
+    for (let k = 0; k < 2; k++) crystal(glowLit, x + r.range(-3, 3), H - 0.5, z + r.range(-3, 3), r.range(3, 7), r.range(1.2, 2), r.pick(ICE), r);
+  }
+  // soft snow hills and snow-capped mountains on the skyline
+  for (let i = 0; i < 5; i++) topM.prim('sphere:16', s * r.range(50, 190), H - 3, r.range(z0 + 10, z1 - 10), r.range(40, 80), r.range(12, 22), r.range(40, 70), '#f6faff', { ao: 0.12 });
+  for (let i = 0; i < 5; i++) {
+    const x = s * r.range(95, 230), z = r.range(z0 - 30, z1 + 30);
+    const h = r.range(55, 100), w = h * r.range(1.1, 1.45), ry = r() * TAU;
+    for (const [dx, dz, k] of [[0, 0, 1], [r.range(-0.5, 0.5) * w, r.range(0.3, 0.6) * w, r.range(0.5, 0.7)]]) {
+      rockM.prim('cone:7', x + dx, H - 2 + (h * k) / 2, z + dz, w * k, h * k, w * k, r.pick(st.rock), { ry, ao: 0.35 });
+      rockM.prim('cone:7', x + dx, H - 2 + h * k * 0.8, z + dz, w * k * 0.43, h * k * 0.4, w * k * 0.43, '#ffffff', { ry, ao: 0 });
+    }
+  }
+  // frozen ponds, an igloo with a snowman friend / a snowman family
+  for (let i = 0; i < 3; i++) roundPool(B, s * r.range(45, 110), H, r.range(z0 + 15, z1 - 15), r.range(14, 26), r.range(10, 20), '#ffffff');
+  if (s < 0) {
+    igloo(props, -40, H, z0 + 62, 6.5, 1);
+    snowman(props, -32, H, z0 + 52, 1.2, 1, r);
+  } else {
+    for (const [dz, k] of [[0, 1.9], [5.5, 1.45], [9.8, 0.95]]) snowman(props, 30 + dz * 0.3, H, z0 + 96 + dz, k, -1, r);
+  }
+}
+
+// ---------------------------------------------------------------- candy canyon
+
+const CANDY = ['#ff4f9a', '#ffcf33', '#7ee36b', '#b36bff', '#4fc3ff', '#ff7a3a'];
+const FROSTING = ['#fff6fb', '#ffc2de', '#c8f5e4', '#fff1a8', '#e2d4ff'];
+
+// swirl disc facing the lane (bullseye rings, the inner ones stand proud)
+function lollipop(m, x, y, z, h, R, r) {
+  const [a, b] = r.pick([['#ff4f9a', '#ffffff'], ['#ffcf33', '#ff7a3a'], ['#7ee36b', '#ffffff'], ['#b36bff', '#7fe0ff'], ['#ff3b4f', '#ffe14d']]);
+  m.cyl(x, y, z, 0.3, h, '#ffffff', { seg: 6, ao: 0.1 });
+  const ry = r.range(-0.4, 0.4);
+  for (let k = 0; k < 3; k++) m.prim('cyl:12', x, y + h + R * 0.8, z, R * 2 * (1 - k * 0.3), 0.8 + k * 0.14, R * 2 * (1 - k * 0.3), k % 2 ? b : a, { rz: Math.PI / 2, ry, ao: 0 });
+}
+
+function candyCane(m, x, y, z, h, yaw, r) {
+  const R = 0.6;
+  const c = r.pick(['#ff3b4f', '#ff3b4f', '#2fbf5a', '#ff4f9a']);
+  m.cyl(x, y, z, R, h, '#ffffff', { seg: 8, ao: 0 });
+  for (let t = 0.6; t < h - 0.6; t += 2.4) m.cyl(x, y + t, z, R * 1.06, 1.2, c, { seg: 8, open: true, ao: 0 });
+  // the hook: a striped half circle of open tubes, each a little long so the bends close up
+  const dx = Math.sin(yaw), dz = Math.cos(yaw), rho = 1.5, N = 6;
+  let px = x, py = y + h, pz = z;
+  for (let i = 1; i <= N; i++) {
+    const a = Math.PI - (i / N) * Math.PI;
+    const nx = x + dx * rho * (1 + Math.cos(a)), ny = y + h + Math.sin(a) * rho, nz = z + dz * rho * (1 + Math.cos(a));
+    const ex = (nx - px) * 0.2, ey = (ny - py) * 0.2, ez = (nz - pz) * 0.2;
+    m.beam(px - ex, py - ey, pz - ez, nx + ex, ny + ey, nz + ez, R * 2, i % 2 ? c : '#ffffff', { prim: 'cylo:8', ao: 0 });
+    px = nx; py = ny; pz = nz;
+  }
+  m.cyl(px, py - 0.8, pz, R, 0.9, c, { seg: 8, ao: 0 });
+}
+
+function cupcake(m, x, y, z, s, r) {
+  const icing = r.pick(FROSTING);
+  m.prim('frustum:12', x, y + 1.1 * s, z, 3.2 * s, 2.2 * s, 3.2 * s, r.pick(['#ff7eb6', '#7fd8ff', '#b8f28a', '#ffd45a', '#c9a8ff']), { rx: Math.PI, ao: 0.25 });
+  m.prim('sphere:10', x, y + 2.6 * s, z, 3.7 * s, 1.7 * s, 3.7 * s, icing, { ao: 0.1 });
+  m.prim('sphere:10', x, y + 3.35 * s, z, 2.7 * s, 1.4 * s, 2.7 * s, icing, { ao: 0.05 });
+  m.prim('sphere:8', x, y + 4.0 * s, z, 1.6 * s, 1.1 * s, 1.6 * s, icing, { ao: 0 });
+  m.prim('sphere:6', x, y + 4.75 * s, z, 0.95 * s, 0.95 * s, 0.95 * s, '#e8233a', { ao: 0 });
+  m.beam(x, y + 5.1 * s, z, x + 0.35 * s, y + 5.9 * s, z, 0.12 * s, '#3f9a3c', { ao: 0 });
+  // sprinkles on the lower swirl
+  for (let k = 0; k < 7; k++) {
+    const a = r() * TAU, d = r.range(1.4, 1.75);
+    const hy = 0.85 * Math.sqrt(Math.max(0, 1 - (d / 1.85) ** 2));
+    m.box(x + Math.cos(a) * d * s, y + (2.6 + hy) * s, z + Math.sin(a) * d * s, 0.12 * s, 0.12 * s, 0.4 * s, r.pick(CANDY), { ry: r() * TAU, rx: 0.4, ao: 0 });
+  }
+}
+
+function iceCream(m, x, y, z, s, r) {
+  m.prim('cone:10', x, y + 2.5 * s, z, 2.4 * s, 5 * s, 2.4 * s, '#e3a55e', { rx: Math.PI, ao: 0.25 });
+  m.cyl(x, y + 4.85 * s, z, 1.3 * s, 0.45 * s, '#d18f48', { seg: 10, ao: 0 });
+  let yy = y + 5.9 * s;
+  const n = r.int(1, 3);
+  for (let k = 0; k < n; k++) {
+    const q = 1 - k * 0.1;
+    m.prim('sphere:10', x, yy, z, 2.8 * s * q, 2.4 * s * q, 2.8 * s * q, r.pick(['#ffb3cf', '#fff3d6', '#9ff0c8', '#8a5230', '#c9a8ff', '#ffe27a']), { ao: 0.1 });
+    yy += 1.9 * s * q;
+  }
+  m.prim('sphere:6', x, yy - 0.5 * s, z, 0.8 * s, 0.8 * s, 0.8 * s, '#e8233a', { ao: 0 });
+}
+
+function cottonCandy(m, x, y, z, h, r) {
+  const c = r.pick(['#ffb3de', '#b3e5ff', '#e0c3ff', '#ffd1e8']);
+  m.cyl(x, y, z, 0.3, h, '#fff4e0', { seg: 6 });
+  m.prim('sphere:8', x, y + h + 2.2, z, 5.4, 4.8, 5.4, c, { ao: 0.3 });
+  m.prim('sphere:6', x + 1.3, y + h + 3.7, z - 0.6, 3.4, 3.0, 3.4, c, { ao: 0.2 });
+  m.prim('sphere:6', x - 1.3, y + h + 3.3, z + 0.9, 3.0, 2.6, 3.0, c, { ao: 0.2 });
+}
+
+// A frosting drip hanging len below y: one stretched sphere whose top tucks into the frosting above.
+function drip(m, x, y, z, len, w, col) {
+  m.prim('sphere:6', x, y + 0.15 - len / 2, z, w, len + 0.3, w, col, { ao: 0 });
+}
+
+function decorateCandy(ctx, B, s, r) {
+  const { props, glowLit, rockM, z0, z1, st, dens } = B;
+  const H = st.H;
+  // candy cane rail (channel curb) with marshmallows and gumdrops bobbing in the chocolate
+  props.prim('cyl:10', s * 20.3, 0.5, (z0 + z1) / 2, 1.0, z1 - z0, 1.0, '#ffffff', { rx: Math.PI / 2, ao: 0.1 });
+  for (let z = z0 + 0.8; z < z1; z += 1.8) props.prim('cylo:8', s * 20.3, 0.5, z, 1.07, 0.8, 1.07, '#ff3b5c', { rx: Math.PI / 2, ao: 0 });
+  for (let z = z0 + 2; z < z1; z += r.range(3, 6) / dens) {
+    const x = s * r.range(21.4, 23.2);
+    if (r() < 0.6) props.cyl(x, 0.05, z, r.range(0.5, 0.75), r.range(0.6, 0.9), r.pick(['#ffffff', '#ffd6ea', '#d8f5ff']), { seg: 8, ao: 0.1, ry: r() });
+    else glowLit.prim('hemi:8', x, 0.1, z, 1.2, 1.5, 1.2, r.pick(CANDY), { ao: 0.1 });
+  }
+  // frosting on every terrace with drips down the cake, and stretches drenched in chocolate glaze
+  const glazed = [];
+  for (let z = z0 + 14; z < z1 - 8; z += r.range(26, 40)) glazed.push([z - r.range(5, 9), z + r.range(5, 9)]);
+  for (const L of B.ledges) {
+    if (L.s !== s) continue;
+    const choc = glazed.some(([a, b]) => L.zc > a && L.zc < b);
+    const c = choc ? r.pick(['#6b3a1e', '#7a4424', '#5a2e16']) : r.pick(FROSTING);
+    props.box(s * (L.x + 0.55), L.top + 0.12, L.zc, 1.8, 0.5, L.len + 0.05, c, { ao: 0.08 });
+    for (let i = choc ? r.int(2, 4) : r.int(1, 2); i > 0; i--) {
+      drip(props, s * (L.x - 0.1), L.top, L.zc + r.range(-0.44, 0.44) * L.len, r.range(0.8, L.k ? (choc ? 5 : 2.8) : 1.6), choc ? 0.9 : 0.75, c);
+    }
+  }
+  // lollipops, candy canes, ice cream cones and cupcakes along the rim
+  for (let z = z0 + 5; z < z1; z += r.range(8, 13) / dens) {
+    const x = s * r.range(27, 36), k = r();
+    if (k < 0.4) lollipop(props, x, H, z, r.range(6, 11), r.range(2.6, 4.2), r);
+    else if (k < 0.6) candyCane(props, x, H, z, r.range(8, 13), s < 0 ? Math.PI / 2 : -Math.PI / 2, r);
+    else if (k < 0.8) iceCream(props, x, H, z, r.range(1.3, 1.8), r);
+    else cupcake(props, x, H, z, r.range(1.6, 2.3), r);
+  }
+  // cotton candy trees, gumdrop hills and lollipops out on the frosting
+  for (let i = 0; i < 12 * dens; i++) cottonCandy(props, s * r.range(40, 150), H, r.range(z0, z1), r.range(6, 11), r);
+  for (let i = 0; i < 10 * dens; i++) glowLit.prim('hemi:12', s * r.range(38, 140), H - 0.5, r.range(z0, z1), r.range(8, 16), r.range(10, 18), r.range(8, 16), r.pick(CANDY), { ao: 0.25 });
+  for (let i = 0; i < 8 * dens; i++) lollipop(props, s * r.range(45, 130), H, r.range(z0, z1), r.range(12, 20), r.range(4, 7), r);
+  // giant layered cakes on the skyline (the cake texture on the tiers), frosted, with a cherry on top
+  for (let i = 0; i < 4; i++) {
+    const x = s * r.range(85, 220), z = r.range(z0 - 20, z1 + 20);
+    let rad = r.range(16, 28), y = H - 1;
+    for (let k = r.int(2, 3); k > 0; k--) {
+      const hh = r.range(9, 14), c = r.pick(FROSTING);
+      rockM.cyl(x, y, z, rad, hh, r.pick(st.rock), { seg: 16, ao: 0.2 });
+      props.cyl(x, y + hh, z, rad * 1.03, 0.9, c, { seg: 16, ao: 0 });
+      for (let n = Math.round(rad * 0.28), i = 0; i < n; i++) {
+        const a = (i / n) * TAU + r.range(-0.2, 0.2);
+        drip(props, x + Math.cos(a) * rad * 1.02, y + hh + 0.3, z + Math.sin(a) * rad * 1.02, r.range(1, 2.8), 1.1, c);
+      }
+      y += hh + 0.9;
+      rad *= r.range(0.6, 0.72);
+    }
+    props.prim('sphere:10', x, y + rad * 0.3, z, rad * 0.9, rad * 0.9, rad * 0.9, '#e8233a', { ao: 0.1 });
+  }
+  // chocolate pools on the frosting
+  for (let i = 0; i < 3; i++) roundPool(B, s * r.range(40, 110), H, r.range(z0 + 15, z1 - 15), r.range(12, 24), r.range(10, 18), '#ffb8da');
+}
+
+// ---------------------------------------------------------------- cloud kingdom
+
+const GOLD = '#ffc93c';
+const MARBLE = '#fffaf0';
+const RAINBOW = ['#ff4f5e', '#ff9f3a', '#ffe14d', '#5cd65c', '#4fa8ff', '#9a6bff'];
+
+function cloudPuff(m, x, y, z, w, r) {
+  m.prim('sphere:10', x, y, z, w, w * 0.45, w * 0.8, '#e6ecff', { top: '#ffffff', ao: 0.2 });
+  for (let k = 0; k < 3; k++) {
+    const a = r() * TAU, d = r.range(0.15, 0.3) * w, q = r.range(0.35, 0.55) * w;
+    m.prim('sphere:8', x + Math.cos(a) * d, y + w * 0.12, z + Math.sin(a) * d, q, q * 0.85, q, '#eef2ff', { top: '#ffffff', ao: 0.15 });
+  }
+}
+
+function goldColumn(m, x, y, z, h, rad) {
+  m.block(x, y, z, rad * 2.8, 0.6, rad * 2.8, MARBLE, { ao: 0.2 });
+  m.cyl(x, y + 0.6, z, rad * 1.2, 0.4, GOLD, { seg: 8, ao: 0 });
+  m.cyl(x, y + 1, z, rad, h - 2, GOLD, { seg: 8, ao: 0.15, top: '#ffe38a' });
+  m.cyl(x, y + h - 1, z, rad * 1.25, 0.4, GOLD, { seg: 8, ao: 0 });
+  m.block(x, y + h - 0.6, z, rad * 2.8, 0.6, rad * 2.8, MARBLE, { ao: 0 });
+}
+
+// Little marble temple on golden columns, its gable end facing the lane.
+function skyTemple(m, glow, x, y, z) {
+  const W = 11, D = 13, h = 9;
+  m.block(x, y - 0.5, z, D + 3, 1.2, W + 3, MARBLE, { ao: 0.25 });
+  m.block(x, y + 0.7, z, D + 1.6, 0.6, W + 1.6, MARBLE, { ao: 0.1 });
+  for (const dx of [-1, 1]) for (const dz of [-1, -1 / 3, 1 / 3, 1]) goldColumn(m, x + dx * D * 0.4, y + 1.3, z + dz * W * 0.42, h, 0.6);
+  m.block(x, y + 1.3 + h, z, D + 1, 1.3, W + 1, MARBLE, { ao: 0 });
+  m.box(x, y + 1.9 + h, z, D + 1.1, 0.4, W + 1.1, GOLD, { ao: 0 });
+  // pediment: a triangular prism, gold behind marble so its outline shines
+  const hp = 3.6;
+  m.prim('cyl:3', x, y + 2.6 + h + hp / 3, z, W / 0.866, D + 1, hp / 0.75, MARBLE, { rx: -Math.PI / 2, ry: Math.PI / 2, ao: 0 });
+  m.prim('cyl:3', x, y + 2.45 + h + hp / 3, z, (W + 1.2) / 0.866, D + 0.6, (hp + 0.9) / 0.75, GOLD, { rx: -Math.PI / 2, ry: Math.PI / 2, ao: 0 });
+  glow.prim('sphere:10', x, y + 3.2 + h + hp, z, 1.6, 1.6, 1.6, '#fff1a8', { ao: 0 });
+  glow.prim('sphere:10', x, y + 5, z, 3, 3, 3, '#fff6d0', { ao: 0 });
+}
+
+// Rainbow in the XY plane at z, centred on (cx, cy), outer radius R, band width bw, depth along z.
+function rainbowArc(m, cx, cy, z, R, bw, depth, N = 14) {
+  RAINBOW.forEach((c, i) => {
+    const rr = R - (i + 0.5) * bw;
+    for (let k = 0; k < N; k++) {
+      const a0 = (k / N) * Math.PI - 0.012, a1 = ((k + 1) / N) * Math.PI + 0.012;
+      m.beam(cx + Math.cos(a0) * rr, cy + Math.sin(a0) * rr, z, cx + Math.cos(a1) * rr, cy + Math.sin(a1) * rr, z, bw, c, { sz: depth / bw, ao: 0 });
+    }
+  });
+}
+
+function decorateCloud(ctx, B, s, r) {
+  const { props, glow, glowLit, topM, z0, z1, st, dens } = B;
+  const H = st.H;
+  // soft glowing puffs along every terrace edge (self-lit, so their shady sides stay cloud-white)
+  for (const L of B.ledges) {
+    if (L.s !== s) continue;
+    const rim = L.k === L.tiers - 1;
+    const n = Math.max(1, Math.round((L.len * (0.6 + 0.4 * dens)) / 5.5));
+    for (let i = 0; i < n; i++) {
+      if (!rim && r() < 0.4) continue;
+      const q = r.range(1.7, 2.6) * (rim ? 1.25 : L.k ? 1 : 0.75);
+      glowLit.prim('sphere:10', s * (L.x + q * 0.55), L.top - q * 0.2, L.zc + ((i + 0.5) / n - 0.5) * L.len + r.range(-0.5, 0.5), q * 2, q * 1.5, q * 2, '#c8d2ea', { ao: 0.3 });
+    }
+  }
+  // cloud tufts and halo lilies at the wall base (non-solid)
+  for (let z = z0 + 2; z < z1; z += r.range(6, 10) / dens) {
+    glowLit.prim('hemi:6', s * r.range(19.9, 20.3), 0, z, r.range(1.4, 2.2), r.range(0.9, 1.4), r.range(2, 3.5), '#c8d2ea', { ao: 0.2 });
+    if (r() < 0.5) {
+      const x = s * r.range(19.3, 19.6);
+      flower(props, x, 0, z + 1.4, '#ffffff', 1.2);
+      glow.cyl(x, 1.25, z + 1.4, 0.42, 0.06, '#ffe27a', { seg: 8, open: true, ao: 0 });
+    }
+  }
+  // golden colonnades along the rim with temples between them
+  const templeZ = s < 0 ? z0 + 42 : z0 + 108;
+  for (let z = z0 + 8; z < z1 - 6; z += 10) {
+    if (Math.abs(z - templeZ) < 14) continue;
+    const h = 11;
+    goldColumn(props, s * 26.5, H, z, h, 0.75);
+    glow.prim('sphere:6', s * 26.5, H + h + 0.8, z, 1.2, 1.2, 1.2, '#fff1a8', { ao: 0 });
+    if (Math.abs(z + 10 - templeZ) >= 14 && z + 10 < z1 - 6) props.box(s * 26.5, H + h + 0.1, z + 5, 1.4, 0.8, 10.4, GOLD, { ao: 0 });
+  }
+  skyTemple(props, glow, s * 32, H, templeZ);
+  // golden trees and cloud bushes on the plateau, palace towers on the skyline
+  for (let z = z0 + 5; z < z1; z += r.range(16, 22) / dens) {
+    if (Math.abs(z - templeZ) > 12) roundTree(props, s * r.range(33, 42), z, r, { y: H, h: r.range(5, 8), size: r.range(3.5, 5), colors: ['#ffd23f', '#ffe27a', '#f5c030'] });
+  }
+  for (let i = 0; i < 6 * dens; i++) cloudPuff(glowLit, s * r.range(40, 150), H + 1, r.range(z0, z1), r.range(8, 16), r);
+  for (let i = 0; i < 5; i++) topM.prim('sphere:16', s * r.range(50, 190), H - 3, r.range(z0 + 10, z1 - 10), r.range(40, 80), r.range(14, 26), r.range(40, 70), '#ffffff', { ao: 0.12 });
+  for (let i = 0; i < 4; i++) {
+    const x = s * r.range(110, 220), z = r.range(z0, z1), h = r.range(34, 64), rad = r.range(4, 7);
+    props.cyl(x, H - 1, z, rad, h, MARBLE, { seg: 12, ao: 0.25 });
+    for (const f of [0.35, 0.7]) props.cyl(x, H - 1 + h * f, z, rad * 1.05, 1, GOLD, { seg: 12, ao: 0 });
+    props.cyl(x, H - 1 + h, z, rad * 1.25, 1.2, GOLD, { seg: 12, ao: 0 });
+    props.prim('cone:12', x, H + h + rad * 1.1, z, rad * 2.6, rad * 2.6, rad * 2.6, GOLD, { ao: 0.1 });
+    glow.prim('sphere:8', x, H + h + rad * 2.5, z, 1.8, 1.8, 1.8, '#fff1a8', { ao: 0 });
+  }
+  // a rainbow over the road (camera-only canopies so the follow camera never sits inside the bands)
+  if (s > 0) {
+    const z = z0 + 78, R = 36, cy = 3, bw = 1.3, depth = 2.4, ri = R - RAINBOW.length * bw;
+    rainbowArc(glow, 0, cy, z, R, bw, depth);
+    for (let x = -24; x < 24; x += 8) {
+      const far = Math.max(Math.abs(x), Math.abs(x + 8)), near = Math.min(Math.abs(x), Math.abs(x + 8));
+      ctx.colliders.push({ minX: x, maxX: x + 8, minY: 1e4, maxY: 1e4, camMinY: cy + Math.sqrt(ri * ri - far * far) - 0.5, camMaxY: cy + Math.sqrt(R * R - near * near) + 0.5, minZ: z - depth / 2 - 0.3, maxZ: z + depth / 2 + 0.3, tag: 'canopy' });
+    }
+  }
+}
+
+function cloudIslands(ctx, B, r) {
+  const { z0, z1 } = B;
+  const isl = new Merger();
+  for (let i = 0; i < 7; i++) {
+    const s = i % 2 ? 1 : -1;
+    const x = s * r.range(36, 90), z = r.range(z0 + 10, z1 - 5), y = r.range(36, 62);
+    const w = r.range(10, 16);
+    cloudPuff(isl, x, y, z, w, r);
+    if (i % 2 === 0) {
+      // a golden gazebo
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * TAU + 0.4;
+        isl.cyl(x + Math.cos(a) * 2.2, y + w * 0.15, z + Math.sin(a) * 2.2, 0.35, 4.2, GOLD, { seg: 6, ao: 0 });
+      }
+      isl.cyl(x, y + w * 0.15 + 4.2, z, 3, 0.5, MARBLE, { seg: 10, ao: 0 });
+      isl.prim('hemi:10', x, y + w * 0.15 + 4.7, z, 5, 3.4, 5, GOLD, { ao: 0.1 });
+    } else roundTree(isl, x, z, r, { y: y + w * 0.12, h: r.range(3, 4.5), size: r.range(2.6, 3.4), colors: ['#ffd23f', '#ffe27a'] });
+  }
+  const mesh = isl.build(ctx.mats.glowLit, { receiveShadow: false });
+  mesh.matrixAutoUpdate = true;
+  B.group.add(mesh);
+  B.bob.push({ obj: mesh, amp: 1.4, speed: 0.45, base: 0 });
+}
+
+const DECOR = {
+  field: decorateField, greenhollow: decorateGreenhollow, dustbowl: decorateDustbowl, tanglemire: decorateTanglemire, emberroot: decorateEmberroot,
+  starbloom: decorateStarbloom, frostfall: decorateFrostfall, candy: decorateCandy, cloud: decorateCloud,
+};
 
 // ---------------------------------------------------------------- arches
 
@@ -704,13 +1126,14 @@ export function buildRoad(ctx) {
       props: new Merger(),
       glow: new Merger(),
       glowLit: new Merger(),
-      pools: [], lavaDiscs: [], lavaFalls: [], spin: [], bob: [],
+      pools: [], lavaDiscs: [], lavaFalls: [], ledges: [], spin: [], bob: [],
     };
     const face = st.channel ? 23.8 : 20;
-    for (const s of [-1, 1]) cliffs(B.rockM, B.topM, s, R.minZ, R.maxZ, st, r, face, bi === 0 ? 5 : 0, B.backM);
+    for (const s of [-1, 1]) cliffs(B.rockM, B.topM, s, R.minZ, R.maxZ, st, r, face, bi === 0 ? 5 : 0, B.backM, B.ledges);
     if (bi === 0) southFace(B, r);
     for (const s of [-1, 1]) DECOR[b.id](ctx, B, s, r);
     if (b.id === 'starbloom') floatingIslands(ctx, B, r);
+    if (b.id === 'cloud') cloudIslands(ctx, B, r);
 
     // road surface
     const { map, emissiveMap } = roadTexture(b.id);
@@ -729,11 +1152,9 @@ export function buildRoad(ctx) {
     // threshold strip at the biome start
     for (let x = -19; x <= 19; x += 2) B.props.box(x, 0.06, R.minZ + 0.6, 1.8, 0.12, 1.2, x % 4 === 1 || x % 4 === -3 ? '#e8e0d0' : shadeHex(st.frame, 1), { ao: 0 });
 
-    // channel liquid (swamp water / lava) between the curb and the cliff face
+    // channel liquid (swamp water / lava / chocolate) between the curb and the cliff face
     if (st.channel) {
-      const liq = st.channel === 'lava'
-        ? liquidMaterial({ c1: '#b3200a', c2: '#ff6a1a', c3: '#ffe07a', scale: 0.18, flow: [0.02, 0.25], glow: 1.35 })
-        : liquidMaterial({ c1: '#2a3a24', c2: '#4a5a34', c3: '#9ab86a', scale: 0.2, flow: [0.05, 0.08], glow: 1.0, bubbles: 1 });
+      const liq = liquidMaterial(CHANNEL[st.channel]);
       const cg = new THREE.PlaneGeometry(4, len).rotateX(-Math.PI / 2);
       for (const s of [-1, 1]) {
         const cm = new THREE.Mesh(cg, liq);
@@ -756,10 +1177,12 @@ export function buildRoad(ctx) {
       }
     }
     if (B.pools.length) {
-      const poolMat = liquidMaterial({ c1: '#2a3a24', c2: '#4a4a5a', c3: '#9ab86a', scale: 0.15, flow: [0.04, 0.06], bubbles: 1 });
+      const poolMat = liquidMaterial(POOL[st.pool || 'swamp']);
+      const oval = new THREE.CircleGeometry(0.5, 20).rotateX(-Math.PI / 2);
       for (const p of B.pools) {
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.d).rotateX(-Math.PI / 2), poolMat);
+        const m = new THREE.Mesh(p.round ? oval : new THREE.PlaneGeometry(p.w, p.d).rotateX(-Math.PI / 2), poolMat);
         m.position.set(p.x, p.y, p.z);
+        if (p.round) m.scale.set(p.w, 1, p.d);
         group.add(m);
       }
     }
@@ -773,11 +1196,12 @@ export function buildRoad(ctx) {
 
     // bake
     const add = (m) => m && group.add(m);
-    add(B.rockM.build(mats.rock, { name: 'cliffs-' + b.id, castShadow: quality.shadows }));
-    const back = B.backM.build(mats.rock, { name: 'cliffback-' + b.id });
+    const cliffMat = surfaceMat(st.cliff || 'rock', mats);
+    add(B.rockM.build(cliffMat, { name: 'cliffs-' + b.id, castShadow: quality.shadows }));
+    const back = B.backM.build(cliffMat, { name: 'cliffback-' + b.id });
     if (back) back.renderOrder = 3;
     add(back);
-    const top = B.topM.build(st.ground === 'sand' ? mats.sand : st.ground === 'grass' ? mats.grass : mats.rockTop, { name: 'plateau-' + b.id });
+    const top = B.topM.build(surfaceMat(st.ground, mats), { name: 'plateau-' + b.id });
     if (top) top.renderOrder = 2;
     add(top);
     add(B.props.build(mats.flat, { name: 'props-' + b.id }));
@@ -826,9 +1250,10 @@ export function buildRoad(ctx) {
 
   return {
     biomes,
-    update(dt, t, camZ, viewDist) {
+    // visible: the biomes overlapping [camZ - behind, camZ + ahead]
+    update(dt, t, camZ, ahead, behind = ahead) {
       for (const b of biomes) {
-        const vis = camZ > b.minZ - viewDist && camZ < b.maxZ + viewDist;
+        const vis = b.minZ < camZ + ahead && b.maxZ > camZ - behind;
         b.group.visible = vis;
         if (!vis) continue;
         for (const s of b.spin) s.obj.rotation[s.axis] = t * s.speed;
@@ -838,59 +1263,105 @@ export function buildRoad(ctx) {
   };
 }
 
+// The end of the road: a golden cloud-palace gate with a glowing portal between two towers, a smiling sun
+// and a rainbow over the cloud bank. Everything in the lane sits behind the end wall's reach (z >= zEnd - 1.2).
 function buildEndCap(ctx, B, zEnd, r) {
   const { props, glowLit, glow } = B;
-  const cols = ['#6fd8ff', '#b36bff', '#ff7ae0', '#9ff0ff'];
-  B.rockM.block(0, -1, zEnd + 5, 64, 32, 10, '#3a3f8c', { topFace: '#4a52b8', top: '#5a4ab0', ao: 0.4 });
+  B.rockM.block(0, -1, zEnd + 5, 64, 30, 10, '#f2f5ff', { topFace: '#ffffff', ao: 0.25 });
+  for (let i = 0; i < 16; i++) props.prim('sphere:10', r.range(-34, 34), r.range(26, 31), zEnd + r.range(3, 8), r.range(10, 18), r.range(7, 11), r.range(8, 12), '#ffffff', { ao: 0.25 });
+  rainbowArc(glow, 0, 0, zEnd + 14, 46, 1.8, 3, 18);
+  // golden arch on marble-footed columns
+  const zg = zEnd + 1.2;
   for (const s of [-1, 1]) {
-    B.rockM.block(s * 17, 31, zEnd + 6, 14, 6, 8, '#454ba0', { topFace: '#4a52b8', ao: 0.2 });
-    B.rockM.block(s * 11, 37, zEnd + 7, 6, 5, 6, '#5258b4', { topFace: '#4a52b8', ao: 0.2 });
+    props.block(s * 12, 0, zg, 7, 1.2, 3.6, MARBLE, { ao: 0.2 });
+    props.cyl(s * 12, 1.2, zg, 2.4, 10.2, GOLD, { seg: 12, ao: 0.2, top: '#ffe38a' });
+    props.block(s * 12, 11.4, zg, 6.6, 0.8, 3.4, MARBLE, { ao: 0 });
   }
-  // star gate: a glowing ring with a swirling portal
-  glowLit.add('torus:28', new THREE.Matrix4().compose(new THREE.Vector3(0, 17, zEnd - 0.6), new THREE.Quaternion(), new THREE.Vector3(21, 21, 14)), '#9ff0ff', { ao: 0 });
-  for (let k = 0; k < 8; k++) {
-    const a = (k / 8) * TAU;
-    crystal(glowLit, Math.cos(a) * 10.6, 17 + Math.sin(a) * 10.6 - 1.5, zEnd - 0.8, 3.2, 1.6, k % 2 ? '#ff9ae8' : '#d38bff', r);
+  glowLit.add('halftorus:20', trs(0, 12.2, zg, 30, 30, 26), GOLD, { ao: 0 });
+  for (let k = 1; k < 8; k++) {
+    const a = (k / 8) * Math.PI;
+    glow.prim('sphere:8', Math.cos(a) * 12, 12.2 + Math.sin(a) * 12, zg - 1.35, 1, 1, 0.6, '#fff6c8', { ao: 0 });
   }
-  const portal = new THREE.Mesh(new THREE.CircleGeometry(7.6, 36), liquidMaterial({ c1: '#1b0f4a', c2: '#6b3fd0', c3: '#ff9ae8', scale: 0.22, flow: [0.15, 0.35], glow: 1.3, vertical: true }));
-  portal.position.set(0, 17, zEnd - 0.3);
+  glowLit.prim('octa', 0, 12.2 + 15.4, zg - 0.4, 3, 3.6, 1.6, '#7fe0ff', { ao: 0 });
+  // the portal fills the doorway (its edges tuck behind the columns and the arch)
+  const door = new THREE.Shape();
+  door.moveTo(-10, 0.05);
+  door.lineTo(10, 0.05);
+  door.lineTo(10, 12.2);
+  door.absarc(0, 12.2, 10, 0, Math.PI, false);
+  door.lineTo(-10, 0.05);
+  const portal = new THREE.Mesh(new THREE.ShapeGeometry(door, 16), liquidMaterial({ c1: '#8fd4ff', c2: '#fff4d0', c3: '#ffffff', scale: 0.2, flow: [0.12, 0.4], glow: 1.25, vertical: true }));
+  portal.position.set(0, 0, zEnd - 0.05);
   portal.rotation.y = Math.PI;
   B.group.add(portal);
-  for (let i = 0; i < 26; i++) {
-    const x = r.range(-22, 22);
-    crystal(glowLit, x, 0, zEnd + r.range(0.5, 2.5), r.range(3, 12), r.range(1.5, 3.5), r.pick(cols), r);
+  // pearly gates swung open against the wall
+  for (const s of [-1, 1]) {
+    for (let k = 0; k < 6; k++) {
+      const x = s * (15 + k * 0.95), h = 9 + Math.sin((k / 5) * Math.PI) * 1.4;
+      props.cyl(x, 0, zEnd - 0.4, 0.16, h, GOLD, { seg: 6, ao: 0 });
+      props.prim('cone:6', x, h + 0.3, zEnd - 0.4, 0.5, 0.7, 0.5, GOLD, { ao: 0 });
+    }
+    for (const y of [1.2, 5, 8.6]) props.box(s * 17.4, y, zEnd - 0.4, 5.3, 0.3, 0.3, GOLD, { ao: 0 });
+    props.add('torus:12', trs(s * 17.4, 6.8, zEnd - 0.4, 3.2, 3.2, 3.2), GOLD, { ao: 0 });
   }
-  for (const s of [-1, 1]) crystal(glowLit, s * 13, 0, zEnd + 2, 30, 6, s < 0 ? '#6fd8ff' : '#ff7ae0', r);
-  // big glowing star
-  const star = new Merger();
-  for (let k = 0; k < 5; k++) {
-    const a = (k / 5) * TAU;
-    star.prim('octa', Math.sin(a) * 2.8, Math.cos(a) * 2.8, 0, 2.6, 5.6, 1.2, '#fff4a0', { rz: -a, ao: 0 });
+  // palace towers at the ends of the cloud cliffs (solid, outside the lane: the camera stays out of them)
+  for (const s of [-1, 1]) {
+    const tx = s * 25.5, tz = zEnd - 1;
+    props.cyl(tx, 0, tz, 3.4, 30, MARBLE, { seg: 12, ao: 0.3 });
+    for (const y of [18, 24, 29.4]) props.cyl(tx, y, tz, 3.6, 0.8, GOLD, { seg: 12, ao: 0 });
+    for (const y of [20.2, 25.8]) props.box(tx - s * 3.2, y + 0.8, tz, 0.4, 2.2, 1.2, '#3a5a9a', { ao: 0 });
+    props.prim('cone:12', tx, 34.6, tz, 8.6, 9.2, 8.6, GOLD, { ao: 0.1 });
+    glow.prim('sphere:10', tx, 39.6, tz, 1.8, 1.8, 1.8, '#fff1a8', { ao: 0 });
+    ctx.colliders.push({ minX: tx - 3.4, maxX: tx + 3.4, minY: 0, maxY: 39, minZ: tz - 3.4, maxZ: tz + 3.4, tag: 'deco' });
   }
-  star.prim('sphere:12', 0, 0, 0, 4, 4, 1.6, '#ffffff', { ao: 0 });
-  const sm = star.build(ctx.mats.glow, { receiveShadow: false });
-  sm.matrixAutoUpdate = true;
-  sm.position.set(0, 31, zEnd - 0.5);
-  B.group.add(sm);
-  B.spin.push({ obj: sm, axis: 'z', speed: 0.4 });
+  // cloud tufts at the foot of the wall
+  for (let i = 0; i < 14; i++) {
+    const x = (i % 2 ? 1 : -1) * r.range(14.5, 21);
+    props.prim('sphere:8', x, 0.3, zEnd + r.range(0.3, 1.5), r.range(2.4, 3.6), r.range(1.6, 2.4), r.range(2, 3), '#ffffff', { ao: 0.2 });
+  }
+  // smiling sun (the rays turn) above the gate, with a camera-only canopy so the lens never ends up inside it
+  const zs = zEnd - 0.4, ys = 37;
+  glow.prim('cyl:24', 0, ys, zs, 9, 1, 9, '#ffe14d', { rx: Math.PI / 2, ao: 0 });
+  glow.prim('cyl:24', 0, ys, zs - 0.1, 7.6, 1, 7.6, '#fff3a0', { rx: Math.PI / 2, ao: 0 });
+  for (const e of [-1, 1]) {
+    glow.prim('sphere:8', e * 1.5, ys + 0.9, zs - 0.65, 0.8, 1.2, 0.4, '#1b2440', { ao: 0 });
+    glow.prim('sphere:8', e * 2.5, ys - 0.6, zs - 0.62, 1.2, 0.7, 0.3, '#ff9ab8', { ao: 0 });
+  }
+  glow.add('halftorus:12', trs(0, ys - 0.6, zs - 0.6, 5, 5, 3, 0, 0, Math.PI), '#b0461a', { ao: 0 });
+  const rays = new Merger();
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * TAU, L = k % 2 ? 2.4 : 3.6;
+    rays.prim('octa', Math.sin(a) * (4.7 + L / 2), Math.cos(a) * (4.7 + L / 2), 0, 1.5, L * 1.6, 0.8, k % 2 ? '#ffe14d' : '#ffb627', { rz: -a, ao: 0 });
+  }
+  const rm = rays.build(ctx.mats.glow, { receiveShadow: false });
+  rm.matrixAutoUpdate = true;
+  rm.position.set(0, ys, zs + 0.2);
+  B.group.add(rm);
+  B.spin.push({ obj: rm, axis: 'z', speed: 0.3 });
+  ctx.colliders.push({ minX: -9, maxX: 9, minY: 1e4, maxY: 1e4, camMinY: ys - 9, camMaxY: ys + 9, minZ: zs - 1, maxZ: zs + 1, tag: 'canopy' });
   const tex = drawTexture(1024, 256, (g, W, H) => {
-    g.fillStyle = '#15173d';
+    g.fillStyle = '#6b3f10';
     g.fillRect(0, 0, W, H);
     roundRect(g, 6, 6, W - 12, H - 12, 44);
     const gr = g.createLinearGradient(0, 0, 0, H);
-    gr.addColorStop(0, '#8f6bff');
-    gr.addColorStop(1, '#3a2a9a');
+    gr.addColorStop(0, '#ffe27a');
+    gr.addColorStop(1, '#f2a41f');
     g.fillStyle = gr;
     g.fill();
     g.lineWidth = 12;
-    g.strokeStyle = '#15173d';
+    g.strokeStyle = '#6b3f10';
     g.stroke();
-    chunkyText(g, 'END OF THE SEED ROAD', W / 2, 100, { size: 84, fill: '#ffffff', stroke: '#15173d', strokeW: 16, maxW: W - 100 });
-    chunkyText(g, 'YOU MADE IT, EXPLORER!', W / 2, 190, { size: 50, fill: '#ffe07a', stroke: '#15173d', strokeW: 10 });
+    roundRect(g, 22, 22, W - 44, H - 44, 30);
+    g.lineWidth = 4;
+    g.strokeStyle = 'rgba(255,255,255,0.6)';
+    g.stroke();
+    chunkyText(g, 'END OF THE SEED ROAD', W / 2, 100, { size: 84, fill: '#ffffff', stroke: '#6b3f10', strokeW: 16, maxW: W - 100 });
+    chunkyText(g, 'YOU MADE IT, EXPLORER!', W / 2, 190, { size: 50, fill: '#fff8d8', stroke: '#6b3f10', strokeW: 10 });
   }, { clamp: true });
-  const sign = signBoard(tex, 20, 5, 0.5);
+  const sign = signBoard(tex, 17, 4.25, 0.5);
   sign.position.set(0, 5.2, zEnd - 0.2);
   sign.rotation.y = Math.PI;
   B.group.add(sign);
-  glow.box(0, 0.05, zEnd - 3, 36, 0.06, 1.2, '#9ff0ff', { ao: 0 });
+  for (const s of [-1, 1]) props.block(s * 6.5, 0, zEnd - 0.05, 0.5, 3.2, 0.3, GOLD, { ao: 0 });
+  glow.box(0, 0.05, zEnd - 3, 36, 0.06, 1.2, '#ffe27a', { ao: 0 });
 }

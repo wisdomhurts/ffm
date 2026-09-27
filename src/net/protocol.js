@@ -23,7 +23,7 @@
 //   welcome {to, hn, slot, ep, order, priv, st} host -> joiner (st = full world state)
 //   kick    {to, k, p, v, su, iu}               host -> member: the rules moved you (knockback, caught, respawn)
 //   kicked  {to}                                host -> member: removed from the room
-import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD } from '../config.js';
+import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor } from '../config.js';
 import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
 import { REPLIES, EMOTE_LINES } from '../social/replies.js';
 import { PRACTICE_LINES } from '../ai/personalities.js';
@@ -35,7 +35,7 @@ import { Player } from '../gameplay/player.js';
 /** Own keys only: catalog lookups must never match 'toString', '__proto__' and friends. */
 export const own = (obj, k) => typeof k === 'string' && !!obj && Object.prototype.hasOwnProperty.call(obj, k);
 
-export const PROTO = 1;
+export const PROTO = 2; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots
 
 // Two builds can only share a room when their rules agree (ids of everything that crosses the wire).
 function fnv(str) {
@@ -250,13 +250,13 @@ export function vetSlotData(data) {
   const stats = {};
   if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds']) stats[k] = cap(p.stats[k], 1e12);
   out.player = {
-    cash: cap(p.cash, 1e13, PLAYER.startCash), speedLevel: cap(p.speedLevel, 25), rebirths: cap(p.rebirths, 50),
-    upgradeSpend: cap(p.upgradeSpend, 1e13), items, stats,
+    cash: cap(p.cash, 1e18, PLAYER.startCash), speedLevel: cap(p.speedLevel, 999), rebirths: cap(p.rebirths, 50),
+    upgradeSpend: cap(p.upgradeSpend, 1e18), items, stats,
   };
   const g = isObj(data.garden) ? data.garden : {};
-  const planters = Array.isArray(g.planters) ? g.planters.slice(0, 10) : [];
+  const planters = Array.isArray(g.planters) ? g.planters.slice(0, WORLD.planterCount) : [];
   out.garden = {
-    cashPile: cap(g.cashPile, 1e13),
+    cashPile: cap(g.cashPile, 1e18),
     planters: planters.map((pl) => (isObj(pl) ? { unlocked: !!pl.unlocked, plant: vetPlantData(pl.plant) } : { unlocked: false, plant: null })),
   };
   return out;
@@ -277,7 +277,8 @@ const MSTATE = ['patrol', 'chase', 'stunned'];
  * draws remote players with this, and each device uses the same guess to decide when to report.
  */
 export function predict(b, age, out) {
-  const a = b.og ? PLAYER.accel : PLAYER.airAccel;
+  // the game's grip grows with the player's top speed (accelFor): the faster of target and current speed stands in for it
+  const a = accelFor(Math.max(Math.hypot(b.tx, b.tz), Math.hypot(b.vx, b.vz)), b.og);
   const dvx = b.tx - b.vx, dvz = b.tz - b.vz;
   const dv = Math.hypot(dvx, dvz);
   const T = dv > 1e-6 ? dv / a : 0; // time to reach the target velocity
@@ -323,7 +324,7 @@ export function packProjectiles(game) {
 /** Gameplay events the host shares with everyone (HUD, FX and audio on each device react to them). */
 export const FORWARD = new Set([
   'seed:grabbed', 'seed:dropped', 'seed:expired', 'ground:expired', 'plant:planted', 'plant:grown', 'plant:sold', 'plant:returned',
-  'plant:watered', 'planter:unlocked', 'steal:start', 'steal:cancel', 'steal:grabbed', 'steal:success', 'steal:foiled',
+  'plant:watered', 'planter:unlocked', 'garden:expanded', 'steal:start', 'steal:cancel', 'steal:grabbed', 'steal:success', 'steal:foiled',
   'cash:collected', 'lock:on', 'lock:off', 'garden:full', 'bonk:swing', 'bonk:miss', 'bonk:blocked', 'player:hit', 'player:jump',
   'monster:aggro', 'monster:caught', 'monster:bonked', 'item:used', 'item:empty', 'item:fail', 'balloon:splash', 'banana:slip',
   'purchase', 'purchase:fail', 'speed:up', 'rebirth', 'pod:respawn', 'event:start', 'event:end', 'chat', 'shop:open', 'emote',
@@ -476,7 +477,7 @@ export class EventCodec {
 // on their own: clients advance them locally and every few ticks get the exact values.
 export function sectionize(full) {
   const S = {};
-  S.m = { over: full.over, mode: full.mode, difficulty: full.difficulty, uid: full.uid, nextEventAt: full.nextEventAt, event: full.event, match: full.match };
+  S.m = { over: full.over, mode: full.mode, difficulty: full.difficulty, uid: full.uid, nextEventAt: full.nextEventAt, event: full.event, match: full.match, maxBots: full.maxBots };
   full.players.forEach((p, i) => (S['p' + i] = p));
   full.gardens.forEach((g, i) => (S['g' + i] = g));
   S.pd = full.pods;
@@ -495,7 +496,7 @@ export function signature(key, v) {
     return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0]])]);
   }
   if (key === 'mo') return stringifyR(v.map((m) => [m.stunUntil, m.attackAt]));
-  if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match]); // uid: only for promotion
+  if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match, v.maxBots]); // uid: only for promotion
   return stringifyR(v);
 }
 
@@ -531,7 +532,7 @@ export function vetFull(s) {
 }
 
 export function vetGarden(g, i) {
-  if (!isObj(g) || !Array.isArray(g.planters) || g.planters.length !== 10) return false;
+  if (!isObj(g) || !Array.isArray(g.planters) || g.planters.length !== WORLD.planterCount) return false;
   g.planters = g.planters.map((pl) => (isObj(pl) ? { unlocked: !!pl.unlocked, stealer: int(pl.stealer, 0, 3, null), plant: vetPlantData(pl.plant, i) } : { unlocked: false, stealer: null, plant: null }));
   return true;
 }
@@ -560,7 +561,7 @@ export function vetPlayer(d, i) {
   if (c) {
     if (c.kind === 'plant') {
       const plant = vetPlantData(c.plant, int(c.fromSlot, 0, 3, 0));
-      d.carrying = plant ? { kind: 'plant', plant, fromSlot: int(c.fromSlot, 0, 3, 0), fromIndex: int(c.fromIndex, 0, 9, 0) } : null;
+      d.carrying = plant ? { kind: 'plant', plant, fromSlot: int(c.fromSlot, 0, 3, 0), fromIndex: int(c.fromIndex, 0, WORLD.planterCount - 1, 0) } : null;
     } else if (c.kind === 'seed' && own(PLANT, c.speciesId)) {
       d.carrying = { kind: 'seed', speciesId: c.speciesId, mutation: own(MUTATIONS, c.mutation) ? c.mutation : 'normal', podId: int(c.podId, 0, 999, 0), lucky: !!c.lucky };
     } else d.carrying = null;

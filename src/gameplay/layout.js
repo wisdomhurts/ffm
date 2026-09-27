@@ -1,9 +1,15 @@
 // The single source of truth for where everything is. Pure data derived from config.
 // Gameplay, AI, physics and the world art all read positions from here.
-import { WORLD, BIOMES, PODS, ROAD_END_Z } from '../config.js';
+import { WORLD, BIOMES, PODS, ROAD_END_Z, PLANTERS, LOTS } from '../config.js';
 
 const G = WORLD.garden;
 const ROAD = WORLD.road;
+
+// Planter columns, measured from the gate into the garden: the garden's own two columns, then one column
+// per lot (LOTS). Rows run along z, 8 studs apart; each planter box is 4.8 x 4.8.
+const COL_D = [22.5, 30.5];
+for (let k = 0; k < LOTS.count; k++) COL_D.push(38.5 + k * 8);
+const ROWS = 5;
 
 function gardenLayout(slot) {
   const c = WORLD.gardenCenters[slot];
@@ -16,13 +22,19 @@ function gardenLayout(slot) {
   const gateX = west ? maxX : minX;
   const gateHalf = 6;
   const inward = west ? -1 : 1; // direction from gate into the garden along x
-  // Planters: 2 columns x 5 rows, columns parallel to z.
+  const at = (d) => gateX + inward * d; // x of a point d studs in from the gate
+  // Planters 0-9: 2 columns x 5 rows (index = row * 2 + column). Then each lot: one column of 5 (lot k = planters
+  // 10 + 5k .. 14 + 5k).
   const planters = [];
-  const colX = [c.x + inward * 4.5, c.x + inward * 12.5];
-  for (let i = 0; i < WORLD.planterCount; i++) {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    planters.push({ index: i, x: colX[col], z: c.z - 16 + row * 8 });
+  for (let i = 0; i < PLANTERS.base; i++) planters.push({ index: i, x: at(COL_D[i % 2]), z: c.z - 16 + Math.floor(i / 2) * 8, lot: -1 });
+  for (let k = 0; k < LOTS.count; k++) {
+    for (let r = 0; r < ROWS; r++) planters.push({ index: planters.length, x: at(COL_D[2 + k]), z: c.z - 16 + r * 8, lot: k });
+  }
+  // The FOR SALE lots: x span (edge = the side facing the gate, where its rope line runs) and its middle row.
+  const lots = [];
+  for (let k = 0; k < LOTS.count; k++) {
+    const d0 = COL_D[2 + k] - 4, d1 = k === LOTS.count - 1 ? G.w : COL_D[3 + k] - 4;
+    lots.push({ index: k, edgeX: at(d0), farX: at(d1), x: at(COL_D[2 + k]), z: c.z, minZ: minZ + 1.5, maxZ: maxZ - 1.5 });
   }
   return {
     slot,
@@ -34,6 +46,7 @@ function gardenLayout(slot) {
     // laser span across the gate opening
     laser: { x1: gateX, z1: c.z - gateHalf, x2: gateX, z2: c.z + gateHalf },
     planters,
+    lots,
     collectPad: { x: gateX + inward * 4, z: c.z + (c.z < 0 ? 12 : -12), r: 2.6 },
     lockPad: { x: gateX + inward * 4, z: c.z + (c.z < 0 ? -12 : 12), r: 2.2 },
     sign: { x: gateX, z: c.z + gateHalf + 2.5 },
@@ -66,8 +79,8 @@ function staticColliders(gardens) {
   const box = (minX, maxX, minZ, maxZ, maxY = 8, minY = 0, tag = 'wall') =>
     boxes.push({ minX, maxX, minY, maxY, minZ, maxZ, tag });
   const T = 1; // wall thickness
-  // Home area boundary: x in [-72,72], z in [-66,60], open to the road at x in [-20,20].
-  const H = { minX: -72, maxX: 72, minZ: -66, maxZ: 60 };
+  // Home area boundary: x in [-96,96], z in [-66,60], open to the road at x in [-20,20].
+  const H = { minX: -WORLD.homeHalfW, maxX: WORLD.homeHalfW, minZ: WORLD.homeMinZ, maxZ: ROAD.startZ };
   const WALL_H = 60; // invisible; no prop + jump may clear it
   box(H.minX - T, H.minX, H.minZ, H.maxZ, WALL_H);
   box(H.maxX, H.maxX + T, H.minZ, H.maxZ, WALL_H);
@@ -92,8 +105,8 @@ function staticColliders(gardens) {
     // gate wall with gap
     box(g.gate.x - F / 2, g.gate.x + F / 2, b.minZ, g.gate.minZ, fenceH, 0, 'fence');
     box(g.gate.x - F / 2, g.gate.x + F / 2, g.gate.maxZ, b.maxZ, fenceH, 0, 'fence');
-    // planter boxes: low (you can hop onto them)
-    for (const p of g.planters) box(p.x - 2.4, p.x + 2.4, p.z - 2.4, p.z + 2.4, 1.2, 0, 'planter');
+    // planter boxes: low (you can hop onto them). A lot's planters only exist once it is bought (Game.lotBoxes).
+    for (const p of g.planters) if (p.lot < 0) box(p.x - 2.4, p.x + 2.4, p.z - 2.4, p.z + 2.4, 1.2, 0, 'planter');
   }
   // the follow camera collides with fences only up to their visual height
   for (const b of boxes) if (b.tag === 'fence') b.camMaxY = 6.6;
@@ -135,6 +148,11 @@ export function buildLayout() {
 }
 
 export const LAYOUT = buildLayout();
+
+/** Collider boxes of garden `L`'s lot `k` planters (fresh objects: each Game switches its own on and off). */
+export function lotPlanterBoxes(L, k) {
+  return L.planters.filter((p) => p.lot === k).map((p) => ({ minX: p.x - 2.4, maxX: p.x + 2.4, minY: 0, maxY: 1.2, minZ: p.z - 2.4, maxZ: p.z + 2.4, tag: 'planter', off: true }));
+}
 
 export function gardenContains(g, x, z, pad = 0) {
   const b = g.bounds;

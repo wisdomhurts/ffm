@@ -300,7 +300,8 @@ const DEMOS = [
     ['jump'], ['slip'], ['splash']]],
   ['Items', [['item', { item: 'banana' }, 'banana'], ['item', { item: 'balloon' }, 'balloon'], ['item', { item: 'coil' }, 'coil'], ['item', { item: 'cloak' }, 'cloak'], ['item', { item: 'bucket' }, 'bucket']]],
   ['Monsters', [['aggro', { type: 'stump' }, 'Grumpy Stump'], ['aggro', { type: 'crab' }, 'Cactus Crab'], ['aggro', { type: 'snapper' }, 'Swamp Snapper'],
-    ['aggro', { type: 'lavasprout' }, 'Lava Sprout'], ['aggro', { type: 'lurker' }, 'Star Lurker'], ['chomp'], ['monsterBonk']]],
+    ['aggro', { type: 'lavasprout' }, 'Lava Sprout'], ['aggro', { type: 'lurker' }, 'Star Lurker'], ['aggro', { type: 'yeti' }, 'Snowball Yeti'],
+    ['aggro', { type: 'gummy' }, 'Gummy Bear'], ['aggro', { type: 'storm' }, 'Storm Puff'], ['chomp'], ['monsterBonk']]],
   ['Shops', [['purchase'], ['speedUp'], ['rebirth']]],
   ['Events', [['event', { type: 'golden' }, 'Golden Hour'], ['event', { type: 'diamond' }, 'Diamond Night'], ['event', { type: 'rainbow' }, 'Rainbow Rain'], ['confetti']]],
 ];

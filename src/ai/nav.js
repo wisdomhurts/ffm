@@ -38,7 +38,7 @@ export class NavGrid {
   }
 
   _stamp(b) {
-    if (b.maxY <= STEP_Y || b.minY >= WORLD.playerHeight) return;
+    if (b.off || b.maxY <= STEP_Y || b.minY >= WORLD.playerHeight) return;
     const low = b.maxY <= LOW_MAX_Y;
     const pad = low ? LOW_PAD : SOLID_PAD;
     const v = low ? JUMP : BLOCK;
@@ -277,7 +277,7 @@ const ROAD_JOIN_Z = 66; // routes between the plaza and the road meet here (just
 export class Nav {
   constructor(game) {
     const boxes = game.physics.boxes;
-    this.home = new NavGrid({ minX: -74, maxX: 74, minZ: -68, maxZ: 74 }, 0.5, boxes, 1.6);
+    this.home = new NavGrid({ minX: -WORLD.homeHalfW - 2, maxX: WORLD.homeHalfW + 2, minZ: WORLD.homeMinZ - 2, maxZ: 74 }, 0.5, boxes, 1.6);
     this.road = new NavGrid({ minX: -WORLD.road.width / 2 - 1, maxX: WORLD.road.width / 2 + 1, minZ: 54, maxZ: ROAD_END_Z + 2 }, 1, boxes, 2.5);
   }
 
@@ -345,12 +345,14 @@ function gardenAt(x, z) {
 }
 
 const navs = new WeakMap();
-/** One Nav per Game (built lazily from its physics colliders, including the world's decor). */
+/** One Nav per Game (built lazily from its physics colliders, including the world's decor; rebuilt when a
+ *  garden lot opens or closes: game.navEpoch). */
 export function getNav(game) {
   let n = navs.get(game);
-  if (!n || n.boxCount !== game.physics.boxes.length) {
+  if (!n || n.boxCount !== game.physics.boxes.length || n.epoch !== (game.navEpoch || 0)) {
     n = new Nav(game);
     n.boxCount = game.physics.boxes.length;
+    n.epoch = game.navEpoch || 0;
     navs.set(game, n);
   }
   return n;

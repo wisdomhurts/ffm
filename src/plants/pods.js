@@ -1,12 +1,13 @@
-// Road seed stands (one style per biome) and the terracotta pot used for carried plants.
+// Road seed stands (one style per biome, indexed like BIOMES) and the terracotta pot used for carried plants.
 // Built once per biome with the same Builder as the plants (one merged, vertex-coloured mesh each).
 import * as THREE from 'three';
-import { Builder, P, latheGeo, tubeGeo, cachedGeo, TAU } from './geometry.js';
+import { Builder, P, latheGeo, tubeGeo, leafGeo, shapeGeo, starShape, cachedGeo, TAU } from './geometry.js';
 import { shade } from './materials.js';
 import { hash, fm } from './species.js';
 
 const PI = Math.PI;
 const cache = new Map();
+const CANDY = ['#ff5ca8', '#ffd84a', '#ff8a3d', '#b77bff', '#4fc3ff', '#ff4d5e'];
 
 function rock(b, p, s, c, seed, o = {}) {
   b.add(P.blob(seed, 0.2, 0), { p, s: [s, s * 0.7, s], r: [0, seed, 0], c, c2: shade(c, 0.12), gy: [-1, 1], ...o });
@@ -151,13 +152,97 @@ const STANDS = [
     b.use('body');
     return { seedY: 2.2, topY: 1.44, halo: '#9fb8ff' };
   },
+  // 6 Frostfall: hexagonal ice pillar in a snow drift, with icicles, ice crystals and a tiny snowman
+  (b) => {
+    const ice = '#9fe3ff', deep = '#4fa8e0';
+    b.add(P.blob(12, 0.12, 1), { p: [0, 0.02, 0], s: [1.5, 0.42, 1.4], c: '#d2e8f8', c2: '#f4fbff', gy: [-1, 1] });
+    b.add(P.cyl(0.74, 0.9, 6), { p: [0, 0.15, 0], s: [1, 1.08, 1], c: deep, c2: ice, gy: [0, 1], glow: 0.15, glow2: 0.45, cf: (x, y, z, i) => (i % 4 === 1 ? ['#e8fbff', 0.6] : null) });
+    b.add(P.cyl(1.02, 0.96, 6), { p: [0, 1.2, 0], s: [1, 0.16, 1], c: '#dff3ff', glow: 0.2 });
+    b.add(P.blob(13, 0.1, 1), { p: [0, 1.36, 0], s: [0.98, 0.14, 0.98], c: '#eef8ff', c2: '#ffffff', gy: [-1, 1] });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + PI / 6;
+      b.add(P.cone(5), { p: [Math.sin(a) * 0.86, 1.22, Math.cos(a) * 0.86], r: [PI, 0, 0], s: [0.08, 0.28 + hash(i + 3) * 0.3, 0.08], c: '#ffffff', c2: ice, gy: [0, 1], glow: 0.5 });
+    }
+    [[1.25, 0.55, 0.4], [-1.2, -0.6, -0.35], [-0.95, 0.95, 0.25]].forEach(([x, z, lean], i) => {
+      b.add(P.oct(), { p: [x, 0.3, z], r: [lean, i, -lean], s: [0.16, 0.45, 0.16], c: deep, c2: '#e8fbff', gy: [-1, 1], glow: 0.5, glow2: 0.8 });
+      b.add(P.oct(), { p: [x + 0.2, 0.18, z - 0.1], r: [0.3, i, 0.6], s: [0.09, 0.24, 0.09], c: ice, glow: 0.6 });
+    });
+    const sx = 1.2, sz = -0.7;
+    b.add(P.sphere(8, 6), { p: [sx, 0.3, sz], s: 0.32, c: '#ffffff' });
+    b.add(P.sphere(8, 6), { p: [sx, 0.72, sz], s: 0.22, c: '#ffffff' });
+    b.add(P.cone(5), { p: [sx, 0.72, sz + 0.2], r: [PI / 2, 0, 0], s: [0.05, 0.22, 0.05], c: '#ff8a2a' });
+    for (const ex of [-0.08, 0.08]) b.add(P.sphere(4, 3), { p: [sx + ex, 0.79, sz + 0.19], s: 0.03, c: '#1a1a24', keep: true });
+    b.add(P.cyl(1, 1, 6), { p: [sx, 0.9, sz], s: [0.2, 0.03, 0.2], c: '#2a2a3a' });
+    b.add(P.cyl(1, 1, 6), { p: [sx, 0.92, sz], s: [0.13, 0.2, 0.13], c: '#2a2a3a' });
+    b.use('crystals', [0, 2.0, 0]);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU;
+      const p = [Math.sin(a) * 1.15, 2.0 + (i % 2) * 0.35, Math.cos(a) * 1.15];
+      for (let k = 0; k < 3; k++) b.add(P.oct(), { p, r: [0, a, (k * PI) / 3], s: [0.045, 0.2, 0.04], c: '#e8fbff', glow: 0.9 });
+    }
+    b.use('body');
+    return { seedY: 2.25, topY: 1.5, halo: '#9fe8ff' };
+  },
+  // 7 Candy Canyon: a giant frosted cupcake with sprinkles, a candy cane and a lollipop
+  (b) => {
+    const pink = '#ff7eb8';
+    const liner = [[0, 0], [0.78, 0], [0.82, 0.04], [1.02, 0.86], [1.06, 0.9]];
+    b.add(latheGeo('cupLiner', liner, 14), { c: pink, c2: shade(pink, 0.15), gy: [0, 0.9], cf: (x, y, z) => (Math.floor(((Math.atan2(x, z) + PI) / TAU) * 14) % 2 ? '#ffd1ea' : null) });
+    b.add(P.cyl(1.0, 1.04, 14, true), { p: [0, 0.86, 0], s: [1, 0.16, 1], c: '#c8844a' });
+    b.add(P.torus(0.4, 4, 14), { p: [0, 1.08, 0], r: [PI / 2, 0, 0], s: [0.8, 0.8, 0.75], c: '#ff8fc8', c2: '#ffd6ea', gy: [-1, 1] });
+    b.add(P.torus(0.42, 4, 12), { p: [0, 1.36, 0], r: [PI / 2, 0, 0.4], s: [0.55, 0.55, 0.55], c: '#ffb0d8', c2: '#fff0f6', gy: [-1, 1] });
+    b.add(P.dome(12, 3), { p: [0, 1.36, 0], s: [0.55, 0.26, 0.55], c: '#fff6fa' });
+    for (let i = 0; i < 10; i++) {
+      const a = hash(i + 7) * TAU, top = i % 2;
+      const r = top ? 0.5 : 0.82, y = top ? 1.56 : 1.32;
+      b.add(P.box(), { p: [Math.sin(a) * r, y, Math.cos(a) * r], r: [hash(i) * 2, a * 3, 0.3], s: [0.07, 0.07, 0.22], c: CANDY[i % CANDY.length], keep: true });
+    }
+    const cane = [[1.3, 0, 0.45], [1.3, 0.8, 0.45], [1.3, 1.35, 0.45], [1.36, 1.6, 0.45], [1.54, 1.66, 0.45], [1.68, 1.5, 0.45], [1.68, 1.32, 0.45]];
+    b.add(tubeGeo(cane, 0.1, 0.1, 5, 10), { c: '#ffffff', cf: (x, y, z, k) => ((Math.floor(k / 10) + (Math.floor(k / 2) % 5)) % 4 < 2 ? '#ff3b4f' : null) });
+    b.add(P.cyl(1, 1, 4), { p: [-1.3, 0, -0.35], s: [0.04, 1.1, 0.04], c: '#ffffff' });
+    b.add(P.cyl(1, 1, 12), { p: [-1.3, 1.35, -0.43], r: [PI / 2, 0, 0], s: [0.34, 0.14, 0.34], c: '#6ff0c0', cf: (x, y, z) => (Math.floor(((Math.atan2(x, z) + PI) / TAU) * 6 + Math.hypot(x, z) * 2) % 2 ? '#ffffff' : null) });
+    b.use('crystals', [0, 2.0, 0]);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU, c = CANDY[i * 2];
+      const p = [Math.sin(a) * 1.15, 2.0 + (i % 2) * 0.35, Math.cos(a) * 1.15];
+      b.add(P.sphere(5, 3), { p, s: [0.13, 0.11, 0.11], c, glow: 0.3 });
+      for (const s of [-1, 1]) b.add(P.cone(4), { p: [p[0] + Math.cos(a) * s * 0.1, p[1], p[2] - Math.sin(a) * s * 0.1], r: [0, a, (s * PI) / 2], s: [0.08, 0.14, 0.08], c, glow: 0.3 });
+    }
+    b.use('body');
+    return { seedY: 2.35, topY: 1.62, halo: '#ff9fd8' };
+  },
+  // 8 Cloud Kingdom: a golden column on a fluffy cloud, with little angel wings
+  (b) => {
+    [[0, 0.2, 0, 1.0], [0.95, 0.16, 0.35, 0.62], [-0.9, 0.18, 0.4, 0.64], [0.1, 0.15, -0.95, 0.66]].forEach(([x, y, z, s], i) =>
+      b.add(P.blob(i + 20, 0.08, 1), { p: [x, y, z], s: [s, s * 0.6, s], c: '#dfe8ff', c2: '#ffffff', gy: [-1, 1], glow: 0.25 }));
+    b.add(P.cyl(0.62, 0.7, 10), { p: [0, 0.2, 0], s: [1, 0.16, 1], c: '#d9a020' });
+    b.add(P.cyl(0.5, 0.58, 10), { p: [0, 0.34, 0], s: [1, 0.8, 1], c: '#e0a820', c2: '#ffd84a', gy: [0, 1], glow: 0.1, cf: (x, y, z, i) => (i < 20 && Math.floor(i / 2) % 2 ? '#ffe68a' : null) });
+    b.add(P.cyl(0.95, 0.66, 10), { p: [0, 1.12, 0], s: [1, 0.2, 1], c: '#ffc933', c2: '#ffe27a', gy: [0, 1], glow: 0.1 });
+    b.add(P.cyl(1, 1, 10), { p: [0, 1.32, 0], s: [0.92, 0.07, 0.92], c: '#fff6c8', glow: 0.7 });
+    b.add(P.torus(0.1, 4, 16), { p: [0, 1.36, 0], r: [PI / 2, 0, 0], s: 0.93, c: '#ffd23f', glow: 0.3 });
+    const feather = leafGeo({ shape: 'feather', segL: 4, segW: 2, bend: 0.15, cup: 0.1 });
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        b.add(feather, { p: [side * 0.82, 1.12, 0.05], r: [0, 0, -side * (0.7 + k * 0.4)], s: [0.34, 0.95 - k * 0.17, 0.6], c: '#ffffff', c2: '#fff2c0', glow: 0.3 });
+      }
+    }
+    b.use('crystals', [0, 2.0, 0]);
+    const star = shapeGeo('podStar', () => starShape(5, 0.45), 0.12);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU;
+      b.add(star, { p: [Math.sin(a) * 1.15, 2.0 + (i % 2) * 0.35, Math.cos(a) * 1.15], r: [0, a, 0], s: 0.2, c: '#ffd23f', c2: '#fff4b0', gy: [-1, 1], glow: 0.7 });
+    }
+    b.use('body');
+    return { seedY: 2.3, topY: 1.42, halo: '#fff2a8' };
+  },
 ];
 
 export function podTemplate(biome) {
-  const key = 'pod' + biome;
+  const i = Math.max(0, Math.min(STANDS.length - 1, biome | 0));
+  const key = 'pod' + i;
   if (!cache.has(key)) {
     const b = new Builder();
-    const meta = STANDS[biome](b);
+    const meta = STANDS[i](b);
     const t = b.finish(meta);
     cache.set(key, t);
   }

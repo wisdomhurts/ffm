@@ -1,5 +1,6 @@
 // Minimal character physics: circle (XZ) vs axis-aligned boxes, plus gravity and jumping.
-// Boxes: {minX,maxX,minY,maxY,minZ,maxZ}. Ground plane is y = 0.
+// Boxes: {minX,maxX,minY,maxY,minZ,maxZ, off?}. `off: true` switches a box out (a garden lot not bought yet).
+// Ground plane is y = 0.
 import { WORLD } from '../config.js';
 
 const STEP = 0.7; // can walk up ledges this tall without jumping
@@ -49,7 +50,7 @@ export class PhysicsWorld {
           if (seen.has(i)) continue;
           seen.add(i);
           const b = this.boxes[i];
-          if (b.maxX < minX || b.minX > maxX || b.maxZ < minZ || b.minZ > maxZ) continue;
+          if (b.off || b.maxX < minX || b.minX > maxX || b.maxZ < minZ || b.minZ > maxZ) continue;
           out.push(b);
         }
       }
