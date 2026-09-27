@@ -512,9 +512,11 @@ function buildCrab(body, eyeMat) {
     l.scale.x = s;
     return p;
   });
+  // claw phase, accumulated so the snapping speeds up smoothly when it starts chasing
+  let clack = 0;
   return {
     headY: 4.3,
-    animate(W, t, ph) {
+    animate(W, t, ph, dt) {
       const wk = W.move;
       const sw = Math.sin(ph * 1.6);
       torso.position.y = Math.abs(Math.sin(ph * 1.6)) * 0.12 * wk + Math.sin(t * 2) * 0.04;
@@ -525,8 +527,8 @@ function buildCrab(body, eyeMat) {
       legs[0].position.y = Math.max(0, sw) * 0.2 * wk;
       legs[1].position.y = Math.max(0, -sw) * 0.2 * wk;
       // claws: lazy clack on patrol, frantic snapping when chasing, a big lunge-snap on attack
-      const rate = lerp(3, 16, W.chase);
-      const snap = 0.5 + 0.5 * Math.sin(t * rate);
+      clack = (clack + (dt || 0) * lerp(3, 16, W.chase)) % TAU;
+      const snap = 0.5 + 0.5 * Math.sin(clack);
       for (let i = 0; i < 2; i++) {
         const c = claws[i];
         const s = i ? 1 : -1;
@@ -534,7 +536,7 @@ function buildCrab(body, eyeMat) {
         const br = W.biteRaw;
         if (br > 0) open = br < 0.25 ? lerp(open, 1.0, br / 0.25) : br < 0.35 ? 1 - (br - 0.25) / 0.1 : 0;
         c.hinge.rotation.x = -open;
-        c.p.rotation.x = -0.25 * W.chase - W.bite * 0.7 + Math.sin(t * rate + i) * 0.1 * W.chase;
+        c.p.rotation.x = -0.25 * W.chase - W.bite * 0.7 + Math.sin(clack + i) * 0.1 * W.chase;
         c.p.rotation.y = s * (0.35 - W.chase * 0.2);
       }
     },
@@ -939,6 +941,8 @@ function buildLurker(body, eyeMat) {
   };
   tent.castShadow = true;
   torso.add(tent);
+  // bell pulse phase, accumulated so the pulsing speeds up smoothly when it starts chasing
+  let pulsePh = 0;
   return {
     headY: 5.6,
     materials: [bellMat],
@@ -958,7 +962,8 @@ function buildLurker(body, eyeMat) {
         arr[o + 2] = base[o + 2] + Math.cos(t * 1.9 + k * 2.7 + a * 3.0) * 0.4 * k * amp - reach * k * k * 1.6;
       }
       if (drawn > 0) tPos.needsUpdate = true;
-      const pulse = Math.sin(t * lerp(2.2, 6, W.chase));
+      pulsePh = (pulsePh + (dt || 0) * lerp(2.2, 6, W.chase)) % TAU;
+      const pulse = Math.sin(pulsePh);
       float.position.y = 0.2 + Math.sin(t * 1.7) * 0.3;
       torso.scale.set(1 + pulse * 0.05 - W.bite * 0.1, 1 - pulse * 0.06 + W.bite * 0.15, 1 + pulse * 0.05 - W.bite * 0.1);
       torso.rotation.x = W.move * 0.15 + W.chase * 0.12 + W.bite * 0.35;
