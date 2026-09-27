@@ -1,5 +1,5 @@
 // The whole map's art: tropical island plaza (studded baseplate, beach, ocean), the four family
-// gardens, the shops, the Seed Road's six biomes, sky, ambience and weather.
+// gardens, the shops, the Seed Road's nine biomes, sky, ambience and weather.
 // Contract: buildWorld(engine, layout, quality) -> {
 //   extraColliders: Box[]            // decorative solid props (trees, rocks) in physics box format
 //   update(dt, ctx)                  // ctx = {time, camera, focus:{x,y,z}, event: game.event}
@@ -24,6 +24,8 @@ import { buildShops } from './shops.js';
 import { createPetShop } from './petshop.js';
 import { createBoutique } from './boutique.js';
 import { buildRoad } from './road.js';
+
+const _dir = new THREE.Vector3();
 
 function createMaterials() {
   const stud = new THREE.MeshLambertMaterial({ vertexColors: true, map: studTexture() });
@@ -94,10 +96,14 @@ export function buildWorld(engine, layout, quality = engine.quality) {
         ambience.setWeather(ev);
       }
       ambience.update(dt, cam);
-      // cull whole areas once they are past the fog
+      // cull whole areas once they are past the fog, and the ones behind the camera: the road's merged meshes
+      // (cliff backing reaching out to the horizon) always overlap the view frustum, so three.js can't skip them
       const dd = Math.min(quality.drawDistance, engine.scene.fog.far + 30);
       const cz = cam.position.z;
-      home.visible = cz < 66 + dd;
+      const fz = cam.getWorldDirection(_dir).z;
+      const ahead = fz < -0.7 ? 40 : dd; // looking home (south) / otherwise
+      const behind = fz > 0.7 ? 40 : dd; // looking up the road (north) / otherwise
+      home.visible = cz < 66 + behind;
       if (home.visible) {
         plaza.update(dt, t, Math.max(ambience.weather.diamond, ambience.zoneW[6]));
         gardens.update(dt, t);
@@ -105,7 +111,7 @@ export function buildWorld(engine, layout, quality = engine.quality) {
         petShop.update(dt, t);
         boutique.userData.update(dt, t);
       }
-      road.update(dt, t, cz, dd);
+      road.update(dt, t, cz, ahead, behind);
     },
   };
   // Signs are painted synchronously above; repaint them with "Lilita One" as soon as it has loaded.

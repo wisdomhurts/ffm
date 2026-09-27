@@ -1250,9 +1250,10 @@ export function buildRoad(ctx) {
 
   return {
     biomes,
-    update(dt, t, camZ, viewDist) {
+    // visible: the biomes overlapping [camZ - behind, camZ + ahead]
+    update(dt, t, camZ, ahead, behind = ahead) {
       for (const b of biomes) {
-        const vis = camZ > b.minZ - viewDist && camZ < b.maxZ + viewDist;
+        const vis = b.minZ < camZ + ahead && b.maxZ > camZ - behind;
         b.group.visible = vis;
         if (!vis) continue;
         for (const s of b.spin) s.obj.rotation[s.axis] = t * s.speed;
