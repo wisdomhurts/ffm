@@ -4,6 +4,10 @@ A Roblox-style 3D browser game starring **Dorian, Esther, Mati and Micah**, insp
 hit *Steal A Seed!*. Run up the Seed Road, grab seeds, grow them into money-making plants, train your
 speed to reach rarer biomes, and steal your family's best plants (while stopping them from stealing yours).
 
+* Nine worlds up the Seed Road, from Sunny Field to Frostfall, Candy Canyon and the Cloud Kingdom.
+* Train Speed as high as you like (there is no top level), and buy the three FOR SALE lots at the back of
+  your garden for up to 25 planters.
+
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.
 * Works on desktop (keyboard/mouse or gamepad) and phones/tablets (touch controls).
@@ -45,5 +49,6 @@ npm install
 node build.mjs            # dist/index.html (public), dist/family.html + dist/artifact.html (with photos)
 node tests/smoke.mjs      # headless Playwright smoke test of the core loop
 node tests/fullscreen.test.mjs   # full screen on Android, iPhone and computers
+node --test tests/gameplay/*.test.mjs   # garden lots, open-ended Speed, the far biomes (no browser)
 ```
 Read `docs/DESIGN.md` for the game design and `docs/ARCHITECTURE.md` for how the code fits together.
