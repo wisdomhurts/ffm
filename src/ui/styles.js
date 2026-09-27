@@ -63,6 +63,9 @@ html.menu-screen .labels-layer{visibility:hidden}
 .pd-name{font-size:15px}
 .rar{font:900 11px/1 var(--fb);text-transform:uppercase;letter-spacing:.09em;margin-top:2px}
 .rar-common{color:#e4e9f2}.rar-uncommon{color:#6dff8a}.rar-rare{color:#6cb8ff}.rar-epic{color:#cf94ff}.rar-legendary{color:#ffc24a}.rar-mythic{color:#ff7089}
+.rar-celestial{color:#8ff7ff;text-shadow:0 0 7px rgba(111,243,255,.75),0 1px 0 rgba(0,0,0,.45)}
+.rar-cosmic{color:#ff86ec;text-shadow:0 0 7px rgba(255,92,225,.75),0 1px 0 rgba(0,0,0,.45)}
+.rar-divine{color:#fff29a;text-shadow:0 0 9px rgba(255,231,94,.95),0 1px 0 rgba(0,0,0,.45)}
 .rar-secret{color:transparent;text-shadow:none;padding:3px 7px 3px;border-radius:6px;border:1.5px solid rgba(255,255,255,.35);
   background-image:var(--rainbow),linear-gradient(#050507,#050507);background-size:200% 100%,100% 100%;
   -webkit-background-clip:text,padding-box;background-clip:text,padding-box;animation:rainbowPan 2s linear infinite}
@@ -79,6 +82,9 @@ html.menu-screen .labels-layer{visibility:hidden}
 .pl-steal{margin-top:3px;font:900 11px/1 var(--fb);letter-spacing:.06em;padding:4px 8px;border-radius:99px;background:var(--red);border:2px solid var(--ink);text-shadow:none;animation:flash .3s steps(2) infinite}
 .ic-lock{display:inline-block;width:.85em;height:1em;margin-right:4px;vertical-align:-.1em;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 24'%3E%3Cpath d='M5 11V7.5a5 5 0 0 1 10 0V11' fill='none' stroke='%2310163a' stroke-width='5'/%3E%3Cpath d='M5 11V7.5a5 5 0 0 1 10 0V11' fill='none' stroke='%23ffd23f' stroke-width='2.4'/%3E%3Crect x='1.5' y='10' width='17' height='12.5' rx='3' fill='%23ffd23f' stroke='%2310163a' stroke-width='2'/%3E%3C/svg%3E") center/contain no-repeat}
 .pl-lock{font:800 13px/1 var(--fb);color:var(--gold);padding:5px 10px;border-radius:10px;background:rgba(16,22,58,.85);border:2px solid var(--ink)}
+.pl-lock b{color:var(--cash)}
+.pl-sale{font:var(--fdw) 17px/1 var(--fd);letter-spacing:.05em;color:#fff;padding:5px 11px 4px;margin-bottom:3px;border-radius:9px;background:linear-gradient(180deg,#ff5a5a,#d62f3f);border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink)}
+.plantlbl.lot.next .pl-sale{animation:incPulse 1.8s ease-in-out infinite}
 .padlbl{gap:3px}
 .cp-amt{font:var(--fdw) 24px/1 var(--fd);color:var(--cash)}
 .cp-lbl{font:900 11px/1 var(--fb);letter-spacing:.16em;padding:4px 8px 4px 10px;border-radius:7px;background:#1f9c46;border:2px solid var(--ink);text-shadow:0 1px 0 rgba(0,0,0,.35)}

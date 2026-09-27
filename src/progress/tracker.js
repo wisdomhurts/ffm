@@ -496,6 +496,7 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
         setMax('secretOwned', secret);
         setMax('namesakeOwned', mine);
         setMax('plantersMax', unlocked);
+        if (g.lotsOwned) setMax('lotsMax', g.lotsOwned(garden));
       }
       // the next day's quests are sized from the player's Endless progress
       if (g.mode !== 'showdown') {
@@ -623,6 +624,13 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     if (!isMe(player)) return;
     add('planters');
     fact('planter');
+    tick();
+  });
+  on('garden:expanded', ({ player, lot }) => {
+    if (!isMe(player)) return;
+    add('lots');
+    setMax('lotsMax', lot + 1);
+    checkBadges();
     tick();
   });
   on('lock:on', ({ player }) => {

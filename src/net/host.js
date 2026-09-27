@@ -489,7 +489,7 @@ export class HostRole {
       }
       case 'gift': {
         const to = g.players[int(args[0], 0, 3, -1)];
-        return to ? g.giftPlant(p, to, int(args[1], 0, 9, -1)) : false;
+        return to ? g.giftPlant(p, to, int(args[1], 0, WORLD.planterCount - 1, -1)) : false;
       }
       case 'addCash':
         return false; // quest cash is banked on the device for solo play; online nobody prints money

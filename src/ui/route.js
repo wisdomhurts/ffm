@@ -100,7 +100,7 @@ function prepare(boxes) {
   for (const g of L.gardens) cand.push(g.inside, g.outside);
   for (const x of [-9, 0, 9]) cand.push({ x, z: gz });
   for (const x of [-14, 0, 14]) for (const z of [-40, -24, -8, 8, 24, 40]) cand.push({ x, z });
-  for (const s of [-1, 1]) for (const x of [24, 36, 48, 60, 69]) cand.push({ x: s * x, z: 52 }, { x: s * x, z: -51.5 });
+  for (const s of [-1, 1]) for (const x of [24, 36, 48, 60, 69, 80, 92]) cand.push({ x: s * x, z: 52 }, { x: s * x, z: -51.5 });
   // waypoints must stand in the open (a garden's own gate nodes are always kept)
   const nodes = cand.filter((n, i) => i < 8 || !obs.some((o) => inside(o, n.x, n.z, 4))).map((n) => ({ x: n.x, z: n.z }));
   const N = nodes.length;

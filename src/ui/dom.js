@@ -71,7 +71,7 @@ export function toggle(el, cls, on) {
 export function fmtNum(n) {
   n = Math.floor(Math.max(0, n || 0));
   if (n < 1000) return String(n);
-  for (const [u, v] of [['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]]) {
+  for (const [u, v] of [['Qi', 1e18], ['Qa', 1e15], ['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]]) {
     if (n >= v * 0.9995) {
       const x = n / v;
       const s = x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);

@@ -5,8 +5,10 @@ import { Merger, makeRand, withColors, drawTexture, trs } from './kit.js';
 import { mosaicTexture, spawnTexture, sandDetail } from './textures.js';
 import { oceanMaterial, liquidMaterial } from './water.js';
 import { palm, lamp, tikiTorch, palapa, lounger, rope, rock, bush, flower } from './props.js';
+import { WORLD } from '../config.js';
 
-export const ISLAND = { minX: -72.5, maxX: 72.5, minZ: -66.5, maxZ: 60 };
+// Half a stud past the walkable home area (WORLD.homeHalfW / homeMinZ): the gardens' far fences stand at |x| = 90.
+export const ISLAND = { minX: -WORLD.homeHalfW - 0.5, maxX: WORLD.homeHalfW + 0.5, minZ: WORLD.homeMinZ - 0.5, maxZ: 60 };
 const WATER_Y = -1.2;
 const SHORE_D = 9; // distance from the island rect to the water line
 
@@ -63,10 +65,14 @@ export function buildPlaza(ctx) {
   group.add(mosaic);
 
   // ---------------------------------------------------------------- props inside the island (with colliders)
+  // (behind the gardens' far fences: 3.4 studs out, like the fence-side palms of the old, smaller gardens)
+  const EDGE = I.maxX - 3.1;
   const inPalms = [
     [-31, 54], [-43, 56], [-58, 52], [-69, 57.5], [31, 54], [43, 56], [58, 52], [69, 57.5],
-    [-69.4, -38], [-69.4, -12], [-69.4, 12], [-69.4, 38], [69.4, -38], [69.4, -12], [69.4, 12], [69.4, 38],
+    [-81, 55], [-92, 57.5], [81, 55], [92, 57.5],
+    [-EDGE, -38], [-EDGE, -12], [-EDGE, 12], [-EDGE, 38], [EDGE, -38], [EDGE, -12], [EDGE, 12], [EDGE, 38],
     [-68, -62.5], [-66, -48.5], [-45, -63], [68, -48.5], [46, -63], [69, -62.5],
+    [-80, -57], [-92, -62.5], [-86, -49], [80, -57], [92, -62.5], [86, -49],
   ];
   for (const [x, z] of inPalms) {
     const lean = r.range(0.12, 0.3);
@@ -129,7 +135,7 @@ export function buildPlaza(ctx) {
   props.block(64, 0, 47.5, 6, 0.4, 1.4, '#8a6038');
   solid(64, 47.5, 3, 0.9, 5);
   // flower beds along the mainland cliff foot (north edge)
-  for (let x = 26; x < 72; x += 4.5) {
+  for (let x = 26; x < I.maxX - 1; x += 4.5) {
     for (const s of [-1, 1]) {
       if (s * x > 0 && Math.abs(s * x - F.x) < 7) continue;
       bush(props, s * x + r.range(-0.6, 0.6), 0, 59.2, 1.1, r);
@@ -201,7 +207,7 @@ export function buildPlaza(ctx) {
   }
   // lifeguard tower (west beach)
   {
-    const x = -79, z = -20;
+    const x = I.minX - 6.5, z = -20;
     for (const [dx, dz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) beach.beam(x + dx * 1.3, -1, z + dz * 1.3, x + dx, 4, z + dz, 0.3, '#ffffff');
     beach.block(x, 4, z, 4.4, 0.35, 4.4, '#e84a4a');
     beach.block(x, 4.35, z, 3.6, 2.6, 3.6, '#ffffff', { ao: 0.15 });

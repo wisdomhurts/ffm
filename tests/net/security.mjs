@@ -5,7 +5,7 @@ import nodeCrypto from 'node:crypto';
 import { StubApp, MemoryHub } from './stub.mjs';
 import { bus } from '../../src/core/events.js';
 import { LAYOUT } from '../../src/gameplay/layout.js';
-import { PLANTS } from '../../src/config.js';
+import { PLANTS, WORLD } from '../../src/config.js';
 import { roomTopic, upTopic, vetFull, vetSlotData, isBotLine, sanitizePet, sanitizeLook } from '../../src/net/protocol.js';
 import { sha256, hmac, hkdf, b64 } from '../../src/net/crypto.js';
 import { familyFaceData } from '../../src/characters/faces.js';
@@ -174,7 +174,7 @@ export async function securitySuite(check) {
   // a kick from the real host is kept inside the play area and stuns briefly at most
   B.online.role.onKick({ k: B.online.role.lastKick + 1, p: [5000, 900, -9000], v: [1e6, 0, -1e6], su: 1e9, iu: 1e9 });
   const bk = bobDev();
-  check(Math.abs(bk.pos.x) <= 73 && bk.pos.z > -67.5 && bk.pos.y <= 60 && Math.abs(bk.vel.x) <= 60 && bk.stunUntil <= B.game.time + 10 && bk.invulnUntil <= B.game.time + 10,
+  check(Math.abs(bk.pos.x) <= WORLD.homeHalfW + 1 && bk.pos.z > -67.5 && bk.pos.y <= 60 && Math.abs(bk.vel.x) <= 60 && bk.stunUntil <= B.game.time + 10 && bk.invulnUntil <= B.game.time + 10,
     `kicks are clamped: (${bk.pos.x.toFixed(0)}, ${bk.pos.y.toFixed(0)}, ${bk.pos.z.toFixed(0)}) stun ${(bk.stunUntil - B.game.time).toFixed(1)} s`);
   bk.stunUntil = bk.invulnUntil = 0;
   await step(1.5);
@@ -215,8 +215,8 @@ export async function securitySuite(check) {
   const v = vetFull(JSON.parse(JSON.stringify(st)));
   check(v && !v.gardens[0].planters[0].plant && !v.pods[0].seed && !v.ground.some((g) => g.speciesId === 'hasOwnProperty') && !v.players[1].carrying &&
     v.players[2].pet === null && v.players[3].look.hat === null, 'prototype ids never pass as plants, seeds, pets or looks');
-  const data = vetSlotData({ player: { cash: 1e30, speedLevel: 99, items: { banana: -5, balloon: 1e9 } }, garden: { cashPile: 'x', planters: [{ unlocked: true, plant: { speciesId: 'toString' } }, { unlocked: true, plant: { speciesId: PLANTS[0].id, growLeft: -9 } }] } });
-  check(data.player.cash <= 1e13 && data.player.speedLevel === 25 && data.player.items.banana === 0 && data.player.items.balloon === 999 &&
+  const data = vetSlotData({ player: { cash: 1e30, speedLevel: 5000, items: { banana: -5, balloon: 1e9 } }, garden: { cashPile: 'x', planters: [{ unlocked: true, plant: { speciesId: 'toString' } }, { unlocked: true, plant: { speciesId: PLANTS[0].id, growLeft: -9 } }] } });
+  check(data.player.cash <= 1e18 && data.player.speedLevel === 999 && data.player.items.banana === 0 && data.player.items.balloon === 999 &&
     data.garden.planters[0].plant === null && data.garden.planters[1].plant?.growLeft === 0, "a joiner's garden is vetted before the host loads it");
   check(sanitizePet('toString') === null && sanitizeLook({ hat: 'constructor' }, 'maddie').hat === null, 'pets and looks: own catalog ids only');
   const lookKeys = Object.keys(sanitizeLook({ skin: '#ffffff', build: 'kid' }, 'esther')).join();

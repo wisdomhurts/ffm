@@ -123,22 +123,18 @@ function speedShop(app, game, me) {
       const carry = s * PLAYER.carrySeedMult;
       setText(lvl, `Speed Lv ${me.speedLevel}`);
       setText(now, `${s} studs/s (${carry.toFixed(1)} with a seed)`);
+      // no top level: there is always a next one
       const n = me.speedLevel + 1;
-      if (n > PLAYER.maxSpeedLevel) {
-        setText(next, 'MAX SPEED! You are a legend.');
-        train.innerHTML = '<span>MAXED</span>';
-        train.disabled = true;
-      } else {
-        const cost = speedCost(n);
-        setText(next, `Next: Lv ${n} = ${speedAt(n, me.rebirths)} studs/s (+${PLAYER.speedPerLevel})`);
-        train.innerHTML = `<span class="bi">${ICON.bolt}</span><span>TRAIN</span><small>${money(cost)}</small>`;
-        train.disabled = me.cash < cost;
-      }
+      const cost = speedCost(n);
+      setText(next, `Next: Lv ${n} = ${speedAt(n, me.rebirths)} studs/s (+${PLAYER.speedPerLevel})`);
+      const html = `<span class="bi">${ICON.bolt}</span><span>TRAIN</span><small>${money(cost)}</small>`;
+      if (train._h !== html) train.innerHTML = train._h = html;
+      train.disabled = me.cash < cost;
       you.style.left = `${Math.min(100, (carry / maxScale) * 100)}%`;
       for (const r of rows) {
         const ok = outruns(s, r.ms);
         r.row.classList.toggle('ok', ok);
-        const html = ok ? `${ICON.check}<span>Faster!</span>` : `<span>Need Lv ${Math.min(PLAYER.maxSpeedLevel, levelToOutrun(r.ms, me.rebirths))}</span>`;
+        const html = ok ? `${ICON.check}<span>Faster!</span>` : `<span>Need Lv ${levelToOutrun(r.ms, me.rebirths)}</span>`;
         if (r.status._h !== html) r.status.innerHTML = r.status._h = html;
       }
     },

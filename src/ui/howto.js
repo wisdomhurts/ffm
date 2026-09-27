@@ -1,5 +1,5 @@
 // "How to Play" guide (static, illustrated with the UI's own icons).
-import { RARITIES, BIOMES, MUTATIONS, EVENTS, PLANTERS, LOCK } from '../config.js';
+import { RARITIES, BIOMES, MUTATIONS, EVENTS, PLANTERS, LOTS, LOCK } from '../config.js';
 import { h } from './dom.js';
 import { ICON, ITEM_ICONS, NOODLE, EVENT_ICON, TILE_ICONS } from './icons.js';
 import { isTouch } from './device.js';
@@ -36,6 +36,8 @@ const TIPS = () => [
   'Bonk a thief to make them drop your plant. It flies straight home.',
   'Banana peels and water balloons make runners drop what they carry.',
   `You start with ${PLANTERS.startUnlocked} planters. Walk up to a locked one to unlock more.`,
+  `Need more room? The back of your garden is ${LOTS.count} FOR SALE lots. Walk up to one to buy it: +${LOTS.planters} planters each.`,
+  'There is no top Speed level. Keep training to outrun the monsters of the far worlds: Frostfall, Candy Canyon and Cloud Kingdom.',
   `Garden full? Hold ${act()} on a grown plant to sell it for 90 seconds of income.`,
   'Rebirth at the altar for a permanent income boost and a crown star.',
   'Small screen? The Simple layout (Settings > Screen layout) keeps just the basics. Tap the row of faces at the top to see everyone\'s cash.',
@@ -50,7 +52,7 @@ export function buildHowTo() {
   const controls = h('div', { class: 'ht-controls' }, ctl.map(([ic, name, rows]) =>
     h('div', { class: 'ht-ctl' }, h('h4', { html: `<span class="bi">${ic}</span>${name}` }),
       h('dl', {}, rows.map(([k, v]) => [h('dt', {}, h('kbd', { text: k })), h('dd', { text: v })])))));
-  const biomeFor = (r) => (r.id === 'secret' ? 'Starbloom (super rare)' : BIOMES.find((b) => b.rarity === r.id)?.name || '');
+  const biomeFor = (r) => (r.id === 'secret' ? 'Starbloom and beyond (super rare)' : BIOMES.find((b) => b.rarity === r.id)?.name || '');
   const rarities = h('div', { class: 'ht-chips' }, RARITIES.map((r) =>
     h('div', { class: 'ht-rar' }, h('span', { class: `rar rar-${r.id}`, text: r.name }), h('span', { class: 'ht-where', text: biomeFor(r) }))));
   const muts = h('div', { class: 'ht-chips' }, Object.values(MUTATIONS).filter((m) => m.name).map((m) =>

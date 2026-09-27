@@ -2,9 +2,9 @@
 // Views, UI, audio and AI read this state and listen to the events it emits on `bus`.
 import {
   ROAD_END_Z, WORLD, PLAYER, PLANTS, PLANT, RARITIES, RARITY, MUTATIONS, BASE_MUTATION_CHANCE, BIOMES, PODS, ITEMS, ITEM,
-  EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, REBIRTH, NAMESAKE_BONUS, speedCost, TOP_TIER,
+  EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, LOTS, REBIRTH, NAMESAKE_BONUS, speedCost, TOP_TIER, planterCost, accelFor,
 } from '../config.js';
-import { LAYOUT, gardenContains } from './layout.js';
+import { LAYOUT, gardenContains, lotPlanterBoxes } from './layout.js';
 import { PhysicsWorld } from '../core/physics.js';
 import { bus } from '../core/events.js';
 import { makeRng } from '../core/rng.js';
@@ -25,7 +25,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // Safety net: anyone who ends up outside the island or the road gets sent home.
 const inPlayArea = ({ x, z }) =>
-  z < WORLD.road.startZ ? Math.abs(x) < 73 && z > -67.5 : Math.abs(x) < WORLD.road.width / 2 + 1 && z < ROAD_END_Z + 1;
+  z < WORLD.road.startZ ? Math.abs(x) < WORLD.homeHalfW + 1 && z > WORLD.homeMinZ - 1.5 : Math.abs(x) < WORLD.road.width / 2 + 1 && z < ROAD_END_Z + 1;
 
 export const SELL_SECONDS = 90;
 export const NETWORTH_PLANT_SECONDS = 60;
@@ -48,7 +48,10 @@ export class Game {
     this.difficulty = DIFFICULTY[difficulty] || DIFFICULTY.normal;
     this.rng = makeRng(seed);
     this.layout = LAYOUT;
-    this.physics = new PhysicsWorld([...LAYOUT.colliders, ...extraColliders]);
+    // a lot's planters are solid only once it is bought (_syncLots switches them on/off; the bots' nav follows navEpoch)
+    this.lotBoxes = LAYOUT.gardens.map((L) => L.lots.map((lot) => lotPlanterBoxes(L, lot.index)));
+    this.navEpoch = 0;
+    this.physics = new PhysicsWorld([...LAYOUT.colliders, ...extraColliders, ...this.lotBoxes.flat(2)]);
     this.paused = false;
     this.over = false;
 
@@ -68,6 +71,7 @@ export class Game {
     for (const pod of this.pods) pod.seed = this.rollSeed(pod.biome);
     this.players.forEach((p) => this.respawn(p));
     if (save) this.restore(save);
+    this.gardens.forEach((g) => this._syncLots(g));
     this._recomputeNetWorth();
   }
 
@@ -80,7 +84,7 @@ export class Game {
       L,
       owner,
       planters: L.planters.map((p) => ({
-        index: p.index, x: p.x, z: p.z, unlocked: p.index < PLANTERS.startUnlocked, plant: null, stealer: null,
+        index: p.index, x: p.x, z: p.z, lot: p.lot, unlocked: p.index < PLANTERS.startUnlocked, plant: null, stealer: null,
       })),
       cashPile: 0,
       lockedUntil: 0,
@@ -133,6 +137,13 @@ export class Game {
 
   isLocked(g) {
     return this.time < g.lockedUntil;
+  }
+
+  /** How many of the garden's FOR SALE lots are bought (they open in order). */
+  lotsOwned(g) {
+    let n = 0;
+    while (n < LOTS.count && g.planters[PLANTERS.base + n * LOTS.planters]?.unlocked) n++;
+    return n;
   }
 
   gardenAt(x, z, pad = 0) {
@@ -284,7 +295,7 @@ export class Game {
     const max = p.maxSpeed(now, this.difficulty.botSpeedMult);
     const tx = mx * max;
     const tz = mz * max;
-    const a = (p.onGround ? PLAYER.accel : PLAYER.airAccel) * dt * (stunned ? 0.25 : 1);
+    const a = accelFor(max, p.onGround) * dt * (stunned ? 0.25 : 1);
     const dvx = tx - p.vel.x;
     const dvz = tz - p.vel.z;
     const dl = Math.hypot(dvx, dvz);
@@ -393,7 +404,13 @@ export class Game {
         const d2 = dist2(pos, pl);
         if (d2 > 4.8 * 4.8) continue;
         if (g.owner === p) {
-          if (!pl.unlocked) {
+          if (!pl.unlocked && pl.lot >= 0) {
+            // a crated lot planter: buys the whole lot (only the next lot is for sale)
+            if (pl.lot !== this.lotsOwned(g)) continue;
+            const cost = LOTS.cost[pl.lot];
+            consider(d2, { key: 'lot' + pl.lot, verb: 'Expand', label: `Garden: +${LOTS.planters} planters ($${fmt(cost)})`, hold: 0, cost, target: pl,
+              action: () => this.buyLot(p, pl.lot) });
+          } else if (!pl.unlocked) {
             const cost = PLANTERS.unlockCost[pl.index];
             consider(d2, { key: 'unlock' + pl.index, verb: 'Unlock', label: `Planter ($${fmt(cost)})`, hold: 0, cost, target: pl,
               action: () => this.unlockPlanter(p, pl.index) });
@@ -418,7 +435,7 @@ export class Game {
     if (dist2(pos, sh.gear) < sh.gear.r ** 2) consider(dist2(pos, sh.gear) + 1, { key: 'shop:gear', verb: 'Open', label: 'Gear Shop', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'gear' }) });
     if (dist2(pos, sh.speed) < sh.speed.r ** 2) {
       const next = p.speedLevel + 1;
-      consider(dist2(pos, sh.speed) + 1, { key: 'shop:speed', verb: 'Train', label: next > 25 ? 'Max Speed!' : `Speed +2 ($${fmt(speedCost(next))})`, hold: 0,
+      consider(dist2(pos, sh.speed) + 1, { key: 'shop:speed', verb: 'Train', label: `Speed +2 ($${fmt(speedCost(next))})`, hold: 0,
         action: () => { if (!this.buySpeed(p)) bus.emit('shop:open', { player: p, shop: 'speed' }); } });
     }
     if (dist2(pos, sh.rebirth) < sh.rebirth.r ** 2) consider(dist2(pos, sh.rebirth) + 1, { key: 'shop:rebirth', verb: 'Open', label: 'Rebirth Altar', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'rebirth' }) });
@@ -522,6 +539,7 @@ export class Game {
   unlockPlanter(p, index) {
     const g = this.gardens[p.slot];
     const pl = g.planters[index];
+    if (pl && pl.lot >= 0) return !pl.unlocked && this.buyLot(p, pl.lot);
     const cost = PLANTERS.unlockCost[index];
     if (!pl || pl.unlocked || p.cash < cost) {
       if (pl && !pl.unlocked) bus.emit('purchase:fail', { player: p, reason: 'cash', cost });
@@ -532,6 +550,48 @@ export class Game {
     pl.unlocked = true;
     bus.emit('planter:unlocked', { player: p, index, cost });
     return true;
+  }
+
+  /** Buy the garden's next FOR SALE lot `k`: its 5 planters open at once. */
+  buyLot(p, k) {
+    const g = this.gardens[p.slot];
+    if (!Number.isInteger(k) || k < 0 || k >= LOTS.count || k !== this.lotsOwned(g)) return false;
+    const cost = LOTS.cost[k];
+    if (p.cash < cost) {
+      bus.emit('purchase:fail', { player: p, reason: 'cash', cost });
+      return false;
+    }
+    p.cash -= cost;
+    p.upgradeSpend += cost;
+    const planters = [];
+    for (const pl of g.planters) {
+      if (pl.lot !== k) continue;
+      pl.unlocked = true;
+      planters.push(pl.index);
+    }
+    this._syncLots(g);
+    bus.emit('garden:expanded', { player: p, lot: k, cost, planters, garden: g });
+    return true;
+  }
+
+  // Switch the planter colliders of garden g's lots on (bought) or off.
+  _syncLots(g) {
+    const n = this.lotsOwned(g);
+    this.lotBoxes[g.slot].forEach((boxes, k) => {
+      if (boxes[0] && boxes[0].off !== k >= n) {
+        for (const b of boxes) b.off = k >= n;
+        this.navEpoch++;
+      }
+    });
+  }
+
+  // A garden's lots always open in order, all 5 planters of a lot together (repairs old or odd saves).
+  _normalizeLots(g) {
+    let open = true;
+    for (let k = 0; k < LOTS.count; k++) {
+      open = open && !!g.planters[PLANTERS.base + k * LOTS.planters]?.unlocked;
+      for (const pl of g.planters) if (pl.lot === k) pl.unlocked = open;
+    }
   }
 
   // ------------------------------------------------------------------ pads & planting
@@ -986,7 +1046,6 @@ export class Game {
   buySpeed(p) {
     if (!this.near(p, LAYOUT.shops.speed, 9)) return false;
     const next = p.speedLevel + 1;
-    if (next > 25) return false;
     const cost = speedCost(next);
     if (p.cash < cost) {
       bus.emit('purchase:fail', { player: p, reason: 'cash', cost });
@@ -1016,6 +1075,7 @@ export class Game {
       pl.plant = null;
       pl.unlocked = pl.index < PLANTERS.startUnlocked;
     });
+    this._syncLots(g);
     p.celebrateUntil = this.time + 3;
     bus.emit('rebirth', { player: p, rebirths: p.rebirths });
     return true;
@@ -1202,6 +1262,7 @@ export class Game {
     });
     this._setIdentity(p, cfg);
     if (cfg.data) this.loadSlot(slot, cfg.data);
+    this._syncLots(g);
     this.respawn(p);
     this.human = this.players.find((q) => q.isHuman) || null;
     this._recomputeNetWorth();
@@ -1345,6 +1406,7 @@ export class Game {
         pl.stealer = pd.stealer;
         pl.plant = plant(pd.plant);
       });
+      this._syncLots(g);
     });
     s.pods.forEach((d, i) => {
       const pod = this.pods[i];
@@ -1419,23 +1481,28 @@ export class Game {
     const num = (v, d = 0) => (Number.isFinite(v) ? v : d);
     const g = this.gardens[i];
     if (!g || !gs || typeof gs !== 'object') return;
-    {
-      g.cashPile = Math.max(0, num(gs.cashPile));
-      if (!Array.isArray(gs.planters)) return;
-      gs.planters.forEach((ps, j) => {
-        const pl = g.planters[j];
-        if (!pl || !ps || typeof ps !== 'object') return;
-        pl.unlocked = !!ps.unlocked || j < PLANTERS.startUnlocked;
-        const d = ps.plant;
-        const sp = d && PLANT[d.speciesId];
-        if (!sp) {
-          pl.plant = null;
-          return;
-        }
-        const growTotal = num(d.growTotal, sp.grow) > 0 ? num(d.growTotal, sp.grow) : sp.grow;
-        pl.plant = { uid: uid(), speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal', growTotal,
-          growLeft: clamp(num(d.growLeft, 0), 0, growTotal), owner: i };
-      });
+    g.cashPile = Math.max(0, num(gs.cashPile));
+    if (!Array.isArray(gs.planters)) return;
+    const saved = (j) => (gs.planters[j] && typeof gs.planters[j] === 'object' ? gs.planters[j] : null);
+    // older saves have 10 planters: their lots stay FOR SALE
+    for (const pl of g.planters) {
+      const ps = saved(pl.index);
+      if (ps) pl.unlocked = !!ps.unlocked || pl.index < PLANTERS.startUnlocked;
+    }
+    this._normalizeLots(g);
+    this._syncLots(g);
+    for (const pl of g.planters) {
+      const ps = saved(pl.index);
+      if (!ps) continue;
+      const d = ps.plant;
+      const sp = d && PLANT[d.speciesId];
+      if (!sp || !pl.unlocked) {
+        pl.plant = null;
+        continue;
+      }
+      const growTotal = num(d.growTotal, sp.grow) > 0 ? num(d.growTotal, sp.grow) : sp.grow;
+      pl.plant = { uid: uid(), speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal', growTotal,
+        growLeft: clamp(num(d.growLeft, 0), 0, growTotal), owner: i };
     }
   }
 }
@@ -1443,7 +1510,7 @@ export class Game {
 export function fmt(n) {
   n = Math.floor(n);
   if (n < 1000) return String(n);
-  const units = [['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]];
+  const units = [['Qi', 1e18], ['Qa', 1e15], ['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]];
   for (const [u, v] of units) {
     if (n >= v * 0.9995) {
       const x = n / v;

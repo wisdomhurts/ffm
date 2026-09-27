@@ -9,7 +9,7 @@
 // A template: {id, tier, group, icon, on, amount?(data,p), max?(data,p), when?(data,p), gate?(ctx), make(ctx,rng) -> {target,p?}, text(target,p)}
 // `money: true` marks quests whose numbers are cash (the UI formats them as $). Targets that depend on the
 // player's progress stage are re-fitted at game start while the quest is still untouched (tracker.js).
-import { BIOMES, RARITIES, CHARACTERS, CHARACTER, PLANTS, PLAYER, REBIRTH, speedAt } from '../config.js';
+import { BIOMES, RARITIES, CHARACTERS, CHARACTER, PLANTS, PLAYER, REBIRTH, LOTS, TOP_TIER, SPEED_MILESTONES, speedAt } from '../config.js';
 import { EGGS } from '../pets/catalog.js';
 import { EMOTE, QUICK_CHAT } from '../social/catalog.js';
 
@@ -27,11 +27,11 @@ export const BONUS = { stars: 25, secs: 240, minCash: 1500 };
 const AVG_INCOME = {};
 for (const p of PLANTS) if (!p.family) (AVG_INCOME[p.rarity] ||= []).push(p.income);
 for (const k of Object.keys(AVG_INCOME)) AVG_INCOME[k] = AVG_INCOME[k].reduce((a, b) => a + b, 0) / AVG_INCOME[k].length;
-const PLANTERS_AT_STAGE = [4, 5, 6, 7, 8, 9];
+const PLANTERS_AT_STAGE = [4, 5, 6, 7, 8, 9, 10, 12, 15];
 
 /**
  * How deep up the Seed Road this player can farm: the last biome whose monster they outrun while
- * carrying a seed (Normal difficulty). 0 = Sunny Field ... 5 = Starbloom.
+ * carrying a seed (Normal difficulty). 0 = Sunny Field ... 8 = Cloud Kingdom.
  */
 export function stageOf(speedLevel = 0, rebirths = 0) {
   const carry = speedAt(speedLevel, rebirths) * PLAYER.carrySeedMult;
@@ -64,7 +64,7 @@ export function nice(x) {
 export function cashText(n) {
   n = Math.floor(n);
   if (n < 1000) return '$' + n;
-  for (const [u, v] of [['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]]) {
+  for (const [u, v] of [['Qi', 1e18], ['Qa', 1e15], ['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]]) {
     if (n >= v) {
       const x = n / v;
       const s = x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2);
@@ -118,10 +118,10 @@ export const QUESTS = [
   { id: 'bonkWho', tier: 'medium', group: 'bonk', icon: 'noodle', on: 'bonk', when: (d, p) => d.target === p,
     make: (ctx, rng) => ({ target: 3, p: otherFamily(ctx, rng) }), text: (n, p) => `Bonk ${famName(p)} ${n === 1 ? 'once' : n + ' times'}` },
   { id: 'grabTier', tier: 'medium', group: 'seed', icon: 'seed', on: 'seed', when: (d, p) => d.tier >= p,
-    make: (ctx) => ({ target: 1, p: Math.min(5, ctx.stage + 1) }), text: (n, p) => `Grab ${an(rarityName(p))} seed${p < 5 ? ' or better' : ''}` },
+    make: (ctx) => ({ target: 1, p: Math.min(TOP_TIER, ctx.stage + 1) }), text: (n, p) => `Grab ${an(rarityName(p))} seed${p < TOP_TIER ? ' or better' : ''}` },
   { id: 'mutant', tier: 'medium', group: 'mutant', icon: 'diamond', on: 'seed', when: (d) => d.mutation && d.mutation !== 'normal',
     make: () => ({ target: 1 }), text: () => 'Grab a Gold, Diamond or Rainbow seed' },
-  { id: 'speed2', tier: 'medium', group: 'speed', icon: 'bolt', on: 'speed', gate: (ctx) => ctx.speedLevel <= PLAYER.maxSpeedLevel - 2,
+  { id: 'speed2', tier: 'medium', group: 'speed', icon: 'bolt', on: 'speed',
     make: () => ({ target: 2 }), text: (n) => `Buy ${plural(n, 'Speed level')}` },
   { id: 'hatch', tier: 'medium', group: 'pets', icon: 'egg', on: 'hatch', gate: (ctx) => ctx.pets && ctx.stage >= 1,
     make: () => ({ target: 1 }), text: () => 'Hatch a pet egg' },
@@ -140,10 +140,10 @@ export const QUESTS = [
   { id: 'foil4', tier: 'hard', group: 'foil', icon: 'shield', on: 'foil', make: () => ({ target: 4 }), text: (n) => `Stop ${plural(n, 'thief', 'thieves')}` },
   { id: 'bonk15', tier: 'hard', group: 'bonk', icon: 'noodle', on: 'bonk', make: () => ({ target: 15 }), text: (n) => `Bonk ${plural(n, 'player')} with your noodle` },
   { id: 'plantTier', tier: 'hard', group: 'seed', icon: 'sprout', on: 'plant', when: (d, p) => d.tier >= p,
-    make: (ctx) => ({ target: 1, p: Math.min(5, ctx.stage + 1) }), text: (n, p) => `Plant ${an(rarityName(p))} seed${p < 5 ? ' or better' : ''}` },
+    make: (ctx) => ({ target: 1, p: Math.min(TOP_TIER, ctx.stage + 1) }), text: (n, p) => `Plant ${an(rarityName(p))} seed${p < TOP_TIER ? ' or better' : ''}` },
   { id: 'grow12', tier: 'hard', group: 'grow', icon: 'sprout', on: 'grow', make: () => ({ target: 12 }), text: (n) => `Grow ${plural(n, 'plant')} to full size` },
   { id: 'win', tier: 'hard', group: 'showdown', icon: 'trophy', on: 'showdown', when: (d) => d.win, make: () => ({ target: 1 }), text: () => 'Win a Family Showdown' },
-  { id: 'speed4', tier: 'hard', group: 'speed', icon: 'bolt', on: 'speed', gate: (ctx) => ctx.speedLevel <= PLAYER.maxSpeedLevel - 4,
+  { id: 'speed4', tier: 'hard', group: 'speed', icon: 'bolt', on: 'speed',
     make: () => ({ target: 4 }), text: (n) => `Buy ${plural(n, 'Speed level')}` },
   { id: 'monster10', tier: 'hard', group: 'monster', icon: 'monster', on: 'monster', make: () => ({ target: 10 }), text: (n) => `Bonk ${plural(n, 'road monster')}` },
   { id: 'mutantPlant', tier: 'hard', group: 'mutant', icon: 'rainbow', on: 'plant', when: (d) => d.mutation && d.mutation !== 'normal',
@@ -188,14 +188,18 @@ export const BADGES = [
   { id: 'market', name: 'Market Day', icon: 'coin', stat: (c) => c.sold, tiers: [25, 250], stars: [10, 40], how: (n) => `Sell ${n} plants` },
   { id: 'millionaire', name: 'Millionaire', icon: 'moneybag', money: true, stat: (c, b) => b.netWorth, tiers: [1e6], stars: [30], how: () => 'Reach $1M net worth' },
   { id: 'billionaire', name: 'Billionaire', icon: 'diamond', money: true, stat: (c, b) => b.netWorth, tiers: [1e9], stars: [150], how: () => 'Reach $1B net worth' },
-  { id: 'speeddemon', name: 'Speed Demon', icon: 'bolt', stat: (c) => c.speedMax, tiers: [PLAYER.maxSpeedLevel], stars: [40], how: () => `Reach Speed level ${PLAYER.maxSpeedLevel}` },
+  { id: 'speeddemon', name: 'Speed Demon', icon: 'bolt', stat: (c) => c.speedMax, tiers: [SPEED_MILESTONES[0]], stars: [40], how: () => `Reach Speed level ${SPEED_MILESTONES[0]}` },
+  { id: 'lightspeed', name: 'Light Speed', icon: 'bolt', stat: (c) => c.speedMax, tiers: SPEED_MILESTONES.slice(1), stars: [60, 100], how: (n) => `Reach Speed level ${n}` },
   { id: 'reborn', name: 'Reborn', icon: 'star', stat: (c) => c.rebirthMax, tiers: [1, 5, 10], stars: [30, 80, 200], how: (n) => (n === 1 ? 'Rebirth once' : `Rebirth ${n} times`) },
-  { id: 'explorer', name: 'Explorer', icon: 'compass', stat: (c) => c.deepest, tiers: [BIOMES.length], stars: [15], how: () => `Reach every biome, all the way to ${BIOMES[BIOMES.length - 1].name}` },
+  { id: 'explorer', name: 'Explorer', icon: 'compass', stat: (c) => c.deepest, tiers: [6], stars: [15], how: () => `Reach ${BIOMES[5].name}` },
+  { id: 'skywalker', name: 'Sky Walker', icon: 'compass', stat: (c) => c.deepest, tiers: [BIOMES.length], stars: [50], how: () => `Reach every world, all the way to ${BIOMES[BIOMES.length - 1].name}` },
+  { id: 'divine', name: 'Divine Touch', icon: 'star', stat: (c) => c.seed_divine, tiers: [1], stars: [60], how: () => 'Grab a Divine seed' },
   { id: 'starcatcher', name: 'Star Catcher', icon: 'star', stat: (c) => c.seed_mythic, tiers: [1], stars: [30], how: () => 'Grab a Mythic seed' },
   { id: 'rainbow', name: 'Rainbow Hunter', icon: 'rainbow', stat: (c) => c.rainbowOwned, tiers: [1], stars: [30], how: () => 'Own a Rainbow plant' },
   { id: 'secret', name: 'Secret Keeper', icon: 'keyhole', stat: (c) => c.secretOwned, tiers: [1], stars: [50], how: () => 'Own a Secret family plant' },
   { id: 'namesake', name: "That's Me!", icon: 'family', stat: (c) => c.namesakeOwned, tiers: [1], stars: [60], how: () => 'Own your own family Secret plant' },
   { id: 'landlord', name: 'Full Garden', icon: 'planter', stat: (c) => c.plantersMax, tiers: [10], stars: [40], how: () => 'Unlock all 10 planters' },
+  { id: 'landbaron', name: 'Land Baron', icon: 'planter', stat: (c) => c.lotsMax, tiers: [1, LOTS.count], stars: [40, 100], how: (n) => (n === 1 ? 'Buy a garden lot' : `Buy all ${n} garden lots`) },
   { id: 'locksmith', name: 'Locksmith', icon: 'lock', stat: (c) => c.locks, tiers: [25], stars: [15], how: (n) => `Lock your garden ${n} times` },
   { id: 'gadgeteer', name: 'Gadgeteer', icon: 'coil', stat: (c) => c.items, tiers: [50], stars: [20], how: (n) => `Use ${n} items` },
   { id: 'slippery', name: 'Slippery!', icon: 'banana', stat: (c) => c.slips, tiers: [10], stars: [15], how: (n) => `Make ${n} players slip on your bananas` },

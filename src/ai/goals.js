@@ -1,6 +1,6 @@
 // Bot goals: small state machines the brain picks between. Each update() fills the Intent and
 // returns 'running' | 'done' | 'failed'. Movement goes through bot.motor; shared helpers live on the bot.
-import { PLAYER, PLANTERS, ITEM } from '../config.js';
+import { PLAYER, ITEM, planterCost } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { hyp, gardenInfo, planterSpot, podSpot, podGuards, yawTo, seedIncome, runSpeed, carrySeedSpeed, wrapAngle } from './util.js';
 import { getBoard, claimPod, releaseClaims } from './blackboard.js';
@@ -175,7 +175,7 @@ export class ReturnGoal extends Goal {
   _makeRoom(bot, game, p, it, dt, info) {
     const g = info.g;
     this.waitT += dt;
-    if (info.nextLocked >= 0 && p.cash >= PLANTERS.unlockCost[info.nextLocked]) {
+    if (info.nextLocked >= 0 && p.cash >= planterCost(info.nextLocked)) {
       const pl = g.planters[info.nextLocked];
       if (goToPlanter(bot, game, p, it, dt, g, pl, null, () => false, this) === 'ready') game.unlockPlanter(p, pl.index);
       return 'running';
@@ -716,7 +716,7 @@ export class UnlockGoal extends Goal {
 
   begin(bot, game, p) {
     super.begin(bot, game, p);
-    if (p.cash < PLANTERS.unlockCost[this.index]) this.pre.push({ kind: 'collect' });
+    if (p.cash < planterCost(this.index)) this.pre.push({ kind: 'collect' });
   }
 
   update(bot, game, p, it, dt) {
@@ -726,8 +726,10 @@ export class UnlockGoal extends Goal {
     if (pl.unlocked) return 'done';
     if (this.age(game) > 25) return 'failed';
     if (runPre(this, bot, game, p, it, dt)) return 'running';
-    if (p.cash < PLANTERS.unlockCost[this.index]) return 'failed';
-    const r = goToPlanter(bot, game, p, it, dt, g, pl, 'unlock' + pl.index, (q) => !q.unlocked || grownPlant(q), this);
+    if (p.cash < planterCost(this.index)) return 'failed';
+    // a lot planter's prompt buys the whole lot
+    const key = pl.lot >= 0 ? 'lot' + pl.lot : 'unlock' + pl.index;
+    const r = goToPlanter(bot, game, p, it, dt, g, pl, key, (q) => !q.unlocked || grownPlant(q), this);
     if (r === 'ready') bot.press(it, p);
     return r === 'fail' ? 'failed' : 'running';
   }

@@ -1,7 +1,7 @@
 // Utility brain: scores every option (farm a pod, steal a plant, defend, shop, ...) in one currency,
 // "income per second gained, per second of effort", and returns the best goal. Personality weights
 // and difficulty knobs bend the scores; the bot adds hysteresis so it does not dither.
-import { PLANT, PLANTS, PLANTERS, ITEM, PLAYER, REBIRTH, BIOMES, speedCost } from '../config.js';
+import { PLANT, PLANTS, ITEM, PLAYER, REBIRTH, BIOMES, speedCost, planterCost } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import {
   hyp, clamp, gardenInfo, podSpot, seedIncome, runSpeed, carrySeedSpeed, carryPlantSpeed, approxDist, runSafety, podGuards,
@@ -252,7 +252,7 @@ export function chooseGoal(bot, game, p) {
 
   // 2. home economy
   const avail = p.cash + info.g.cashPile;
-  if (info.nextLocked >= 0 && info.free === 0 && bot.coast < 0.5 && avail >= PLANTERS.unlockCost[info.nextLocked] * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < bot.diff.endgame * 0.8)) {
+  if (info.nextLocked >= 0 && info.free === 0 && bot.coast < 0.5 && avail >= planterCost(info.nextLocked) * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < bot.diff.endgame * 0.8)) {
     cands.push([ref * 1.9 + 0.01, () => new UnlockGoal(info.nextLocked, ref * 1.9)]);
   }
   const plan = shopPlan(bot, game, p, info);
