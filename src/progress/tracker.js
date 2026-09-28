@@ -50,7 +50,7 @@ function hash(str) {
 }
 
 const MUTANT = (m) => !!m && m !== 'normal';
-const RARE_PETS = new Set(['legendary', 'mythic', 'secret']);
+const RARE_PETS = new Set(['legendary', 'mythic', 'divine', 'secret']);
 
 export function createTracker(app, { now = () => Date.now(), interval = 1000, autoSave = true } = {}) {
   const offs = [];
@@ -117,6 +117,7 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
       netWorth: live ? g.netWorth?.get(h) || 0 : c.lastNetWorth || 0,
       base: p.base,
       online: !!app.online?.available,
+      baseLevel: live ? h.baseLevel : c.baseMax || 1,
     });
   }
 
@@ -497,6 +498,9 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
         setMax('namesakeOwned', mine);
         setMax('plantersMax', unlocked);
         if (g.lotsOwned) setMax('lotsMax', g.lotsOwned(garden));
+        setMax('baseMax', h.baseLevel || 1);
+        setMax('boostMax', h.boostLevel || 0);
+        setMax('treadmillMax', h.treadmillTier || 0);
       }
       // the next day's quests are sized from the player's Endless progress
       if (g.mode !== 'showdown') {
@@ -644,7 +648,50 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     const rarity = PET[pet]?.rarity;
     add('hatches');
     if (RARE_PETS.has(rarity)) add('legendaryPets');
+    if (rarity === 'divine') add('divinePets');
     fact('hatch', { pet, rarity });
+    // distinct kinds of pet owned (the new one is saved a moment later by the pets UI)
+    setTimeout(() => {
+      const prof = profile();
+      const kinds = new Set((prof?.pets?.owned || []).map((x) => x.id));
+      kinds.add(pet);
+      setMax('speciesMax', kinds.size);
+      checkBadges();
+    }, 0);
+    checkBadges();
+  });
+  on('drop:claimed', ({ player }) => {
+    if (!isMe(player)) return;
+    add('eggDrops');
+    fact('drop');
+    checkBadges();
+  });
+  on('base:upgraded', ({ player, level }) => {
+    if (!isMe(player)) return;
+    setMax('baseMax', level);
+    fact('base', { level });
+    checkBadges();
+    tick();
+  });
+  on('boost:start', ({ player }) => {
+    if (!isMe(player)) return;
+    add('boosts');
+    fact('boost');
+  });
+  on('boost:up', ({ player, level }) => {
+    if (!isMe(player)) return;
+    setMax('boostMax', level);
+    checkBadges();
+  });
+  on('treadmill:up', ({ player, tier }) => {
+    if (!isMe(player)) return;
+    setMax('treadmillMax', tier);
+    checkBadges();
+  });
+  on('pump:start', ({ player }) => {
+    if (!isMe(player)) return;
+    add('pumps');
+    fact('pump');
     checkBadges();
   });
   on('emote', ({ player, id }) => {

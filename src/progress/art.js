@@ -48,6 +48,9 @@ const CUSTOM = {
   egg: svg(`<path d="M12 2.4 C 16.6 2.4, 19.6 9, 19.6 13.6 C 19.6 18.1, 16.1 21.6, 12 21.6 C 7.9 21.6, 4.4 18.1, 4.4 13.6 C 4.4 9, 7.4 2.4, 12 2.4 Z" fill="#fff4d6" ${S}/>
     <circle cx="9.4" cy="10" r="1.7" fill="#ffb627"/><circle cx="14.6" cy="14.2" r="2.1" fill="#4cd964"/><circle cx="9.8" cy="17" r="1.3" fill="#3d9bff"/>
     <path d="${starPath(18.6, 4.6, 3.6, 1.3, 4, 0)}" fill="#ffd23f" stroke="${INK}" stroke-width="1.1" stroke-linejoin="round"/>`),
+  house: svg(`<path d="M2.6 11.6 L12 3.2 L21.4 11.6 L18.8 11.6 L18.8 20.6 L5.2 20.6 L5.2 11.6 Z" fill="#4fcf62" ${S}/>
+    <rect x="9.6" y="13.6" width="4.8" height="7" rx="1" fill="#c98a4f" ${S}/>
+    <path d="${starPath(12, 9.4, 2.6, 1.1)}" fill="#ffd23f" stroke="${INK}" stroke-width="1" stroke-linejoin="round"/>`),
   moneybag: svg(`<path d="M8.8 5.6 L7.4 2.4 H16.6 L15.2 5.6 Z" fill="#c9985c" ${S}/>
     <path d="M8.8 5.6 C 4.8 8.2, 3.4 12, 3.4 15 C 3.4 19.1, 7 21.6, 12 21.6 C 17 21.6, 20.6 19.1, 20.6 15 C 20.6 12, 19.2 8.2, 15.2 5.6 Z" fill="#e7b774" ${S}/>
     <path d="M14.2 11 C 13.7 10.1, 13 9.8, 12 9.8 C 10.8 9.8, 10 10.5, 10 11.4 C 10 13.6, 14.3 12.7, 14.3 15 C 14.3 16, 13.3 16.7, 12 16.7 C 11 16.7, 10.2 16.2, 9.8 15.4 M12 8.3 V18.2" fill="none" stroke="#1d7a33" stroke-width="1.7" stroke-linecap="round"/>`),

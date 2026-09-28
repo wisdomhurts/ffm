@@ -9,8 +9,8 @@
 // A template: {id, tier, group, icon, on, amount?(data,p), max?(data,p), when?(data,p), gate?(ctx), make(ctx,rng) -> {target,p?}, text(target,p)}
 // `money: true` marks quests whose numbers are cash (the UI formats them as $). Targets that depend on the
 // player's progress stage are re-fitted at game start while the quest is still untouched (tracker.js).
-import { BIOMES, RARITIES, CHARACTERS, CHARACTER, PLANTS, PLAYER, REBIRTH, LOTS, TOP_TIER, SPEED_MILESTONES, speedAt } from '../config.js';
-import { EGGS } from '../pets/catalog.js';
+import { BIOMES, RARITIES, CHARACTERS, CHARACTER, PLANTS, PLAYER, REBIRTH, LOTS, TOP_TIER, SPEED_MILESTONES, speedAt, BASE, BOOST, TREADMILL } from '../config.js';
+import { EGGS, PETS } from '../pets/catalog.js';
 import { EMOTE, QUICK_CHAT } from '../social/catalog.js';
 
 export const TIERS = {
@@ -103,6 +103,8 @@ export const QUESTS = [
   { id: 'chat', tier: 'easy', group: 'social', icon: 'chat', on: 'chat', gate: () => QUICK_CHAT.length > 0, make: () => ({ target: 3 }), text: (n) => `Send ${plural(n, 'quick chat')}` },
   { id: 'monster2', tier: 'easy', group: 'monster', icon: 'monster', on: 'monster', make: () => ({ target: 2 }), text: (n) => `Bonk ${plural(n, 'road monster')}` },
   { id: 'water', tier: 'easy', group: 'water', icon: 'bucket', on: 'water', make: () => ({ target: 1 }), text: () => 'Water a growing plant with a bucket' },
+  { id: 'boost5', tier: 'easy', group: 'speed', icon: 'bolt', on: 'boost', make: () => ({ target: 5 }), text: (n) => `Use Boost ${n} times (Shift or the boost button)` },
+  { id: 'pump', tier: 'easy', group: 'speed', icon: 'bolt', on: 'pump', make: () => ({ target: 1 }), text: () => 'Run on the Warm-Up treadmill until you get Pumped' },
   { id: 'visit', tier: 'easy', group: 'explore', icon: 'compass', on: 'biome', max: (d, p) => (d.index >= p ? 1 : 0),
     make: (ctx) => ({ target: 1, p: Math.min(BIOMES.length - 1, Math.max(2, ctx.stage + 2)) }), text: (n, p) => `Visit ${BIOMES[p].name}` },
 
@@ -126,6 +128,9 @@ export const QUESTS = [
   { id: 'hatch', tier: 'medium', group: 'pets', icon: 'egg', on: 'hatch', gate: (ctx) => ctx.pets && ctx.stage >= 1,
     make: () => ({ target: 1 }), text: () => 'Hatch a pet egg' },
   { id: 'monster5', tier: 'medium', group: 'monster', icon: 'monster', on: 'monster', make: () => ({ target: 5 }), text: (n) => `Bonk ${plural(n, 'road monster')}` },
+  { id: 'eggdrop', tier: 'medium', group: 'pets', icon: 'egg', on: 'drop', make: () => ({ target: 1 }), text: () => 'Catch an egg drop (look for the light beam!)' },
+  { id: 'baseup', tier: 'medium', group: 'base', icon: 'house', on: 'base', gate: (ctx) => ctx.stage >= 1 && !(ctx.baseLevel >= BASE.maxLevel),
+    make: () => ({ target: 1 }), text: () => 'Upgrade your base at its BASE console' },
   { id: 'slip', tier: 'medium', group: 'items', icon: 'banana', on: 'slip', make: () => ({ target: 2 }), text: (n) => `Make ${plural(n, 'player')} slip on your bananas` },
   { id: 'splash', tier: 'medium', group: 'items', icon: 'balloon', on: 'splash', make: () => ({ target: 2 }), text: (n) => `Splash ${plural(n, 'player')} with water balloons` },
   { id: 'online', tier: 'medium', group: 'social', icon: 'family', on: 'online', gate: (ctx) => ctx.online,
@@ -156,9 +161,9 @@ export const QUEST = Object.assign(Object.create(null), Object.fromEntries(QUEST
 export const STARTER = [{ id: 'grab', tier: 'easy' }, { id: 'plant10', tier: 'medium' }, { id: 'steal2', tier: 'hard' }];
 
 /** Everything a template needs to pick its target: {stage, rebirths, speedLevel, inc, netWorth, base, online, pets}. */
-export function questContext({ speedLevel = 0, rebirths = 0, netWorth = 0, base = CHARACTERS[0].id, online = false } = {}) {
+export function questContext({ speedLevel = 0, rebirths = 0, netWorth = 0, base = CHARACTERS[0].id, online = false, baseLevel = 1 } = {}) {
   const stage = stageOf(speedLevel, rebirths);
-  return { stage, rebirths, speedLevel, netWorth, base, online, pets: EGGS.length > 0, inc: incomeEstimate(stage, rebirths) };
+  return { stage, rebirths, speedLevel, netWorth, base, online, baseLevel, pets: EGGS.length > 0, inc: incomeEstimate(stage, rebirths) };
 }
 
 /** Rewards for a quest of this tier at this progress stage. */
@@ -210,6 +215,13 @@ export const BADGES = [
   { id: 'dealmaker', name: 'Deal Maker', icon: 'handshake', stat: (c) => c.trades, tiers: [1], stars: [20], how: () => 'Finish a trade with a friend' },
   { id: 'petlover', name: 'Pet Lover', icon: 'paw', stat: (c) => c.hatches, tiers: [1, 10], stars: [10, 40], how: (n) => (n === 1 ? 'Hatch a pet egg' : `Hatch ${n} pet eggs`) },
   { id: 'legendary', name: 'Legendary Luck', icon: 'egg', stat: (c) => c.legendaryPets, tiers: [1], stars: [50], how: () => 'Hatch a Legendary pet (or rarer)' },
+  { id: 'divinepet', name: 'Divine Friend', icon: 'star', stat: (c) => c.divinePets, tiers: [1], stars: [100], how: () => 'Hatch a Divine pet' },
+  { id: 'egghunter', name: 'Egg Hunter', icon: 'egg', stat: (c) => c.eggDrops, tiers: [1, 10, 50], stars: [15, 40, 100], how: (n) => (n === 1 ? 'Catch an egg drop' : `Catch ${n} egg drops`) },
+  { id: 'zookeeper', name: 'Zookeeper', icon: 'paw', stat: (c) => c.speciesMax, tiers: [10, 25, PETS.length], stars: [30, 80, 200], how: (n) => (n === PETS.length ? 'Collect every kind of pet' : `Own ${n} different kinds of pet`) },
+  { id: 'homesweet', name: 'Home Sweet Home', icon: 'house', stat: (c) => c.baseMax, tiers: [BASE.guardAt, BASE.maxLevel], stars: [40, 150], how: (n) => `Reach Base level ${n}` },
+  { id: 'boostmaster', name: 'Boost Master', icon: 'bolt', stat: (c) => c.boostMax, tiers: [5, BOOST.maxLevel], stars: [20, 60], how: (n) => `Get Boost to level ${n}` },
+  { id: 'gymhero', name: 'Gym Hero', icon: 'bolt', stat: (c) => c.pumps, tiers: [1, 25], stars: [10, 30], how: (n) => (n === 1 ? 'Get Pumped on a Warm-Up treadmill' : `Get Pumped ${n} times`) },
+  { id: 'galaxytread', name: 'Galaxy Runner', icon: 'star', stat: (c) => c.treadmillMax, tiers: [TREADMILL.tiers.length - 1], stars: [80], how: () => `Buy the ${TREADMILL.tiers[TREADMILL.tiers.length - 1].name}` },
   { id: 'dancer', name: 'Dancer', icon: 'dance', stat: (c) => c.dances, tiers: [10], stars: [15], how: (n) => `Dance ${n} times` },
   { id: 'chatter', name: 'Chatterbox', icon: 'chat', stat: (c) => c.chats, tiers: [25], stars: [10], how: (n) => `Send ${n} quick chats` },
   { id: 'fashion', name: 'Fashionista', icon: 'hat', stat: unlocks, tiers: [5], stars: [25], how: (n) => `Own ${n} Wardrobe items` },

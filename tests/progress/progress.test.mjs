@@ -199,6 +199,10 @@ const DRIVE = {
   showdown: () => bus.emit('match:end', { ranking: [me, ...game.players.filter((p) => p !== me)].map((p) => ({ player: p, netWorth: 1000 })) }),
   slip: () => bus.emit('banana:slip', { target: other, owner: me }),
   splash: () => bus.emit('player:hit', { target: other, by: me, cause: 'balloon' }),
+  drop: () => bus.emit('drop:claimed', { player: me, drop: { egg: 'farm', x: 0, z: 0 }, pet: 'piglet' }),
+  base: () => bus.emit('base:upgraded', { player: me, level: 2, cost: 5000 }),
+  boost: () => bus.emit('boost:start', { player: me }),
+  pump: () => bus.emit('pump:start', { player: me, tier: 0, bonus: 0.1, until: 60 }),
   biome: () => {
     me.pos.z = BIOMES.length * 150 + 50; // Starbloom
     tr.tick();
