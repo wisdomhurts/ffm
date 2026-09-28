@@ -172,6 +172,12 @@ export function createPetView(petId, opts = {}) {
       }
       const t = s.hopT;
       y = 4 * t * (1 - t) * s.hopH + happyY;
+      // walking pets with flippers or side arms (penguin, octopus) paddle them: faster while hopping
+      if (wings.length) {
+        const flap = time * (moving ? 9 : 2.2) + seed;
+        const amp = (moving ? 0.45 : 0.12) * Math.max(0.3, M.wingAmp);
+        for (const w of wings) w.rotation.z = (M.wingBase + Math.sin(flap) * amp) * w.userData.side;
+      }
       // squash on landing, stretch in the air
       const land = t < 0.12 ? 1 - t / 0.12 : t > 0.9 ? (t - 0.9) / 0.1 : 0;
       sqY = moving || s.hopT > 0 ? 1 + 0.1 * Math.sin(t * Math.PI) - 0.14 * land : 1 + Math.sin(time * 5 + seed) * 0.025;
