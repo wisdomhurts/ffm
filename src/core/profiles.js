@@ -7,6 +7,7 @@ import { bus } from './events.js';
 import { sanitizeName } from './names.js';
 import { sanitizeLook } from '../characters/cosmetics.js';
 import { PET } from '../pets/catalog.js';
+import { sanitizeBaseStyle } from '../gameplay/basestyle.js';
 
 const INDEX_KEY = 'profiles';
 const key = (id) => 'profile:' + id;
@@ -32,7 +33,8 @@ function blank(id, base, name, family) {
     shareFace: false,
     stars: 0,
     unlocks: [],
-    pets: { owned: [], equipped: null },
+    pets: { owned: [], equipped: null, team: [] }, // team: up to 3 equipped uids (team[0] === equipped)
+    baseStyle: sanitizeBaseStyle(null), // Base Studio picks (what shows depends on the base level in each game)
     badges: {},
     quests: { day: '', list: [] },
     counters: {},
@@ -59,7 +61,13 @@ function normalize(p, id) {
   if (obj(p.pets)) {
     out.pets.owned = Array.isArray(p.pets.owned) ? p.pets.owned.filter((x) => x && typeof x.id === 'string' && Object.hasOwn(PET, x.id)) : [];
     out.pets.equipped = out.pets.owned.some((x) => x.uid === p.pets.equipped) ? p.pets.equipped : null;
+    const team = Array.isArray(p.pets.team) ? p.pets.team : out.pets.equipped ? [out.pets.equipped] : [];
+    out.pets.team = [...new Set(team)].filter((u) => out.pets.owned.some((x) => x.uid === u)).slice(0, 3);
+    if (out.pets.equipped && !out.pets.team.includes(out.pets.equipped)) out.pets.team.unshift(out.pets.equipped);
+    out.pets.team = out.pets.team.slice(0, 3);
+    out.pets.equipped = out.pets.team[0] || null;
   }
+  if (obj(p.baseStyle)) out.baseStyle = sanitizeBaseStyle(p.baseStyle);
   if (obj(p.badges)) out.badges = { ...p.badges };
   if (obj(p.quests) && Array.isArray(p.quests.list)) out.quests = { day: String(p.quests.day || ''), list: p.quests.list };
   if (obj(p.counters)) for (const [k, v] of Object.entries(p.counters)) if (Number.isFinite(v)) out.counters[k] = v;

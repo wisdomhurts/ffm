@@ -3,16 +3,30 @@
 import {
   ROAD_END_Z, WORLD, PLAYER, PLANTS, PLANT, RARITIES, RARITY, MUTATIONS, BASE_MUTATION_CHANCE, BIOMES, PODS, ITEMS, ITEM,
   EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, LOTS, REBIRTH, NAMESAKE_BONUS, speedCost, TOP_TIER, planterCost, accelFor,
+  BASE, BOOST, TREADMILL, DROPS, baseIncomeMult, petSlotsFor,
 } from '../config.js';
-import { LAYOUT, gardenContains, lotPlanterBoxes } from './layout.js';
+import { LAYOUT, gardenContains, lotPlanterBoxes, beltRect } from './layout.js';
 import { PhysicsWorld } from '../core/physics.js';
 import { bus } from '../core/events.js';
 import { makeRng } from '../core/rng.js';
 import { Player, emptyIntent } from './player.js';
-import { petMods } from '../pets/effects.js';
-import { PET, EGG } from '../pets/catalog.js';
+import { teamMods, MAX_TEAM } from '../pets/effects.js';
+import { PET, EGG, petScore } from '../pets/catalog.js';
+import { sanitizeBaseStyle, sameBaseStyle, effectiveBaseStyle, DECOR, BOT_STYLES } from './basestyle.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { sanitizeLook, sameLook } from '../characters/cosmetics.js';
+
+/** A profile's equipped pet team as species ids (profile.pets.team = [uid...], older saves: equipped uid;
+ *  online profile summaries may send `pets: [id...]` or `pet: id`). */
+export function profileTeam(profile) {
+  const pets = profile?.pets;
+  if (Array.isArray(pets)) return pets.filter((id) => typeof id === 'string' && PET[id]).slice(0, MAX_TEAM);
+  const owned = Array.isArray(pets?.owned) ? pets.owned : [];
+  const uids = Array.isArray(pets?.team) && pets.team.length ? pets.team : pets?.equipped ? [pets.equipped] : [];
+  const ids = uids.map((u) => owned.find((x) => x && x.uid === u)?.id).filter((id) => id && PET[id]);
+  if (!ids.length && typeof profile?.pet === 'string' && PET[profile.pet]) ids.push(profile.pet);
+  return ids.slice(0, MAX_TEAM);
+}
 
 let UID = 1;
 const uid = () => UID++;
@@ -26,6 +40,24 @@ const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // Safety net: anyone who ends up outside the island or the road gets sent home.
 const inPlayArea = ({ x, z }) =>
   z < WORLD.road.startZ ? Math.abs(x) < WORLD.homeHalfW + 1 && z > WORLD.homeMinZ - 1.5 : Math.abs(x) < WORLD.road.width / 2 + 1 && z < ROAD_END_Z + 1;
+// The Speed Shop's moving belts (all three carry you north) and which of them warms you up.
+const SHOP_BELTS = LAYOUT.speedStations.map((st) => ({ ...beltRect(st), station: st.id, warmup: st.id === 'warmup' }));
+const inRect = (r, x, z, pad = 0) => x > r.minX - pad && x < r.maxX + pad && z > r.minZ - pad && z < r.maxZ + pad;
+const onDeck = (p) => p.pos.y > TREADMILL.beltTop - 0.35 && p.pos.y < TREADMILL.beltTop + 0.5;
+/** Garden front-yard boxes that exist only at some base levels / styles (switched with `off`, like lots). */
+function decorBox(spot) {
+  return { minX: spot.x - 2, maxX: spot.x + 2, minZ: spot.z - 2, maxZ: spot.z + 2, minY: 0, maxY: 6, tag: 'deco', off: true, camMaxY: 3 };
+}
+function homeTreadmillBoxes(t) {
+  const r = beltRect(t);
+  const c = { x: t.x + t.dirX * (t.len / 2 + 0.5), z: t.z + t.dirZ * (t.len / 2 + 0.5) };
+  const hw = t.w / 2 + 0.35;
+  const cx = Math.abs(t.dirX) * 0.6 + Math.abs(t.dirZ) * hw, cz = Math.abs(t.dirZ) * 0.6 + Math.abs(t.dirX) * hw;
+  return [
+    { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ, minY: 0, maxY: TREADMILL.beltTop, tag: 'deco', off: true },
+    { minX: c.x - cx, maxX: c.x + cx, minZ: c.z - cz, maxZ: c.z + cz, minY: 0, maxY: 4.6, tag: 'deco', off: true },
+  ];
+}
 
 export const SELL_SECONDS = 90;
 export const NETWORTH_PLANT_SECONDS = 60;
@@ -50,8 +82,11 @@ export class Game {
     this.layout = LAYOUT;
     // a lot's planters are solid only once it is bought (_syncLots switches them on/off; the bots' nav follows navEpoch)
     this.lotBoxes = LAYOUT.gardens.map((L) => L.lots.map((lot) => lotPlanterBoxes(L, lot.index)));
+    // solid decorations (per spot) and the home treadmill (Base Lv 6) are switched on by _syncBase
+    this.decorBoxes = LAYOUT.gardens.map((L) => L.decor.map(decorBox));
+    this.treadmillBoxes = LAYOUT.gardens.map((L) => homeTreadmillBoxes(L.treadmill));
     this.navEpoch = 0;
-    this.physics = new PhysicsWorld([...LAYOUT.colliders, ...extraColliders, ...this.lotBoxes.flat(2)]);
+    this.physics = new PhysicsWorld([...LAYOUT.colliders, ...extraColliders, ...this.lotBoxes.flat(2), ...this.decorBoxes.flat(), ...this.treadmillBoxes.flat()]);
     this.paused = false;
     this.over = false;
 
@@ -61,6 +96,8 @@ export class Game {
     this.gardens = this.players.map((p, slot) => this._makeGarden(slot, p));
     this.pods = LAYOUT.pods.map((pl) => ({ ...pl, seed: null, respawnAt: 0 }));
     this.ground = []; // {uid, kind:'seed'|'banana', x,y,z, ...}
+    this.drops = []; // egg drops: {uid, egg, x, z, spawnAt, landAt, expiresAt}
+    this.nextDropAt = DROPS.firstDelay;
     this.projectiles = []; // water balloons
     this.monsters = this._spawnMonsters();
     this.event = null;
@@ -73,7 +110,11 @@ export class Game {
     for (const pod of this.pods) pod.seed = this.rollSeed(pod.biome);
     this.players.forEach((p) => this.respawn(p));
     if (save) this.restore(save);
-    this.gardens.forEach((g) => this._syncLots(g));
+    this.players.forEach((p) => this._refreshMods(p));
+    this.gardens.forEach((g) => {
+      this._syncLots(g);
+      this._syncBase(g);
+    });
     this._recomputeNetWorth();
   }
 
@@ -92,6 +133,10 @@ export class Game {
       lockedUntil: 0,
       lockReadyAt: 0,
       lockActive: false,
+      guardReadyAt: 0, // the Guard Gnome's next bonk (Base Lv 5)
+      guardAlert: false, // someone else is in this garden (the gnome looks around)
+      bouncers: [], // trampoline spots {x, z, bounce, index} (Base Studio)
+      look: null, // what the base shows: effectiveBaseStyle(owner.baseStyle, owner.baseLevel)
     };
   }
 
@@ -134,7 +179,7 @@ export class Game {
 
   plantIncome(plant, owner = this.players[plant.owner]) {
     const sp = PLANT[plant.speciesId];
-    let v = sp.income * MUTATIONS[plant.mutation].mult * REBIRTH.incomeMult(owner.rebirths) * owner.mods.income;
+    let v = sp.income * MUTATIONS[plant.mutation].mult * REBIRTH.incomeMult(owner.rebirths) * owner.mods.income * baseIncomeMult(owner.baseLevel);
     if (sp.family && sp.family === owner.id) v *= NAMESAKE_BONUS;
     return v;
   }
@@ -154,6 +199,77 @@ export class Game {
     let n = 0;
     while (n < LOTS.count && g.planters[PLANTERS.base + n * LOTS.planters]?.unlocked) n++;
     return n;
+  }
+
+  // ------------------------------------------------------------------ bases (levels, perks, Base Studio)
+
+  /** The equipped pets that count: the first petSlotsFor(base level) of the player's team. */
+  activePets(p) {
+    return p.pets.slice(0, petSlotsFor(p.baseLevel));
+  }
+
+  _refreshMods(p) {
+    const act = this.activePets(p);
+    p.pet = act[0] || null;
+    p.mods = teamMods(act);
+  }
+
+  /** Recompute what garden g shows (floor, fence, laser, decorations) and switch its solid decorations,
+   *  trampolines and home treadmill on or off. Cheap; call after a base level or style change. */
+  _syncBase(g) {
+    const o = g.owner;
+    const look = o.present ? effectiveBaseStyle(o.baseStyle, o.baseLevel) : effectiveBaseStyle(null, 1);
+    g.look = look;
+    g.bouncers = [];
+    let changed = false;
+    this.decorBoxes[g.slot].forEach((b, i) => {
+      const d = DECOR[look.decor[i]];
+      const off = !d?.solid;
+      if (b.off !== off) {
+        b.off = off;
+        changed = true;
+      }
+      if (d?.bounce) g.bouncers.push({ index: i, x: g.L.decor[i].x, z: g.L.decor[i].z, bounce: d.bounce });
+    });
+    const tm = o.present && o.baseLevel >= BASE.treadmillAt;
+    for (const b of this.treadmillBoxes[g.slot]) {
+      if (b.off !== !tm) {
+        b.off = !tm;
+        changed = true;
+      }
+    }
+    if (changed) this.navEpoch++;
+  }
+
+  /** Buy the next base level (inside your own garden). */
+  upgradeBase(p) {
+    const g = this.gardens[p.slot];
+    if (!gardenContains(g.L, p.pos.x, p.pos.z, 2) || p.baseLevel >= BASE.maxLevel) return false;
+    const next = p.baseLevel + 1;
+    const cost = BASE.cost[next];
+    if (p.cash < cost) {
+      bus.emit('purchase:fail', { player: p, reason: 'cash', cost });
+      return false;
+    }
+    p.cash -= cost;
+    p.upgradeSpend += cost;
+    p.baseLevel = next;
+    this._refreshMods(p);
+    this._syncBase(g);
+    p.celebrateUntil = this.time + 2;
+    bus.emit('base:upgraded', { player: p, level: next, cost, garden: g });
+    return true;
+  }
+
+  /** Base Studio: pick floor / fence / laser / decorations (what shows depends on the base level). */
+  setBaseStyle(p, style) {
+    if (!style || typeof style !== 'object') return false;
+    const next = sanitizeBaseStyle({ ...p.baseStyle, ...style });
+    if (sameBaseStyle(next, p.baseStyle)) return false;
+    p.baseStyle = next;
+    this._syncBase(this.gardens[p.slot]);
+    bus.emit('base:style', { player: p, garden: this.gardens[p.slot] });
+    return true;
   }
 
   gardenAt(x, z, pad = 0) {
@@ -184,7 +300,7 @@ export class Game {
   rollMutation() {
     if (this.event) {
       const t = EVENTS.types.find((e) => e.id === this.event.type);
-      if (this.rng.chance(t.chance)) return t.mutation;
+      if (t?.mutation && this.rng.chance(t.chance)) return t.mutation;
     }
     const r = this.rng.next();
     if (r < BASE_MUTATION_CHANCE.rainbow) return 'rainbow';
@@ -256,9 +372,12 @@ export class Game {
       this._handleInteraction(p, dt);
       this._handlePads(p);
       this._handleAutoPlant(p);
+      this._handleTraining(p, dt);
     }
     this._updateProjectiles(dt);
     this._updateGround();
+    this._updateDrops();
+    this._updateGuards();
     this._updateMonsters(dt);
     this._updatePods();
     this._updateGardens(dt);
@@ -288,6 +407,7 @@ export class Game {
     const it = p.intent;
     const now = this.time;
     const stunned = now < p.stunUntil;
+    if (it.boost) this.useBoost(p);
     if (p.remoteMotion) {
       // online: this player's own device simulates their movement and the network code writes
       // pos/vel/yaw/onGround (after a sanity clamp); the host only runs the rules around it
@@ -331,7 +451,25 @@ export class Game {
       p.onGround = false;
       bus.emit('player:jump', { player: p });
     }
+    // treadmill belts carry whoever stands on them towards their open end (run the other way to stay on)
+    const belt = p.onGround && onDeck(p) ? this._beltUnder(p) : null;
+    const cx = belt ? -belt.dirX * TREADMILL.beltSpeed : 0, cz = belt ? -belt.dirZ * TREADMILL.beltSpeed : 0;
+    p.vel.x += cx;
+    p.vel.z += cz;
     this.physics.step(p, dt, this._laserBoxesFor(p));
+    p.vel.x -= cx;
+    p.vel.z -= cz;
+    // trampolines (Base Studio decoration): boing!
+    if (p.onGround && p.pos.y < 1) {
+      const g = this.gardenAt(p.pos.x, p.pos.z);
+      for (const b of g ? g.bouncers : []) {
+        if ((p.pos.x - b.x) ** 2 + (p.pos.z - b.z) ** 2 > 1.9 * 1.9) continue;
+        p.vel.y = b.bounce;
+        p.onGround = false;
+        bus.emit('base:bounce', { player: p, garden: g, spot: b.index });
+        break;
+      }
+    }
     if (!Number.isFinite(p.pos.x) || !Number.isFinite(p.pos.z) || !Number.isFinite(p.pos.y) || !inPlayArea(p.pos) || p.pos.y > 80) {
       if (p.carrying?.kind === 'plant') {
         const c = p.carrying;
@@ -340,6 +478,48 @@ export class Game {
       }
       this.respawn(p);
     }
+  }
+
+  /** The treadmill belt p stands over (plaza stations, and home treadmills of Base Lv 6 gardens), or null. */
+  _beltUnder(p) {
+    const { x, z } = p.pos;
+    if (z < -52 && z > -61 && Math.abs(x) < 10) {
+      for (const b of SHOP_BELTS) if (inRect(b, x, z)) return b;
+      return null;
+    }
+    const g = this.gardenAt(x, z);
+    if (!g || !g.owner.present || g.owner.baseLevel < BASE.treadmillAt) return null;
+    const r = g.homeBelt || (g.homeBelt = { ...beltRect(g.L.treadmill), warmup: true, home: true });
+    return inRect(r, x, z) ? r : null;
+  }
+
+  /** Warm-Up: stay on a warm-up belt (the plaza's right treadmill, or your own home treadmill) for the
+   *  tier's warm-up time and you get Pumped (extra speed for a while). Runs for every player on the host
+   *  (it only needs positions, so it works for online players too). */
+  _handleTraining(p, dt) {
+    const b = onDeck(p) ? this._beltUnder(p) : null;
+    const ok = b && b.warmup && (!b.home || this.gardenAt(p.pos.x, p.pos.z)?.owner === p);
+    const tier = TREADMILL.tiers[p.treadmillTier] || TREADMILL.tiers[0];
+    if (!ok) {
+      if (p.trainT > 0) p.trainT = Math.max(0, p.trainT - dt * 2);
+      return;
+    }
+    p.trainT += dt;
+    if (p.trainT >= tier.warmup) {
+      p.trainT = 0;
+      p.pumpUntil = this.time + tier.duration;
+      p.pumpMult = 1 + tier.bonus;
+      bus.emit('pump:start', { player: p, tier: p.treadmillTier, until: p.pumpUntil, bonus: tier.bonus });
+    }
+  }
+
+  useBoost(p) {
+    const now = this.time;
+    if (now < p.boostReadyAt || now < p.stunUntil) return false;
+    p.boostUntil = now + BOOST.duration(p.boostLevel);
+    p.boostReadyAt = now + BOOST.cooldown(p.boostLevel);
+    bus.emit('boost:start', { player: p, until: p.boostUntil });
+    return true;
   }
 
   _separatePlayers() {
@@ -443,11 +623,32 @@ export class Game {
       return best;
     }
     const sh = LAYOUT.shops;
+    const openSpeed = () => bus.emit('shop:open', { player: p, shop: 'speed' });
     if (dist2(pos, sh.gear) < sh.gear.r ** 2) consider(dist2(pos, sh.gear) + 1, { key: 'shop:gear', verb: 'Open', label: 'Gear Shop', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'gear' }) });
-    if (dist2(pos, sh.speed) < sh.speed.r ** 2) {
-      const next = p.speedLevel + 1;
-      consider(dist2(pos, sh.speed) + 1, { key: 'shop:speed', verb: 'Train', label: `Speed +2 ($${fmt(speedCost(next))})`, hold: 0,
-        action: () => { if (!this.buySpeed(p)) bus.emit('shop:open', { player: p, shop: 'speed' }); } });
+    // Speed Shop 2.0: each treadmill is a station (Boost Lab, Speed, Warm-Up); the mat in front opens the shop
+    let station = null;
+    for (const b of SHOP_BELTS) if (inRect(b, pos.x, pos.z, 0.8)) station = b.station;
+    if (station === 'speed') {
+      consider(0.5, { key: 'shop:speed', verb: 'Train', label: `Speed +2 ($${fmt(speedCost(p.speedLevel + 1))})`, hold: 0,
+        action: () => { if (!this.buySpeed(p)) openSpeed(); } });
+    } else if (station === 'boost') {
+      const L = p.boostLevel + 1;
+      consider(0.5, L > BOOST.maxLevel
+        ? { key: 'shop:boost', verb: 'Open', label: 'Boost is MAXED!', hold: 0, action: openSpeed }
+        : { key: 'shop:boost', verb: 'Upgrade', label: `Boost Lv ${L} ($${fmt(BOOST.cost(L))})`, hold: 0, action: () => { if (!this.buyBoost(p)) openSpeed(); } });
+    } else if (station === 'warmup') {
+      consider(0.5, { key: 'shop:warmup', verb: 'Open', label: 'Speed Shop (keep running to warm up!)', hold: 0, action: openSpeed });
+    } else if (dist2(pos, sh.speed) < sh.speed.r ** 2 || (Math.abs(pos.x) < 11 && pos.z < -50 && pos.z > -61)) {
+      consider(dist2(pos, sh.speed) + 1, { key: 'shop:speed-open', verb: 'Open', label: 'Speed Shop', hold: 0, action: openSpeed });
+    }
+    // your own garden: the BASE console, and the home treadmill (Base Lv 6)
+    const own = this.gardens[p.slot];
+    if (dist2(pos, own.L.console) < (own.L.console.r + 1.2) ** 2) {
+      consider(dist2(pos, own.L.console), { key: 'base', verb: 'Open', label: `My Base (Lv ${p.baseLevel})`, hold: 0,
+        action: () => bus.emit('shop:open', { player: p, shop: 'base' }) });
+    }
+    if (p.baseLevel >= BASE.treadmillAt && inRect(own.homeBelt || beltRect(own.L.treadmill), pos.x, pos.z, 1.2)) {
+      consider(1, { key: 'home:speed', verb: 'Open', label: 'Speed Shop (run to warm up!)', hold: 0, action: openSpeed });
     }
     if (dist2(pos, sh.rebirth) < sh.rebirth.r ** 2) consider(dist2(pos, sh.rebirth) + 1, { key: 'shop:rebirth', verb: 'Open', label: 'Rebirth Altar', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'rebirth' }) });
     if (sh.pets && dist2(pos, sh.pets) < sh.pets.r ** 2) consider(dist2(pos, sh.pets) + 1, { key: 'shop:pets', verb: 'Open', label: 'Pet Eggs', hold: 0, action: () => bus.emit('shop:open', { player: p, shop: 'pets' }) });
@@ -625,8 +826,9 @@ export class Game {
   lockGarden(p) {
     const g = this.gardens[p.slot];
     if (this.time < g.lockReadyAt || this.isLocked(g)) return false;
-    g.lockedUntil = this.time + LOCK.duration + LOCK.perRebirth * p.rebirths;
-    g.lockReadyAt = g.lockedUntil + LOCK.recharge;
+    const extra = p.baseLevel >= BASE.lockAt ? BASE.lockBonus : 0;
+    g.lockedUntil = this.time + LOCK.duration + LOCK.perRebirth * p.rebirths + extra;
+    g.lockReadyAt = g.lockedUntil + LOCK.recharge - extra;
     g.lockActive = true;
     bus.emit('lock:on', { player: p, garden: g, until: g.lockedUntil });
     return true;
@@ -992,13 +1194,148 @@ export class Game {
     }
   }
 
+  /** How fast plants grow in garden g (pets with a grow boost, sprinklers at Base Lv 7). */
+  growRate(g) {
+    const o = g.owner;
+    return o.mods.grow * (o.baseLevel >= BASE.sprinklersAt ? BASE.sprinklerGrow : 1);
+  }
+
+  // ------------------------------------------------------------------ egg drops
+
+  /** Height of a drop's egg above the ground right now. */
+  dropY(d, now = this.time) {
+    return Math.max(0, DROPS.fallFrom - DROPS.fallSpeed * (now - d.spawnAt));
+  }
+
+  _updateDrops() {
+    const now = this.time;
+    const ev = this.event;
+    if (ev?.def?.drops && now >= (ev.nextDropAt ?? Infinity) && (ev.dropped || 0) < DROPS.rain.count) {
+      ev.dropped = (ev.dropped || 0) + 1;
+      ev.nextDropAt = now + DROPS.rain.every;
+      this.spawnDrop({ rain: true });
+    }
+    if (now >= this.nextDropAt) {
+      this.nextDropAt = now + this.rng.range(DROPS.gapMin, DROPS.gapMax);
+      this.spawnDrop();
+    }
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      const d = this.drops[i];
+      if (now >= d.expiresAt) {
+        this.drops.splice(i, 1);
+        bus.emit('drop:expired', { drop: d });
+        continue;
+      }
+      if (now < d.landAt) continue;
+      for (const p of this.players) {
+        if (!p.present || Math.abs(p.pos.y) > 4 || dist2(p.pos, d) > DROPS.pickupR ** 2) continue;
+        this.claimDrop(p, d);
+        break;
+      }
+    }
+  }
+
+  /** Drop an egg from the sky. rain: an Egg Rain drop (near the plaza and the start of the road). */
+  spawnDrop({ rain = false, egg = null, x = null, z = null } = {}) {
+    if (this.drops.length >= DROPS.max) return null;
+    let biome = -1;
+    if (x == null || z == null) {
+      const solid = (px, pz) => this.physics.query(px - 2.2, px + 2.2, pz - 2.2, pz + 2.2).some((b) => !b.off && b.maxY > 0.8);
+      for (let tries = 0; tries < 8; tries++) {
+        if (rain) {
+          biome = this.rng.chance(0.4) ? 0 : -1;
+        } else biome = this.rng.chance(DROPS.roadChance) ? this.rng.int(0, BIOMES.length - 1) : -1;
+        if (biome >= 0) {
+          const r = LAYOUT.biomeRanges[biome];
+          x = this.rng.range(-WORLD.road.width / 2 + 6, WORLD.road.width / 2 - 6);
+          z = this.rng.range(r.minZ + 10, r.maxZ - 10);
+        } else {
+          x = this.rng.range(-26, 26);
+          z = this.rng.range(-40, 52);
+        }
+        if (!solid(x, z)) break;
+      }
+    }
+    if (!egg) {
+      const pool = biome >= 0 ? DROPS.byBiome[biome] || DROPS.plaza : DROPS.plaza;
+      egg = this.rng.chance(rain ? DROPS.rain.rainbowChance : DROPS.rainbowChance) ? 'rainbow' : this.rng.pick(pool);
+    }
+    if (!EGG[egg]) return null;
+    const now = this.time;
+    const d = { uid: uid(), egg, x, z, spawnAt: now, landAt: now + DROPS.fallFrom / DROPS.fallSpeed, expiresAt: 0, biome };
+    d.expiresAt = d.landAt + DROPS.life;
+    this.drops.push(d);
+    bus.emit('drop:spawn', { drop: d });
+    return d;
+  }
+
+  claimDrop(p, d) {
+    const i = this.drops.indexOf(d);
+    if (i < 0 || this.time < d.landAt) return false;
+    this.drops.splice(i, 1);
+    const pet = this._rollPet(d.egg);
+    p.stats.eggs = (p.stats.eggs || 0) + 1;
+    bus.emit('drop:claimed', { player: p, drop: d, pet });
+    if (pet) {
+      if (p.kind === 'bot') this._botAdoptPet(p, pet);
+      bus.emit('pet:hatched', { player: p, egg: d.egg, pet, free: true });
+    }
+    return true;
+  }
+
+  _rollPet(eggId) {
+    const egg = EGG[eggId];
+    const valid = egg ? egg.odds.filter(([id, w]) => PET[id] && w > 0) : [];
+    const total = valid.reduce((a, [, w]) => a + w, 0);
+    if (!total) return null;
+    let r = this.rng.next() * total;
+    for (const [id, w] of valid) if ((r -= w) < 0) return id;
+    return valid[valid.length - 1][0];
+  }
+
+  /** Bots keep their three best pets (from egg drops) as their team. */
+  _botAdoptPet(p, pet) {
+    p.pets = [...new Set([...p.pets, pet])].sort((a, b) => petScore(b) - petScore(a)).slice(0, MAX_TEAM);
+    this._refreshMods(p);
+    bus.emit('pet:equipped', { player: p, pet: p.pet });
+  }
+
+  // ------------------------------------------------------------------ Guard Gnome (Base Lv 5)
+
+  _updateGuards() {
+    const now = this.time;
+    const R = BASE.guard.range;
+    for (const g of this.gardens) {
+      const o = g.owner;
+      if (!o.present || o.baseLevel < BASE.guardAt) {
+        g.guardAlert = false;
+        continue;
+      }
+      let alert = false, thief = null;
+      for (const q of this.players) {
+        if (q === o || !q.present || !gardenContains(g.L, q.pos.x, q.pos.z)) continue;
+        alert = true;
+        const robbing = (q.carrying?.kind === 'plant' && q.carrying.fromSlot === g.slot) || (q.interact.stealPl && g.planters.includes(q.interact.stealPl));
+        if (robbing && now >= q.invulnUntil && dist2(q.pos, g.L.guard) < R * R) thief = q;
+      }
+      g.guardAlert = alert;
+      if (!thief || now < g.guardReadyAt) continue;
+      g.guardReadyAt = now + BASE.guard.cooldown;
+      const dx = thief.pos.x - g.L.guard.x, dz = thief.pos.z - g.L.guard.z;
+      const d = Math.hypot(dx, dz) || 1;
+      bus.emit('guard:bonk', { garden: g, target: thief });
+      this.hitPlayer(thief, null, { x: dx / d, z: dz / d }, BASE.guard.stun, 'guard');
+    }
+  }
+
   _updateGardens(dt) {
     for (const g of this.gardens) {
+      const gdt = dt * this.growRate(g);
       for (const pl of g.planters) {
         const pt = pl.plant;
         if (!pt) continue;
         if (pt.growLeft > 0) {
-          pt.growLeft -= dt;
+          pt.growLeft -= gdt;
           if (pt.growLeft <= 0) {
             pt.growLeft = 0;
             bus.emit('plant:grown', { plant: pt, planter: pl, garden: g });
@@ -1030,7 +1367,8 @@ export class Game {
     if (!t) return;
     this.event = { type: t.id, def: t, startedAt: this.time, endsAt: this.time + EVENTS.duration };
     // give some waiting seeds the event mutation right away
-    for (const pod of this.pods) if (pod.seed && pod.seed.mutation === 'normal' && this.rng.chance(t.chance * 0.6)) pod.seed.mutation = t.mutation;
+    if (t.mutation) for (const pod of this.pods) if (pod.seed && pod.seed.mutation === 'normal' && this.rng.chance(t.chance * 0.6)) pod.seed.mutation = t.mutation;
+    if (t.drops) this.event.nextDropAt = this.time + 1.5;
     bus.emit('event:start', { event: this.event });
   }
 
@@ -1054,18 +1392,64 @@ export class Game {
     return true;
   }
 
-  buySpeed(p) {
-    if (!this.near(p, LAYOUT.shops.speed, 9)) return false;
-    const next = p.speedLevel + 1;
-    const cost = speedCost(next);
+  /** At the Speed Shop (any of its stations or its mat), or on your own home treadmill (Base Lv 6). */
+  nearSpeedShop(p) {
+    const { x, z } = p.pos;
+    if (this.near(p, LAYOUT.shops.speed, 9) || (Math.abs(x) < 11 && z < -50 && z > -61)) return true;
+    if (p.baseLevel < BASE.treadmillAt) return false;
+    const t = this.gardens[p.slot].L.treadmill;
+    return dist2(p.pos, t) < 7 * 7;
+  }
+
+  /** Buy Speed levels: n = 1, 10, ... or 'max' (as many as you can afford). */
+  buySpeed(p, n = 1) {
+    if (!this.nearSpeedShop(p)) return false;
+    const want = n === 'max' ? Infinity : Math.max(1, Math.min(1000, Math.floor(Number(n) || 1)));
+    let count = 0, spent = 0;
+    while (count < want) {
+      const cost = speedCost(p.speedLevel + 1);
+      if (p.cash < cost) break;
+      p.cash -= cost;
+      p.upgradeSpend += cost;
+      p.speedLevel++;
+      spent += cost;
+      count++;
+    }
+    if (!count) {
+      bus.emit('purchase:fail', { player: p, reason: 'cash', cost: speedCost(p.speedLevel + 1) });
+      return false;
+    }
+    bus.emit('speed:up', { player: p, level: p.speedLevel, cost: spent, count });
+    return true;
+  }
+
+  buyBoost(p) {
+    if (!this.nearSpeedShop(p) || p.boostLevel >= BOOST.maxLevel) return false;
+    const next = p.boostLevel + 1;
+    const cost = BOOST.cost(next);
     if (p.cash < cost) {
       bus.emit('purchase:fail', { player: p, reason: 'cash', cost });
       return false;
     }
     p.cash -= cost;
     p.upgradeSpend += cost;
-    p.speedLevel = next;
-    bus.emit('speed:up', { player: p, level: next, cost });
+    p.boostLevel = next;
+    bus.emit('boost:up', { player: p, level: next, cost });
+    return true;
+  }
+
+  buyTreadmill(p) {
+    if (!this.nearSpeedShop(p) || p.treadmillTier >= TREADMILL.tiers.length - 1) return false;
+    const next = p.treadmillTier + 1;
+    const cost = TREADMILL.tiers[next].cost;
+    if (p.cash < cost) {
+      bus.emit('purchase:fail', { player: p, reason: 'cash', cost });
+      return false;
+    }
+    p.cash -= cost;
+    p.upgradeSpend += cost;
+    p.treadmillTier = next;
+    bus.emit('treadmill:up', { player: p, tier: next, cost });
     return true;
   }
 
@@ -1101,17 +1485,9 @@ export class Game {
       bus.emit('purchase:fail', { player: p, reason: 'cash', cost: egg.price });
       return null;
     }
-    const valid = egg.odds.filter(([id, w]) => PET[id] && w > 0);
-    const total = valid.reduce((a, [, w]) => a + w, 0);
-    if (!total) return null;
-    let r = this.rng.next() * total;
-    let pet = valid[valid.length - 1][0];
-    for (const [id, w] of valid) {
-      if ((r -= w) < 0) {
-        pet = id;
-        break;
-      }
-    }
+    if (egg.shop === false) return null; // drop-only eggs are never sold
+    const pet = this._rollPet(eggId);
+    if (!pet) return null;
     p.cash -= egg.price;
     bus.emit('purchase', { player: p, what: 'egg:' + eggId, cost: egg.price, qty: 1 });
     bus.emit('pet:hatched', { player: p, egg: eggId, pet });
@@ -1119,9 +1495,18 @@ export class Game {
   }
 
   setPet(p, petId) {
-    p.pet = petId && PET[petId] ? petId : null;
-    p.mods = petMods(p.pet);
-    bus.emit('pet:equipped', { player: p, pet: p.pet });
+    return this.setPets(p, petId ? [petId] : []);
+  }
+
+  /** Equip a team (up to MAX_TEAM pet ids; only the first petSlotsFor(base level) count). */
+  setPets(p, ids) {
+    const next = (Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string' && PET[id]).slice(0, MAX_TEAM);
+    const before = p.pet;
+    const same = next.length === p.pets.length && next.every((id, i) => id === p.pets[i]);
+    p.pets = next;
+    this._refreshMods(p);
+    if (!same || before !== p.pet) bus.emit('pet:equipped', { player: p, pet: p.pet, pets: this.activePets(p) });
+    return true;
   }
 
   setLook(p, look) {
@@ -1212,16 +1597,17 @@ export class Game {
       p.faceKey = kind === 'remote' ? 'r_' + pid : profile.id;
       p.name = profile.name || p.char.name;
       p.look = sanitizeLook({ ...p.char.look, ...(profile.look || {}) }, p.char.id);
-      const eq = profile.pets?.owned?.find((x) => x.uid === profile.pets.equipped);
-      p.pet = eq && PET[eq.id] ? eq.id : typeof profile.pet === 'string' && PET[profile.pet] ? profile.pet : null;
+      p.pets = profileTeam(profile);
+      p.baseStyle = sanitizeBaseStyle(profile.baseStyle);
     } else {
       p.profileId = p.char.id;
       p.faceKey = p.char.id;
       p.name = p.char.name;
       p.look = p.char.look;
-      p.pet = null;
+      p.pets = [];
+      p.baseStyle = sanitizeBaseStyle(BOT_STYLES[p.char.id]);
     }
-    p.mods = petMods(p.pet);
+    this._refreshMods(p);
     p.emote = null;
   }
 
@@ -1258,7 +1644,8 @@ export class Game {
     for (const m of this.monsters) if (m.target === slot) m.target = null;
     const fresh = new Player(slot, p.char, false);
     for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'items', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt',
-      'swingStart', 'coilUntil', 'cloakUntil', 'celebrateUntil', 'interact', 'prevInteract', 'intent', 'lastHitBy', 'stats']) p[k] = fresh[k];
+      'swingStart', 'coilUntil', 'cloakUntil', 'celebrateUntil', 'interact', 'prevInteract', 'intent', 'lastHitBy', 'stats',
+      'baseLevel', 'boostLevel', 'treadmillTier', 'boostUntil', 'boostReadyAt', 'pumpUntil', 'pumpMult', 'trainT']) p[k] = fresh[k];
     p.holdSpent = false;
     p._jumpQ = 0;
     const g = this.gardens[slot];
@@ -1273,7 +1660,9 @@ export class Game {
     });
     this._setIdentity(p, cfg);
     if (cfg.data) this.loadSlot(slot, cfg.data);
+    this._refreshMods(p);
     this._syncLots(g);
+    this._syncBase(g);
     this.respawn(p);
     this.human = this.players.find((q) => q.isHuman) || null;
     this._recomputeNetWorth();
@@ -1326,6 +1715,8 @@ export class Game {
         const it = p.interact;
         return {
           kind: p.kind === 'bot' || p.kind === 'empty' ? p.kind : 'player', pid: p.pid, profileId: p.profileId, name: p.name, look: p.look, pet: p.pet,
+          pets: [...p.pets], baseLevel: p.baseLevel, baseStyle: p.baseStyle, boostLevel: p.boostLevel, boostUntil: p.boostUntil, boostReadyAt: p.boostReadyAt,
+          treadmillTier: p.treadmillTier, pumpUntil: p.pumpUntil, pumpMult: p.pumpMult, trainT: p.trainT,
           pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z }, vel: { x: p.vel.x, y: p.vel.y, z: p.vel.z }, yaw: p.yaw, onGround: p.onGround,
           cash: p.cash, speedLevel: p.speedLevel, rebirths: p.rebirths, upgradeSpend: p.upgradeSpend, items: { ...p.items }, selectedItem: p.selectedItem,
           carrying: c ? (c.kind === 'plant' ? { kind: 'plant', plant: plant(c.plant), fromSlot: c.fromSlot, fromIndex: c.fromIndex } : { ...c }) : null,
@@ -1337,10 +1728,13 @@ export class Game {
       }),
       gardens: this.gardens.map((g) => ({
         cashPile: g.cashPile, lockedUntil: g.lockedUntil, lockReadyAt: g.lockReadyAt, lockActive: g.lockActive, collectedAt: g.collectedAt ?? -9,
+        guardReadyAt: g.guardReadyAt, guardAlert: g.guardAlert,
         planters: g.planters.map((pl) => ({ unlocked: pl.unlocked, stealer: pl.stealer, plant: plant(pl.plant) })),
       })),
       pods: this.pods.map((pod) => ({ seed: pod.seed ? { ...pod.seed } : null, respawnAt: pod.respawnAt })),
       ground: this.ground.map((gi) => ({ ...gi })),
+      drops: this.drops.map((d) => ({ ...d })),
+      nextDropAt: this.nextDropAt,
       projectiles: this.projectiles.map((b) => ({ ...b })),
       monsters: this.monsters.map((m) => ({
         uid: m.uid, x: m.x, y: m.y, z: m.z, yaw: m.yaw, vx: m.vx, vz: m.vz, state: m.state, target: m.target,
@@ -1384,10 +1778,17 @@ export class Game {
       p.faceKey = mine ? p.faceKey : p.kind === 'bot' || p.kind === 'empty' ? p.char.id : faceKeyOf ? faceKeyOf(d) : 'r_' + d.pid;
       p.name = d.name;
       if (d.look && !sameLook(d.look, p.look)) p.look = sanitizeLook(d.look, p.char.id);
-      if (d.pet !== p.pet) {
-        p.pet = d.pet && PET[d.pet] ? d.pet : null;
-        p.mods = petMods(p.pet);
+      const pets = Array.isArray(d.pets) ? d.pets : d.pet ? [d.pet] : [];
+      const baseLevel = clamp(Math.floor(Number(d.baseLevel) || 1), 1, BASE.maxLevel);
+      const style = sanitizeBaseStyle(d.baseStyle);
+      const baseChanged = baseLevel !== p.baseLevel || !sameBaseStyle(style, p.baseStyle);
+      p.baseLevel = baseLevel;
+      p.baseStyle = style;
+      if (pets.length !== p.pets.length || pets.some((id, j) => id !== p.pets[j]) || baseChanged) {
+        p.pets = pets.filter((id) => typeof id === 'string' && PET[id]).slice(0, MAX_TEAM);
+        this._refreshMods(p);
       }
+      if (baseChanged) p._baseDirty = true;
       if (!mine || force) {
         Object.assign(p.pos, d.pos);
         Object.assign(p.vel, d.vel);
@@ -1396,6 +1797,10 @@ export class Game {
       }
       for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt', 'swingStart',
         'coilUntil', 'cloakUntil', 'celebrateUntil']) p[k] = d[k];
+      for (const k of ['boostLevel', 'treadmillTier', 'pumpUntil', 'pumpMult', 'trainT']) if (Number.isFinite(d[k])) p[k] = d[k];
+      // our own boost is simulated here as soon as we press it: don't let an older state cancel it
+      if (Number.isFinite(d.boostUntil) && (!mine || d.boostUntil > p.boostUntil)) p.boostUntil = d.boostUntil;
+      if (Number.isFinite(d.boostReadyAt) && (!mine || d.boostReadyAt > p.boostReadyAt)) p.boostReadyAt = d.boostReadyAt;
       Object.assign(p.items, d.items);
       Object.assign(p.stats, d.stats);
       const c = d.carrying;
@@ -1412,6 +1817,8 @@ export class Game {
       g.lockReadyAt = d.lockReadyAt;
       g.lockActive = d.lockActive;
       g.collectedAt = d.collectedAt;
+      if (Number.isFinite(d.guardReadyAt)) g.guardReadyAt = d.guardReadyAt;
+      g.guardAlert = !!d.guardAlert;
       d.planters.forEach((pd, j) => {
         const pl = g.planters[j];
         if (!pl || !pd) return;
@@ -1420,6 +1827,10 @@ export class Game {
         pl.plant = plant(pd.plant);
       });
       this._syncLots(g);
+      if (g.owner._baseDirty || !g.look) {
+        g.owner._baseDirty = false;
+        this._syncBase(g);
+      }
     });
     s.pods.forEach((d, i) => {
       const pod = this.pods[i];
@@ -1428,6 +1839,12 @@ export class Game {
       pod.respawnAt = d.respawnAt;
     });
     this.ground = s.ground.filter((gi) => gi && (gi.kind === 'banana' || PLANT[gi.speciesId])).map((gi) => ({ ...gi }));
+    if (Array.isArray(s.drops)) {
+      // keep the same objects for drops we already show (views key on uid)
+      const had = new Map(this.drops.map((d) => [d.uid, d]));
+      this.drops = s.drops.filter((d) => d && EGG[d.egg] && Number.isFinite(d.x) && Number.isFinite(d.z)).map((d) => Object.assign(had.get(d.uid) || {}, d));
+    }
+    if (Number.isFinite(s.nextDropAt)) this.nextDropAt = s.nextDropAt;
     this.projectiles = s.projectiles.map((b) => ({ ...b }));
     s.monsters.forEach((d, i) => {
       const m = this.monsters[i];

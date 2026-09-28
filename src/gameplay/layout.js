@@ -141,6 +141,12 @@ function staticColliders(gardens) {
   box(-60, -48, -66, -59, 9, 0, 'shop');
   box(48, 60, -66, -59, 9, 0, 'shop');
   for (const b of boxes) if (b.tag === 'shop') b.camMaxY = 4.2;
+  // the Speed Shop's three treadmills: decks you step onto (belt top 0.55) and the consoles at their south end
+  for (let i = -1; i <= 1; i++) {
+    const x = WORLD.shops.speed.x + i * 7;
+    box(x - 1.8, x + 1.8, -60.2, -53.2, 0.55, 0, 'deco');
+    box(x - 1.8, x + 1.8, -61.0, -59.7, 4.8, 0, 'deco');
+  }
   return boxes;
 }
 

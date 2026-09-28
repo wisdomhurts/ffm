@@ -13,6 +13,7 @@
 // Test transports: `?net=local` (BroadcastChannel between tabs) or window.__SAS_NET__ = 'local'.
 // Real play: src/online/config.js (or window.__SAS_ONLINE__ = {url, key}).
 import { CHARACTERS } from '../config.js';
+import { profileTeam } from '../gameplay/game.js';
 import { bus } from '../core/events.js';
 import { settings, setSetting } from '../core/settings.js';
 import { getProfile, updateProfile } from '../core/profiles.js';
@@ -836,7 +837,7 @@ class Online {
       const prof = this._profile();
       const slots = full.players.map((d, i) => (i === slot ? { kind: 'local', profile: prof, pid: this.pid }
         : d.kind === 'bot' || d.kind === 'empty' ? { kind: d.kind }
-          : { kind: 'remote', pid: d.pid, profile: { id: d.profileId, name: d.name, look: d.look, pet: d.pet } }));
+          : { kind: 'remote', pid: d.pid, profile: { id: d.profileId, name: d.name, look: d.look, pet: d.pet, pets: d.pets, baseStyle: d.baseStyle } }));
       game = this._enterWorld({ mode: 'endless', difficulty: full.difficulty || 'normal', slots });
     }
     const order = Array.isArray(m.order) ? m.order.filter(isPid) : [hostPid];
@@ -966,8 +967,8 @@ class Online {
 
   _who(face) {
     const prof = this._profile();
-    const eq = prof.pets?.owned?.find((x) => x.uid === prof.pets.equipped)?.id || null;
-    const w = { id: prof.id, name: sanitizeName(prof.name, 'Player'), base: prof.base, look: prof.look, pet: eq };
+    const team = profileTeam(prof);
+    const w = { id: prof.id, name: sanitizeName(prof.name, 'Player'), base: prof.base, look: prof.look, pet: team[0] || null, pets: team, baseStyle: prof.baseStyle || null };
     if (face) w.face = face;
     return w;
   }

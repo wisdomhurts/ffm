@@ -10,7 +10,8 @@ import { settings } from './core/settings.js';
 import { load, save, remove } from './core/save.js';
 import { CHARACTERS, CHARACTER, PLANTS } from './config.js';
 import { LAYOUT } from './gameplay/layout.js';
-import { Game } from './gameplay/game.js';
+import { Game, profileTeam } from './gameplay/game.js';
+import { sanitizeBaseStyle, sameBaseStyle } from './gameplay/basestyle.js';
 import { HumanController } from './gameplay/humanController.js';
 import { BotController } from './ai/bot.js';
 import { buildWorld } from './world/world.js';
@@ -125,8 +126,10 @@ class App {
       const p = this.human;
       if (!p || !this.game || profile.id !== p.profileId) return;
       if (!sameLook(profile.look, p.look)) this.act('setLook', profile.look);
-      const eq = profile.pets.owned.find((x) => x.uid === profile.pets.equipped)?.id || null;
-      if (eq !== p.pet) this.act('setPet', eq);
+      const team = profileTeam(profile);
+      if (team.length !== p.pets.length || team.some((id, i) => id !== p.pets[i])) this.act('setPets', team);
+      const style = sanitizeBaseStyle(profile.baseStyle);
+      if (!sameBaseStyle(style, p.baseStyle)) this.act('setBaseStyle', style);
     });
     bus.on('match:end', ({ ranking }) => {
       if (!this.human) return;
@@ -271,7 +274,12 @@ class App {
     if (!g || !p) return false;
     switch (name) {
       case 'buyItem': return g.buyItem(p, args[0], args[1] ?? 1);
-      case 'buySpeed': return g.buySpeed(p);
+      case 'buySpeed': return g.buySpeed(p, args[0] ?? 1);
+      case 'buyBoost': return g.buyBoost(p);
+      case 'buyTreadmill': return g.buyTreadmill(p);
+      case 'upgradeBase': return g.upgradeBase(p);
+      case 'setBaseStyle': return g.setBaseStyle(p, args[0]);
+      case 'setPets': return g.setPets(p, args[0]);
       case 'rebirth': return g.rebirth(p);
       case 'buyEgg': return g.buyEgg(p, args[0]);
       case 'setPet': g.setPet(p, args[0] ?? null); return true;

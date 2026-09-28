@@ -23,11 +23,12 @@
 //   welcome {to, hn, slot, ep, order, priv, st} host -> joiner (st = full world state)
 //   kick    {to, k, p, v, su, iu}               host -> member: the rules moved you (knockback, caught, respawn)
 //   kicked  {to}                                host -> member: removed from the room
-import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor } from '../config.js';
+import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL } from '../config.js';
 import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
 import { REPLIES, EMOTE_LINES } from '../social/replies.js';
 import { PRACTICE_LINES } from '../ai/personalities.js';
-import { PETS, PET } from '../pets/catalog.js';
+import { PETS, PET, EGG } from '../pets/catalog.js';
+import { sanitizeBaseStyle } from '../gameplay/basestyle.js';
 import { sanitizeLook as canonLook } from '../characters/cosmetics.js';
 import { sanitizeName, isNameAllowed } from '../core/names.js';
 import { Player } from '../gameplay/player.js';
@@ -35,7 +36,7 @@ import { Player } from '../gameplay/player.js';
 /** Own keys only: catalog lookups must never match 'toString', '__proto__' and friends. */
 export const own = (obj, k) => typeof k === 'string' && !!obj && Object.prototype.hasOwnProperty.call(obj, k);
 
-export const PROTO = 2; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots
+export const PROTO = 3; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots; 3: base levels + styles, pet teams, boost, treadmills, egg drops
 
 // Two builds can only share a room when their rules agree (ids of everything that crosses the wire).
 function fnv(str) {
@@ -122,7 +123,7 @@ export const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? 
 export const int = (v, lo, hi, d = lo) => (Number.isInteger(v) && v >= lo && v <= hi ? v : d);
 export const r2 = (v) => Math.round(v * 100) / 100;
 export const r3 = (v) => Math.round(v * 1000) / 1000;
-const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+export const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const ID_RE = /^[a-zA-Z0-9_:-]{1,32}$/;
 export const isId = (s) => typeof s === 'string' && ID_RE.test(s);
 
@@ -165,6 +166,8 @@ export function sanitizeFace(face) {
 }
 
 export const sanitizePet = (id) => (own(PET, id) ? id : null);
+/** An equipped pet team: up to 3 known species ids. */
+export const sanitizePets = (list) => (Array.isArray(list) ? list.slice(0, 3).filter((id) => own(PET, id)) : []);
 export const sanitizeProfileId = (id) => (typeof id === 'string' && (/^p_[a-z0-9]{4,16}$/.test(id) || own(CHARACTER, id)) ? id : null);
 export const sanitizeBase = (id) => (own(CHARACTER, id) ? id : CHARACTERS[0].id);
 
@@ -179,6 +182,8 @@ export function sanitizeWho(w, pid, allowFace) {
     base,
     look: sanitizeLook(w.look, base),
     pet: sanitizePet(w.pet),
+    pets: sanitizePets(Array.isArray(w.pets) ? w.pets : w.pet ? [w.pet] : []),
+    baseStyle: sanitizeBaseStyle(w.baseStyle),
     face: allowFace ? sanitizeFace(w.face) : null,
   };
 }
@@ -248,10 +253,11 @@ export function vetSlotData(data) {
   const items = {};
   for (const it of ITEMS) items[it.id] = cap(isObj(p.items) ? p.items[it.id] : 0, 999);
   const stats = {};
-  if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds']) stats[k] = cap(p.stats[k], 1e12);
+  if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds', 'eggs']) stats[k] = cap(p.stats[k], 1e12);
   out.player = {
     cash: cap(p.cash, 1e18, PLAYER.startCash), speedLevel: cap(p.speedLevel, 999), rebirths: cap(p.rebirths, 50),
     upgradeSpend: cap(p.upgradeSpend, 1e18), items, stats,
+    baseLevel: Math.max(1, cap(p.baseLevel, BASE.maxLevel, 1)), boostLevel: cap(p.boostLevel, BOOST.maxLevel), treadmillTier: cap(p.treadmillTier, TREADMILL.tiers.length - 1),
   };
   const g = isObj(data.garden) ? data.garden : {};
   const planters = Array.isArray(g.planters) ? g.planters.slice(0, WORLD.planterCount) : [];
@@ -329,6 +335,8 @@ export const FORWARD = new Set([
   'monster:aggro', 'monster:caught', 'monster:bonked', 'item:used', 'item:empty', 'item:fail', 'balloon:splash', 'banana:slip',
   'purchase', 'purchase:fail', 'speed:up', 'rebirth', 'pod:respawn', 'event:start', 'event:end', 'chat', 'shop:open', 'emote',
   'gift', 'gift:fail', 'pet:hatched', 'pet:equipped', 'player:look', 'slot:changed', 'practice:steal',
+  'base:upgraded', 'base:style', 'base:bounce', 'guard:bonk', 'boost:start', 'boost:up', 'treadmill:up', 'pump:start',
+  'drop:spawn', 'drop:claimed', 'drop:expired',
 ]);
 export const forwarded = (name) => FORWARD.has(name) || name.startsWith('trade:');
 
@@ -477,11 +485,12 @@ export class EventCodec {
 // on their own: clients advance them locally and every few ticks get the exact values.
 export function sectionize(full) {
   const S = {};
-  S.m = { over: full.over, mode: full.mode, difficulty: full.difficulty, uid: full.uid, nextEventAt: full.nextEventAt, event: full.event, match: full.match, maxBots: full.maxBots };
+  S.m = { over: full.over, mode: full.mode, difficulty: full.difficulty, uid: full.uid, nextEventAt: full.nextEventAt, event: full.event, match: full.match, maxBots: full.maxBots, nextDropAt: full.nextDropAt };
   full.players.forEach((p, i) => (S['p' + i] = p));
   full.gardens.forEach((g, i) => (S['g' + i] = g));
   S.pd = full.pods;
   S.gr = full.ground;
+  S.dr = full.drops || [];
   S.mo = full.monsters;
   return S;
 }
@@ -489,11 +498,11 @@ export function sectionize(full) {
 /** The part of a section whose change must reach clients right away. */
 export function signature(key, v) {
   if (key[0] === 'p' && key !== 'pd') {
-    const { pos, vel, yaw, onGround, interact, ...rest } = v;
-    return stringifyR([rest, interact.key, interact.verb, interact.label]);
+    const { pos, vel, yaw, onGround, interact, trainT, ...rest } = v;
+    return stringifyR([rest, interact.key, interact.verb, interact.label, trainT > 0]);
   }
   if (key[0] === 'g' && key !== 'gr') {
-    return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0]])]);
+    return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.guardReadyAt, v.guardAlert, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0]])]);
   }
   if (key === 'mo') return stringifyR(v.map((m) => [m.stunUntil, m.attackAt]));
   if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match, v.maxBots]); // uid: only for promotion
@@ -506,6 +515,7 @@ export function mergeSections(full, D) {
     if (k === 'm') Object.assign(full, v);
     else if (k === 'pd') full.pods = v;
     else if (k === 'gr') full.ground = v;
+    else if (k === 'dr') full.drops = v;
     else if (k === 'mo') {
       if (Array.isArray(v)) v.forEach((m, i) => full.monsters[i] && Object.assign(full.monsters[i], m));
     } else if (k[0] === 'p') {
@@ -527,6 +537,8 @@ export function vetFull(s) {
   for (let i = 0; i < s.gardens.length; i++) if (!vetGarden(s.gardens[i], i)) return null;
   s.pods = s.pods.map(vetPod);
   s.ground = vetGround(s.ground);
+  s.drops = vetDrops(s.drops);
+  if (s.nextDropAt != null && !Number.isFinite(s.nextDropAt)) s.nextDropAt = 0;
   if (!Number.isFinite(s.time)) return null;
   return s;
 }
@@ -549,6 +561,13 @@ export function vetGround(list) {
   });
 }
 
+export function vetDrops(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 32).filter((d) => isObj(d) && own(EGG, d.egg)).map((d) => ({
+    uid: num(d.uid), egg: d.egg, x: num(d.x), z: num(d.z), spawnAt: num(d.spawnAt), landAt: num(d.landAt), expiresAt: num(d.expiresAt), biome: int(d.biome, -1, 20, -1),
+  }));
+}
+
 export function vetPlayer(d, i) {
   if (!isObj(d) || !isObj(d.pos) || !isObj(d.vel) || !isObj(d.items) || !isObj(d.stats) || !isObj(d.interact)) return false;
   d.name = sanitizeName(d.name, CHARACTERS[i].name);
@@ -556,6 +575,13 @@ export function vetPlayer(d, i) {
   d.profileId = sanitizeProfileId(d.profileId) || CHARACTERS[i].id;
   d.look = sanitizeLook(d.look, CHARACTERS[i].id) || { ...CHARACTERS[i].look };
   d.pet = sanitizePet(d.pet);
+  d.pets = sanitizePets(d.pets);
+  d.baseStyle = sanitizeBaseStyle(d.baseStyle);
+  d.baseLevel = int(d.baseLevel, 1, BASE.maxLevel, 1);
+  d.boostLevel = int(d.boostLevel, 0, BOOST.maxLevel, 0);
+  d.treadmillTier = int(d.treadmillTier, 0, TREADMILL.tiers.length - 1, 0);
+  for (const k of ['boostUntil', 'boostReadyAt', 'pumpUntil', 'trainT']) d[k] = num(d[k]);
+  d.pumpMult = Math.max(1, Math.min(2, num(d.pumpMult, 1)));
   if (d.emote && (!isObj(d.emote) || !own(EMOTE, d.emote.id))) d.emote = null;
   const c = d.carrying;
   if (c) {

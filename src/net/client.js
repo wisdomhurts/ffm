@@ -250,7 +250,7 @@ export class ClientRole {
       e = EventCodec.vet(name, e);
       if (!e) continue;
       // already played on this device the moment it happened
-      if ((name === 'player:jump' || name === 'bonk:swing') && e.player === me) continue;
+      if ((name === 'player:jump' || name === 'bonk:swing' || name === 'boost:start' || name === 'base:bounce') && e.player === me) continue;
       if ((name === 'chat' || name === 'emote') && this.s.isMuted(e.player)) continue;
       relay.depth++;
       try {
@@ -380,6 +380,8 @@ export class ClientRole {
       if (it.selectSlot != null) this.sel = p.selectedItem = Math.max(0, Math.min(ITEMS.length - 1, it.selectSlot | 0));
       if (it.emote) this._edge('m', it.emote);
       if (it.say) this._edge('s', it.say);
+      // boost: starts right here (the host starts it too when the edge arrives, for the rules and everyone's FX)
+      if (it.boost && g.time >= p.boostReadyAt && g.time >= p.stunUntil) this._edge('x', 1);
       it.emote = it.say = null; // the host plays these for everyone
       const held = !!it.interact;
       if (held !== this.held) {

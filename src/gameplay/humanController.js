@@ -1,6 +1,8 @@
 // Turns device input + camera orientation into an Intent for the human's Player.
 import { emptyIntent } from './player.js';
-import { ITEMS } from '../config.js';
+import { ITEMS, GEARS } from '../config.js';
+import { settings, setSetting } from '../core/settings.js';
+import { bus } from '../core/events.js';
 
 export class HumanController {
   constructor(input, cam) {
@@ -21,8 +23,10 @@ export class HumanController {
       item: i.take('item'),
       select: i.take('select'),
       interactTap: i.take('interactTap'),
+      boost: i.take('boost'),
     };
     this.frameEdges = e;
+    if (i.take('gear')) this.cycleGear();
     // a quick tap on E / the Action button counts as a short hold, long enough for 0.25 s grabs;
     // a new tap during that hold first reports a release so it registers as a fresh press
     if (e.interactTap) {
@@ -44,8 +48,10 @@ export class HumanController {
     const yaw = this.cam.yaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const rx = -Math.cos(yaw), rz = Math.sin(yaw);
-    it.moveX = fx * a.y + rx * a.x;
-    it.moveZ = fz * a.y + rz * a.x;
+    // speed gears: ask for part of your top speed (fine control when you're super fast)
+    const g = (GEARS[this.gear] || GEARS[GEARS.length - 1]).mult;
+    it.moveX = (fx * a.y + rx * a.x) * g;
+    it.moveZ = (fz * a.y + rz * a.x) * g;
     // A tap on E / the action button counts as holding for a moment (instant actions fire on it).
     if (this._tapRelease) {
       this._tapRelease = false;
@@ -59,6 +65,7 @@ export class HumanController {
     if (e) {
       it.jump = !!e.jump;
       it.bonk = !!e.bonk;
+      it.boost = !!e.boost;
       if (e.item === 'selected') it.useItem = p.selectedItem;
       else if (e.item != null) {
         it.useItem = e.item;
@@ -74,6 +81,17 @@ export class HumanController {
       this._queued = null;
     }
     return it;
+  }
+
+  /** Speed gear index into GEARS (0 slow .. 2 full). Saved in settings. */
+  get gear() {
+    return settings.speedGear ?? GEARS.length - 1;
+  }
+
+  cycleGear(to) {
+    const n = Number.isInteger(to) ? to : (this.gear + 1) % GEARS.length;
+    setSetting('speedGear', n);
+    bus.emit('gear:changed', { gear: n, def: GEARS[n] });
   }
 
   /** Put a one-shot intent field (emote, say) into the next tick. */

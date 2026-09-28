@@ -1,14 +1,15 @@
 // The room host: runs the real Game for everyone. Remote players move on their own devices; the host
 // takes their positions after a sanity check, runs every rule, and streams the world back ~5x a second (and right away when something happens).
 // Everything a member sends arrives sealed on its own uplink (session.open checks it is really them).
-import { PLAYER, WORLD, ITEMS, CHARACTERS } from '../config.js';
+import { PLAYER, WORLD, ITEMS, CHARACTERS, BOOST, TREADMILL } from '../config.js';
+import { sanitizeBaseStyle } from '../gameplay/basestyle.js';
 import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { BotController } from '../ai/bot.js';
 import {
   RATES, TIMEOUTS, MAX_HUMANS, EventCodec, forwarded, packPlayers, packMonsters, packProjectiles, sectionize, signature,
-  stringifyR, num, int, isId, own, sanitizeLook, sanitizePet, vetSlotData, RateLimiter, upTopic, relay, isPid, predict,
+  stringifyR, num, int, isId, isObj, own, sanitizeLook, sanitizePet, sanitizePets, vetSlotData, RateLimiter, upTopic, relay, isPid, predict,
 } from './protocol.js';
 
 const R = WORLD.playerRadius;
@@ -38,9 +39,10 @@ export class RemoteController {
     while (this.q.length) {
       const k = this.q[0];
       const v = this.q[1];
-      if ((k === 'j' && it.jump) || (k === 'b' && it.bonk) || (k === 'u' && it.useItem != null) || (k === 'm' && it.emote) || (k === 's' && it.say)) break;
+      if ((k === 'j' && it.jump) || (k === 'b' && it.bonk) || (k === 'x' && it.boost) || (k === 'u' && it.useItem != null) || (k === 'm' && it.emote) || (k === 's' && it.say)) break;
       this.q.splice(0, 2);
       if (k === 'j') it.jump = true;
+      else if (k === 'x') it.boost = true;
       else if (k === 'b') it.bonk = true;
       else if (k === 'u') it.useItem = v;
       else if (k === 'm') it.emote = v;
@@ -157,7 +159,7 @@ export class HostRole {
 
   _addMember(pid, slot, who, data) {
     const g = this.game;
-    const profile = { id: who.id, name: who.name, look: who.look || undefined, pet: who.pet };
+    const profile = { id: who.id, name: who.name, look: who.look || undefined, pet: who.pet, pets: who.pets, baseStyle: who.baseStyle };
     let p;
     try {
       p = g.setSlot(slot, { kind: 'remote', profile, pid, data: data && typeof data === 'object' ? data : null });
@@ -351,7 +353,7 @@ export class HostRole {
 
   _edge(m, p, k, v) {
     const ctrl = m.ctrl;
-    if (k === 'j' || k === 'b') ctrl.push(k, true);
+    if (k === 'j' || k === 'b' || k === 'x') ctrl.push(k, true);
     else if (k === 'u') {
       if (Number.isInteger(v) && v >= 0 && v < ITEMS.length) ctrl.push('u', v);
       else if (isId(v) && ITEMS.some((i) => i.id === v)) ctrl.push('u', v);
@@ -376,7 +378,9 @@ export class HostRole {
     let dt = b.c != null && Number.isFinite(c) ? c - b.c : dth;
     dt = Math.max(0, Math.min(dt, dth + 0.3, 1.5));
     const fast = s.clock < m.kickGraceUntil ? 32 : 0;
-    const vmax = Math.max(p.maxSpeed(g.time), PLAYER.baseSpeed) * 1.3 + fast;
+    // their Boost may have started on their device a moment before its edge reaches us
+    const boosty = g.time < p.boostUntil + 0.5 || g.time > p.boostReadyAt - 0.3 ? BOOST.power(p.boostLevel) : 1;
+    const vmax = Math.max(p.maxSpeed(g.time) * (g.time < p.boostUntil ? 1 : boosty), PLAYER.baseSpeed) * 1.3 + fast + TREADMILL.beltSpeed;
     const allowed = vmax * dt + 2.5;
     let dx = x - b.x, dz = z - b.z;
     const d = Math.hypot(dx, dz);
@@ -518,10 +522,15 @@ export class HostRole {
         const qty = int(args[1], 1, 99, 1);
         return isId(args[0]) ? g.buyItem(p, args[0], qty) : false;
       }
-      case 'buySpeed': return g.buySpeed(p);
+      case 'buySpeed': return g.buySpeed(p, args[0] === 'max' ? 'max' : int(args[0], 1, 100, 1));
+      case 'buyBoost': return g.buyBoost(p);
+      case 'buyTreadmill': return g.buyTreadmill(p);
+      case 'upgradeBase': return g.upgradeBase(p);
+      case 'setBaseStyle': return isObj(args[0]) ? g.setBaseStyle(p, sanitizeBaseStyle(args[0])) : false;
       case 'rebirth': return g.rebirth(p);
       case 'buyEgg': return isId(args[0]) ? g.buyEgg(p, args[0]) : null;
       case 'setPet': g.setPet(p, sanitizePet(args[0])); return true;
+      case 'setPets': g.setPets(p, sanitizePets(args[0])); return true;
       case 'setLook': {
         const look = sanitizeLook(args[0], this.s.who.get(p.pid)?.base || p.char.id);
         if (look) g.setLook(p, look);
