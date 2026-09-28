@@ -6,7 +6,7 @@ import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import {
-  EventCodec, forwarded, mergeSections, vetPlayer, vetGarden, vetPod, vetGround, predict, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
+  EventCodec, forwarded, mergeSections, vetPlayer, vetGarden, vetPod, vetGround, vetDrops, predict, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
 } from './protocol.js';
 
 const RING = 24;
@@ -142,6 +142,7 @@ export class ClientRole {
       if (k === 'm') ok = v && typeof v === 'object' && !Array.isArray(v);
       else if (k === 'pd') ok = Array.isArray(v) && !!(D.pd = v.map(vetPod));
       else if (k === 'gr') ok = Array.isArray(v) && !!(D.gr = vetGround(v));
+      else if (k === 'dr') ok = Array.isArray(v) && !!(D.dr = vetDrops(v));
       else if (k === 'mo') ok = Array.isArray(v) && v.every((m) => m && typeof m === 'object');
       else if (/^p[0-3]$/.test(k)) ok = +k.slice(1) < n && vetPlayer(v, +k.slice(1));
       else if (/^g[0-3]$/.test(k)) ok = +k.slice(1) < n && vetGarden(v, +k.slice(1));
