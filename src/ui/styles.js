@@ -1368,6 +1368,8 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .pp-sub{margin:-8px 0 0;text-align:center;font:800 14px/1.2 var(--fb);color:#ffe066}
 .pause-btns .pb-quit{order:9}
 .pause-quick,.pause-util{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pause-quick{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:430px) and (orientation:portrait){.pause-quick{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .pause-btns .pause-quick .btn,.pause-btns .pause-util .btn{width:auto;min-width:0}
 .pq{--b1:rgba(66,80,158,.98);--b2:rgba(35,45,104,.98);flex-direction:column;gap:3px;min-height:0;padding:7px 4px 9px;font-size:15px;border-radius:15px}
 .pq-ic{width:36px;height:36px;filter:drop-shadow(0 2px 0 rgba(0,0,0,.3))}
