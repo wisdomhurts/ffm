@@ -87,8 +87,21 @@ Income accumulates into the garden's cash pile; step on the COLLECT pad to bank 
   60 s recharge.
 * **Collect** (step on COLLECT pad): bank your garden's cash pile.
 * **Sell** (hold E on your own grown plant): +90 s worth of its income.
-* **Train** (Speed Shop treadmill): buy the next Speed level (+2 studs/s). There is no top level: each one
-  costs 55% more than the last. Grip grows with top speed (above 50 studs/s) so fast players still steer.
+* **Train** (Speed Shop, three treadmill stations): the **Speed** treadmill sells the next Speed level (+2 studs/s;
+  the shop panel also buys x10 or MAX). There is no top level: each one costs 55% more than the last. Grip grows
+  with top speed (above 50 studs/s) so fast players still steer. The **Boost Lab** sells Boost levels 1-10.
+  The **Warm-Up** treadmill: its belt carries you back (all belts do); stay on it for a few seconds and you get
+  **Pumped** (+10-30% speed for 45-180 s, better with each treadmill tier: Basic, Turbo, Rocket, Hyper, Galaxy).
+* **Boost** (Shift / lightning button / RT): a burst of +50% speed (up to +100% at Boost Lv 10) for 1.2-2.2 s,
+  recharging in 12-6 s. Works while carrying: the escape tool.
+* **Speed gears** (X / gear chip / LT): Slow 35%, Cruise 70%, Full. Only changes what your stick asks for.
+* **Base** (BASE console just inside your gate): level your garden 1-10 with cash (survives rebirth). Each level
+  +2% income; Lv 2 Base Studio (floors, fences), Lv 3 laser colours + 2 decoration spots, Lv 4 2nd pet slot,
+  Lv 5 Guard Gnome (bonks a thief robbing your garden, every 6 s) + 4 spots, Lv 6 home treadmill (warm up and
+  shop from home), Lv 7 sprinklers (plants grow 25% faster) + 6 spots, Lv 8 3rd pet slot, Lv 9 locks last 20 s
+  longer, Lv 10 golden base + Golden Statue. Solid decorations block walking; the trampoline launches you.
+* **Egg drops**: every 100-170 s an egg floats down on balloons (a light beam marks where it lands) on the plaza
+  or the Seed Road (deeper = rarer eggs; 5% Rainbow Eggs). First to touch it after it lands hatches it for free.
 * **Expand** (walk into your next FOR SALE lot): +5 planters.
 * **Items** (Gear Shop, hotbar 1–5): Banana Peel, Water Balloon, Speed Coil, Invisibility Cloak,
   Water Bucket (halves remaining growth time of the plant you stand next to).
@@ -103,6 +116,7 @@ biome, and knock the seed out of your hands if they catch you. Out-run them (Spe
 * **Golden Hour** — warm sunset light; 45% of new seeds are Gold.
 * **Diamond Night** — starry night; 35% Diamond.
 * **Rainbow Rain** — rain + rainbow; 25% Rainbow.
+* **Egg Rain** — a candy-pastel sky; 10 egg drops fall around the plaza and the start of the road (15% Rainbow).
 
 ## 7. Modes
 * **Endless** (auto-saves locally).

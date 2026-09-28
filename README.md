@@ -8,6 +8,13 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * Train Speed as high as you like (there is no top level), and buy the three FOR SALE lots at the back of
   your garden for up to 25 planters.
 * Online rooms with up to 4 players; the host picks how many computer players fill the empty gardens (None to All).
+* 37 pets from 10 eggs (Farm, Ocean, Frost, Candy, Cloud...), with a team of up to 3 at once. Eggs also float
+  down from the sky as free **egg drops** (the Rainbow Egg only comes that way), plus an Egg Rain weather event.
+* **Base levels 1-10**: every level pays more and unlocks the **Base Studio** (floors, fences, gate-laser colours and
+  decorations like trampolines and fountains), a Guard Gnome that bonks thieves, a home treadmill, sprinklers and
+  a golden base.
+* **Speed Shop 2.0**: buy Speed x10 or MAX, a Boost burst (Shift) with 10 upgrade levels, treadmill tiers, moving
+  belts, the Warm-Up treadmill that makes you Pumped, and speed gears for fine control at super speed.
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.
@@ -23,6 +30,8 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 | Jump | Space | Jump button | A |
 | Grab / Steal / Sell | E (hold to steal) | Action button | B |
 | Pool-noodle bonk | click or F | Bonk button | X |
+| Boost | Shift | lightning button | RT |
+| Speed gear | X | gear chip | LT |
 | Items | 1–5 | tap hotbar | Y / bumpers |
 | Pause | Esc | pause button | Start |
 
@@ -50,6 +59,6 @@ npm install
 node build.mjs            # dist/index.html (public), dist/family.html + dist/artifact.html (with photos)
 node tests/smoke.mjs      # headless Playwright smoke test of the core loop
 node tests/fullscreen.test.mjs   # full screen on Android, iPhone and computers
-node --test tests/gameplay/*.test.mjs   # garden lots, open-ended Speed, the far biomes (no browser)
+node --test tests/gameplay/*.test.mjs   # garden lots, Speed, far biomes, bases, pets, egg drops, Boost (no browser)
 ```
 Read `docs/DESIGN.md` for the game design and `docs/ARCHITECTURE.md` for how the code fits together.
