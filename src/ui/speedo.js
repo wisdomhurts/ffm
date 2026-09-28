@@ -51,7 +51,8 @@ function injectCSS() {
   border:3.5px solid var(--ink);color:#fff;pointer-events:auto;touch-action:none;cursor:pointer;background:radial-gradient(circle at 42% 30%,#d7b8ff,#7a3fe0);
   box-shadow:inset 0 3px 0 rgba(255,255,255,.3),0 5px 0 var(--ink)}
 .is-touch .touch.on ~ .hud .tb-boost,.is-touch .hud .tb-boost.on{display:grid}
-.tb-boost svg.bi{width:30px;height:30px}
+.tb-boost .bi{display:grid;place-items:center;color:#fff;filter:drop-shadow(0 2px 0 rgba(0,0,0,.35))}
+.tb-boost .bi svg{width:34px;height:34px}
 .tb-boost .tbb-ring{position:absolute;inset:-7px;width:calc(100% + 14px);height:calc(100% + 14px);transform:rotate(-90deg);pointer-events:none}
 .tb-boost .tbb-ring circle{fill:none;stroke-width:6;stroke-linecap:round}
 .tb-boost .tbb-ring .bg{stroke:rgba(10,14,40,.45)}
