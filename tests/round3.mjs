@@ -168,11 +168,12 @@ try {
   await ev(() => window.__app.__sim(4));
   await stepFrames(page, 2);
   await shot(page, 'r3-drop-falling');
+  // wait on the landing spot: bots chase drops too, and the first one there when it lands gets it
   await ev(() => {
     const a = window.__app;
     const d = a.__drop;
-    while (a.game.time < d.landAt + 0.2) a.game.update(1 / 30);
     a.__put(d.x, d.z);
+    while (a.game.time < d.landAt + 0.2) a.game.update(1 / 30);
   });
   await stepFrames(page, 3);
   const after = await ev(() => window.__app.profile?.pets?.owned?.length || 0);
