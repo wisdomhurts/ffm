@@ -1,5 +1,6 @@
-// Pet eggs: a smooth lathe egg with a painted pattern per egg type (spots, jungle zigzag, lava cracks,
-// galaxy stars), glowing crack lines revealed in three stages for the hatch, and the two shell halves that
+// Pet eggs: a smooth lathe egg with a painted pattern per egg type (garden spots, farm barn + cow spots,
+// jungle zigzag, ocean waves, lava cracks, galaxy stars, frost flakes, candy frosting, cloud sun rays,
+// rainbow bands), glowing crack lines revealed in three stages for the hatch, and the two shell halves that
 // burst apart. Geometry and materials are cached and shared (stand in the plaza, hatch stage, icons).
 //   createEgg(eggId) -> THREE.Group (1 unit tall, standing on y=0)
 //   eggParts(eggId)  -> {whole, cracks, top, bottom, teeth, shardGeo, mat}   (for the hatch)
@@ -183,6 +184,445 @@ const PAINT = {
     }
     return glow;
   },
+
+  // ---- Farm: cream shell, cute cow spots on top, a red barn band with white X doors round the bottom
+  farm(g, e, r) {
+    vgrad(g, '#fffbf0', '#fff0d0');
+    // cow spots (each a lumpy cluster of circles)
+    for (let i = 0; i < 11; i++) {
+      const x = (i / 11) * TW + (r() - 0.5) * 30, y = 52 + (i % 3) * 30 + r() * 14, s = 12 + r() * 11;
+      const lumps = [];
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2 + r();
+        lumps.push([Math.cos(a) * s * 0.55, Math.sin(a) * s * 0.5, s * (0.5 + r() * 0.3)]);
+      }
+      wrapDraw(g, x, (xx) => {
+        g.fillStyle = '#3b2a25';
+        g.beginPath();
+        g.ellipse(xx, y, s, s * 0.85, 0, 0, Math.PI * 2);
+        for (const [dx, dy, rr] of lumps) {
+          g.moveTo(xx + dx + rr, y + dy);
+          g.arc(xx + dx, y + dy, rr, 0, Math.PI * 2);
+        }
+        g.fill();
+        g.fillStyle = 'rgba(255,255,255,0.18)';
+        g.beginPath();
+        g.ellipse(xx - s * 0.3, y - s * 0.35, s * 0.35, s * 0.2, -0.4, 0, Math.PI * 2);
+        g.fill();
+      });
+    }
+    // a few pink hearts between the spots
+    for (let i = 0; i < 5; i++) {
+      const x = ((i + 0.5) / 5) * TW + 24, y = 70 + (i % 2) * 50, s = 7;
+      wrapDraw(g, x, (xx) => {
+        g.fillStyle = '#ff8fb1';
+        g.beginPath();
+        g.moveTo(xx, y + s * 1.1);
+        g.bezierCurveTo(xx - s * 1.6, y, xx - s * 0.9, y - s * 1.1, xx, y - s * 0.35);
+        g.bezierCurveTo(xx + s * 0.9, y - s * 1.1, xx + s * 1.6, y, xx, y + s * 1.1);
+        g.fill();
+      });
+    }
+    // red barn band: planks, white trim and a white X on every door panel
+    const y0 = 146, y1 = 214;
+    g.fillStyle = '#e0564a';
+    g.fillRect(0, y0, TW, y1 - y0);
+    g.fillStyle = '#c4443a';
+    for (let x = 0; x < TW; x += 16) g.fillRect(x, y0, 3, y1 - y0);
+    const P = 64;
+    g.strokeStyle = '#fff8ee';
+    g.lineCap = 'round';
+    for (let x = 0; x < TW; x += P) {
+      g.lineWidth = 5;
+      g.strokeRect(x + 6, y0 + 8, P - 12, y1 - y0 - 16);
+      g.lineWidth = 6;
+      g.beginPath();
+      g.moveTo(x + 9, y0 + 11);
+      g.lineTo(x + P - 9, y1 - 11);
+      g.moveTo(x + P - 9, y0 + 11);
+      g.lineTo(x + 9, y1 - 11);
+      g.stroke();
+    }
+    g.fillStyle = '#fff8ee';
+    g.fillRect(0, y0 - 6, TW, 8);
+    g.fillRect(0, y1 - 2, TW, 8);
+    // green grass tufts under the barn
+    g.fillStyle = '#6cc24a';
+    g.fillRect(0, y1 + 6, TW, TH - y1 - 6);
+    g.fillStyle = '#86d65e';
+    for (let x = 0; x < TW; x += 12) {
+      g.beginPath();
+      g.moveTo(x, y1 + 12);
+      g.lineTo(x + 6, y1 + 3);
+      g.lineTo(x + 12, y1 + 12);
+      g.fill();
+    }
+    return null;
+  },
+
+  // ---- Ocean: light-to-deep blue waves with foamy crests, bubbles and a couple of starfish
+  ocean(g, e, r) {
+    vgrad(g, '#a8f2ff', '#58d3ff');
+    const bands = [
+      [62, '#62d4ff', 4, 0.3],
+      [104, '#3cb2f2', 5, 1.7],
+      [148, '#2a8ae0', 4, 2.9],
+      [192, '#1f5fd0', 6, 0.8],
+      [230, '#1a4aa8', 5, 2.2],
+    ];
+    const wave = (x, y0, k, ph) => y0 + Math.sin((x / TW) * Math.PI * 2 * k + ph) * 7;
+    for (const [y0, col, k, ph] of bands) {
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(0, TH);
+      for (let x = 0; x <= TW; x += 8) g.lineTo(x, wave(x, y0, k, ph));
+      g.lineTo(TW, TH);
+      g.closePath();
+      g.fill();
+      // foam crest + little foam bubbles along it
+      g.strokeStyle = 'rgba(255,255,255,0.95)';
+      g.lineWidth = 5;
+      g.lineJoin = g.lineCap = 'round';
+      g.beginPath();
+      for (let x = 0; x <= TW; x += 8) g.lineTo(x, wave(x, y0, k, ph) + 1);
+      g.stroke();
+      g.fillStyle = '#ffffff';
+      for (let x = 0; x < TW; x += 22) {
+        const c = Math.sin((x / TW) * Math.PI * 2 * k + ph);
+        if (c < 0.2) continue; // foam gathers on the troughs' shoulders
+        g.beginPath();
+        g.arc(x, wave(x, y0, k, ph) + 5, 3.2, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    // bubbles
+    for (let i = 0; i < 26; i++) {
+      const x = r() * TW, y = 70 + r() * 150, s = 3 + r() * 7;
+      wrapDraw(g, x, (xx) => {
+        g.fillStyle = 'rgba(255,255,255,0.22)';
+        g.strokeStyle = 'rgba(255,255,255,0.9)';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(xx, y, s, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#ffffff';
+        g.beginPath();
+        g.arc(xx - s * 0.35, y - s * 0.35, s * 0.28, 0, Math.PI * 2);
+        g.fill();
+      });
+    }
+    // two starfish
+    for (const [x, y, rot] of [[120, 205, 0.2], [380, 175, -0.3]]) {
+      wrapDraw(g, x, (xx) => {
+        g.fillStyle = '#ff8a6b';
+        g.strokeStyle = '#d9573f';
+        g.lineWidth = 2.5;
+        g.beginPath();
+        for (let k = 0; k < 10; k++) {
+          const a = rot + (k / 10) * Math.PI * 2 - Math.PI / 2, rr = k % 2 ? 6 : 15;
+          g.lineTo(xx + Math.cos(a) * rr, y + Math.sin(a) * rr);
+        }
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#ffd0b8';
+        g.beginPath();
+        g.arc(xx, y, 2.4, 0, Math.PI * 2);
+        g.fill();
+      });
+    }
+    return null;
+  },
+
+  // ---- Frost: pale ice with a snowy cap, frosty cracks and snowflakes that glint
+  frost(g, e, r) {
+    vgrad(g, '#ffffff', '#9fdcff');
+    const glow = canvas();
+    const gg = glow.getContext('2d');
+    gg.fillStyle = '#6a9cc0';
+    gg.fillRect(0, 0, TW, TH);
+    // soft icy facets
+    for (let i = 0; i < 18; i++) {
+      const x = r() * TW, y = 40 + r() * (TH - 60), s = 18 + r() * 26;
+      const pts = [];
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * Math.PI * 2 + r() * 0.8;
+        pts.push([Math.cos(a) * s * (0.6 + r() * 0.5), Math.sin(a) * s * (0.6 + r() * 0.5)]);
+      }
+      wrapDraw(g, x, (xx) => {
+        g.fillStyle = i % 2 ? 'rgba(255,255,255,0.4)' : 'rgba(150,215,255,0.16)';
+        g.beginPath();
+        for (const [dx, dy] of pts) g.lineTo(xx + dx, y + dy);
+        g.closePath();
+        g.fill();
+      });
+    }
+    // frosty cracks: jagged branching lines
+    for (let i = 0; i < 7; i++) {
+      let x = r() * TW, y = 70 + r() * 150;
+      const pts = [[x, y]];
+      for (let k = 0; k < 6; k++) {
+        x += 8 + r() * 16;
+        y += (r() - 0.5) * 30;
+        pts.push([x, y]);
+      }
+      const br = pts.slice(1, -1).filter(() => r() < 0.6).map(([bx, by]) => [[bx, by], [bx + (r() - 0.5) * 18, by + (r() < 0.5 ? -1 : 1) * (10 + r() * 12)]]);
+      for (const [w, c] of [[4, 'rgba(70,160,220,0.55)'], [1.6, '#ffffff']]) {
+        g.strokeStyle = c;
+        g.lineWidth = w;
+        g.lineJoin = g.lineCap = 'round';
+        for (const dx of [-TW, 0, TW]) {
+          g.beginPath();
+          pts.forEach(([px, py]) => g.lineTo(px + dx, py));
+          g.stroke();
+          for (const b of br) {
+            g.beginPath();
+            b.forEach(([px, py]) => g.lineTo(px + dx, py));
+            g.stroke();
+          }
+        }
+      }
+    }
+    // snowflakes (six arms with little side branches), drawn on the glow map too
+    const flake = (ctx, x, y, s, col, w) => {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + 0.26;
+        const cx = Math.cos(a), cy = Math.sin(a);
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + cx * s, y + cy * s);
+        for (const f of [0.55]) {
+          const bx = x + cx * s * f, by = y + cy * s * f;
+          for (const sgn of [-1, 1]) {
+            const b = a + sgn * 0.8;
+            ctx.moveTo(bx, by);
+            ctx.lineTo(bx + Math.cos(b) * s * 0.36, by + Math.sin(b) * s * 0.36);
+          }
+        }
+      }
+      ctx.stroke();
+    };
+    for (let i = 0; i < 14; i++) {
+      const x = (i / 14) * TW + (r() - 0.5) * 20, y = 62 + ((i * 53) % 150) + r() * 12, s = 9 + r() * 9;
+      wrapDraw(g, x, (xx) => {
+        flake(g, xx, y, s, '#4aa8e0', 5.5);
+        flake(g, xx, y, s, '#ffffff', 2.6);
+        flake(gg, xx, y, s, '#f0fbff', 3.5);
+      });
+    }
+    // snowy cap with round drips
+    g.fillStyle = '#ffffff';
+    gg.fillStyle = 'rgba(200,235,255,0.6)';
+    for (const ctx of [g, gg]) {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      for (let x = 0; x <= TW; x += 4) ctx.lineTo(x, 34 + Math.sin((x / TW) * Math.PI * 12) * 5 + Math.sin((x / TW) * Math.PI * 4 + 1) * 4);
+      ctx.lineTo(TW, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    for (let i = 0; i < 9; i++) {
+      const x = ((i + 0.3) / 9) * TW, len = 8 + r() * 14;
+      g.fillStyle = '#ffffff';
+      wrapDraw(g, x, (xx) => {
+        g.fillRect(xx - 5, 30, 10, len);
+        g.beginPath();
+        g.arc(xx, 30 + len, 5, 0, Math.PI * 2);
+        g.fill();
+      });
+    }
+    g.fillStyle = 'rgba(90,170,230,0.35)';
+    g.fillRect(0, 0, TW, 3);
+    return { glow, k: 0.6 };
+  },
+
+  // ---- Candy: pink frosting with sprinkles over a pastel candy-swirl bottom
+  candy(g, e, r) {
+    g.fillStyle = '#ffe3f1';
+    g.fillRect(0, 0, TW, TH);
+    // diagonal candy swirl stripes (the period divides the width so it wraps)
+    const cols = ['#8fe3ff', '#ffffff', '#ff9ccd', '#ffffff'];
+    const P = 32, slope = 0.9;
+    for (let i = -Math.ceil((TH * slope) / P) - 2; i < TW / P + 2; i++) {
+      const x = i * P;
+      g.fillStyle = cols[((i % 4) + 4) % 4];
+      g.beginPath();
+      g.moveTo(x, TH);
+      g.lineTo(x + P, TH);
+      g.lineTo(x + P + TH * slope, 0);
+      g.lineTo(x + TH * slope, 0);
+      g.closePath();
+      g.fill();
+    }
+    // frosting (top) with round drips, a darker rim underneath and a soft shine
+    const drip = [];
+    for (let i = 0; i < 12; i++) drip.push([((i + r() * 0.5) / 12) * TW, 6 + r() * 16, 10 + r() * 5]);
+    const frost = (col, off) => {
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(0, 0);
+      for (let x = 0; x <= TW; x += 4) g.lineTo(x, 98 + off + Math.sin((x / TW) * Math.PI * 10) * 6);
+      g.lineTo(TW, 0);
+      g.closePath();
+      g.fill();
+      for (const [x, len, w] of drip) {
+        wrapDraw(g, x, (xx) => {
+          g.fillRect(xx - w, 96 + off, w * 2, len);
+          g.beginPath();
+          g.arc(xx, 96 + off + len, w, 0, Math.PI * 2);
+          g.fill();
+        });
+      }
+    };
+    frost('#e0569a', 4);
+    frost('#ff8cc6', 0);
+    g.fillStyle = 'rgba(255,255,255,0.35)';
+    g.fillRect(0, 10, TW, 10);
+    // sprinkles
+    const sp = ['#ff4f6d', '#ffd23f', '#4cd964', '#3db8ff', '#b36bff', '#ffffff'];
+    for (let i = 0; i < 70; i++) {
+      const x = r() * TW, y = 14 + r() * 80, a = r() * Math.PI, c = sp[i % sp.length];
+      wrapDraw(g, x, (xx) => {
+        g.save();
+        g.translate(xx, y);
+        g.rotate(a);
+        g.fillStyle = c;
+        g.beginPath();
+        g.moveTo(-6, -2.2);
+        g.lineTo(6, -2.2);
+        g.arc(6, 0, 2.2, -Math.PI / 2, Math.PI / 2);
+        g.lineTo(-6, 2.2);
+        g.arc(-6, 0, 2.2, Math.PI / 2, -Math.PI / 2);
+        g.fill();
+        g.restore();
+      });
+    }
+    return null;
+  },
+
+  // ---- Cloud: warm white with golden sun rays from the top, a band of puffy clouds, softly glowing
+  cloud(g, e, r) {
+    vgrad(g, '#fffdf2', '#fff2c2');
+    const glow = canvas();
+    const gg = glow.getContext('2d');
+    const gl = gg.createLinearGradient(0, 0, 0, TH);
+    gl.addColorStop(0, '#c4b890');
+    gl.addColorStop(1, '#aaa088');
+    gg.fillStyle = gl;
+    gg.fillRect(0, 0, TW, TH);
+    // sun rays: wedges of constant width (sectors seen from above), fading towards the waist
+    const N = 12, w = TW / N;
+    for (const [ctx, a0] of [[g, 0.95], [gg, 1]]) {
+      for (let i = 0; i < N; i++) {
+        const x = i * w;
+        const gr = ctx.createLinearGradient(0, 0, 0, 170);
+        gr.addColorStop(0, ctx === g ? `rgba(255,176,0,${a0})` : `rgba(255,160,0,${a0})`);
+        gr.addColorStop(0.75, `rgba(255,190,30,${a0 * 0.4})`);
+        gr.addColorStop(1, 'rgba(255,215,80,0)');
+        ctx.fillStyle = gr;
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.2, 0);
+        ctx.lineTo(x + w * 0.8, 0);
+        ctx.lineTo(x + w * 0.62, 170);
+        ctx.lineTo(x + w * 0.38, 170);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // the sun itself sits on the top of the egg
+      ctx.fillStyle = ctx === g ? '#ffd23f' : '#ffe27a';
+      ctx.fillRect(0, 0, TW, 12);
+    }
+    // puffy clouds round the lower half (shadowed undersides), a few little ones higher up
+    const cloud = (x, y, s) => {
+      const puffs = [[-1.1, 0.2, 0.62], [-0.45, -0.25, 0.8], [0.35, -0.3, 0.9], [1.05, 0.15, 0.62], [0, 0.25, 0.75]];
+      wrapDraw(g, x, (xx) => {
+        for (const [col, dy] of [['#c6d2ff', 6], ['#ffffff', 0]]) {
+          g.fillStyle = col;
+          g.beginPath();
+          for (const [px, py, pr] of puffs) {
+            g.moveTo(xx + px * s + pr * s, y + py * s + dy);
+            g.arc(xx + px * s, y + py * s + dy, pr * s, 0, Math.PI * 2);
+          }
+          g.fill();
+        }
+      });
+      wrapDraw(gg, x, (xx) => {
+        gg.fillStyle = '#fffaf0';
+        gg.beginPath();
+        for (const [px, py, pr] of puffs) {
+          gg.moveTo(xx + px * s + pr * s, y + py * s);
+          gg.arc(xx + px * s, y + py * s, pr * s, 0, Math.PI * 2);
+        }
+        gg.fill();
+      });
+    };
+    for (let i = 0; i < 6; i++) cloud(((i + 0.5) / 6) * TW + (r() - 0.5) * 20, 168 + (i % 2) * 22, 20 + r() * 5);
+    for (let i = 0; i < 4; i++) cloud(((i + 0.1) / 4) * TW, 118 + r() * 10, 11 + r() * 3);
+    // tiny gold sparkles
+    for (let i = 0; i < 26; i++) {
+      const x = r() * TW, y = 30 + r() * 110, s = 2 + r() * 2.5;
+      for (const ctx of [g, gg]) {
+        ctx.fillStyle = '#ffc93a';
+        ctx.fillRect(x - s * 2.2, y - 0.9, s * 4.4, 1.8);
+        ctx.fillRect(x - 0.9, y - s * 2.2, 1.8, s * 4.4);
+      }
+    }
+    return { glow, k: 0.6 };
+  },
+
+  // ---- Rainbow (egg drops only): wavy rainbow bands and sparkles, glowing like the galaxy egg
+  rainbow(g, e, r) {
+    const glow = canvas();
+    const gg = glow.getContext('2d');
+    const cols = ['#ff3b5c', '#ff8a1c', '#ffd21c', '#3fcf5a', '#1fb2ff', '#5a64ff', '#b44dff'];
+    const bh = TH / cols.length;
+    const edge = (x, i) => i * bh + Math.sin((x / TW) * Math.PI * 2 * 4 + i * 1.3) * 6;
+    cols.forEach((c, i) => {
+      for (const [ctx, alpha] of [[g, 1], [gg, 0.3]]) {
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.moveTo(0, i === cols.length - 1 ? TH : edge(0, i + 1));
+        for (let x = 0; x <= TW; x += 8) ctx.lineTo(x, i ? edge(x, i) : 0);
+        for (let x = TW; x >= 0; x -= 8) ctx.lineTo(x, i === cols.length - 1 ? TH : edge(x, i + 1) + 1);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // a soft shine along the top of each band
+      if (i) {
+        g.strokeStyle = 'rgba(255,255,255,0.45)';
+        g.lineWidth = 3;
+        g.beginPath();
+        for (let x = 0; x <= TW; x += 8) g.lineTo(x, edge(x, i) + 4);
+        g.stroke();
+      }
+    });
+    // sparkles: dots and four-point stars
+    for (let i = 0; i < 60; i++) {
+      const x = r() * TW, y = 12 + r() * (TH - 24), big = r() < 0.25, s = big ? 3 + r() * 2 : 1.3 + r();
+      for (const ctx of [g, gg]) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, y, s, 0, Math.PI * 2);
+        ctx.fill();
+        if (big) {
+          ctx.beginPath();
+          ctx.moveTo(x - s * 3.4, y);
+          ctx.quadraticCurveTo(x, y, x, y - s * 3.4);
+          ctx.quadraticCurveTo(x, y, x + s * 3.4, y);
+          ctx.quadraticCurveTo(x, y, x, y + s * 3.4);
+          ctx.quadraticCurveTo(x, y, x - s * 3.4, y);
+          ctx.fill();
+        }
+      }
+    }
+    return { glow, k: 1.0 };
+  },
 };
 
 function tex(c) {
@@ -194,18 +634,21 @@ function tex(c) {
 }
 
 const MATS = {};
-/** Shared material for an egg type (map + optional glowing emissive map). */
+/** Shared material for an egg type (map + optional glowing emissive map). userData.glow: the egg has a
+ *  painted glow of its own (lava, galaxy, frost, cloud, rainbow). */
 export function eggMaterial(eggId) {
   const id = PAINT[eggId] ? eggId : 'garden';
   if (MATS[id]) return MATS[id];
   const c = canvas();
-  const glow = PAINT[id](c.getContext('2d'), EGG[id], rng(id.length * 7919 + 13));
+  const res = PAINT[id](c.getContext('2d'), EGG[id], rng(id.length * 7919 + 13));
+  const glow = res?.glow || res;
   const map = tex(c);
   const m = new THREE.MeshStandardMaterial({ map, roughness: 0.38, metalness: 0 });
   if (glow) {
     m.emissive = new THREE.Color('#ffffff');
     m.emissiveMap = tex(glow);
-    m.emissiveIntensity = id === 'volcano' ? 1.4 : 1.0;
+    m.emissiveIntensity = res.k ?? (id === 'volcano' ? 1.4 : 1.0);
+    m.userData.glow = true;
   } else {
     m.emissive = new THREE.Color('#ffffff');
     m.emissiveMap = map;
