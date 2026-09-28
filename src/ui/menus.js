@@ -19,6 +19,7 @@ import { buildPhotoBooth } from './photobooth.js';
 import { buildHowTo } from './howto.js';
 import { buildPetShop, openPets } from './pets.js';
 import { buildWardrobe, openWardrobe } from './wardrobe.js';
+import { buildBase } from './base.js';
 import { openLobby } from './lobby.js';
 import { openProgress } from './progress.js';
 import { openLeaderboard } from './leaderboard.js';
@@ -722,6 +723,7 @@ export function createMenus(app) {
         h('div', { class: 'pause-quick' },
           quick('wardrobe', 'Wardrobe', openWardrobe, 'Wardrobe'),
           quick('pets', 'Pets', openPets, 'Pets'),
+          quick('base', 'My Base', () => openShop('base'), 'My Base'),
           quick('quests', 'Quests', openProgress, 'Quests & Badges')),
         h('div', { class: 'pause-util' },
           btn(iconLabel(ICON.gear, 'Settings'), 'btn-blue', openSettings),
@@ -750,7 +752,7 @@ export function createMenus(app) {
     app.touch?.setVisible(false);
     bus.emit('app:state', { state: 'shop' });
     // feature stands build their own panel ({el, title, dispose}); see docs/ONLINE.md
-    const custom = { pets: buildPetShop, wardrobe: buildWardrobe }[kind];
+    const custom = { pets: buildPetShop, wardrobe: buildWardrobe, base: buildBase }[kind];
     const shop = (custom || ((a, close) => buildShop(a, kind, close)))(app, () => shopModal?.close());
     shop.el.appendChild(doneRow(() => shopModal?.close()));
     const m = openModal(shop.el, {

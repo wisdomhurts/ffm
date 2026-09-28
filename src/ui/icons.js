@@ -123,6 +123,11 @@ export const ICON = {
   exit: ui('<path d="M13.5 4H6.6A1.6 1.6 0 0 0 5 5.6v12.8A1.6 1.6 0 0 0 6.6 20h6.9M10 12h10.5M16.8 8.3l3.7 3.7-3.7 3.7"/>'),
   user: ui('<circle cx="12" cy="8.2" r="4"/><path d="M4.2 20.5c0-4.3 3.5-7 7.8-7s7.8 2.7 7.8 7"/>'),
   userPlus: ui('<circle cx="10" cy="8.2" r="3.8"/><path d="M3 20.5c0-4.2 3.1-6.8 7-6.8 1.7 0 3.2.5 4.4 1.4M18.5 13.5v7M15 17h7"/>'),
+  house: svg('0 0 24 24', '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" fill="currentColor" stroke="#10163a" stroke-width="1.6" stroke-linejoin="round"/>'),
+  egg: svg('0 0 24 24', '<path d="M12 2.8c3.9 0 7 6.1 7 10.6A7 7 0 0 1 5 13.4C5 8.9 8.1 2.8 12 2.8z" fill="currentColor" stroke="#10163a" stroke-width="1.6"/><path d="M7.6 12.2l2.2-1.6 2.2 1.6 2.2-1.6 2.2 1.6" fill="none" stroke="#10163a" stroke-width="1.5" stroke-linejoin="round"/>'),
+  boost: svg('0 0 24 24', '<path d="M13.5 2 5 13.2h6L9.8 22 19 10.3h-6.1z" fill="currentColor" stroke="#10163a" stroke-width="1.6" stroke-linejoin="round"/><path d="M2.5 8h3.5M1.5 12h3M2.5 16h3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'),
+  treadmill: ui('<path d="M3 17.5h13.5a2.5 2.5 0 0 0 0-5H14M5 17.5l1.2-3.2M15.5 7.5 14 12.5M13 4h4.5l1 3.5"/><circle cx="7" cy="20" r="1.2"/><circle cx="15" cy="20" r="1.2"/>'),
+  gauge: ui('<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4.2-5.2" stroke-width="2.8"/><circle cx="12" cy="17" r="1.6" fill="currentColor"/>'),
 };
 
 // Full-colour "sticker" art for the title's feature tiles (same style as the item icons).
@@ -148,6 +153,14 @@ export const TILE_ICONS = {
     <circle cx="32" cy="41" r="12.5" fill="#ffb627" stroke-width="2.4"/>
     <path d="${starPath(32, 41.8, 9, 3.9)}" fill="#fff6c2" stroke-width="2.2"/></g>
     <path d="M19.5 34 C 21.5 29.5, 25 26.5, 29.5 25.5" fill="none" stroke="#fff6c2" stroke-width="3" stroke-linecap="round"/>`, 'tile-art'),
+  base: svg('0 0 64 64', `<g ${O}>
+    <path d="M44 6 L 44 20" fill="none" stroke-width="3"/>
+    <path d="M44 7 L 56 10.5 L 44 14 Z" fill="#ff4d6d" stroke-width="2.4"/>
+    <path d="M6 32 L 32 11 L 58 32 L 51 32 L 51 57 L 13 57 L 13 32 Z" fill="#4fcf62"/>
+    <path d="M13 32 L 32 16.5 L 51 32" fill="none" stroke-width="3"/>
+    <rect x="25" y="39" width="14" height="18" rx="2" fill="#c98a4f"/>
+    <path d="${starPath(32, 29, 6, 2.6)}" fill="#ffd23f" stroke-width="2"/></g>
+    <path d="M17 36 L 17 50" stroke="#b9f5c2" stroke-width="3" stroke-linecap="round"/>`, 'tile-art'),
   scores: svg('0 0 64 64', `<g ${O}>
     <path d="M17 10 L 11 10 C 9 10, 8 11, 8 13 C 8 21, 13 26, 20 27 M47 10 L 53 10 C 55 10, 56 11, 56 13 C 56 21, 51 26, 44 27" fill="none"/>
     <path d="M17 6 L 47 6 L 47 20 C 47 30, 40 36, 32 36 C 24 36, 17 30, 17 20 Z" fill="#ffd23f"/>
@@ -158,7 +171,7 @@ export const TILE_ICONS = {
     <path d="M24 52 L 40 52" stroke="#c9b2ff" stroke-width="2.6" stroke-linecap="round"/>`, 'tile-art'),
 };
 
-export const EVENT_ICON = { golden: ICON.sun, diamond: ICON.diamond, rainbow: ICON.rainbow };
+export const EVENT_ICON = { golden: ICON.sun, diamond: ICON.diamond, rainbow: ICON.rainbow, eggrain: ICON.egg };
 
 export const LOGO_SPROUT = `<svg class="logo-sprout" viewBox="0 0 120 110" aria-hidden="true">
   <g stroke="${INK}" stroke-width="6" stroke-linejoin="round" stroke-linecap="round">

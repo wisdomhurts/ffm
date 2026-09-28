@@ -1,5 +1,5 @@
 // Shop panels (Gear, Speed, Rebirth). Built by menus.openShop(); the game keeps running underneath.
-import { ITEMS, BIOMES, PLAYER, REBIRTH, LOCK, speedAt, speedCost } from '../config.js';
+import { ITEMS, BIOMES, PLAYER, REBIRTH, LOCK, BOOST, TREADMILL, speedAt, speedCost, speedCostN } from '../config.js';
 import { bus } from '../core/events.js';
 import { h, money, setText } from './dom.js';
 import { ICON, ITEM_ICONS } from './icons.js';
@@ -31,7 +31,7 @@ export function buildShop(app, kind, close) {
     part.refresh();
   };
   refresh();
-  const offs = ['purchase', 'purchase:fail', 'speed:up', 'rebirth', 'cash:collected'].map((n) => bus.on(n, refresh));
+  const offs = ['purchase', 'purchase:fail', 'speed:up', 'boost:up', 'treadmill:up', 'pump:start', 'rebirth', 'cash:collected'].map((n) => bus.on(n, refresh));
   const timer = setInterval(refresh, 300);
   return {
     el,
@@ -85,10 +85,38 @@ function gearShop(app, game, me) {
 // ------------------------------------------------------------------ speed
 
 function speedShop(app, game, me) {
+  injectSpeedCSS();
   const lvl = h('span', { class: 'sp-lvl' });
   const now = h('span', { class: 'sp-now' });
   const next = h('span', { class: 'sp-next' });
+  const pumped = h('span', { class: 'sp-pump' });
+  const buy = (n, btn) => {
+    const r = app.act('buySpeed', n); // undefined = sent to the online host
+    if (r === false) bump(btn, 'nope');
+    else if (r) bump(lvl, 'bump');
+  };
   const train = h('button', { class: 'btn btn-green btn-xl sp-train', type: 'button', 'data-autofocus': '' });
+  const x10 = h('button', { class: 'btn btn-blue sp-bulk', type: 'button' });
+  const xmax = h('button', { class: 'btn btn-gold sp-bulk', type: 'button' });
+  train.addEventListener('click', () => buy(1, train));
+  x10.addEventListener('click', () => buy(10, x10));
+  xmax.addEventListener('click', () => buy('max', xmax));
+  // Boost Lab + treadmill tier
+  const bLvl = h('b');
+  const bStats = h('span', { class: 'sx-stats' });
+  const bBtn = h('button', { class: 'btn btn-purple sx-btn', type: 'button' });
+  bBtn.addEventListener('click', () => {
+    const r = app.act('buyBoost');
+    if (r === false) bump(bBtn, 'nope');
+  });
+  const tName = h('b');
+  const tStats = h('span', { class: 'sx-stats' });
+  const tBtn = h('button', { class: 'btn btn-blue sx-btn', type: 'button' });
+  tBtn.addEventListener('click', () => {
+    const r = app.act('buyTreadmill');
+    if (r === false) bump(tBtn, 'nope');
+  });
+  const keyName = app.input?.lastDevice === 'touch' ? 'the boost button' : app.input?.lastDevice === 'gamepad' ? 'RT' : 'Shift';
   // monster speeds as they really are in this match (difficulty scales them)
   const monsters = BIOMES.map((b, i) => ({ b, i, ms: monsterSpeed(game, b) })).filter((x) => x.b.monster);
   const maxScale = Math.max(...monsters.map((m) => m.ms)) + 8;
@@ -102,34 +130,73 @@ function speedShop(app, game, me) {
       h('span', { class: 'sr-spd', text: fmtSpeed(ms) }), status);
     return { b, ms, row, status };
   });
-  train.addEventListener('click', () => {
-    const r = app.act('buySpeed'); // undefined = sent to the online host
-    if (r === false) bump(train, 'nope');
-    else if (r) bump(lvl, 'bump');
-  });
   const el = h('div', { class: 'speed-body' },
     h('div', { class: 'sp-card' },
       h('span', { class: 'sp-bolt', html: ICON.bolt }),
-      h('div', { class: 'sp-copy' }, lvl, now, next)),
+      h('div', { class: 'sp-copy' }, lvl, now, next, pumped)),
     train,
+    h('div', { class: 'sp-bulks' }, x10, xmax),
+    h('div', { class: 'sx-row' },
+      h('div', { class: 'sx-card sx-boost' },
+        h('div', { class: 'sx-head' }, h('span', { class: 'sx-ic', html: ICON.boost }), h('div', null, h('span', { class: 'sx-t', text: 'Boost Lab' }), bLvl)),
+        bStats, h('span', { class: 'sx-tip', text: `Press ${keyName} for a burst of speed. Great for escaping monsters!` }), bBtn),
+      h('div', { class: 'sx-card sx-tread' },
+        h('div', { class: 'sx-head' }, h('span', { class: 'sx-ic', html: ICON.treadmill }), h('div', null, h('span', { class: 'sx-t', text: 'Treadmill' }), tName)),
+        tStats, h('span', { class: 'sx-tip', text: 'Run on the Warm-Up treadmill (the right one) without falling off to get Pumped!' }), tBtn)),
     h('div', { class: 'sr' },
       h('div', { class: 'sr-title' }, h('b', { text: 'Can you outrun the road monsters?' }), h('span', { text: ` Carrying a seed slows you to ${Math.round(PLAYER.carrySeedMult * 100)}%.` })),
       track,
       h('div', { class: 'sr-rows' }, rows.map((r) => r.row))));
+  const setBtn = (b, html) => {
+    if (b._h !== html) b.innerHTML = b._h = html;
+  };
   return {
     el,
     refresh() {
       const s = speedAt(me.speedLevel, me.rebirths);
       const carry = s * PLAYER.carrySeedMult;
+      const t = game.time;
       setText(lvl, `Speed Lv ${me.speedLevel}`);
       setText(now, `${s} studs/s (${carry.toFixed(1)} with a seed)`);
       // no top level: there is always a next one
       const n = me.speedLevel + 1;
       const cost = speedCost(n);
       setText(next, `Next: Lv ${n} = ${speedAt(n, me.rebirths)} studs/s (+${PLAYER.speedPerLevel})`);
-      const html = `<span class="bi">${ICON.bolt}</span><span>TRAIN</span><small>${money(cost)}</small>`;
-      if (train._h !== html) train.innerHTML = train._h = html;
+      setText(pumped, t < me.pumpUntil ? `PUMPED! +${Math.round((me.pumpMult - 1) * 100)}% for ${Math.ceil(me.pumpUntil - t)} s` : '');
+      setBtn(train, `<span class="bi">${ICON.bolt}</span><span>TRAIN</span><small>${money(cost)}</small>`);
       train.disabled = me.cash < cost;
+      // x10: the next ten levels; MAX: as many as the cash buys
+      const c10 = speedCostN(me.speedLevel, 10);
+      setBtn(x10, `<span>x10</span><small>${money(c10)}</small>`);
+      x10.disabled = me.cash < cost;
+      let nMax = 0, cMax = 0;
+      while (nMax < 1000 && cMax + speedCost(me.speedLevel + nMax + 1) <= me.cash) cMax += speedCost(me.speedLevel + ++nMax);
+      setBtn(xmax, `<span>MAX${nMax ? ' +' + nMax : ''}</span><small>${nMax ? money(cMax) : '—'}</small>`);
+      xmax.disabled = nMax < 1;
+      // Boost Lab
+      const B = me.boostLevel;
+      setText(bLvl, `Lv ${B} / ${BOOST.maxLevel}`);
+      setText(bStats, `+${Math.round((BOOST.power(B) - 1) * 100)}% speed for ${BOOST.duration(B).toFixed(1)} s, every ${BOOST.cooldown(B).toFixed(1)} s`);
+      if (B >= BOOST.maxLevel) {
+        setBtn(bBtn, '<span>MAXED!</span>');
+        bBtn.disabled = true;
+      } else {
+        const bc = BOOST.cost(B + 1);
+        setBtn(bBtn, `<span>Lv ${B + 1}: +${Math.round((BOOST.power(B + 1) - 1) * 100)}%</span><small>${money(bc)}</small>`);
+        bBtn.disabled = me.cash < bc;
+      }
+      // treadmill tier
+      const T = TREADMILL.tiers[me.treadmillTier] || TREADMILL.tiers[0];
+      setText(tName, T.name);
+      setText(tStats, `Warm up ${T.warmup} s: +${Math.round(T.bonus * 100)}% speed for ${T.duration} s`);
+      const NT = TREADMILL.tiers[me.treadmillTier + 1];
+      if (!NT) {
+        setBtn(tBtn, '<span>BEST TREADMILL!</span>');
+        tBtn.disabled = true;
+      } else {
+        setBtn(tBtn, `<span>${NT.name.replace(' Treadmill', '')}: +${Math.round(NT.bonus * 100)}%</span><small>${money(NT.cost)}</small>`);
+        tBtn.disabled = me.cash < NT.cost;
+      }
       you.style.left = `${Math.min(100, (carry / maxScale) * 100)}%`;
       for (const r of rows) {
         const ok = outruns(s, r.ms);
@@ -139,6 +206,41 @@ function speedShop(app, game, me) {
       }
     },
   };
+}
+
+let speedCSS = false;
+function injectSpeedCSS() {
+  if (speedCSS || typeof document === 'undefined') return;
+  speedCSS = true;
+  const el = document.createElement('style');
+  el.id = 'sas-speedshop';
+  el.textContent = `
+.sp-pump{font:900 13px/1.2 var(--fb);color:#ff9ad8;text-shadow:0 0 8px rgba(255,79,216,.6)}
+.sp-pump:empty{display:none}
+.sp-bulks{display:flex;gap:10px;margin-top:-4px}
+.sp-bulk{min-width:128px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 14px 10px}
+.sp-bulk span{font:var(--fdw) 20px/1 var(--fd)}
+.sp-bulk small{font:900 13px/1 var(--fb)}
+.btn-gold{--b1:#ffe36b;--b2:#f0a515;color:var(--ink)}
+.btn-purple{--b1:#c08bff;--b2:#7a3fe0}
+.sx-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%}
+.sx-card{display:flex;flex-direction:column;gap:7px;padding:12px;border-radius:18px;border:3px solid var(--ink);background:rgba(10,15,40,.4)}
+.sx-boost{box-shadow:inset 0 0 0 2px rgba(179,107,255,.35)}
+.sx-tread{box-shadow:inset 0 0 0 2px rgba(63,240,255,.3)}
+.sx-head{display:flex;align-items:center;gap:10px}
+.sx-head b{display:block;font:var(--fdw) 20px/1.05 var(--fd)}
+.sx-t{font:900 12px/1 var(--fb);letter-spacing:.06em;text-transform:uppercase;color:var(--txt2)}
+.sx-ic{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#2a1b5c;border:2.5px solid var(--ink);color:#d7b8ff;flex:none}
+.sx-tread .sx-ic{background:#10324a;color:#7ff4ff}
+.sx-ic svg{width:26px;height:26px}
+.sx-stats{font:800 13.5px/1.3 var(--fb)}
+.sx-tip{font:700 12px/1.3 var(--fb);color:var(--txt2)}
+.sx-btn{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 10px 10px}
+.sx-btn span{font:var(--fdw) 17px/1.05 var(--fd)}
+.sx-btn small{font:900 13px/1 var(--fb)}
+@media (max-width:600px){.sx-row{grid-template-columns:1fr}.sp-bulks{width:100%}.sp-bulk{flex:1;min-width:0}}
+`;
+  document.head.appendChild(el);
 }
 
 // ------------------------------------------------------------------ rebirth
