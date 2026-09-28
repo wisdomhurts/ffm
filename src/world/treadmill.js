@@ -2,9 +2,10 @@
 // Contract:
 //   createTreadmill({tier, len, w, quality}) -> {object3d, setTier(tier), update(dt, t, {running}), dispose()}
 //       Built along +Z: the console end at +Z*len/2 (where you run to), the belt's open end at -Z*len/2.
-//       The belt covers exactly w x len (x within +-w/2) with its top at y = TREADMILL.beltTop. Around it: foot
-//       rails and deck sides out to x = +-(w/2 + 0.3) (the Rocket's boosters out to +-(w/2 + 0.95)), the console
-//       (motor hood + uprights + screen) from z = len/2 to len/2 + 1.1, at most 4.6 tall.
+//       The belt covers exactly w x len (x within +-w/2) with its top at y = TREADMILL.beltTop (+0.01). Around it:
+//       foot rails and deck sides out to x = +-(w/2 + 0.4) (the Rocket's boosters and fins out to +-(w/2 + 1.45),
+//       its little flames up to 2 studs past the open end), the console (motor hood, uprights, tilted screen head)
+//       from z = len/2 to len/2 + 1.2, at most 4.6 tall.
 //       tier = index into TREADMILL.tiers (basic, turbo, rocket, hyper, galaxy): fancier per tier.
 //       update(): scrolls the belt towards -Z (always slowly; at TREADMILL.beltSpeed and glowing while running).
 //       Two draw calls per treadmill: the body (one material shared by every treadmill) and the belt + neon.
@@ -426,8 +427,8 @@ function buildTier(tier, len, w) {
   const zc = L2 + 0.55;
   body.block(0, 0, zc, dw * 2, 1.0, 1.1, L.body, { ao: 0.3 });
   body.box(0, 1.0, zc + 0.05, dw * 2 - 0.3, 0.1, 0.8, L.dark, { ao: 0 });
-  for (const s of [-1, 1]) body.beam(s * (hw + 0.02), 0.95, L2 + 0.5, s * (hw - 0.12), 3.4, L2 + 0.7, 0.44, L.body, { ao: 0.15 });
-  const hy = 3.55, hz = L2 + 0.72, headRx = 0.55; // head: its -Z face (the screen) tilts up towards the runner
+  for (const s of [-1, 1]) body.beam(s * (hw + 0.02), 0.95, L2 + 0.5, s * (hw - 0.12), 3.4, L2 + 0.6, 0.44, L.body, { ao: 0.15 });
+  const hy = 3.55, hz = L2 + 0.62, headRx = 0.55; // head: its -Z face (the screen) tilts up towards the runner
   const tilt = (dy, dz) => [hy + dy * Math.cos(headRx) - dz * Math.sin(headRx), hz + dy * Math.sin(headRx) + dz * Math.cos(headRx)];
   body.box(0, hy, hz, w + 0.55, 0.98, 0.72, L.body, { rx: headRx, ao: 0.05 });
   {
@@ -464,12 +465,12 @@ function buildTier(tier, len, w) {
         body.box(s * (dw + 0.01), 0.32, 0.4, 0.02, 0.1, len - 0.8, '#ffffff', { ao: 0 });
         body.box(s * (dw + 0.01), 0.17, 0.4, 0.02, 0.06, len - 0.8, '#ffffff', { ao: 0 });
         body.box(s * 0.3, 1.02, zc + 0.05, 0.2, 0.04, 1.1, '#ffffff', { ao: 0 });
-        body.block(s * 0.95, 3.95, hz + 0.25, 0.14, 0.4, 0.14, L.dark);
+        body.block(s * 0.95, 3.95, hz + 0.2, 0.14, 0.4, 0.14, L.dark);
         neon.box(s * (dw + 0.005), 0.245, 0.4, 0.015, 0.035, len - 0.8, '#9dff5c', { ao: 0 });
       }
-      body.box(0, 4.42, hz + 0.3, w + 0.5, 0.12, 0.6, L.body, { rx: 0.12, ao: 0 });
-      body.box(0, 4.43, hz + 0.3, 0.5, 0.13, 0.62, '#ffffff', { rx: 0.12, ao: 0 });
-      for (const s of [-1, 1]) body.box(s * (w / 2 + 0.28), 4.35, hz + 0.3, 0.08, 0.38, 0.66, '#ffffff', { ao: 0 });
+      body.box(0, 4.42, hz + 0.22, w + 0.5, 0.12, 0.56, L.body, { rx: 0.12, ao: 0 });
+      body.box(0, 4.43, hz + 0.22, 0.5, 0.13, 0.58, '#ffffff', { rx: 0.12, ao: 0 });
+      for (const s of [-1, 1]) body.box(s * (w / 2 + 0.28), 4.35, hz + 0.22, 0.08, 0.38, 0.6, '#ffffff', { ao: 0 });
       break;
     case 'rocket': {
       // twin side boosters, nose cones towards the console, flames out of the open end
@@ -516,7 +517,7 @@ function buildTier(tier, len, w) {
       neon.box(0, 1.02, zc - 0.5, dw * 2 - 0.2, 0.05, 0.08, '#ff4fd8', { ao: 0 });
       {
         const [yy, zz] = tilt(0.5, 0);
-        neon.box(0, yy, zz, w + 0.6, 0.06, 0.76, '#ff4fd8', { rx: headRx, ao: 0 });
+        neon.box(0, yy, zz, w + 0.6, 0.06, 0.68, '#ff4fd8', { rx: headRx, ao: 0 });
       }
       neon.add(heartGeometry(0.1), trs(0, 4.3, hz + 0.15, 0.36, 0.36, 0.36), '#ff4fd8', { ao: 0 });
       break;
@@ -526,8 +527,8 @@ function buildTier(tier, len, w) {
         for (let k = 0; k < 4; k++) neon.prim('octa', s * (dw + 0.02), 0.28, -L2 + 0.9 + k * 1.5, 0.05, 0.28, 0.28, k % 2 ? '#ffe98a' : '#ffffff', { rx: Math.PI / 4, ao: 0 });
       }
       // a ringed planet on top of the console and two little stars
-      body.prim('sphere:16', 0, 4.28, hz + 0.08, 0.6, 0.6, 0.6, '#ff7ad9', { top: '#ffd0f0', ao: 0.2 });
-      neon.add('torus:24', trs(0, 4.28, hz + 0.08, 1.4, 1.4, 0.5, Math.PI / 2 - 0.3, 0, 0.35), '#ffd23f', { ao: 0 });
+      body.prim('sphere:16', 0, 4.28, hz - 0.02, 0.6, 0.6, 0.6, '#ff7ad9', { top: '#ffd0f0', ao: 0.2 });
+      neon.add('torus:24', trs(0, 4.28, hz - 0.02, 1.2, 1.2, 0.5, Math.PI / 2 - 0.3, 0, 0.35), '#ffd23f', { ao: 0 });
       for (const s of [-1, 1]) neon.prim('octa', s * 1.25, 4.25, hz + 0.1, 0.24, 0.4, 0.24, '#ffe98a', { ry: 0.6, ao: 0 });
       break;
     }
