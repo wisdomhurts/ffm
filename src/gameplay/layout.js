@@ -53,7 +53,30 @@ function gardenLayout(slot) {
     // A point just outside the gate on the aisle side (useful for AI).
     outside: { x: gateX - inward * 6, z: c.z },
     inside: { x: gateX + inward * 5, z: c.z },
+    // ---- the front yard (between the gate and the first planter column), used by base levels (BASE):
+    // the BASE console (upgrade + Base Studio), the Guard Gnome's post, the home treadmill (run along
+    // `dir`, the belt carries you back towards the gate) and six decoration spots (5x5 each, opened in
+    // order by BASE.decorAt). dz is measured from the garden's centre line.
+    console: { x: at(3.2), z: c.z + 7.6, r: 2.6 },
+    guard: { x: at(16.5), z: c.z - 8.5 },
+    treadmill: { x: at(15.5), z: c.z + 8.5, dirX: inward, dirZ: 0, len: 6.4, w: 2.9 },
+    decor: [
+      { index: 0, x: at(9.5), z: c.z - 16.5 },
+      { index: 1, x: at(9.5), z: c.z + 16.5 },
+      { index: 2, x: at(16), z: c.z - 16.5 },
+      { index: 3, x: at(16), z: c.z + 16.5 },
+      { index: 4, x: at(9.5), z: c.z - 8 },
+      { index: 5, x: at(9.5), z: c.z + 8 },
+    ],
   };
+}
+
+/** A treadmill's belt as a box ({minX, maxX, minZ, maxZ}) plus the unit direction you run (dir) and the
+ *  console end. `t` = {x, z, dirX, dirZ, len, w}. The belt carries you along -dir. */
+export function beltRect(t) {
+  const hx = Math.abs(t.dirX) * t.len / 2 + Math.abs(t.dirZ) * t.w / 2;
+  const hz = Math.abs(t.dirZ) * t.len / 2 + Math.abs(t.dirX) * t.w / 2;
+  return { minX: t.x - hx, maxX: t.x + hx, minZ: t.z - hz, maxZ: t.z + hz, dirX: t.dirX, dirZ: t.dirZ };
 }
 
 function podLayout() {
@@ -135,6 +158,11 @@ export function buildLayout() {
       pets: { x: WORLD.shops.pets.x, z: WORLD.shops.pets.z, r: 7 },
       wardrobe: { x: WORLD.shops.wardrobe.x, z: WORLD.shops.wardrobe.z, r: 7 },
     },
+    // The Speed Shop's three treadmills (west to east): Boost Lab, Speed, Warm-Up. You run south (towards
+    // the consoles); the belts carry you north. Belt area x +-1.45 around each x, z from -59.6 to -53.2.
+    speedStations: ['boost', 'speed', 'warmup'].map((id, i) => ({
+      id, x: WORLD.shops.speed.x + (i - 1) * 7, z: -56.4, dirX: 0, dirZ: -1, len: 6.4, w: 2.9,
+    })),
     spawn: { x: WORLD.spawn.x, z: WORLD.spawn.z },
     roadGate: { x: 0, z: ROAD.startZ },
     roadEndZ: ROAD_END_Z,

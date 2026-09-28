@@ -11,7 +11,7 @@ export function emptyIntent() {
   return { moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null };
 }
 
-const NO_MODS = Object.freeze({ income: 1, speed: 1, hold: 1, magnet: 0, bonkCd: 1 });
+const NO_MODS = Object.freeze({ income: 1, speed: 1, hold: 1, magnet: 0, bonkCd: 1, grow: 1 });
 
 export class Player {
   constructor(slot, char, isHuman) {

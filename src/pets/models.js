@@ -9,6 +9,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PET } from './catalog.js';
+import { EYE, WHITE, BLUSH, sym, face, smile } from './kit.js';
+import { FARM_OCEAN_FROST } from './species/farmOceanFrost.js';
+import { CANDY_CLOUD_RAINBOW } from './species/candyCloudRainbow.js';
 
 // ------------------------------------------------------------------ geometry baking
 
@@ -219,7 +222,7 @@ function shadowParts() {
 
 // Aura: a camera-facing soft glow (billboarded in the vertex shader). Sparkles: twinkling points that orbit
 // and rise around the pet. Both additive; one material per rarity.
-const FX_COLORS = { legendary: ['#ffc23a', '#fff1a8'], mythic: ['#ff4fa0', '#ffe07a'] };
+const FX_COLORS = { legendary: ['#ffc23a', '#fff1a8'], mythic: ['#ff4fa0', '#ffe07a'], divine: ['#fff3a0', '#ffffff'] };
 const FX = {};
 let fxQuad = null;
 let fxPts = null;
@@ -255,7 +258,7 @@ function fxParts(rarity) {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  const rainbow = rarity === 'mythic' ? 1 : 0;
+  const rainbow = rarity === 'mythic' || rarity === 'divine' ? 1 : 0;
   const sparkle = new THREE.ShaderMaterial({
     uniforms: { uTime: fxTime, uPx: fxPx, uC1: { value: new THREE.Color(c1) }, uC2: { value: new THREE.Color(c2) } },
     vertexShader: `uniform float uTime; uniform float uPx; varying float vA; varying float vH;
@@ -296,7 +299,7 @@ function addFx(parent, rarity, size, cy) {
   group.name = 'pet-fx';
   group.position.y = cy;
   const aura = new THREE.Mesh(fxQuad, f.aura);
-  aura.scale.setScalar(size * (rarity === 'mythic' ? 3.1 : 2.6));
+  aura.scale.setScalar(size * (rarity === 'divine' ? 3.5 : rarity === 'mythic' ? 3.1 : 2.6));
   aura.renderOrder = -1;
   aura.frustumCulled = false;
   const pts = new THREE.Points(fxPts, f.sparkle);
@@ -309,34 +312,6 @@ function addFx(parent, rarity, size, cy) {
 }
 
 // ------------------------------------------------------------------ species
-
-const EYE = '#1d1a2f';
-const WHITE = '#ffffff';
-const BLUSH = '#ff9fbf';
-const sym = (fn) => {
-  fn(1);
-  fn(-1);
-};
-
-/** Big glossy Roblox-style eyes (+ optional iris, lashes) and rosy cheeks on a front face at depth z. */
-function face(m, { x = 0, y, z, sep, w = 0.16, h = 0.23, blush = true, iris = null, lashes = false, cheekY = null }) {
-  sym((s) => {
-    const ex = x + s * sep;
-    if (iris) {
-      m.box(ex, y, z + 0.015, w * 1.1, h, 0.06, iris, { r: w * 0.45, ao: 0, glow: 0.1 });
-      m.box(ex, y - h * 0.05, z + 0.04, w * 0.55, h * 0.72, 0.04, EYE, { r: w * 0.25, ao: 0 });
-    } else m.box(ex, y, z + 0.015, w, h, 0.06, EYE, { r: w * 0.45, ao: 0 });
-    m.box(ex - w * 0.18, y + h * 0.2, z + 0.055, w * 0.4, h * 0.32, 0.03, WHITE, { r: w * 0.15, ao: 0, glow: 0.45 });
-    m.box(ex + w * 0.2, y - h * 0.24, z + 0.052, w * 0.2, h * 0.14, 0.02, WHITE, { r: w * 0.08, ao: 0, glow: 0.45 });
-    if (lashes) m.box(ex + s * w * 0.55, y + h * 0.45, z + 0.02, w * 0.5, 0.035, 0.03, EYE, { rz: s * 0.5, r: 0.012, ao: 0 });
-    if (blush) m.box(ex + s * w * 1.05, cheekY ?? y - h * 0.62, z - 0.005, w * 0.95, h * 0.34, 0.03, BLUSH, { r: h * 0.15, ao: 0 });
-  });
-}
-
-/** Little smile made of two tilted strokes. */
-function smile(m, x, y, z, w = 0.14, color = '#6b2a3c') {
-  sym((s) => m.box(x + s * w * 0.42, y, z, w * 0.62, 0.035, 0.03, color, { rz: s * 0.45, r: 0.015, ao: 0 }));
-}
 
 // Each species: scale (studs per unit), fly (hover height in studs, or 0), pivots of the animated parts, and a
 // build({body, head, tail, wing}) that draws each part relative to its own pivot. The model faces +Z.
@@ -765,6 +740,9 @@ const SPECIES = {
   },
 };
 
+// the newer eggs' species live in their own files (same build contract)
+Object.assign(SPECIES, FARM_OCEAN_FROST, CANDY_CLOUD_RAINBOW);
+
 // ------------------------------------------------------------------ assembly
 
 const GEO = new Map();
@@ -860,7 +838,7 @@ export function createPetModel(petId, { fx = true, shadow = true, scale = 1 } = 
     root.add(shadowMesh);
   }
   let fxObj = null;
-  if (fx && pet && (pet.rarity === 'legendary' || pet.rarity === 'mythic')) {
+  if (fx && pet && (pet.rarity === 'legendary' || pet.rarity === 'mythic' || pet.rarity === 'divine')) {
     const cy = (size.minY + size.h * 0.5);
     fxObj = addFx(lift, pet.rarity, Math.max(size.h, size.w) * 0.62, cy);
   }

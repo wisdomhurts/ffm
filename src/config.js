@@ -70,6 +70,141 @@ export const planterCost = (i) => (i >= PLANTERS.base ? LOTS.cost[lotOf(i)] ?? I
 
 export const LOCK = { duration: 40, perRebirth: 10, recharge: 60 };
 
+// ------------------------------------------------------------------ Speed Shop 2.0
+// Boost: a burst of extra speed (Shift / the boost button / gamepad RT). Level 0 is free; the Boost Lab
+// treadmill sells levels 1-10. Boost, treadmill tier and base level all survive a rebirth.
+export const BOOST = {
+  maxLevel: 10,
+  power: (L) => 1.5 + 0.05 * L, // speed multiplier while boosting
+  duration: (L) => 1.2 + 0.1 * L, // seconds
+  cooldown: (L) => 12 - 0.6 * L, // seconds from one boost to the next
+  cost: (L) => Math.round(1500 * Math.pow(2.8, L - 1)), // price of level L
+};
+// Treadmill tiers: run on a Warm-Up treadmill (the plaza's right one, or your home treadmill) for `warmup`
+// seconds without falling off and you get Pumped: +bonus speed for `duration` seconds.
+export const TREADMILL = {
+  tiers: [
+    { id: 'basic', name: 'Basic Treadmill', cost: 0, bonus: 0.1, duration: 45, warmup: 6, color: '#3ff0ff' },
+    { id: 'turbo', name: 'Turbo Treadmill', cost: 25_000, bonus: 0.15, duration: 60, warmup: 5.5, color: '#4cd964' },
+    { id: 'rocket', name: 'Rocket Treadmill', cost: 1_000_000, bonus: 0.2, duration: 90, warmup: 5, color: '#ff8a1a' },
+    { id: 'hyper', name: 'Hyper Treadmill', cost: 50_000_000, bonus: 0.25, duration: 120, warmup: 4.5, color: '#ff4fd8' },
+    { id: 'galaxy', name: 'Galaxy Treadmill', cost: 2_500_000_000, bonus: 0.3, duration: 180, warmup: 4, color: '#b36bff' },
+  ],
+  beltSpeed: 9, // studs/s a belt carries you towards its open end (run the other way to stay on)
+  beltTop: 0.55, // deck height
+};
+// Speed gears: how much of your top speed you ask for (C, or tap the speedometer). Local control only.
+export const GEARS = [
+  { id: 'slow', name: 'Slow', mult: 0.35 },
+  { id: 'cruise', name: 'Cruise', mult: 0.7 },
+  { id: 'full', name: 'Full', mult: 1 },
+];
+/** Total price of the next n Speed levels after `level`. */
+export const speedCostN = (level, n) => {
+  let s = 0;
+  for (let i = 1; i <= n; i++) s += speedCost(level + i);
+  return s;
+};
+
+// ------------------------------------------------------------------ Base levels (your garden)
+// Upgrade at the BASE console just inside your gate. Levels survive rebirth and unlock perks and the
+// Base Studio (floors, fences, laser colours, decorations; see BASE_STYLES).
+export const BASE = {
+  maxLevel: 10,
+  cost: [0, 0, 5_000, 50_000, 300_000, 1_500_000, 8_000_000, 40_000_000, 200_000_000, 1_000_000_000, 5_000_000_000], // price of reaching level L
+  incomePerLevel: 0.02, // +2% income per level above 1
+  studioAt: 2,
+  petSlotsAt: [1, 4, 8], // base level that opens pet slot 1, 2, 3
+  decorAt: [3, 3, 5, 5, 7, 7], // base level that opens decoration spot i (LAYOUT garden.decor[i])
+  guardAt: 5,
+  guard: { range: 13, cooldown: 6, stun: 1.2 },
+  treadmillAt: 6,
+  sprinklersAt: 7,
+  sprinklerGrow: 1.25, // plants grow this much faster
+  lockAt: 9,
+  lockBonus: 20, // extra lock seconds (and that much faster recharge)
+  goldenAt: 10,
+};
+export const baseIncomeMult = (L) => 1 + BASE.incomePerLevel * (Math.max(1, L || 1) - 1);
+export const petSlotsFor = (L) => BASE.petSlotsAt.filter((x) => (L || 1) >= x).length;
+export const decorSpotsFor = (L) => BASE.decorAt.filter((x) => (L || 1) >= x).length;
+
+// Base Studio choices. min = base level that unlocks it. Floors, fences and lasers are drawn by
+// world/gardens.js; decorations by world/basedecor.js. `solid` decorations block walking (a 4x4 box);
+// a trampoline launches you up (vy = bounce).
+export const BASE_STYLES = {
+  floors: [
+    { id: 'lawn', name: 'Classic Lawn', min: 1, colors: ['#86d863', '#6cc24a'] },
+    { id: 'stripes', name: 'Mowed Stripes', min: 2, colors: ['#7fd35a', '#5fb83f'] },
+    { id: 'checker', name: 'Checkerboard', min: 2, colors: ['#8ee06a', '#62bf45'] },
+    { id: 'meadow', name: 'Flower Meadow', min: 3, colors: ['#9ee070', '#ff8cc6'] },
+    { id: 'beach', name: 'Sandy Beach', min: 4, colors: ['#f4dc9c', '#e8c878'] },
+    { id: 'stone', name: 'Stone Tiles', min: 5, colors: ['#c9ccd4', '#a9adb8'] },
+    { id: 'candy', name: 'Candy Swirl', min: 6, colors: ['#ffc2e0', '#ffffff'] },
+    { id: 'cloud', name: 'Cloud Puff', min: 7, colors: ['#eaf6ff', '#bfe3ff'] },
+    { id: 'space', name: 'Starry Night', min: 8, colors: ['#2a2360', '#141038'] },
+    { id: 'gold', name: 'Golden Tiles', min: 10, colors: ['#ffd23f', '#e8a91c'] },
+  ],
+  fences: [
+    { id: 'bamboo', name: 'Bamboo', min: 1, color: '#e8e2b0' },
+    { id: 'picket', name: 'White Picket', min: 2, color: '#ffffff' },
+    { id: 'hedge', name: 'Hedge', min: 3, color: '#3f9e3a' },
+    { id: 'castle', name: 'Castle Wall', min: 4, color: '#a9adb8' },
+    { id: 'candy', name: 'Candy Cane', min: 6, color: '#ff4f6a' },
+    { id: 'ice', name: 'Ice Crystal', min: 7, color: '#9fe8ff' },
+    { id: 'neon', name: 'Neon Glow', min: 8, color: '#ff4fd8' },
+    { id: 'gold', name: 'Solid Gold', min: 10, color: '#ffd23f' },
+  ],
+  lasers: [
+    { id: 'red', name: 'Red', min: 1, color: '#ff1030' },
+    { id: 'blue', name: 'Blue', min: 3, color: '#2f8bff' },
+    { id: 'green', name: 'Green', min: 3, color: '#2fff6a' },
+    { id: 'purple', name: 'Purple', min: 3, color: '#b24cff' },
+    { id: 'pink', name: 'Pink', min: 5, color: '#ff4fd8' },
+    { id: 'rainbow', name: 'Rainbow', min: 7, color: 'rainbow' },
+    { id: 'gold', name: 'Gold', min: 10, color: '#ffd23f' },
+  ],
+  decor: [
+    { id: 'flowerbed', name: 'Flower Bed', min: 3 },
+    { id: 'oak', name: 'Big Oak Tree', min: 3, solid: true },
+    { id: 'palm', name: 'Palm Tree', min: 3, solid: true },
+    { id: 'lamp', name: 'Lamp Posts', min: 3 },
+    { id: 'gnome', name: 'Garden Gnome', min: 3 },
+    { id: 'fountain', name: 'Fountain', min: 3, solid: true },
+    { id: 'trampoline', name: 'Trampoline', min: 4, bounce: 88 },
+    { id: 'pethouse', name: 'Pet House', min: 4, solid: true },
+    { id: 'hottub', name: 'Hot Tub', min: 5, solid: true },
+    { id: 'windmill', name: 'Windmill', min: 5, solid: true },
+    { id: 'campfire', name: 'Campfire', min: 5 },
+    { id: 'snowman', name: 'Snowman', min: 6, solid: true },
+    { id: 'candytree', name: 'Candy Tree', min: 6, solid: true },
+    { id: 'rainbowarch', name: 'Rainbow Arch', min: 7 },
+    { id: 'rocket', name: 'Toy Rocket', min: 8, solid: true },
+    { id: 'statue', name: 'Golden Statue', min: 10, solid: true },
+  ],
+};
+export const DEFAULT_BASE_STYLE = Object.freeze({ floor: 'lawn', fence: 'bamboo', laser: 'red', decor: Object.freeze([null, null, null, null, null, null]) });
+
+// ------------------------------------------------------------------ egg drops
+// Every couple of minutes a pet egg floats down on a balloon somewhere on the plaza or the Seed Road.
+// First to touch it after it lands hatches it for free. Deeper on the road = rarer eggs. Rainbow Eggs
+// only ever come from drops. The Egg Rain weather event drops a burst of them.
+export const DROPS = {
+  firstDelay: 50,
+  gapMin: 100,
+  gapMax: 170,
+  fallFrom: 70, // studs above the ground
+  fallSpeed: 9, // studs/s
+  life: 75, // seconds on the ground before it floats away
+  pickupR: 2.8,
+  roadChance: 0.65,
+  rainbowChance: 0.05,
+  plaza: ['garden', 'farm', 'jungle'],
+  byBiome: [['garden', 'farm'], ['farm', 'jungle'], ['jungle', 'ocean'], ['ocean', 'volcano'], ['volcano', 'galaxy'], ['galaxy', 'frost'], ['frost', 'candy'], ['candy', 'cloud'], ['cloud']],
+  rain: { count: 10, every: 4.5, rainbowChance: 0.15 },
+  max: 14, // never more than this many at once
+};
+
 export const REBIRTH = {
   // Net worth needed for rebirth N+1 given current rebirths N.
   threshold: (n) => 1_000_000 * Math.pow(5, n),
@@ -205,6 +340,8 @@ export const EVENTS = {
     { id: 'golden', name: 'Golden Hour', desc: 'Seeds are turning GOLD!', mutation: 'gold', chance: 0.45 },
     { id: 'diamond', name: 'Diamond Night', desc: 'Diamond seeds are sparkling!', mutation: 'diamond', chance: 0.35 },
     { id: 'rainbow', name: 'Rainbow Rain', desc: 'RAINBOW seeds are falling!', mutation: 'rainbow', chance: 0.25 },
+    // no seed mutation: pet eggs rain down around the plaza and the start of the road (DROPS.rain)
+    { id: 'eggrain', name: 'Egg Rain', desc: 'Pet eggs are falling from the sky!', mutation: null, chance: 0, drops: true },
   ],
 };
 
