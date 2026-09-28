@@ -9,7 +9,9 @@
 //     setLocked(locked, secondsLeft), // laser gate on/off
 //     setCashPile(amount),            // grow the cash pile model on the COLLECT pad
 //     planters: [{ setUnlocked(bool) }],
+//     setBase({level, style}), setTreadmillTier(tier), guard, treadmill, decor, base   // see gardens.js
 //   }]
+//   speedShop: { setBusy(stationIndex, running) }   // Boost Lab / Speed / Warm-Up belts run and glow
 // }
 // Extras: root (THREE.Group), ambience (sky/weather controller), weather (current id),
 //   redrawSigns() (repaints canvas signs once the display font has loaded; called automatically).

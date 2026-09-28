@@ -50,11 +50,13 @@ function decorBox(spot) {
 }
 function homeTreadmillBoxes(t) {
   const r = beltRect(t);
-  const c = { x: t.x + t.dirX * (t.len / 2 + 0.5), z: t.z + t.dirZ * (t.len / 2 + 0.5) };
+  // the deck (rails reach 0.35 past the belt on each side) and the console at the far end (len/2 .. len/2 + 1.2)
+  const c = { x: t.x + t.dirX * (t.len / 2 + 0.6), z: t.z + t.dirZ * (t.len / 2 + 0.6) };
   const hw = t.w / 2 + 0.35;
   const cx = Math.abs(t.dirX) * 0.6 + Math.abs(t.dirZ) * hw, cz = Math.abs(t.dirZ) * 0.6 + Math.abs(t.dirX) * hw;
+  const ex = Math.abs(t.dirZ) * 0.35, ez = Math.abs(t.dirX) * 0.35;
   return [
-    { minX: r.minX, maxX: r.maxX, minZ: r.minZ, maxZ: r.maxZ, minY: 0, maxY: TREADMILL.beltTop, tag: 'deco', off: true },
+    { minX: r.minX - ex, maxX: r.maxX + ex, minZ: r.minZ - ez, maxZ: r.maxZ + ez, minY: 0, maxY: TREADMILL.beltTop, tag: 'deco', off: true },
     { minX: c.x - cx, maxX: c.x + cx, minZ: c.z - cz, maxZ: c.z + cz, minY: 0, maxY: 4.6, tag: 'deco', off: true },
   ];
 }

@@ -13,6 +13,7 @@
 //                             BASE.treadmillAt. The view animates it (same caveat as guard).
 //   setTreadmillTier(tier)    index into TREADMILL.tiers.
 //   base                      {level, style} as last applied (read only).
+//   decor                     the decoration objects by spot (null where empty); the trampoline's userData.bounce().
 // Styled parts of all four gardens share one mesh per material (rebuilt on the next update after a change), so
 // a default Lv1 garden costs what it did before plus a few shared draw calls.
 import * as THREE from 'three';
@@ -1098,6 +1099,9 @@ export function buildGardens(ctx) {
       },
       get base() {
         return { level: g.level, style: g.style };
+      },
+      get decor() {
+        return g.decor.map((d) => d?.obj || null);
       },
       setBase({ level = 1, style = DEFAULT_BASE_STYLE } = {}) {
         const lv = Math.max(1, Math.min(BASE.maxLevel, level | 0 || 1));
