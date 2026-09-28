@@ -138,7 +138,7 @@ function staticColliders(gardens) {
   box(-36, -24, -66, -57, 9, 0, 'shop');
   box(24, 36, -66, -57, 9, 0, 'shop');
   // pet egg stand (west end of the shop row) and the wardrobe boutique (east end)
-  box(-60, -48, -66, -59, 9, 0, 'shop');
+  box(-72, -48, -66, -59, 9, 0, 'shop');
   box(48, 60, -66, -59, 9, 0, 'shop');
   for (const b of boxes) if (b.tag === 'shop') b.camMaxY = 4.2;
   // the Speed Shop's three treadmills: decks you step onto (belt top 0.55) and the consoles at their south end
