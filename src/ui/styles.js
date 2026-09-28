@@ -56,6 +56,11 @@ html.menu-screen .labels-layer{visibility:hidden}
 .nametag.thief .nt-carry{background:linear-gradient(180deg,#ff5a73,#d81f45);animation:thief .45s ease-in-out infinite alternate}
 .nametag.thief .nt-carry b{color:#fff!important}
 .plantlbl{gap:0}
+.droplbl{gap:2px}
+.dr-name{font:var(--fdw) 17px/1 var(--fd);padding:3px 10px 4px;border-radius:999px;background:linear-gradient(180deg,#ffe36b,#f0a515);color:var(--ink);border:2.5px solid var(--ink);text-shadow:none;box-shadow:0 3px 0 rgba(10,14,40,.55)}
+.droplbl.rainbow .dr-name{background:linear-gradient(90deg,#ff5c8a,#ffb627,#4cd964,#5cc8ff,#b36bff);color:#fff;text-shadow:var(--o1)}
+.dr-sub{font:900 11px/1 var(--fb);letter-spacing:.05em;animation:drPulse .8s ease-in-out infinite alternate}
+@keyframes drPulse{to{transform:scale(1.08)}}
 .plantlbl.compact .pl-inc{font-size:13px;padding:1px 7px;border-radius:99px;background:rgba(16,22,58,.72);border:2px solid var(--rc,#1b2440);animation:none}
 .plantlbl.compact .pl-bar{width:40px;height:7px}
 .podlbl.compact{transform-origin:50% 100%;opacity:.9}
@@ -200,6 +205,7 @@ html.menu-screen .labels-layer{visibility:hidden}
 .ev-golden{--e1:#ffcf4a;--e2:#f0851c}
 .ev-diamond{--e1:#4057d6;--e2:#1b2270}
 .ev-rainbow{--e1:#ff6fb1;--e2:#7a5cff}
+.ev-eggrain{--e1:#ffb3d9;--e2:#5cc8ff}
 .evchip.ev-rainbow::before,.ht-ev.ev-rainbow::before{content:'';position:absolute;inset:0;background:var(--rainbow);background-size:200% 100%;opacity:.35;animation:rainbowPan 3s linear infinite}
 .ev-ic{position:relative;width:36px;height:36px;flex:none;animation:spinSlow 8s linear infinite}
 .ev-copy{position:relative;display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -272,6 +278,10 @@ html.menu-screen .labels-layer{visibility:hidden}
 .an-sub{display:inline-block;font:900 18px/1.2 var(--fb);background:rgba(16,22,58,.88);padding:7px 16px 8px;border-radius:999px;border:3px solid var(--ink)}
 .an-ev.ev-golden .an-title,.an-rebirth .an-title{color:#ffd23f}
 .an-ev.ev-diamond .an-title{color:#aef3ff}
+.an-ev.ev-eggrain .an-title{color:#ffc2e0}
+.an-ev.ev-eggrain .an-ic{color:#ffe36b}
+.an-base .an-title{color:#7dffa0}
+.an-base .an-ic{color:#7dffa0}
 .an-ev.ev-rainbow .an-title{color:transparent;text-shadow:none;background:var(--rainbow);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;animation:rainbowPan 2s linear infinite;
   filter:drop-shadow(3px 0 0 var(--ink)) drop-shadow(-3px 0 0 var(--ink)) drop-shadow(0 3px 0 var(--ink)) drop-shadow(0 -3px 0 var(--ink)) drop-shadow(0 5px 0 var(--ink))}
 .an-rebirth .an-ic{color:#ffd23f}

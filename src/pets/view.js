@@ -29,7 +29,8 @@ export function createPetView(petId, opts = {}) {
   // tiny per-pet random stream (idle timings differ between pets)
   let seed = (SEQ++ * 9973) >>> 0;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const side = opts.side ?? 1; // which side of the owner it trots on
+  const side = opts.side ?? 1; // which side of the owner it trots on (0 = straight behind)
+  const extraBack = opts.back ?? 0; // team pets: the third one trots a little further back
 
   const s = {
     init: false,
@@ -52,7 +53,7 @@ export function createPetView(petId, opts = {}) {
     const yaw = owner.yaw || 0;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     // right of a character facing (fx, fz) is (-fz, fx)
-    const back = fly ? 2.1 : 2.5;
+    const back = (fly ? 2.1 : 2.5) + extraBack;
     const lat = (fly ? 2.3 : 2.0) * side;
     out.x = owner.pos.x - fx * back - fz * lat + s.wanderX;
     out.z = owner.pos.z - fz * back + fx * lat + s.wanderZ;

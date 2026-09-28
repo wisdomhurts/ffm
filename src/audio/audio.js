@@ -377,6 +377,34 @@ class GameAudio {
     on('speed:up', (e, H) => {
       if (e.player === H) this.play('speedUp', { important: true });
     });
+    on('boost:start', (e, H) => {
+      if (e.player === H) this.play('boost', { important: true });
+      else this.play('boost', pos(e.player, { vol: 0.4 }));
+    });
+    on('boost:up', (e, H) => {
+      if (e.player === H) this.play('speedUp', { important: true });
+    });
+    on('treadmill:up', (e, H) => {
+      if (e.player === H) this.play('unlock', { important: true });
+    });
+    on('pump:start', (e, H) => {
+      if (e.player === H) this.play('pump', { important: true });
+    });
+    on('base:upgraded', (e, H) => {
+      if (e.player === H) this.play('baseUp', { important: true });
+      else this.play('unlock', pos(e.player, { vol: 0.5 }));
+    });
+    on('guard:bonk', (e, H) => {
+      const near = e.target === H || e.garden.owner === H;
+      this.play('hit', near ? { important: true } : pos(e.target, { vol: 0.5 }));
+    });
+    on('base:bounce', (e, H) => {
+      if (e.player === H) this.play('jump', { important: true, vol: 1.2 });
+    });
+    on('drop:claimed', (e, H) => {
+      if (e.player === H) this.play('egg', { kind: 'catch', important: true });
+      else if (e.drop) this.play('egg', { kind: 'catch', x: e.drop.x, z: e.drop.z, vol: 0.4 });
+    });
     on('rebirth', (e, H) => {
       if (e.player === H) this.play('rebirth', { important: true });
       else this.play('rebirth', pos(e.player, { vol: 0.5 }));
