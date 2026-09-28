@@ -145,7 +145,7 @@ function staticColliders(gardens) {
   for (let i = -1; i <= 1; i++) {
     const x = WORLD.shops.speed.x + i * 7;
     box(x - 1.8, x + 1.8, -60.2, -53.2, 0.55, 0, 'deco');
-    box(x - 1.8, x + 1.8, -61.0, -59.7, 4.8, 0, 'deco');
+    box(x - 1.8, x + 1.8, -61.0, -59.7, 7.4, 0, 'deco');
   }
   return boxes;
 }

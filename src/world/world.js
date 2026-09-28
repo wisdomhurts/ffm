@@ -79,6 +79,7 @@ export function buildWorld(engine, layout, quality = engine.quality) {
     ambience,
     extraColliders: colliders,
     gardens: gardens.gardens,
+    speedShop: shops.speed,
     get weather() {
       return ambience.weatherId;
     },
