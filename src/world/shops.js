@@ -1,6 +1,10 @@
-// Shops along the south edge of the plaza: Gear Shop stall, Speed Shop treadmills, Rebirth Altar.
+// Shops along the south edge of the plaza: Gear Shop stall, Speed Shop (a neon gym with three treadmill
+// stations), Rebirth Altar.
+// buildShops(ctx) -> {group, update(dt, t), speed: {setBusy(stationIndex, running)}}
 import * as THREE from 'three';
-import { Merger, makeRand, drawTexture, chunkyText, roundRect, mergedGeometry, uTime, signMaterial } from './kit.js';
+import { Merger, makeRand, drawTexture, chunkyText, roundRect, mergedGeometry, uTime, signMaterial, trs } from './kit.js';
+import { FxBuilder, beltSurface, beltFxMaterial, beltDriver, BELT_STRIP, lightning, heart, boltGeometry, heartGeometry } from './treadmill.js';
+import { TREADMILL } from '../config.js';
 
 function signTexture(w, h, draw) {
   return drawTexture(w, h, draw, { clamp: true });
@@ -48,20 +52,243 @@ function signMesh(tex, w, h) {
   return new THREE.Mesh(new THREE.PlaneGeometry(w, h), signMaterial(tex, 0.3));
 }
 
-function beltTexture() {
-  return drawTexture(64, 64, (g, w, h) => {
-    g.fillStyle = '#2a2e36';
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = '#3a404c';
-    for (let y = 0; y < h; y += 8) g.fillRect(0, y, w, 3);
-    g.fillStyle = '#ffcf33';
-    g.beginPath();
-    g.moveTo(w / 2, 10);
-    g.lineTo(w / 2 + 12, 26);
-    g.lineTo(w / 2 - 12, 26);
-    g.closePath();
-    g.fill();
+// ---------------------------------------------------------------- speed shop: themes + sign atlas
+
+// The three stations, west to east (LAYOUT.speedStations order).
+const SPEED_THEMES = [
+  { id: 'boost', name: 'BOOST LAB', c1: '#a27bff', c2: '#4a5cff', main: '#7b4dff', accent: '#3fb0ff', neon: '#a98bff', neon2: '#5fd0ff', dark: '#241a52', wall: '#34246e' },
+  { id: 'speed', name: 'SPEED', c1: '#ffe04a', c2: '#ff8a1a', main: '#ffc21a', accent: '#ff7a1a', neon: '#ffd23f', neon2: '#ff8a1a', dark: '#4a2e12', wall: '#6e3f16' },
+  { id: 'warmup', name: 'WARM-UP', c1: '#ff7ad0', c2: '#d8309a', main: '#ff4fb8', accent: '#3ff0ff', neon: '#ff5fd0', neon2: '#3ff0ff', dark: '#44143e', wall: '#5e1f5a' },
+];
+
+// Regions [x, y, w, h] of the Speed Shop's 1024x1024 sign atlas (one draw call for every sign and screen).
+const SPEED_ATLAS = {
+  bill: [0, 0, 1024, 400],
+  top: [[0, 400, 340, 160], [342, 400, 340, 160], [684, 400, 340, 160]],
+  screen: [[0, 560, 340, 160], [342, 560, 340, 160], [684, 560, 340, 160]],
+  board: [0, 720, 300, 304],
+  poster: [[304, 720, 358, 304], [666, 720, 358, 304]],
+};
+
+function region(g, [x, y, w, h], draw) {
+  g.save();
+  g.translate(x, y);
+  g.beginPath();
+  g.rect(0, 0, w, h);
+  g.clip();
+  draw(g, w, h);
+  g.restore();
+}
+
+function pill(g, x, y, w, h, fill, text, size) {
+  roundRect(g, x - w / 2, y - h / 2, w, h, h / 2);
+  g.fillStyle = fill;
+  g.fill();
+  g.lineWidth = 7;
+  g.strokeStyle = '#1b2440';
+  g.stroke();
+  chunkyText(g, text, x, y + 3, { size, fill: '#ffffff', stroke: '#1b2440', strokeW: 9, maxW: w - 30 });
+}
+
+function stationIcon(g, id, x, y, s, fill = '#ffffff') {
+  if (id === 'boost') lightning(g, x, y, 0.95 * s, fill, '#1b2440');
+  else if (id === 'speed') bolt(g, x, y, 0.9 * s, fill);
+  else heart(g, x, y + 6 * s, 1.75 * s, fill, '#1b2440');
+}
+
+function screenBg(g, W, H, glowCol) {
+  g.fillStyle = '#1b2440';
+  g.fillRect(0, 0, W, H);
+  roundRect(g, 8, 8, W - 16, H - 16, 22);
+  const gr = g.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, W * 0.6);
+  gr.addColorStop(0, '#1d2a5c');
+  gr.addColorStop(1, '#0a0f26');
+  g.fillStyle = gr;
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = glowCol;
+  g.stroke();
+  g.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let y = 14; y < H - 14; y += 6) g.fillRect(14, y, W - 28, 2);
+}
+
+function paintSpeedAtlas(g) {
+  g.fillStyle = '#1b2440';
+  g.fillRect(0, 0, 1024, 1024);
+  // the big billboard: SPEED SHOP + the three stations
+  region(g, SPEED_ATLAS.bill, (g, W, H) => {
+    boardBg(g, W, H, '#ffd84a', '#ff8a1a');
+    g.save();
+    g.globalAlpha = 0.18;
+    g.fillStyle = '#ffffff';
+    for (let k = 0; k < 7; k++) {
+      g.beginPath();
+      g.moveTo(-80 + k * 170, H);
+      g.lineTo(-20 + k * 170, H);
+      g.lineTo(100 + k * 170, 0);
+      g.lineTo(40 + k * 170, 0);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    chunkyText(g, 'SPEED SHOP', W / 2, 142, { size: 150, fill: '#ffffff', stroke: '#1b2440', strokeW: 22, maxW: W - 260 });
+    SPEED_THEMES.forEach((t, i) => pill(g, W / 2 + (i - 1) * 262, 296, 236, 84, t.c2, t.name, 50));
+    bolt(g, 90, 200, 2.3, '#ffffff');
+    bolt(g, W - 90, 200, 2.3, '#ffffff');
   });
+  // station toppers
+  SPEED_THEMES.forEach((t, i) => region(g, SPEED_ATLAS.top[i], (g, W, H) => {
+    boardBg(g, W, H, t.c1, t.c2);
+    stationIcon(g, t.id, 58, H / 2 + 2, 1.05);
+    chunkyText(g, t.name, W / 2 + 34, H / 2 + 4, { size: 64, fill: '#ffffff', stroke: '#1b2440', strokeW: 13, maxW: W - 130 });
+  }));
+  // console screens
+  region(g, SPEED_ATLAS.screen[0], (g, W, H) => {
+    const t = SPEED_THEMES[0];
+    screenBg(g, W, H, t.neon2);
+    lightning(g, 62, H / 2, 1.3, t.neon2, '#ffffff');
+    chunkyText(g, 'BOOST', 208, 62, { size: 58, fill: t.neon, stroke: '#ffffff', strokeW: 5, shadow: false, maxW: 220 });
+    chunkyText(g, 'SPEED BURST!', 208, 116, { size: 30, fill: '#ffffff', stroke: t.c2, strokeW: 5, shadow: false, maxW: 220 });
+  });
+  region(g, SPEED_ATLAS.screen[1], (g, W, H) => {
+    const t = SPEED_THEMES[1];
+    screenBg(g, W, H, t.neon);
+    // speedometer
+    const cx = 80, cy = 108, r = 58;
+    const cols = ['#4cd964', '#ffd23f', '#ff8a1a', '#ff4d6d'];
+    g.lineWidth = 16;
+    cols.forEach((c, k) => {
+      g.beginPath();
+      g.arc(cx, cy, r, Math.PI + (k * Math.PI) / 4 + 0.04, Math.PI + ((k + 1) * Math.PI) / 4 - 0.04);
+      g.strokeStyle = c;
+      g.stroke();
+    });
+    g.lineWidth = 7;
+    g.lineCap = 'round';
+    g.strokeStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(cx, cy);
+    g.lineTo(cx + Math.cos(-0.55) * (r - 8), cy + Math.sin(-0.55) * (r - 8));
+    g.stroke();
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(cx, cy, 9, 0, Math.PI * 2);
+    g.fill();
+    chunkyText(g, 'SPEED', 232, 62, { size: 58, fill: t.neon, stroke: '#ffffff', strokeW: 5, shadow: false, maxW: 190 });
+    chunkyText(g, 'LEVEL UP!', 232, 116, { size: 32, fill: '#ffffff', stroke: t.c2, strokeW: 5, shadow: false, maxW: 190 });
+  });
+  region(g, SPEED_ATLAS.screen[2], (g, W, H) => {
+    const t = SPEED_THEMES[2];
+    screenBg(g, W, H, t.neon2);
+    heart(g, 70, H / 2 + 12, 2.1, t.neon, '#ffffff');
+    // heartbeat line
+    g.strokeStyle = t.neon2;
+    g.lineWidth = 5;
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(130, 120);
+    for (const [x, y] of [[160, 120], [172, 98], [186, 136], [198, 110], [212, 120], [320, 120]]) g.lineTo(x, y);
+    g.stroke();
+    chunkyText(g, 'KEEP', 232, 42, { size: 40, fill: '#ffffff', stroke: t.c2, strokeW: 5, shadow: false, maxW: 190 });
+    chunkyText(g, 'RUNNING!', 232, 84, { size: 42, fill: t.neon2, stroke: '#ffffff', strokeW: 4, shadow: false, maxW: 190 });
+  });
+  // leaderboard of treadmill tiers
+  region(g, SPEED_ATLAS.board, (g, W, H) => {
+    g.fillStyle = '#1b2440';
+    g.fillRect(0, 0, W, H);
+    roundRect(g, 8, 8, W - 16, H - 16, 20);
+    g.fillStyle = '#10183a';
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = '#ffd23f';
+    g.stroke();
+    chunkyText(g, 'TREADMILLS', W / 2, 44, { size: 40, gradient: ['#fff6c8', '#ffc93c'], stroke: '#1b2440', strokeW: 8, maxW: W - 40 });
+    const tiers = TREADMILL.tiers.slice().reverse();
+    tiers.forEach((t, k) => {
+      const y = 94 + k * 44;
+      roundRect(g, 18, y - 19, W - 36, 38, 12);
+      g.fillStyle = k % 2 ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)';
+      g.fill();
+      g.fillStyle = t.color;
+      g.beginPath();
+      g.arc(40, y, 15, 0, Math.PI * 2);
+      g.fill();
+      chunkyText(g, String(k + 1), 40, y + 2, { size: 22, fill: '#1b2440', stroke: '#ffffff', strokeW: 0, shadow: false });
+      chunkyText(g, t.name.replace(' Treadmill', '').toUpperCase(), 64, y + 2, { size: 26, fill: t.color, stroke: '#1b2440', strokeW: 5, align: 'left', shadow: false, maxW: 140 });
+      chunkyText(g, `+${Math.round(t.bonus * 100)}%`, W - 28, y + 2, { size: 26, fill: '#ffffff', stroke: '#1b2440', strokeW: 5, align: 'right', shadow: false });
+    });
+  });
+  // posters
+  region(g, SPEED_ATLAS.poster[0], (g, W, H) => {
+    boardBg(g, W, H, '#5fd0ff', '#3a6bff');
+    g.fillStyle = 'rgba(255,255,255,0.55)';
+    for (let k = 0; k < 4; k++) g.fillRect(40, 70 + k * 30, 70 - k * 12, 10);
+    star(g, 250, 96, 52, '#ffe45a');
+    chunkyText(g, 'GO FAST!', W / 2, 222, { size: 68, fill: '#ffffff', stroke: '#1b2440', strokeW: 13, maxW: W - 60 });
+  });
+  region(g, SPEED_ATLAS.poster[1], (g, W, H) => {
+    boardBg(g, W, H, '#ff9ad6', '#ff4f9a');
+    heart(g, W / 2, 112, 3.0, '#ffffff', '#1b2440');
+    star(g, 70, 70, 22, '#ffe45a');
+    star(g, W - 70, 88, 18, '#ffe45a');
+    chunkyText(g, 'HAVE FUN!', W / 2, 222, { size: 68, fill: '#ffffff', stroke: '#1b2440', strokeW: 13, maxW: W - 60 });
+  });
+}
+
+function star(g, cx, cy, r, fill) {
+  g.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+    const rr = k % 2 ? r * 0.45 : r;
+    g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+  }
+  g.closePath();
+  g.fillStyle = fill;
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = '#1b2440';
+  g.stroke();
+}
+
+/** Quads textured from a region of a square atlas: add(matrix, w, h, [x, y, w, h]) then build(). */
+function atlasQuads(size) {
+  const pos = [], nor = [], uv = [], idx = [];
+  const v = new THREE.Vector3(), n = new THREE.Vector3(), nm = new THREE.Matrix3();
+  return {
+    add(matrix, w, h, [rx, ry, rw, rh]) {
+      nm.getNormalMatrix(matrix);
+      n.set(0, 0, 1).applyMatrix3(nm).normalize();
+      const u0 = (rx + 1) / size, u1 = (rx + rw - 1) / size, v1 = 1 - (ry + 1) / size, v0 = 1 - (ry + rh - 1) / size;
+      const b = pos.length / 3;
+      for (const [x, y, u, vv] of [[-w / 2, -h / 2, u0, v0], [w / 2, -h / 2, u1, v0], [w / 2, h / 2, u1, v1], [-w / 2, h / 2, u0, v1]]) {
+        v.set(x, y, 0).applyMatrix4(matrix);
+        pos.push(v.x, v.y, v.z);
+        nor.push(n.x, n.y, n.z);
+        uv.push(u, vv);
+      }
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    },
+    build() {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx);
+      g.computeBoundingSphere();
+      return g;
+    },
+  };
+}
+
+/** A flat V painted on the floor, pointing -Z. */
+function floorChevron(m, x, z, s, color, y = 0.15) {
+  const len = Math.hypot(s, s * 0.8);
+  for (const k of [-1, 1]) m.box(x + (k * s) / 2, y, z + s * 0.4, len + 0.3, 0.04, 0.42, color, { ry: Math.atan2(-0.8 * s, k * s), ao: 0 });
+}
+
+function dumbbell(m, x, y, z, len, r, color) {
+  m.beam(x - len / 2, y, z, x + len / 2, y, z, 0.16, '#c9ced6', { prim: 'cyl:8', ao: 0 });
+  for (const s of [-1, 1]) m.beam(x + s * (len / 2 - 0.02), y, z, x + s * (len / 2 - 0.34), y, z, r * 2, color, { prim: 'cyl:6', ao: 0.1 });
 }
 
 // ---------------------------------------------------------------- gear items (each its own spinning mesh)
@@ -175,55 +402,160 @@ export function buildShops(ctx) {
   }
 
   // ================================================================ SPEED SHOP
-  const belts = [];
+  // A neon gym: three treadmill stations (west to east, LAYOUT.speedStations) BOOST LAB, SPEED and WARM-UP under the
+  // big billboard. The belts scroll north (you run south, towards the consoles); speed.setBusy(i, on) makes one run
+  // at full belt speed and glow. Two draw calls of its own: the signs (one atlas) and the belts + station neon.
+  const speedDrivers = [];
+  let speedFxMat;
   {
     const S = layout.shops.speed;
-    const zFront = -53.2, zBack = -60.2;
-    // rubber gym mat
-    m.box(S.x, 0.09, -57.2, 22.5, 0.1, 10.6, '#394150', { ao: 0 });
-    for (let i = -1; i <= 1; i++) m.box(S.x + i * 7, 0.11, zFront + 1.6, 0.3, 0.1, 1.8, '#ffcf33', { ao: 0 });
-    const belt = new Merger({ uv: 'box', uvScale: 0.25 });
-    for (let i = -1; i <= 1; i++) {
-      const x = S.x + i * 7;
-      // deck
-      m.block(x, 0, (zFront + zBack) / 2, 3.6, 0.55, zFront - zBack, '#2c3440', { ao: 0.2 });
-      m.block(x - 1.62, 0.55, (zFront + zBack) / 2, 0.36, 0.14, zFront - zBack, '#e84a4a', { ao: 0 });
-      m.block(x + 1.62, 0.55, (zFront + zBack) / 2, 0.36, 0.14, zFront - zBack, '#e84a4a', { ao: 0 });
-      m.prim('cyl:10', x, 0.3, zFront, 0.68, 3.0, 0.68, '#5a6270', { rz: Math.PI / 2 });
-      belt.box(x, 0.6, (zFront + zBack) / 2 + 0.2, 2.9, 0.06, zFront - zBack - 0.4, '#ffffff', { ao: 0 });
-      // console + uprights + handrails
+    const ST = layout.speedStations || [-1, 0, 1].map((i) => ({ x: S.x + i * 7, z: -56.4, len: 6.4, w: 2.9 }));
+    const zFront = -53.2, zBack = -60.2; // deck (belt runs from zBack + 0.6 to zFront)
+    const zWall = -63.6;
+    const fx = new FxBuilder();
+    const signs = atlasQuads(1024);
+    const tilt = (y0, z0, a, dy, dz) => [y0 + dy * Math.cos(a) - dz * Math.sin(a), z0 + dy * Math.sin(a) + dz * Math.cos(a)];
+
+    // rubber gym mat with a start apron in front of the belts
+    m.box(S.x, 0.09, -57.1, 23.6, 0.1, 13.4, '#3a4252', { ao: 0 });
+    m.box(S.x, 0.1, -50.55, 23.6, 0.12, 0.3, '#1b2440', { ao: 0 });
+    for (const sx of [-1, 1]) m.box(S.x + sx * 11.65, 0.1, -57.1, 0.3, 0.12, 13.4, '#1b2440', { ao: 0 });
+
+    ST.forEach((st, i) => {
+      const T = SPEED_THEMES[i];
+      const x = st.x;
+      const neon = fx.merger(i, 1);
+      // ---- deck, foot rails, roller caps, the moving belt
+      m.block(x, 0, (zBack + zFront - 0.15) / 2, 3.6, 0.5, zFront - 0.15 - zBack, '#2c3440', { ao: 0.25 });
       for (const s of [-1, 1]) {
-        m.beam(x + s * 1.55, 0.55, zBack + 0.6, x + s * 1.35, 4.2, zBack - 0.1, 0.35, '#c9ced6', { ao: 0.1 });
-        m.beam(x + s * 1.45, 3.4, zBack + 0.2, x + s * 1.45, 3.4, zBack + 3.2, 0.26, '#c9ced6', { ao: 0 });
+        m.block(x + s * 1.63, 0.46, (zBack + zFront) / 2, 0.34, 0.22, zFront - zBack, T.main, { ao: 0 });
+        m.prim('cyl:12', x + s * 1.63, 0.3, zFront - 0.26, 0.6, 0.36, 0.6, '#e9edf3', { rz: Math.PI / 2, ao: 0 });
+        neon.box(x + s * 1.815, 0.24, (zBack + zFront) / 2, 0.04, 0.1, zFront - zBack - 0.2, T.neon, { ao: 0 });
       }
-      m.box(x, 4.35, zBack - 0.1, 3.2, 1.0, 0.6, '#2c3440', { rx: 0.5, ao: 0.1 });
-      glow.box(x, 4.46, zBack + 0.15, 2.2, 0.5, 0.06, '#3ff0ff', { rx: 0.5, ao: 0 });
+      fx.geometry(beltSurface({ len: st.len, w: st.w, strip: BELT_STRIP[T.id], matrix: trs(x, 0, st.z, 1, 1, 1, 0, Math.PI, 0) }), i, 0);
+      // start apron: chevrons pointing onto the belt
+      floorChevron(m, x, -52.75, 1.0, T.main);
+      floorChevron(m, x, -51.55, 1.0, T.accent);
+      // ---- console tower: motor hood, body, tilted screen head
+      m.block(x, 0, -60.4, 3.6, 1.05, 1.2, T.dark, { ao: 0.3 });
+      m.box(x, 1.06, -60.4, 3.2, 0.05, 1.0, T.main, { ao: 0 });
+      m.block(x, 1.0, -60.62, 2.3, 2.6, 0.76, '#2c3440', { ao: 0.2 });
+      for (const s of [-1, 1]) m.block(x + s * 1.3, 1.0, -60.62, 0.34, 2.6, 0.84, T.main, { ao: 0.1 });
+      const hy = 4.0, hz = -60.4, hrx = -0.42;
+      m.box(x, hy, hz, 3.5, 1.62, 0.7, '#2c3440', { rx: hrx, ao: 0.1 });
+      {
+        const [by, bz] = tilt(hy, hz, hrx, 0, 0.36);
+        neon.box(x, by, bz, 3.32, 1.46, 0.03, T.neon2, { rx: hrx, ao: 0 });
+        const [sy, sz] = tilt(hy, hz, hrx, 0, 0.385);
+        signs.add(trs(x, sy, sz, 1, 1, 1, hrx, 0, 0), 3.06, 1.44, SPEED_ATLAS.screen[i]);
+      }
+      // uprights and low side rails (below the arms of a running avatar)
+      for (const s of [-1, 1]) {
+        m.beam(x + s * 1.66, 0.5, -59.85, x + s * 1.55, 3.5, -60.15, 0.28, '#c9ced6', { ao: 0.1 });
+        m.beam(x + s * 1.7, 2.0, -59.95, x + s * 1.7, 2.0, -57.3, 0.2, '#c9ced6', { prim: 'cyl:8', ao: 0 });
+        m.beam(x + s * 1.7, 2.0, -58.1, x + s * 1.7, 2.0, -57.15, 0.3, T.main, { prim: 'cyl:8', ao: 0 });
+        m.beam(x + s * 1.7, 0.6, -57.35, x + s * 1.7, 2.0, -57.35, 0.14, '#c9ced6', { prim: 'cyl:8', ao: 0 });
+      }
+      // ---- station sign on two posts above the console
+      for (const s of [-1, 1]) m.block(x + s * 1.72, 1.05, -61.0, 0.24, 6.4, 0.24, '#2c3440', { ao: 0.1 });
+      m.box(x, 6.3, -61.0, 4.5, 2.24, 0.2, T.dark, { ao: 0 });
+      neon.box(x, 6.3, -61.07, 4.74, 2.48, 0.08, T.neon, { ao: 0 });
+      signs.add(trs(x, 6.3, -60.885), 4.25, 2.0, SPEED_ATLAS.top[i]);
+      // ---- a themed prop on top of the sign
+      if (T.id === 'boost') {
+        // tesla orbs and a little bolt
+        for (const s of [-1, 1]) {
+          m.cyl(x + s * 1.9, 7.42, -61.0, 0.1, 0.6, '#c9ced6', { seg: 6, ao: 0 });
+          m.cyl(x + s * 1.9, 7.42, -61.0, 0.22, 0.12, '#2c3440', { seg: 8, ao: 0 });
+          neon.prim('sphere:10', x + s * 1.9, 8.2, -61.0, 0.62, 0.62, 0.62, T.neon2, { ao: 0 });
+        }
+        neon.add(boltGeometry(0.24), trs(x, 7.95, -61.0, 0.75, 0.75, 1), T.neon2, { ao: 0 });
+      } else if (T.id === 'speed') {
+        neon.add(boltGeometry(0.3), trs(x, 8.05, -61.0, 1.05, 1.05, 1, 0, 0, -0.12), T.neon, { ao: 0 });
+      } else {
+        neon.add(heartGeometry(0.3), trs(x, 8.05, -61.0, 0.95, 0.95, 1), T.neon, { ao: 0 });
+      }
+      // ---- the wall panel behind the station with slanted speed stripes
+      m.box(x, 4.0, zWall + 0.32, 6.6, 7.6, 0.06, T.wall, { ao: 0 });
+      for (let k = 0; k < 3; k++) glow.box(x - 2.2 + k * 0.55, 2.2 + k * 0.1, zWall + 0.36, 0.22, 3.2 - k * 0.5, 0.04, [T.neon, T.neon2, '#ffffff'][k], { rz: -0.5, ao: 0 });
+      for (let k = 0; k < 3; k++) glow.box(x + 2.2 - k * 0.55, 2.2 + k * 0.1, zWall + 0.36, 0.22, 3.2 - k * 0.5, 0.04, [T.neon, T.neon2, '#ffffff'][k], { rz: 0.5, ao: 0 });
+      glow.box(x, 0.16, -50.55, 6.8, 0.05, 0.12, T.neon, { ao: 0 });
+      // physics: the deck you step onto from the north, the console + sign behind it
       solid(x - 1.8, x + 1.8, zBack, zFront, 0.55, 'deco');
-      solid(x - 1.8, x + 1.8, zBack - 0.8, zBack + 0.5, 4.8);
-    }
-    const beltMat = new THREE.MeshLambertMaterial({ map: beltTexture(), vertexColors: true });
-    const bm = belt.build(beltMat, { name: 'treadmill-belts' });
-    group.add(bm);
-    belts.push(beltMat.map);
-    // back billboard
-    for (const px of [-8.5, 8.5]) {
-      m.block(S.x + px, 0, -63.5, 0.8, 11.5, 0.8, '#2c3440');
-      solid(S.x + px - 0.5, S.x + px + 0.5, -64, -63, 11);
-    }
-    const tex = signTexture(1024, 400, (g, W, H) => {
-      boardBg(g, W, H, '#ffcf33', '#ff8a1a');
-      chunkyText(g, 'SPEED SHOP', W / 2, 150, { size: 150, fill: '#ffffff', stroke: '#1b2440', strokeW: 22, maxW: W - 260 });
-      chunkyText(g, 'TRAIN YOUR SPEED!', W / 2, 300, { size: 76, fill: '#1b2440', stroke: '#ffffff', strokeW: 10, maxW: W - 200 });
-      bolt(g, 90, 200, 2.3, '#ffffff');
-      bolt(g, W - 90, 200, 2.3, '#ffffff');
+      solid(x - 1.8, x + 1.8, zBack - 0.8, zBack + 0.5, 7.4);
     });
-    const sign = signMesh(tex, 16, 6.25);
-    sign.position.set(S.x, 8.4, -63.0);
-    const back = sign.clone();
-    back.position.z = -64.0;
-    back.rotation.y = Math.PI;
-    group.add(sign, back);
-    m.block(S.x, 5.1, -63.5, 16.8, 6.8, 0.4, '#1b2440', { ao: 0 });
+
+    // ---- back wall + big billboard
+    for (const px of [-8.5, 8.5]) {
+      m.block(S.x + px, 0, zWall, 0.8, 14.7, 0.8, '#2c3440');
+      m.block(S.x + px, 14.7, zWall, 1.0, 0.25, 1.0, '#ffcf33', { ao: 0 });
+      solid(S.x + px - 0.5, S.x + px + 0.5, -64, -63, 14.7);
+    }
+    m.block(S.x, 0, zWall, 16.2, 7.9, 0.6, '#1b2440', { ao: 0.2 });
+    m.block(S.x, 7.8, zWall, 16.8, 6.9, 0.4, '#1b2440', { ao: 0 });
+    solid(S.x - 8.1, S.x + 8.1, -64, -63.2, 7.9);
+    signs.add(trs(S.x, 11.2, zWall + 0.21), 16, 6.25, SPEED_ATLAS.bill);
+    signs.add(trs(S.x, 11.2, zWall - 0.21, 1, 1, 1, 0, Math.PI, 0), 16, 6.25, SPEED_ATLAS.bill);
+    for (const [y, h] of [[14.42, 0.16], [7.98, 0.16]]) glow.box(S.x, y, zWall + 0.24, 16.3, h, 0.06, '#fff1a8', { ao: 0 });
+    // posters between the stations
+    for (const [k, px] of [[0, -3.5], [1, 3.5]]) {
+      m.box(S.x + px, 4.4, zWall + 0.36, 2.5, 2.15, 0.06, '#1b2440', { ao: 0 });
+      signs.add(trs(S.x + px, 4.4, zWall + 0.4), 2.35, 2.0, SPEED_ATLAS.poster[k]);
+    }
+
+    // ---- west: water cooler, a giant dumbbell, the dumbbell rack
+    const wx = S.x - 10.4;
+    m.block(wx, 0.14, -54.9, 1.2, 2.2, 1.1, '#eef2f7', { ao: 0.3 });
+    m.box(wx, 1.62, -54.34, 0.84, 0.56, 0.04, '#c9d4e0', { ao: 0 });
+    m.box(wx - 0.2, 1.7, -54.3, 0.16, 0.16, 0.14, '#3fa0ff', { ao: 0 });
+    m.box(wx + 0.2, 1.7, -54.3, 0.16, 0.16, 0.14, '#ff4f5a', { ao: 0 });
+    m.box(wx, 1.4, -54.3, 0.6, 0.06, 0.2, '#9aa3b2', { ao: 0 });
+    m.cyl(wx, 2.34, -54.9, 0.2, 0.2, '#dfe6ee', { seg: 8 });
+    m.cyl(wx, 2.52, -54.9, 0.54, 1.15, '#6cc8ff', { seg: 14, ao: 0.15, top: '#b8ecff' });
+    m.prim('hemi:14', wx, 3.66, -54.9, 1.08, 0.5, 1.08, '#b8ecff', { ao: 0 });
+    glow.box(wx - 0.22, 3.1, -54.37, 0.1, 0.8, 0.04, '#eafaff', { ao: 0 });
+    m.cyl(wx + 0.76, 1.3, -54.9, 0.16, 0.95, '#ffffff', { seg: 8, ao: 0 });
+    solid(wx - 0.7, wx + 0.9, -55.5, -54.3, 3.9, 'deco');
+    m.beam(wx, 0.72, -58.9, wx, 0.72, -56.3, 0.3, '#c9ced6', { prim: 'cyl:10', ao: 0 });
+    for (const z of [-58.55, -56.65]) {
+      m.beam(wx, 0.72, z - 0.26, wx, 0.72, z + 0.26, 1.44, '#ff4f7a', { prim: 'cyl:14', ao: 0.1 });
+      m.beam(wx, 0.72, z - 0.29, wx, 0.72, z + 0.29, 1.0, '#ffffff', { prim: 'cyl:14', ao: 0 });
+    }
+    solid(wx - 0.75, wx + 0.75, -59.0, -56.2, 1.45, 'deco');
+    for (const s of [-1, 1]) m.block(wx + s * 1.05, 0.14, -60.9, 0.18, 2.2, 1.1, '#2c3440', { ao: 0.2 });
+    for (const [y, z] of [[0.9, -60.6], [1.8, -61.05]]) {
+      m.box(wx, y, z, 2.2, 0.12, 0.7, '#5a6270', { ao: 0 });
+      dumbbell(m, wx - 0.5, y + 0.3, z, 0.9, 0.24, y < 1 ? '#3fa0ff' : '#ffcf33');
+      dumbbell(m, wx + 0.5, y + 0.3, z, 0.9, 0.24, y < 1 ? '#ff4f7a' : '#4cd964');
+    }
+    solid(wx - 1.2, wx + 1.2, -61.5, -60.2, 2.4, 'deco');
+
+    // ---- east: tier leaderboard, exercise ball, kettlebells
+    const ex = S.x + 10.6;
+    for (const s of [-1, 1]) m.block(ex + s * 1.15, 0.14, -61.4, 0.26, 6.1, 0.26, '#2c3440');
+    m.box(ex, 4.6, -61.45, 2.66, 2.72, 0.24, '#1b2440', { ao: 0 });
+    glow.box(ex, 4.6, -61.58, 2.76, 2.84, 0.04, '#ffd23f', { ao: 0 });
+    glow.box(ex, 6.2, -61.4, 1.8, 0.2, 0.2, '#ffd23f', { ao: 0 });
+    signs.add(trs(ex, 4.6, -61.32), 2.5, 2.53, SPEED_ATLAS.board);
+    solid(ex - 1.35, ex + 1.35, -61.6, -61.2, 6.3);
+    m.prim('sphere:16', ex - 0.4, 1.0, -58.2, 1.7, 1.7, 1.7, '#ff5fb0', { top: '#ffa6d6', ao: 0.25 });
+    solid(ex - 1.2, ex + 0.4, -59.0, -57.4, 1.8, 'deco');
+    for (const [kx, kz, c] of [[0.4, -55.3, '#ff8a1a'], [-0.6, -54.6, '#7b4dff']]) {
+      m.prim('sphere:12', ex + kx, 0.5, kz, 0.9, 0.78, 0.9, c, { ao: 0.2 });
+      m.add('halftorus:10', trs(ex + kx, 0.8, kz, 0.72, 0.95, 1.3), c, { ao: 0.1 });
+      solid(ex + kx - 0.45, ex + kx + 0.45, kz - 0.45, kz + 0.45, 1.3, 'deco');
+    }
+
+    // ---- the two meshes of the shop's own
+    const speedSigns = new THREE.Mesh(signs.build(), signMaterial(drawTexture(1024, 1024, paintSpeedAtlas, { clamp: true }), 0.35));
+    speedSigns.name = 'speed-signs';
+    group.add(speedSigns);
+    speedFxMat = beltFxMaterial(ST.length);
+    const fxMesh = new THREE.Mesh(fx.buildGeometry(), speedFxMat);
+    fxMesh.name = 'speed-belts';
+    fxMesh.receiveShadow = true;
+    group.add(fxMesh);
+    ST.forEach((st, i) => speedDrivers.push(beltDriver(speedFxMat, i)));
   }
 
   // ================================================================ REBIRTH ALTAR
@@ -339,14 +671,24 @@ export function buildShops(ctx) {
 
   group.add(m.build(mats.stud, { name: 'shops', castShadow: quality.shadows }));
 
+  const speed = {
+    /** A Speed Shop belt runs at full TREADMILL.beltSpeed and glows while someone is on it. */
+    setBusy(stationIndex, running) {
+      const d = speedDrivers[stationIndex];
+      if (d) d.running = !!running;
+    },
+  };
+  group.userData.speed = speed;
   return {
     group,
+    speed,
     update(dt, t) {
       for (const s of spinners) {
         s.mesh.rotation.y = t * 0.9 + s.phase;
         s.mesh.position.y = s.y + Math.sin(t * 2 + s.phase) * 0.12;
       }
-      for (const b of belts) b.offset.y = (b.offset.y - dt * 1.6 + 1) % 1;
+      for (const d of speedDrivers) d.step(dt);
+      speedFxMat.userData.uniforms.uT.value = t;
       crown.rotation.y = t * 0.8;
       crown.position.y = 9.2 + Math.sin(t * 1.7) * 0.35;
       halo.position.y = crown.position.y + 0.4;

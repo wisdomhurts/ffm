@@ -1,7 +1,7 @@
 // Pet UI styles (egg shop, pet inventory, hatch overlay), injected once as <style id="sas-pets">.
 // Matches ui/styles.js: Lilita One display type, Nunito body, chunky navy panels with ink outlines.
-export const RARITY_COLOR = { common: '#c3cbd8', rare: '#3d9bff', epic: '#b36bff', legendary: '#ffb627', mythic: '#ff4d6d' };
-const RARITY_NAME = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary', mythic: 'Mythic' };
+export const RARITY_COLOR = { common: '#c3cbd8', rare: '#3d9bff', epic: '#b36bff', legendary: '#ffb627', mythic: '#ff4d6d', divine: '#ffe75e' };
+const RARITY_NAME = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary', mythic: 'Mythic', divine: 'Divine' };
 export const rarityName = (r) => RARITY_NAME[r] || 'Common';
 
 const svg = (body, vb = '0 0 24 24') => `<svg class="ico" viewBox="${vb}" aria-hidden="true">${body}</svg>`;
@@ -19,6 +19,7 @@ const css = `
 /* ---------------------------------------------------------------- shared bits */
 .pr-tag{display:inline-block;font:900 10.5px/1 var(--fb);letter-spacing:.09em;text-transform:uppercase;color:var(--ink);padding:3px 7px 3px;border-radius:7px;background:var(--rc);border:2px solid var(--ink)}
 .pr-tag.r-mythic{background:linear-gradient(90deg,#ff4d6d,#ffb627,#ff66d9);background-size:200% 100%;animation:petRainbow 2.4s linear infinite}
+.pr-tag.r-divine{background:linear-gradient(90deg,#ffc83d,#fff6c2,#ffe75e,#ffc83d);background-size:200% 100%;animation:petRainbow 1.8s linear infinite;box-shadow:0 0 10px rgba(255,231,94,.75)}
 .pthumb{position:relative;display:grid;place-items:center;flex:none;overflow:visible}
 .pthumb img{display:block;width:100%;height:100%;object-fit:contain;-webkit-user-drag:none;filter:drop-shadow(0 3px 0 rgba(10,14,40,.35))}
 .boost-list{display:flex;flex-wrap:wrap;gap:5px}
@@ -66,6 +67,8 @@ const css = `
 @keyframes petCardIn{from{opacity:0;transform:translateY(26px) scale(.9)}}
 @keyframes petPulse{from{opacity:1}to{opacity:.55}}
 @keyframes petRainbow{to{background-position:200% 0,0 0}}
+@keyframes petGold{to{background-position:0 0,0 0,250% 0}}
+@keyframes petGlow{from{box-shadow:inset 0 -4px 0 #c9a200,0 0 10px rgba(255,231,94,.45),0 3px 0 rgba(10,14,40,.5)}to{box-shadow:inset 0 -4px 0 #c9a200,0 0 22px rgba(255,231,94,.85),0 3px 0 rgba(10,14,40,.5)}}
 @keyframes petSpin{to{transform:rotate(360deg)}}
 @keyframes petNope{0%,100%{transform:none}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
 @keyframes petBought{0%{transform:scale(1)}35%{transform:scale(1.06);box-shadow:0 0 0 4px var(--cash)}100%{transform:scale(1)}}
@@ -110,6 +113,10 @@ const css = `
 .pcard.new::before{content:'NEW';position:absolute;top:-8px;left:-6px;font:900 10px/1 var(--fb);letter-spacing:.06em;color:var(--ink);background:var(--gold);padding:3px 5px;border-radius:7px;border:2px solid var(--ink);z-index:1}
 .pcard.r-mythic,.pi-sel.r-mythic{box-shadow:inset 0 -4px 0 #d11c43,0 0 14px rgba(255,77,109,.45),0 3px 0 rgba(10,14,40,.5)}
 .pcard.r-legendary{box-shadow:inset 0 -4px 0 #c07d00,0 0 12px rgba(255,182,39,.35),0 3px 0 rgba(10,14,40,.5)}
+/* divine: a shimmering gold border (gradient border-box under the card's own padding-box fill) and a breathing glow */
+.pcard.r-divine,.pi-sel.r-divine{border-color:transparent;background-size:100% 100%,100% 100%,250% 100%;animation:petGold 2.4s linear infinite,petGlow 1.3s ease-in-out infinite alternate}
+.pcard.r-divine{background-image:radial-gradient(circle at 50% 38%,rgba(255,236,140,.42),transparent 62%),linear-gradient(rgba(16,22,64,.7),rgba(16,22,64,.7)),linear-gradient(110deg,#b8860b,#ffe75e,#fffbe0,#ffe75e,#b8860b,#ffe75e);background-origin:padding-box,padding-box,border-box;background-clip:padding-box,padding-box,border-box}
+.pi-sel.r-divine{background-image:radial-gradient(circle at 70px 50%,rgba(255,236,140,.42),transparent 150px),linear-gradient(rgba(16,22,64,.7),rgba(16,22,64,.7)),linear-gradient(110deg,#b8860b,#ffe75e,#fffbe0,#ffe75e,#b8860b,#ffe75e);background-origin:padding-box,padding-box,border-box;background-clip:padding-box,padding-box,border-box}
 
 /* ---------------------------------------------------------------- hatch overlay */
 .pet-hatch{position:absolute;inset:0;z-index:30;pointer-events:auto;display:flex;flex-direction:column;align-items:center;padding:var(--st,10px) 16px var(--sb,10px);
@@ -121,6 +128,18 @@ const css = `
 .ph-rays::before{content:'';position:absolute;inset:0;border-radius:50%;background:repeating-conic-gradient(from 0deg,var(--rc) 0 7deg,transparent 7deg 18deg);
   -webkit-mask:radial-gradient(circle,#000 4%,transparent 42%);mask:radial-gradient(circle,#000 4%,transparent 42%);animation:petSpin 16s linear infinite}
 .pet-hatch.r-mythic .ph-rays::before{background:repeating-conic-gradient(#ff4d6d 0 6deg,transparent 6deg 12deg,#ffb627 12deg 18deg,transparent 18deg 24deg,#4cd964 24deg 30deg,transparent 30deg 36deg,#3d9bff 36deg 42deg,transparent 42deg 48deg,#b36bff 48deg 54deg,transparent 54deg 60deg)}
+.pet-hatch.r-divine .ph-rays::before{background:repeating-conic-gradient(#ffe75e 0 5deg,transparent 5deg 11deg,#fffbe0 11deg 14deg,transparent 14deg 20deg)}
+.pet-hatch.r-divine .ph-rays::after{content:'';position:absolute;inset:8%;border-radius:50%;background:repeating-conic-gradient(from 9deg,rgba(255,200,61,.75) 0 13deg,transparent 13deg 30deg);
+  -webkit-mask:radial-gradient(circle,#000 6%,transparent 46%);mask:radial-gradient(circle,#000 6%,transparent 46%);animation:petSpin 24s linear infinite reverse}
+.pet-hatch.r-divine.burst .ph-bg{background:radial-gradient(circle at var(--cx,50%) var(--cy,42%),rgba(255,221,110,.6),rgba(96,62,150,.95) 38%,rgba(22,14,48,.97) 76%)}
+.pet-hatch.r-divine.burst .ph-glow{width:96vmin;height:96vmin;margin:-48vmin 0 0 -48vmin;opacity:.85}
+.pet-hatch.r-divine .ph-flash{background:radial-gradient(circle at var(--cx,50%) var(--cy,42%),#fff,#ffe75e 60%,#ffc83d)}
+.pet-hatch.r-divine.burst .ph-flash{animation:phFlash 1.1s ease-out}
+.ph-rings{position:absolute;left:var(--cx,50%);top:var(--cy,42%);width:0;height:0;pointer-events:none}
+.ph-rings i{position:absolute;left:0;top:0;width:40vmin;height:40vmin;margin:-20vmin 0 0 -20vmin;border-radius:50%;border:6px solid #ffe75e;box-shadow:0 0 18px #ffe75e,inset 0 0 18px rgba(255,231,94,.6);opacity:0;transform:scale(.1)}
+.pet-hatch.burst .ph-rings i{animation:phRing 1.3s cubic-bezier(.15,.7,.3,1) both}
+.pet-hatch.burst .ph-rings i:nth-child(2){animation-delay:.22s;border-color:#fffbe0}
+.pet-hatch.burst .ph-rings i:nth-child(3){animation-delay:.48s;border-width:4px}
 .pet-hatch.crack1 .ph-rays{opacity:.12;transform:scale(.5)}
 .pet-hatch.crack3 .ph-rays{opacity:.28;transform:scale(.62)}
 .pet-hatch.burst .ph-rays{opacity:.75;transform:scale(1)}
@@ -131,7 +150,7 @@ const css = `
 .pet-hatch.burst .ph-flash{animation:phFlash .7s ease-out}
 .ph-confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none}
 .ph-confetti i{position:absolute;top:-24px;border-radius:2px;animation:petConfetti 3s linear both;animation-iteration-count:2}
-.pet-hatch.r-legendary .ph-confetti i,.pet-hatch.r-mythic .ph-confetti i{animation-iteration-count:infinite}
+.pet-hatch.r-legendary .ph-confetti i,.pet-hatch.r-mythic .ph-confetti i,.pet-hatch.r-divine .ph-confetti i{animation-iteration-count:infinite}
 .ph-top{position:relative;flex:none;margin-top:6px;z-index:2}
 .ph-kicker{display:inline-block;font:var(--fdw) 20px/1 var(--fd);letter-spacing:.03em;padding:7px 16px 8px;border-radius:999px;background:rgba(10,15,40,.6);border:3px solid var(--ink);text-shadow:var(--o1)}
 .ph-kicker::before{content:'Hatching ';color:var(--txt2)}
@@ -146,8 +165,10 @@ const css = `
 .ph-rarity{font:var(--fdw) 44px/1 var(--fd);letter-spacing:.04em;color:var(--rc);text-shadow:var(--o2);text-transform:uppercase}
 .pet-hatch.r-mythic .ph-rarity{color:transparent;text-shadow:none;background:var(--rainbow);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;animation:petRainbow 1.6s linear infinite;
   filter:drop-shadow(3px 0 0 var(--ink)) drop-shadow(-3px 0 0 var(--ink)) drop-shadow(0 3px 0 var(--ink)) drop-shadow(0 -3px 0 var(--ink)) drop-shadow(0 5px 0 var(--ink))}
+.pet-hatch.r-divine .ph-rarity{color:transparent;text-shadow:none;background:linear-gradient(90deg,#ffc83d,#fffbe0,#ffe75e,#ffb627,#fffbe0,#ffc83d);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;font-size:52px;
+  filter:drop-shadow(3px 0 0 var(--ink)) drop-shadow(-3px 0 0 var(--ink)) drop-shadow(0 3px 0 var(--ink)) drop-shadow(0 -3px 0 var(--ink)) drop-shadow(0 5px 0 var(--ink)) drop-shadow(0 0 14px rgba(255,231,94,.7))}
 .pet-hatch.info .ph-rarity{animation:phSlam .5s var(--spring) both}
-.pet-hatch.info.r-mythic .ph-rarity{animation:phSlam .5s var(--spring) both,petRainbow 1.6s linear infinite}
+.pet-hatch.info.r-mythic .ph-rarity,.pet-hatch.info.r-divine .ph-rarity{animation:phSlam .5s var(--spring) both,petRainbow 1.6s linear infinite}
 .ph-name{font:var(--fdw) 32px/1 var(--fd);letter-spacing:.02em;text-shadow:var(--o1)}
 .pet-hatch.info .ph-name{animation:petPopIn .45s .12s var(--spring) both}
 .ph-badges{display:flex;gap:8px;min-height:0}
@@ -169,6 +190,18 @@ const css = `
 .ph-cssegg.egg-jungle{background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.6),transparent 30%),linear-gradient(180deg,#5fd66a,#ffd23f 50%,#2a9443)}
 .ph-cssegg.egg-volcano{background:radial-gradient(circle at 35% 30%,rgba(255,200,150,.5),transparent 30%),linear-gradient(180deg,#4a2620,#ff5a1a 55%,#1e0e0c)}
 .ph-cssegg.egg-galaxy{background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.5),transparent 30%),linear-gradient(180deg,#3a2480,#ff66d9 55%,#110b2e)}
+.ph-cssegg.egg-farm{background:radial-gradient(circle at 35% 26%,rgba(255,255,255,.7),transparent 22%),radial-gradient(circle at 64% 28%,#3b2a25 10%,transparent 11%),radial-gradient(circle at 28% 46%,#3b2a25 8%,transparent 9%),
+  radial-gradient(circle at 70% 50%,#3b2a25 6%,transparent 7%),linear-gradient(180deg,#fffbf0 0 58%,#fff8ee 58% 61%,#e0564a 61% 84%,#fff8ee 84% 87%,#6cc24a 87%)}
+.ph-cssegg.egg-ocean{background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.6),transparent 28%),radial-gradient(circle at 62% 62%,rgba(255,255,255,.5) 4%,transparent 5%),radial-gradient(circle at 40% 75%,rgba(255,255,255,.5) 3%,transparent 4%),
+  linear-gradient(180deg,#a8f2ff 0 22%,#fff 22% 24%,#62d4ff 24% 44%,#fff 44% 46%,#3cb2f2 46% 64%,#fff 64% 66%,#2a8ae0 66% 82%,#1f5fd0 82%)}
+.ph-cssegg.egg-frost{background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.85),transparent 30%),radial-gradient(circle at 66% 58%,#fff 5%,transparent 6%),radial-gradient(circle at 34% 70%,#fff 4%,transparent 5%),
+  linear-gradient(180deg,#fff 0 16%,#e6f7ff 16%,#9fdcff);box-shadow:0 0 22px rgba(160,220,255,.6)}
+.ph-cssegg.egg-candy{background:radial-gradient(circle at 35% 26%,rgba(255,255,255,.6),transparent 22%),linear-gradient(180deg,#ff8cc6 0 38%,transparent 38%),
+  repeating-linear-gradient(135deg,#8fe3ff 0 12px,#fff 12px 18px,#ff9ccd 18px 30px,#fff 30px 36px)}
+.ph-cssegg.egg-cloud{background:radial-gradient(circle at 30% 72%,#fff 12%,transparent 13%),radial-gradient(circle at 52% 76%,#fff 14%,transparent 15%),radial-gradient(circle at 72% 70%,#fff 11%,transparent 12%),
+  repeating-conic-gradient(from 0deg at 50% 0%,rgba(255,196,40,.75) 0 7deg,transparent 7deg 16deg),linear-gradient(180deg,#fffdf2,#fff2c2);box-shadow:0 0 26px rgba(255,231,94,.55)}
+.ph-cssegg.egg-rainbow{background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.7),transparent 26%),linear-gradient(180deg,#ff3b5c 0 14%,#ff8a1c 14% 28%,#ffd21c 28% 43%,#3fcf5a 43% 57%,#1fb2ff 57% 71%,#5a64ff 71% 86%,#b44dff 86%);
+  box-shadow:0 0 26px rgba(255,255,255,.55)}
 .ph-cssegg.pop{animation:phPop .4s ease-in forwards}
 .ph-csspet{position:absolute;left:var(--cx,50%);top:var(--cy,50%);width:min(34vmin,200px);aspect-ratio:1;transform:translate(-50%,-50%);padding:5%;border-radius:50%;color:#fff;
   background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.5),transparent 45%),var(--rc);border:5px solid var(--ink);animation:petPopIn .5s var(--spring) both}
@@ -178,6 +211,7 @@ const css = `
 @keyframes phPulse{from{opacity:.5;transform:scale(.94)}to{opacity:.8;transform:scale(1.06)}}
 @keyframes phSlam{0%{opacity:0;transform:scale(2.4) rotate(-6deg)}60%{opacity:1;transform:scale(.92) rotate(2deg)}100%{transform:none}}
 @keyframes phPop{to{transform:translate(-50%,-50%) scale(1.6);opacity:0}}
+@keyframes phRing{0%{opacity:0;transform:scale(.1)}15%{opacity:1}100%{opacity:0;transform:scale(3.4)}}
 
 /* ---------------------------------------------------------------- phones */
 @media (max-width:760px){
@@ -198,7 +232,7 @@ const css = `
   .pi-head h2{font-size:25px}
   .pi-grid{grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px}
   .pcard .pthumb{width:64px;height:64px}
-  .ph-rarity{font-size:36px}
+  .ph-rarity,.pet-hatch.r-divine .ph-rarity{font-size:36px}
   .ph-name{font-size:27px}
   .ph-btns .btn{min-width:0;flex:1}
   .ph-btns{width:100%}
@@ -237,7 +271,8 @@ const css = `
   .pi-sel .pthumb{width:90px;height:90px}
 }
 @media (prefers-reduced-motion:reduce){
-  .ph-rays::before,.ph-confetti{display:none}
+  .ph-rays::before,.ph-rays::after,.ph-confetti,.ph-rings{display:none}
+  .pcard.r-divine,.pi-sel.r-divine{animation:none}
   .ec-art .pthumb,.pi-empty .pthumb{animation:none}
 }
 `;

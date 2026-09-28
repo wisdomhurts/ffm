@@ -160,7 +160,10 @@ test('bots walk to a lot and press its prompt', () => {
 
 test('Speed has no top level', () => {
   const { game, me } = setup();
-  place(me, LAYOUT.shops.speed.x, LAYOUT.shops.speed.z);
+  // the Speed treadmill (middle station) offers the next level
+  const st = LAYOUT.speedStations.find((s) => s.id === 'speed');
+  place(me, st.x, st.z);
+  me.pos.y = 0.55;
   me.cash = 1e30;
   for (let i = 0; i < 40; i++) assert.equal(game.buySpeed(me), true);
   assert.equal(me.speedLevel, 40);

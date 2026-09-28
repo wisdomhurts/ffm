@@ -1,7 +1,7 @@
 // Utility brain: scores every option (farm a pod, steal a plant, defend, shop, ...) in one currency,
 // "income per second gained, per second of effort", and returns the best goal. Personality weights
 // and difficulty knobs bend the scores; the bot adds hysteresis so it does not dither.
-import { PLANT, PLANTS, ITEM, PLAYER, REBIRTH, BIOMES, speedCost, planterCost } from '../config.js';
+import { PLANT, PLANTS, ITEM, PLAYER, REBIRTH, BIOMES, BASE, speedCost, planterCost } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import {
   hyp, clamp, gardenInfo, podSpot, seedIncome, runSpeed, carrySeedSpeed, carryPlantSpeed, approxDist, runSafety, podGuards,
@@ -9,7 +9,7 @@ import {
 import { getBoard, podClaimedByOther, stealersOn } from './blackboard.js';
 import {
   FarmGoal, StealGoal, LurkGoal, DefendGoal, MugGoal, GroundGoal, ShopGoal, UnlockGoal, WaterGoal, CollectGoal,
-  LockGoal, PatrolGoal,
+  LockGoal, PatrolGoal, BaseGoal, DropGoal,
 } from './goals.js';
 
 const MIN_REF = 0.02;
@@ -176,6 +176,27 @@ function bestGround(bot, game, p, info) {
   return best;
 }
 
+/** The egg drop most worth running for (landed or landing soon, reachable before it floats away). */
+function bestDrop(bot, game, p, ref) {
+  if (p.carrying || !game.drops.length) return null;
+  const spd = runSpeed(game, p);
+  let best = null;
+  for (const d of game.drops) {
+    const dist = hyp(d.x - p.pos.x, d.z - p.pos.z);
+    if (dist > 90) continue;
+    const bi = game.biomeAt(d.z);
+    if (bi > bot.biomeCap) continue;
+    const arrive = game.time + dist / spd;
+    if (arrive > d.expiresAt - 1 || d.landAt - arrive > 6) continue;
+    let rival = false;
+    for (const q of game.players) if (q !== p && q.present && hyp(d.x - q.pos.x, d.z - q.pos.z) < dist - 5) rival = true;
+    const P = bi >= 0 ? runSafety(game, p, bi, bot.pers.risk + bot.diff.riskPad) : 1;
+    const u = (ref * 3 * P * (rival ? 0.3 : 1)) / (1 + dist / spd / 8);
+    if (!best || u > best.u) best = { d, u };
+  }
+  return best;
+}
+
 function bestMug(bot, game, p, info, farm) {
   const now = game.time;
   if (now < p.bonkReadyAt - 0.3 || now < bot.mugReadyAt || now < 45) return null;
@@ -255,6 +276,13 @@ export function chooseGoal(bot, game, p) {
   if (info.nextLocked >= 0 && info.free === 0 && bot.coast < 0.5 && avail >= planterCost(info.nextLocked) * pers.planterEager * bot.diff.eager * (1 + bot.ease * 1.5) && !(game.match && game.timeLeft() < bot.diff.endgame * 0.8)) {
     cands.push([ref * 1.9 + 0.01, () => new UnlockGoal(info.nextLocked, ref * 1.9)]);
   }
+  // base levels: a permanent upgrade (tycoons love them); keep a cushion so farming goes on
+  const nextBase = BASE.cost[p.baseLevel + 1];
+  if (nextBase && bot.coast < 0.5 && avail >= nextBase * (bot.personality === 'tycoon' ? 1.8 : 2.6) * bot.diff.eager && !(game.match && game.timeLeft() < bot.diff.endgame)) {
+    cands.push([ref * 1.7 + 0.008, () => new BaseGoal(ref * 1.7)]);
+  }
+  const drop = bestDrop(bot, game, p, ref);
+  if (drop) cands.push([drop.u, () => new DropGoal(drop.d, drop.u)]);
   const plan = shopPlan(bot, game, p, info);
   if (plan) {
     const big = plan.speed || plan.rebirth;

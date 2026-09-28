@@ -1,6 +1,8 @@
 // Turns gameplay events that concern the local player into banners, toasts and reveals.
 import { bus } from '../core/events.js';
-import { PLANT, RARITY, MUTATIONS, ITEM, LOTS, speedAt, REBIRTH } from '../config.js';
+import { PLANT, RARITY, MUTATIONS, ITEM, LOTS, speedAt, REBIRTH, BOOST, TREADMILL, BASE } from '../config.js';
+import { PET, EGG } from '../pets/catalog.js';
+import { levelPerks } from './base.js';
 import { rarityColor } from '../view/gameView.js';
 import { esc, money } from './dom.js';
 import { who } from './alerts.js';
@@ -22,6 +24,7 @@ export function wireNotifications(app, alerts) {
     if (cause === 'balloon') return 'SPLASH! A water balloon knocked it loose.';
     if (cause === 'banana') return 'Slipped on a banana peel!';
     if (cause === 'monster') return 'A road monster knocked it loose!';
+    if (cause === 'guard') return 'A Guard Gnome bonked the thief!';
     return '';
   };
 
@@ -224,6 +227,59 @@ export function wireNotifications(app, alerts) {
     } else if (by === me && target !== me && dropped?.kind === 'seed') {
       alerts.toast(`BONK! ${who(target)} dropped their seed!`, 'good');
     }
+  });
+  // ---- bases
+  on('base:upgraded', ({ player, level }) => {
+    if (player === me) {
+      const perks = levelPerks(level).filter((t) => !t.startsWith('+'));
+      alerts.announce({ title: `BASE LEVEL ${level}!`, sub: esc(perks[0] || `+${Math.round(BASE.incomePerLevel * 100)}% income`), icon: ICON.house, cls: 'an-base', ms: 3400 });
+      if (level === BASE.studioAt) alerts.toast('Open <b>My Base</b> at your BASE console to pick a new floor and fence!', 'info', { icon: ICON.house, duration: 5000 });
+    } else alerts.toast(`${who(player)}'s base is now level ${level}!`, 'info', { icon: ICON.house });
+  });
+  on('guard:bonk', ({ garden, target }) => {
+    if (target === me) alerts.show({ key: 'hit', kind: 'warn', face: garden.owner.faceKey, duration: 2600, html: `${who(garden.owner)}'s Guard Gnome bonked you!<small>Level 5 bases fight back.</small>` });
+    else if (garden.owner === me) alerts.show({ kind: 'good', face: target.faceKey, duration: 3000, html: `Your Guard Gnome bonked ${who(target)}!<small>Your plants are safe.</small>` });
+  });
+  // ---- speed
+  on('boost:up', ({ player, level }) => {
+    if (player !== me) return;
+    alerts.show({ key: 'speed', kind: 'info', icon: ICON.boost, duration: 2800, html: `Boost level ${level}! <b>+${Math.round((BOOST.power(level) - 1) * 100)}% speed</b><small>${BOOST.duration(level).toFixed(1)} s bursts, every ${BOOST.cooldown(level).toFixed(1)} s</small>` });
+  });
+  on('treadmill:up', ({ player, tier }) => {
+    if (player !== me) return;
+    const T = TREADMILL.tiers[tier];
+    alerts.show({ key: 'speed', kind: 'good', icon: ICON.treadmill, duration: 3200, html: `${esc(T.name)}!<small>Warm up for ${T.warmup} s: +${Math.round(T.bonus * 100)}% speed for ${T.duration} s</small>` });
+  });
+  on('pump:start', ({ player, bonus, until }) => {
+    if (player !== me) return;
+    alerts.show({ key: 'pump', kind: 'good', icon: ICON.treadmill, duration: 3000, html: `PUMPED UP! <b>+${Math.round(bonus * 100)}% speed</b><small>for ${Math.round(until - game.time)} seconds</small>` });
+  });
+  let boostTipShown = false;
+  on('boost:start', ({ player }) => {
+    if (player !== me || boostTipShown) return;
+    boostTipShown = true;
+    alerts.toast('BOOST! It recharges in a few seconds. Upgrade it at the Boost Lab.', 'info', { icon: ICON.boost, key: 'boost', duration: 3200 });
+  });
+  // ---- egg drops
+  let dropToastAt = -1e9;
+  on('drop:spawn', ({ drop }) => {
+    if (!me || !drop || game.event?.def?.drops) return; // Egg Rain announces itself
+    const d = Math.hypot(drop.x - me.pos.x, drop.z - me.pos.z);
+    const now = performance.now();
+    if (now - dropToastAt < 8000) return;
+    dropToastAt = now;
+    const egg = EGG[drop.egg];
+    const where = drop.biome >= 0 ? 'on the Seed Road' : 'on the plaza';
+    alerts.show({ key: 'drop', kind: drop.egg === 'rainbow' ? 'gold' : 'info', icon: ICON.egg, duration: 4200,
+      html: `${drop.egg === 'rainbow' ? 'A RAINBOW EGG is falling!' : `A ${esc(egg?.name || 'pet egg')} is falling ${where}!`}<small>${d < 90 ? 'It is close! Look for the light beam.' : 'Follow the light beam. First to touch it hatches it free!'}</small>` });
+  });
+  on('drop:claimed', ({ player, drop, pet }) => {
+    if (player === me || !pet) return;
+    const p = PET[pet];
+    if (drop.egg === 'rainbow' || ['legendary', 'mythic', 'divine'].includes(p?.rarity)) alerts.toast(`${who(player)} caught a ${esc(EGG[drop.egg]?.name || 'egg')} and hatched a <b>${esc(p?.name || 'pet')}</b>!`, 'info', { icon: ICON.egg });
+  });
+  on('pets:released', ({ pet }) => {
+    alerts.toast(`Your pet bag was full, so a spare ${esc(PET[pet]?.name || 'pet')} went home to make room.`, 'info', { icon: ICON.paw, duration: 4200 });
   });
   on('event:start', ({ event }) => {
     alerts.announce({ title: event.def.name.toUpperCase() + '!', sub: esc(event.def.desc), icon: EVENT_ICON[event.type], cls: 'an-ev ev-' + event.type, ms: 3400 });

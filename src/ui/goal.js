@@ -2,10 +2,11 @@
 // The goal is the next biome: how much Speed you need to outrun its monster while carrying a seed, what that
 // costs, and how much more its seeds pay. Once the garden's own 10 planters are open, the next FOR SALE lot
 // takes over when it is cheaper. Once every monster is beaten and every lot bought: Rebirth.
-import { BIOMES, PLANTS, PLAYER, RARITY, REBIRTH, PLANTERS, LOTS, speedAt, speedCost } from '../config.js';
+import { BIOMES, PLANTS, PLAYER, RARITY, REBIRTH, PLANTERS, LOTS, BASE, speedAt, speedCost } from '../config.js';
 import { settings } from '../core/settings.js';
 import { h, esc, setHTML, setStyle, toggle, money } from './dom.js';
 import { ICON } from './icons.js';
+import { levelPerks } from './base.js';
 
 /** A biome monster's real speed in this match (difficulty scales it). */
 export const monsterSpeed = (game, biome) => (biome.monster ? biome.monster.speed * (game?.difficulty?.monsterSpeedMult ?? 1) : 0);
@@ -43,15 +44,20 @@ export function nextGoal(game, me) {
     const k = game.lotsOwned(g);
     if (k < LOTS.count && g.planters.slice(0, PLANTERS.base).every((pl) => pl.unlocked)) lot = { kind: 'lot', lot: k, cost: LOTS.cost[k] };
   }
+  // the next base level, once the basics are learned (it keeps its perks through rebirths)
+  const bl = (me.baseLevel || 1) + 1;
+  const base = me.speedLevel >= 3 && BASE.cost[bl] ? { kind: 'base', level: bl, cost: BASE.cost[bl] } : null;
+  const cheapest = (...list) => list.filter(Boolean).reduce((a, b) => (!a || b.cost < a.cost ? b : a), null);
   const next = BIOMES[reach + 1];
   if (next) {
     const level = levelToOutrun(monsterSpeed(game, next), me.rebirths);
     let cost = 0;
     for (let L = me.speedLevel + 1; L <= level; L++) cost += speedCost(L);
     const ratio = (avgIncome[next.rarity] || 1) / (avgIncome[BIOMES[reach].rarity] || 1);
-    if (!lot || cost <= lot.cost) return { kind: 'speed', level, cost, biome: next, ratio };
+    const sp = { kind: 'speed', level, cost, biome: next, ratio };
+    return cheapest(lot, base) && cheapest(lot, base).cost < cost ? cheapest(lot, base) : sp;
   }
-  return lot || { kind: 'rebirth', cost: REBIRTH.threshold(me.rebirths), mult: REBIRTH.incomeMult(me.rebirths + 1) };
+  return cheapest(lot, base) || { kind: 'rebirth', cost: REBIRTH.threshold(me.rebirths), mult: REBIRTH.incomeMult(me.rebirths + 1) };
 }
 
 const times = (r) => (r >= 2 ? `${Math.round(r)}×` : `${r.toFixed(1)}×`);
@@ -86,7 +92,7 @@ export function createNextGoal(app, parent, tutorial) {
       }
       if (!show) return;
       const g = nextGoal(game, me);
-      const k = g.kind === 'speed' ? `s${g.level}|${g.cost}|${g.biome.id}` : g.kind === 'lot' ? `l${g.lot}|${g.cost}` : `r${g.cost}`;
+      const k = g.kind === 'speed' ? `s${g.level}|${g.cost}|${g.biome.id}` : g.kind === 'lot' ? `l${g.lot}|${g.cost}` : g.kind === 'base' ? `b${g.level}` : `r${g.cost}`;
       if (k !== key) {
         key = k;
         if (g.kind === 'speed') {
@@ -97,6 +103,10 @@ export function createNextGoal(app, parent, tutorial) {
         } else if (g.kind === 'lot') {
           setHTML(line1, `${ICON.sprout}<span><span class="ng-word">Expand </span>Garden <b class="cash">${money(g.cost)}</b></span>`);
           setHTML(line2, `<span class="ng-arrow">→</span> <b class="x">+${LOTS.planters}</b><span class="ng-more"> planters</span>`);
+        } else if (g.kind === 'base') {
+          const perk = levelPerks(g.level).find((t) => !t.startsWith('+')) || 'more income';
+          setHTML(line1, `${ICON.house}<span><span class="ng-word">Base </span>Lv ${g.level} <b class="cash">${money(g.cost)}</b></span>`);
+          setHTML(line2, `<span class="ng-arrow">→</span><span class="ng-more"> ${esc(perk)}</span>`);
         } else {
           setHTML(line1, `${ICON.crown}<span>Rebirth <b class="cash">${money(g.cost)}</b></span>`);
           setHTML(line2, `<span class="ng-arrow">→</span> <b class="x">×${g.mult}</b><span class="ng-more"> income forever</span>`);

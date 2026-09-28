@@ -1,6 +1,13 @@
 // Dev gallery for the pets module. URL hash (or window.__gallery.apply({...})) picks the view:
-//   view=lineup | front | close:<petId> | follow | eggs | stand | thumbs | hatch
+//   view=lineup | front | close:<petId> | solo:<petId> | grid | follow | eggs[:<eggId>] | stand | drops | hatch
 //   t=<seconds> (time), freeze=1, speed=<owner studs/s for follow>
+//   eggs: rot=<radians> fixes the turn.  stand: camp=x,y,z look=x,y,z (stand-local).
+//   drops: egg drops at several phases (falling high/low, landed, expiring; rainbow too); anim=1 plays whole
+//          fall/land/expire cycles; far=1 looks from ~160 studs away; eggs=a,b,c,d (phases high, low, landed,
+//          expiring by position, 11 studs apart); camp/look like the stand.
+//   hatch: pet=<petId> egg=<eggId> at=<seconds> (holds the hatch timeline there; omit to play it through).
+//   css: the CSS stand-in eggs (no-WebGL hatch) of every egg, and rarity tags + inventory cards per rarity.
+// window.__gallery.stats() -> renderer draw calls/triangles of the last frame.
 // Build: node build.mjs --entry src/pets/dev/gallery.js --out <dir>
 import * as THREE from 'three';
 import { Engine } from '../../core/engine.js';
@@ -12,6 +19,12 @@ import { createPetView } from '../view.js';
 import { createEgg } from '../eggs.js';
 import { EGGS } from '../catalog.js';
 import { createPetShop } from '../../world/petshop.js';
+import { createDropView } from '../dropView.js';
+import { playHatch } from '../hatch.js';
+import { PET } from '../catalog.js';
+import { injectStyles } from '../../ui/styles.js';
+import { injectPetStyles, RARITY_COLOR, rarityName, PAW_ICON } from '../style.js';
+import { PET_RARITIES } from '../catalog.js';
 
 document.body.style.margin = '0';
 const container = document.getElementById('app') || document.body.appendChild(document.createElement('div'));
@@ -60,6 +73,7 @@ function parseHash() {
 
 let actors = [];
 let cleanup = [];
+let hatchHold = null;
 function clear() {
   for (const a of actors) a.dispose?.();
   actors = [];
@@ -136,6 +150,126 @@ function follow() {
   });
 }
 
+// ---- drops: egg drops in every phase
+const DROP_SET = [
+  { egg: 'garden', y: 46 },
+  { egg: 'ocean', y: 7 },
+  { egg: 'rainbow', y: 22 },
+  { egg: 'galaxy', landed: true },
+  { egg: 'rainbow', landed: true },
+  { egg: 'volcano', landed: true, expiring: 0.65 },
+  { egg: 'candy', y: 30 },
+  { egg: 'cloud', landed: true, expiring: 0.2 },
+];
+function drops() {
+  const anim = opts.anim === '1' || opts.anim === true;
+  const set = opts.eggs ? opts.eggs.split(',').map((egg, i) => ({ egg, y: [40, 8, 0, 0][i % 4], landed: i % 4 >= 2, expiring: i % 4 === 3 ? 0.6 : 0 })) : DROP_SET;
+  set.forEach((d, i) => {
+    let v = createDropView(d.egg);
+    const x = (i - (set.length - 1) / 2) * 11, z = -(i % 2) * 8;
+    v.object3d.position.set(x, 0, z);
+    scene.add(v.object3d);
+    // anim: fall from 70 studs at 9 studs/s, sit for 8 s, blink for 3 s, start over (DROPS in config.js)
+    const FALL = 70 / 9, SIT = 8, EXP = 3, P = FALL + SIT + EXP;
+    let cycle = -1;
+    actors.push({
+      update(dt, t) {
+        if (!anim) return v.update(dt, t, { y: d.landed ? 0 : d.y, landed: !!d.landed, expiring: d.expiring || 0 });
+        const k = (t + i * 2.3) % P;
+        const c = Math.floor((t + i * 2.3) / P);
+        if (c !== cycle) {
+          cycle = c;
+          v.dispose();
+          v = createDropView(d.egg);
+          v.object3d.position.set(x, 0, z);
+          scene.add(v.object3d);
+        }
+        const y = Math.max(0, 70 - k * 9);
+        v.update(dt, t, { y, landed: k >= FALL, expiring: k > FALL + SIT ? (k - FALL - SIT) / EXP : 0 });
+      },
+      dispose: () => v.dispose(),
+    });
+  });
+  if (opts.camp) {
+    const [cx, cy, cz] = opts.camp.split(',').map(Number);
+    const [lx, ly, lz] = (opts.look || '0,4,0').split(',').map(Number);
+    camera.position.set(cx, cy, cz);
+    camera.lookAt(lx, ly, lz);
+  } else if (opts.far === '1') {
+    camera.position.set(40, 30, 160);
+    camera.lookAt(0, 20, -4);
+  } else {
+    camera.position.set(0, 20, 62);
+    camera.lookAt(0, 15, -4);
+  }
+}
+
+// ---- hatch: the real hatch overlay on top of the gallery
+function hatch() {
+  injectStyles();
+  let root = document.getElementById('hatch-root');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'hatch-root';
+    root.style.cssText = 'position:fixed;inset:0;z-index:10;pointer-events:none';
+    document.body.appendChild(root);
+  }
+  const petId = PET[opts.pet] ? opts.pet : 'pegasus';
+  const eggId = opts.egg || PET[petId]?.egg || 'garden';
+  playHatch({ root, audio: null }, { petId, eggId, isNew: true, equipped: false, onEquip: () => {} });
+  hatchHold = opts.at != null && opts.at !== '' ? +opts.at : null;
+  cleanup.push(() => {
+    hatchHold = null;
+    for (let i = 0; i < 3; i++) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  });
+}
+
+// ---- css: the DOM fallbacks and rarity styling
+function cssView() {
+  injectStyles();
+  injectPetStyles();
+  const root = document.createElement('div');
+  root.style.cssText = 'position:fixed;inset:0;z-index:10;overflow:auto;padding:18px;background:linear-gradient(180deg,#2f3c82,#1b2452);color:#fff;font-family:var(--fb)';
+  const eggs = document.createElement('div');
+  eggs.style.cssText = 'display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:18px';
+  for (const e of EGGS) {
+    const cell = document.createElement('div');
+    cell.style.cssText = 'position:relative;height:190px;border-radius:14px;background:rgba(10,15,40,.4)';
+    const egg = document.createElement('div');
+    egg.className = 'ph-cssegg egg-' + e.id;
+    egg.style.cssText = '--cx:50%;--cy:46%;width:110px;animation:none';
+    const label = document.createElement('div');
+    label.textContent = e.name;
+    label.style.cssText = 'position:absolute;bottom:6px;left:0;right:0;text-align:center;font:800 13px var(--fb)';
+    cell.append(egg, label);
+    eggs.appendChild(cell);
+  }
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap';
+  for (const r of PET_RARITIES) {
+    const col = document.createElement('div');
+    col.style.cssText = 'display:flex;flex-direction:column;gap:8px;align-items:center;width:110px';
+    const tag = document.createElement('span');
+    tag.className = 'pr-tag r-' + r;
+    tag.style.setProperty('--rc', RARITY_COLOR[r]);
+    tag.textContent = rarityName(r);
+    const card = document.createElement('div');
+    card.className = 'pcard r-' + r;
+    card.style.cssText = `--rc:${RARITY_COLOR[r]};width:100px`;
+    card.innerHTML = `<span class="pthumb nothumb" style="--rc:${RARITY_COLOR[r]}"><img alt=""></span><span class="pc-n">${rarityName(r)} pet</span><span class="pc-r">${rarityName(r)}</span>`;
+    col.append(tag, card);
+    row.appendChild(col);
+  }
+  const paw = document.createElement('div');
+  paw.className = 'ph-csspet';
+  paw.style.cssText = `--rc:${RARITY_COLOR.divine};position:relative;left:auto;top:auto;transform:none;width:120px;animation:none`;
+  paw.innerHTML = PAW_ICON;
+  row.appendChild(paw);
+  root.append(eggs, row);
+  document.body.appendChild(root);
+  cleanup.push(() => root.remove());
+}
+
 function setView(view) {
   clear();
   const [kind, arg] = view.split(':');
@@ -166,24 +300,34 @@ function setView(view) {
       camera.lookAt(0, 1.2, -2.2);
     }
   } else if (kind === 'follow') follow();
+  else if (kind === 'drops') drops();
+  else if (kind === 'hatch') hatch();
+  else if (kind === 'css') cssView();
   else if (kind === 'eggs') {
-    EGGS.forEach((e, i) => {
+    // every egg, two rows (arg = one egg id for a close-up); rot=<radians> fixes the turn
+    const list = arg ? EGGS.filter((e) => e.id === arg) : EGGS;
+    const perRow = Math.ceil(list.length / 2);
+    list.forEach((e, i) => {
       const egg = createEgg(e.id);
       egg.scale.setScalar(2);
-      egg.position.set((i - 1.5) * 2.6, 0, 0);
+      const row = Math.floor(i / perRow), col = i % perRow;
+      egg.position.set(list.length === 1 ? 0 : (col - (perRow - 1) / 2) * 2.8 + row * 1.4, 0, row * -3.2);
       scene.add(egg);
-      actors.push({ update(dt, t) { egg.rotation.y = t * 0.5 + i; }, dispose: () => scene.remove(egg) });
+      actors.push({ update(dt, t) { egg.rotation.y = opts.rot != null ? +opts.rot : t * 0.5 + i; }, dispose: () => scene.remove(egg) });
     });
-    camera.position.set(0, 2.6, 9);
-    camera.lookAt(0, 1, 0);
+    if (arg) camera.position.set(0, 1.6, 4.2);
+    else camera.position.set(0, 4.2, 10.5);
+    camera.lookAt(0, 1, arg ? 0 : -1.6);
   } else if (kind === 'stand') {
     const st = createPetShop();
     st.position.set(0, 0, 0);
     scene.add(st);
     actors.push({ update: (dt, t) => st.update(dt, t), dispose: () => scene.remove(st) });
-    const [cx, cy, cz] = (opts.camp || '10,9,14').split(',').map(Number);
+    // camp=<x,y,z> camera, look=<x,y,z> target (stand-local: the shop spot is the origin, the stand is x -18..6)
+    const [cx, cy, cz] = (opts.camp || '0,10,20').split(',').map(Number);
+    const [lx, ly, lz] = (opts.look || '-6,6,-9').split(',').map(Number);
     camera.position.set(cx, cy, cz);
-    camera.lookAt(0, 5, -9);
+    camera.lookAt(lx, ly, lz);
   }
 }
 
@@ -205,7 +349,12 @@ engine.add((dt) => {
   if (!opts.freeze) time += dt;
   for (const a of actors) a.update?.(opts.freeze ? 0 : dt, time);
   engine.setFocus(camera.position.x * 0.5, 0, camera.position.z * 0.5);
+  if (hatchHold != null) document.querySelector('.pet-hatch')?.__hatch?.seek(hatchHold);
 });
-window.__gallery = { apply, engine, scene, camera, step: (n = 1, dt = 1 / 30) => { for (let i = 0; i < n; i++) engine.frame(dt); } };
+window.__gallery = {
+  apply, engine, scene, camera,
+  step: (n = 1, dt = 1 / 30) => { for (let i = 0; i < n; i++) engine.frame(dt); },
+  stats: () => ({ calls: engine.renderer.info.render.calls, triangles: engine.renderer.info.render.triangles }),
+};
 apply();
 engine.start();

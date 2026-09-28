@@ -1,9 +1,12 @@
 // The egg hatch: a full-screen moment. The egg drops in, wobbles three times (cracks spreading, light
 // leaking out in the pet's rarity colour), bursts, and the pet pops out spinning with rays, confetti,
-// its name, rarity and boost. Tap to hurry it along. Hatches queue if several arrive at once.
+// its name, rarity and boost. Divine pets get a bigger golden finale: a second layer of gold rays,
+// shockwave rings, a spinning golden halo and a burst of gold stars. Tap to hurry it along. Hatches
+// queue if several arrive at once. Works for every egg in EGGS and every pet in PETS.
 //   playHatch(app, {petId, eggId, isNew, equipped, onEquip}) -> void
 // The pet is already saved to the profile before this plays, so closing early never loses it.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PET, EGG, boostLines } from './catalog.js';
 import { createPetModel } from './models.js';
 import { eggParts, rimTeeth } from './eggs.js';
@@ -27,7 +30,7 @@ const play = (app, name, opts) => {
     /* sound is optional */
   }
 };
-const TIER = { common: 0, rare: 2, epic: 3, legendary: 4, mythic: 5 };
+const TIER = { common: 0, rare: 2, epic: 3, legendary: 4, mythic: 5, divine: 8 };
 const easeOutBack = (t, c = 2.2) => 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
 const clamp01 = (t) => Math.max(0, Math.min(1, t));
 
@@ -64,8 +67,9 @@ function run(app, info, done) {
   injectPetStyles();
   const pet = PET[info.petId];
   const egg = EGG[info.eggId] || EGG.garden;
-  const rarity = pet?.rarity || 'common';
+  const rarity = RARITY_COLOR[pet?.rarity] ? pet.rarity : 'common';
   const color = RARITY_COLOR[rarity];
+  const divine = rarity === 'divine';
   const quick = reduced();
 
   // ---------------------------------------------------------------- DOM
@@ -111,7 +115,10 @@ function run(app, info, done) {
   btns.append(equipBtn, okBtn);
   infoEl.append(rar, name, badges, boosts, blurb, btns);
   const hint = el('div', 'ph-hint', 'Tap to hatch faster!');
-  wrap.append(bg, rays, glow, stageEl, top, space, infoEl, confetti, flash, hint);
+  // divine finale: shockwave rings (CSS shows them for .r-divine only)
+  const rings = el('div', 'ph-rings');
+  if (divine) for (let i = 0; i < 3; i++) rings.appendChild(el('i'));
+  wrap.append(bg, rays, glow, rings, stageEl, top, space, infoEl, confetti, flash, hint);
   (app.root || document.body).appendChild(wrap);
   requestAnimationFrame(() => wrap.classList.add('in'));
   wrap.focus({ preventScroll: true });
@@ -125,8 +132,8 @@ function run(app, info, done) {
   eggMat.emissive = new THREE.Color(color);
   eggMat.emissiveMap = P.mat.map;
   eggMat.emissiveIntensity = 0;
-  // keep the painted glow of lava/galaxy eggs: they add their own emissive map on top of the tease
-  if (P.mat.emissiveMap && P.mat.emissiveIntensity > 0.5) {
+  // keep the painted glow of lava/galaxy/frost/cloud/rainbow eggs: their own emissive map stays on top of the tease
+  if (P.mat.userData.glow) {
     eggMat.emissiveMap = P.mat.emissiveMap;
     eggMat.emissive = new THREE.Color('#ffffff');
     eggMat.emissiveIntensity = P.mat.emissiveIntensity;
@@ -182,6 +189,7 @@ function run(app, info, done) {
     petModel.root.userData.k = k;
     root.add(petModel.root);
     Object.assign(G, { root, eggRoot, whole, bottom, topHalf, shards, sh, cr });
+    if (divine) G.gold = goldFinale(root, 1.2); // the pet stands 1.85 tall on the stage
   }
 
   // CSS stand-ins while the 3D stage can't draw (no WebGL, or its context was lost; it comes back on restore)
@@ -286,9 +294,9 @@ function run(app, info, done) {
     hint.hidden = true;
     play(app, 'whoosh', { vol: 0.9 });
     play(app, 'confetti');
-    play(app, 'grab', { tier: TIER[rarity] ?? 0, mutation: rarity === 'mythic' ? 'rainbow' : rarity === 'legendary' ? 'gold' : 'normal' });
-    if (rarity === 'legendary') setTimeout(() => play(app, 'event', { type: 'golden' }), 150);
-    if (rarity === 'mythic') setTimeout(() => play(app, 'secret'), 120);
+    play(app, 'grab', { tier: TIER[rarity] ?? 0, mutation: rarity === 'mythic' || divine ? 'rainbow' : rarity === 'legendary' ? 'gold' : 'normal' });
+    if (rarity === 'legendary' || divine) setTimeout(() => play(app, 'event', { type: 'golden' }), 150);
+    if (rarity === 'mythic' || divine) setTimeout(() => play(app, 'secret'), divine ? 420 : 120);
     if (rarity === 'epic') setTimeout(() => play(app, 'grown'), 120);
     if (!quick) spawnConfetti(confetti, rarity);
   }
@@ -397,6 +405,7 @@ function run(app, info, done) {
       for (const w of pm.wings) w.rotation.z = (pm.wingBase + Math.sin(u * pm.wingSpeed) * pm.wingAmp) * w.userData.side;
       if (pm.tailPivot) pm.tailPivot.rotation[pm.tailAxis] = Math.sin(u * 12) * 0.45;
       if (pm.shadow) pm.shadow.position.y = -pm.root.position.y / Math.max(0.001, s) + 0.02;
+      G.gold?.update(u, dt);
     }
     resize(dt);
     stage.render();
@@ -422,6 +431,7 @@ function run(app, info, done) {
       crackMat.dispose();
       G.sh?.geometry.dispose();
       G.sh?.material.dispose();
+      G.gold?.dispose();
       done();
     }, quick ? 0 : 220);
   }
@@ -465,10 +475,12 @@ function run(app, info, done) {
 }
 
 function spawnConfetti(host, rarity) {
-  const n = { common: 26, rare: 38, epic: 50, legendary: 70, mythic: 90 }[rarity] || 30;
+  const n = { common: 26, rare: 38, epic: 50, legendary: 70, mythic: 90, divine: 120 }[rarity] || 30;
   const colors = rarity === 'mythic'
     ? ['#ff4d6d', '#ffb627', '#fff04d', '#4cd964', '#3dd6ff', '#6b7bff', '#c86bff']
-    : [RARITY_COLOR[rarity], '#ffd23f', '#ff4f9a', '#3d9bff', '#4cd964', '#ffffff'];
+    : rarity === 'divine'
+      ? ['#ffe75e', '#fff6c2', '#ffc83d', '#ffffff', '#ffb627', '#ffe75e', '#ff9fd8']
+      : [RARITY_COLOR[rarity], '#ffd23f', '#ff4f9a', '#3d9bff', '#4cd964', '#ffffff'];
   const frag = document.createDocumentFragment();
   for (let i = 0; i < n; i++) {
     const c = document.createElement('i');
@@ -478,4 +490,83 @@ function spawnConfetti(host, rarity) {
     frag.appendChild(c);
   }
   host.appendChild(frag);
+}
+
+// ------------------------------------------------------------------ divine finale (3D)
+// A golden halo (two counter-spinning rings studded with beads) grows behind the pet, and gold stars burst
+// out, then drift round it twinkling. 3 draw calls; created per hatch and disposed with it.
+const _m4 = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _p = new THREE.Vector3();
+const _s = new THREE.Vector3();
+
+function goldFinale(root, cy) {
+  const group = new THREE.Group();
+  group.position.set(0, cy, -0.35);
+  root.add(group);
+  const gold = new THREE.MeshBasicMaterial({ color: '#ffe75e', toneMapped: false });
+  const white = new THREE.MeshBasicMaterial({ color: '#fff8d8', toneMapped: false });
+  // each ring + its beads baked into one geometry
+  const ringWithBeads = (radius, tube, beadR, n, phase) => {
+    const parts = [new THREE.TorusGeometry(radius, tube, 8, 56)];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + phase;
+      parts.push(new THREE.OctahedronGeometry(beadR, 0).translate(Math.cos(a) * radius, Math.sin(a) * radius, 0));
+    }
+    const merged = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)));
+    parts.forEach((g) => g.dispose());
+    return merged;
+  };
+  const ringGeo = ringWithBeads(1.35, 0.07, 0.12, 6, 0);
+  const ring2Geo = ringWithBeads(1.55, 0.035, 0.09, 6, Math.PI / 6);
+  const ring = new THREE.Mesh(ringGeo, gold);
+  const ring2 = new THREE.Mesh(ring2Geo, white);
+  const halo = new THREE.Group();
+  halo.add(ring, ring2);
+  halo.scale.setScalar(0.001);
+  group.add(halo);
+  // gold and white stars (one instanced mesh): fly out from the egg, then orbit
+  const starGeo = new THREE.OctahedronGeometry(0.13, 0);
+  const starMat = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
+  const N = 16;
+  const stars = new THREE.InstancedMesh(starGeo, starMat, N);
+  const cGold = new THREE.Color('#ffe75e'), cWhite = new THREE.Color('#fff8d8');
+  const S = [];
+  for (let i = 0; i < N; i++) {
+    stars.setColorAt(i, i % 3 ? cGold : cWhite);
+    S.push({ a: (i / N) * Math.PI * 2, r: 1.6 + (i % 4) * 0.24, y: ((i * 7) % 5) / 5 - 0.5, sp: 0.5 + (i % 3) * 0.18, tw: i * 1.7 });
+  }
+  stars.visible = false;
+  stars.frustumCulled = false;
+  group.add(stars);
+  return {
+    update(u, dt) {
+      const grow = clamp01((u - 0.1) / 0.5);
+      halo.scale.setScalar(Math.max(0.001, easeOutBack(grow, 1.8)));
+      ring.rotation.z += dt * 0.6;
+      ring2.rotation.z -= dt * 0.9;
+      halo.rotation.y = Math.sin(u * 0.8) * 0.25;
+      stars.visible = u > 0.05;
+      const out = easeOutBack(clamp01(u / 0.7), 1.4);
+      for (let i = 0; i < N; i++) {
+        const d = S[i];
+        const a = d.a + u * d.sp;
+        const k = 0.6 + Math.abs(Math.sin(u * 3 + d.tw)) * 0.8;
+        _p.set(Math.cos(a) * d.r * out, Math.sin(a) * d.r * 0.55 * out + d.y * out, Math.sin(a) * 0.6);
+        _q.setFromEuler(_e.set(0, u * 3 + d.tw, 0));
+        _s.set(k, k * 1.8, k);
+        stars.setMatrixAt(i, _m4.compose(_p, _q, _s));
+      }
+      stars.instanceMatrix.needsUpdate = true;
+    },
+    dispose() {
+      group.parent?.remove(group);
+      for (const g of [ringGeo, ring2Geo, starGeo]) g.dispose();
+      stars.dispose();
+      gold.dispose();
+      white.dispose();
+      starMat.dispose();
+    },
+  };
 }

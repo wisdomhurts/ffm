@@ -130,6 +130,7 @@ export class BotController {
     it.selectSlot = null;
     it.aimYaw = null;
     it.emote = null;
+    it.boost = false;
     const now = game.time;
     updateHuman(game);
     this._perceive(game, p, now);
@@ -144,12 +145,25 @@ export class BotController {
       if (status !== 'running') this._finish(game, p, status);
     }
     this._hops(game, p, it);
+    if (now >= p.boostReadyAt && this._wantsBoost(game, p, now)) it.boost = true;
     if (this.emoteNext && !p.carrying) {
       // optional: games that support intent.emote play the celebration dance
       it.emote = this.emoteNext;
       this.emoteNext = null;
     }
     return it;
+  }
+
+  /** Boost when a road monster is right behind us, or someone chases us home with their plant. */
+  _wantsBoost(game, p, now) {
+    if (!p.carrying || now < p.stunUntil) return false;
+    let chased = false;
+    for (const m of game.monsters) if (m.target === p.slot && (m.x - p.pos.x) ** 2 + (m.z - p.pos.z) ** 2 < 16 * 16) chased = true;
+    if (!chased && p.carrying.kind === 'plant') {
+      for (const q of game.players) if (q !== p && q.present && !q.carrying && (q.pos.x - p.pos.x) ** 2 + (q.pos.z - p.pos.z) ** 2 < 12 * 12) chased = true;
+    }
+    // relaxed bots react late (or not at all)
+    return chased && this.rng.next() < (this.diff.boostEager ?? 0.08);
   }
 
   /** Debug snapshot (used by the headless sims). */

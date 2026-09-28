@@ -7,7 +7,7 @@ export class Input {
   constructor(canvas) {
     this.canvas = canvas;
     this.keys = new Set();
-    this.latched = { jump: false, bonk: false, item: null, select: null, pause: false, interactTap: false };
+    this.latched = { jump: false, bonk: false, item: null, select: null, pause: false, interactTap: false, boost: false, gear: false };
     this.mouse = { right: false, left: false, dx: 0, dy: 0, wheel: 0, x: 0, y: 0 };
     // Touch UI writes here (see ui/touch.js).
     this.virtual = { moveX: 0, moveY: 0, active: false, interact: false, camDX: 0, camDY: 0, pinch: 0 };
@@ -91,6 +91,8 @@ export class Input {
     if (i >= 0) this.latched.item = i;
     if (code === 'KeyQ') this.latched.select = -1;
     if (code === 'KeyR') this.latched.select = 1;
+    if (code === 'ShiftLeft' || code === 'ShiftRight') this.latched.boost = true;
+    if (code === 'KeyX') this.latched.gear = true;
   }
 
   // Call from UI buttons.
@@ -100,6 +102,8 @@ export class Input {
     else if (action === 'item') this.latched.item = value;
     else if (action === 'pause') this.latched.pause = true;
     else if (action === 'interact') this.latched.interactTap = true;
+    else if (action === 'boost') this.latched.boost = true;
+    else if (action === 'gear') this.latched.gear = true;
   }
 
   // Movement in camera space: x = right, y = forward. Length <= 1.
@@ -182,6 +186,8 @@ export class Input {
     if (edge(4)) this.latched.select = -1;
     if (edge(5)) this.latched.select = 1;
     if (edge(9)) this.latched.pause = true;
+    if (edge(7)) this.latched.boost = true; // RT
+    if (edge(6)) this.latched.gear = true; // LT
     for (let i = 0; i < gp.buttons.length; i++) prev[i] = b(i);
     if (gp.buttons.some((x) => x.pressed)) this.lastDevice = 'gamepad';
   }

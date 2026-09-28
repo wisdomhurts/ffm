@@ -85,7 +85,12 @@ export class StubApp {
     if (!g || !p) return false;
     switch (name) {
       case 'buyItem': return g.buyItem(p, args[0], args[1] ?? 1);
-      case 'buySpeed': return g.buySpeed(p);
+      case 'buySpeed': return g.buySpeed(p, args[0] ?? 1);
+      case 'buyBoost': return g.buyBoost(p);
+      case 'buyTreadmill': return g.buyTreadmill(p);
+      case 'upgradeBase': return g.upgradeBase(p);
+      case 'setBaseStyle': return g.setBaseStyle(p, args[0]);
+      case 'setPets': return g.setPets(p, args[0]);
       case 'rebirth': return g.rebirth(p);
       case 'buyEgg': return g.buyEgg(p, args[0]);
       case 'setPet': g.setPet(p, args[0] ?? null); return true;

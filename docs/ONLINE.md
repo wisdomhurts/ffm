@@ -25,7 +25,8 @@ profile = {
   shareFace: false,          // opt-in: send my Photo Booth face to people in PRIVATE rooms
   stars: 0,                  // ⭐ earned from quests + badges, spent in the Wardrobe
   unlocks: [],               // cosmetic ids owned ('hat:crown', ...); free items need no unlock
-  pets: { owned: [{ uid, id }], equipped: null },   // equipped = pet uid or null
+  pets: { owned: [{ uid, id }], equipped: null, team: [] },   // team = up to 3 equipped uids (equipped = team[0])
+  baseStyle: { floor, fence, laser, decor: [id|null x6] },    // Base Studio picks (what shows depends on the base level)
   badges: { [badgeId]: epochMs },
   quests: { day: 'YYYY-MM-DD', list: [{ id, target, progress, claimed }] },
   counters: { [key]: number },   // lifetime totals (steals, bonks, planted, sold, gifts, trades, hatches, onlineGames, ...)
@@ -41,7 +42,9 @@ Solo Endless saves stay per profile under `save:endless:<profileId>` (whole 4-ga
 
 ## Player identity in the Game (`src/gameplay/*`, integrator)
 `Player` gains: `profileId`, `faceKey` (key for faces/avatars; = profile id, or `r_<pid>` for remote
-players), `name`, `look` (full Look), `pet` (equipped pet species id or null), `kind`
+players), `name`, `look` (full Look), `pets` (equipped team: up to 3 species ids; only the first
+`petSlotsFor(baseLevel)` count, see `game.activePets(p)`), `pet` (the first active one), `baseLevel`, `baseStyle`,
+`boostLevel`/`boostUntil`/`boostReadyAt`, `treadmillTier`, `pumpUntil`/`pumpMult`/`trainT` (warm-up), `kind`
 (`'local'|'remote'|'bot'|'empty'`), `pid` (network id, remote/local online players), `emote` (`{id, until}` or null).
 `p.char` stays the slot's family character (garden colours, bot personality, chat lines).
 UI must use `p.faceKey` (not `p.id`) for avatars and `p.name` for names, `p.char.color` for colour.
@@ -56,8 +59,16 @@ Game additions:
   host migration.
 * Hooks (all players, host-authoritative): `game.mods(p)` -> `{income, speed, hold, magnet, bonkCd}` from the
   equipped pet (`petMods(petId)` in `src/pets/effects.js`).
-* `game.buyEgg(p, eggId)` -> rolls a pet (game rng), charges cash, emits `pet:hatched {player, egg, pet}`.
-* `game.setPet(p, petId|null)`, `game.setLook(p, look)` (emits `player:look {player}`).
+* `game.buyEgg(p, eggId)` -> rolls a pet (game rng), charges cash, emits `pet:hatched {player, egg, pet}` (never for
+  drop-only eggs). Egg drops: `game.drops` `[{uid, egg, x, z, spawnAt, landAt, expiresAt, biome}]` (height =
+  `game.dropY(d)`); touching a landed one emits `drop:claimed {player, drop, pet}` + `pet:hatched {..., free: true}`;
+  also `drop:spawn`, `drop:expired`. Bots keep their best 3 drop pets.
+* `game.setPets(p, [petId...])` (and `setPet(p, id)` = a team of one), `game.setLook(p, look)` (emits `player:look {player}`).
+* Bases: `game.upgradeBase(p)` (in your own garden) -> `base:upgraded {player, level, cost, garden}`;
+  `game.setBaseStyle(p, style)` -> `base:style {player, garden}`; each garden's `g.look` is what it shows
+  (`effectiveBaseStyle`). Guard Gnome: `guard:bonk {garden, target}`; trampolines: `base:bounce {player, garden, spot}`.
+* Speed: `game.buySpeed(p, n|'max')` -> `speed:up {player, level, cost, count}`; `game.buyBoost(p)` -> `boost:up`;
+  `game.buyTreadmill(p)` -> `treadmill:up`; intent `boost` -> `boost:start {player, until}`; warm-up -> `pump:start`.
 * Emotes: intent `emote: id` -> `p.emote = {id, until}` + `emote {player, id}`. Moving cancels it.
 * Quick chat: intent `say: phraseId` -> `chat {player, text, quick: true, phrase}` (rate limited 1/1.2 s).
 * `game.giftPlant(from, to, planterIndex)` -> `gift {from, to, plant}` (needs a free unlocked planter on `to`).
@@ -67,7 +78,8 @@ Game additions:
 ## Actions gateway (`app.act`, integrator)
 Anything the UI changes in the game goes through `app.act(name, ...args)` so it also works as a
 client in an online room (the host applies it for the right player):
-`buyItem(id, qty)`, `buySpeed()`, `rebirth()`, `buyEgg(eggId)`, `setPet(petId)`, `setLook(look)`,
+`buyItem(id, qty)`, `buySpeed(n)`, `buyBoost()`, `buyTreadmill()`, `upgradeBase()`, `setBaseStyle(style)`, `rebirth()`,
+`buyEgg(eggId)`, `setPet(petId)`, `setPets(ids)`, `setLook(look)`,
 `gift(toSlot, planterIndex)`, `tradeRequest(toSlot)`, `tradeOffer(offer)`, `tradeReady(bool)`,
 `tradeCancel()`, `emote(id)`, `say(phraseId)`. Returns `true/false` offline, `undefined` (async) online.
 
@@ -92,7 +104,7 @@ Host-authoritative rooms with **client-authoritative movement**:
 * Topics: lobby `sas:lobby` (public rooms `track` `{code, name, host, n, max, v}`), room `sas:room:<CODE>`.
 * Messages (room): `hello` (join: pid, profile summary {name, look, base, pet, face?}), `welcome`
   (host -> joiner: slot, full state), `in` (client -> host: pos/vel/yaw/onGround, edge counters for
-  jump/bonk/item/emote/say, interact held, action queue), `snap` (host, 15 Hz: fast motion of players,
+  jump/bonk/boost/item/emote/say, interact held, action queue), `snap` (host, 15 Hz: fast motion of players,
   monsters, projectiles), `state` (host, 4 Hz: `serializeFull()` or a delta), `ev` (host: encoded bus events
   for FX/UI/audio), `kick` (host -> one client: set pos/vel), `act` (client -> host: actions), `bye`.
 * Host election: earliest `joinedAt` in room presence (tie: lowest pid). On host loss the next member

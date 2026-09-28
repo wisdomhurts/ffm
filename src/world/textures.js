@@ -881,3 +881,613 @@ export function lockTexture() {
   }, { clamp: true }));
 }
 
+// ------------------------------------------------------------------ Base Studio: garden floors and fences
+
+const TAU = Math.PI * 2;
+const hexRgb = (hex) => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+const mixRgb = (a, b, t, k = 1) => [(a[0] + (b[0] - a[0]) * t) * k, (a[1] + (b[1] - a[1]) * t) * k, (a[2] + (b[2] - a[2]) * t) * k];
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+// Per-pixel painting of smooth (low-frequency) colour at 1/k resolution, scaled up: these floors are painted
+// the first time a Base Studio choice shows, so they have to be quick. f gets full-resolution coordinates.
+function lowRes(g, w, h, k, f) {
+  const c = makeCanvas(w / k, h / k);
+  pixels(c.getContext('2d'), w / k, h / k, (x, y) => f(x * k + k / 2, y * k + k / 2));
+  g.save();
+  g.imageSmoothingEnabled = true;
+  g.drawImage(c, 0, 0, w, h);
+  g.restore();
+}
+
+// Soft tileable light/dark variation over whatever is painted (overlay blend).
+function noiseOverlay(g, w, h, seed, period, alpha, k = 4) {
+  const n = tileNoise(seed, period);
+  const c = makeCanvas(w / k, h / k);
+  pixels(c.getContext('2d'), w / k, h / k, (x, y) => {
+    const v = 50 + n(x * k, y * k, w, h, 3) * 156;
+    return [v, v, v];
+  });
+  g.save();
+  g.globalAlpha = alpha;
+  g.globalCompositeOperation = 'overlay';
+  g.imageSmoothingEnabled = true;
+  g.drawImage(c, 0, 0, w, h);
+  g.restore();
+}
+
+// Bevelled square tile: light top/left edge, dark bottom/right edge.
+function bevelTile(g, x0, y0, sw, sh, b, fill, light, dark) {
+  g.fillStyle = fill;
+  g.fillRect(x0, y0, sw, sh);
+  g.fillStyle = light;
+  g.beginPath();
+  g.moveTo(x0, y0);
+  g.lineTo(x0 + sw, y0);
+  g.lineTo(x0 + sw - b, y0 + b);
+  g.lineTo(x0 + b, y0 + b);
+  g.lineTo(x0 + b, y0 + sh - b);
+  g.lineTo(x0, y0 + sh);
+  g.closePath();
+  g.fill();
+  g.fillStyle = dark;
+  g.beginPath();
+  g.moveTo(x0 + sw, y0 + sh);
+  g.lineTo(x0, y0 + sh);
+  g.lineTo(x0 + b, y0 + sh - b);
+  g.lineTo(x0 + sw - b, y0 + sh - b);
+  g.lineTo(x0 + sw - b, y0 + b);
+  g.lineTo(x0 + sw, y0);
+  g.closePath();
+  g.fill();
+}
+
+// Calls fn(x, y) for every copy of a shape of radius r at (x, y) that shows on a wrapping w x h tile.
+function wrapped(w, h, x, y, r, fn) {
+  for (const ox of [-w, 0, w]) {
+    for (const oy of [-h, 0, h]) {
+      const px = x + ox, py = y + oy;
+      if (px > -r && px < w + r && py > -r && py < h + r) fn(px, py);
+    }
+  }
+}
+
+// Short grass blade strokes; `lean` tilts them (mowed stripes lean one way, then the other).
+function blades(g, w, h, r, n, lean = () => 0) {
+  g.lineWidth = 1.3;
+  for (let i = 0; i < n; i++) {
+    const x = r() * w, y = r() * h, l = 3 + r() * 4;
+    g.strokeStyle = r() < 0.55 ? `rgba(255,255,255,${0.12 + r() * 0.16})` : `rgba(0,40,0,${0.07 + r() * 0.1})`;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + lean(x, y) + (r() - 0.5) * 2.5, y - l);
+    g.stroke();
+  }
+}
+
+function flower5(g, x, y, rad, petal, centre, rot) {
+  for (const [ox, oy, col] of [[1, 1.6, 'rgba(20,70,20,0.28)'], [0, 0, petal]]) {
+    g.fillStyle = col;
+    for (let k = 0; k < 5; k++) {
+      const a = rot + (k / 5) * TAU;
+      g.beginPath();
+      g.ellipse(x + ox + Math.cos(a) * rad * 0.55, y + oy + Math.sin(a) * rad * 0.55, rad * 0.52, rad * 0.38, a, 0, TAU);
+      g.fill();
+    }
+  }
+  g.fillStyle = centre;
+  g.beginPath();
+  g.arc(x, y, rad * 0.32, 0, TAU);
+  g.fill();
+}
+
+function starfish(g, x, y, R, rot, col) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  const path = (ox, oy) => {
+    g.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * TAU - Math.PI / 2, rr = k % 2 ? R * 0.42 : R;
+      g.lineTo(ox + Math.cos(a) * rr, oy + Math.sin(a) * rr);
+    }
+    g.closePath();
+  };
+  g.lineJoin = 'round';
+  g.lineWidth = R * 0.34;
+  path(1.2, 2);
+  g.fillStyle = g.strokeStyle = 'rgba(140,90,30,0.28)';
+  g.stroke();
+  g.fill();
+  path(0, 0);
+  g.fillStyle = g.strokeStyle = col;
+  g.stroke();
+  g.fill();
+  g.fillStyle = 'rgba(255,240,215,0.9)';
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * TAU - Math.PI / 2;
+    for (const d of [0.3, 0.62]) {
+      g.beginPath();
+      g.arc(Math.cos(a) * R * d, Math.sin(a) * R * d, R * 0.08, 0, TAU);
+      g.fill();
+    }
+  }
+  g.restore();
+}
+
+function scallop(g, x, y, R, rot, col, rib) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  const cy = R * 0.45;
+  const fan = (ox, oy) => {
+    g.beginPath();
+    g.moveTo(ox, cy + oy);
+    g.arc(ox, cy + oy, R, Math.PI * 1.12, Math.PI * 1.88);
+    g.closePath();
+    g.fill();
+    for (let k = 0; k <= 6; k++) {
+      const a = Math.PI * (1.12 + (0.76 * k) / 6);
+      g.beginPath();
+      g.arc(ox + Math.cos(a) * R, cy + oy + Math.sin(a) * R, R * 0.13, 0, TAU);
+      g.fill();
+    }
+  };
+  g.fillStyle = 'rgba(140,90,30,0.25)';
+  fan(1.2, 2);
+  g.fillStyle = col;
+  fan(0, 0);
+  g.strokeStyle = rib;
+  g.lineWidth = Math.max(1, R * 0.08);
+  for (let k = 1; k < 6; k++) {
+    const a = Math.PI * (1.12 + (0.76 * k) / 6);
+    g.beginPath();
+    g.moveTo(0, cy);
+    g.lineTo(Math.cos(a) * R * 0.95, cy + Math.sin(a) * R * 0.95);
+    g.stroke();
+  }
+  g.fillStyle = rib;
+  g.fillRect(-R * 0.26, cy - R * 0.08, R * 0.52, R * 0.2);
+  g.restore();
+}
+
+function peppermint(g, x, y, R, rot, red) {
+  g.fillStyle = 'rgba(160,40,90,0.22)';
+  g.beginPath();
+  g.arc(x + 1.5, y + 2.5, R, 0, TAU);
+  g.fill();
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.arc(x, y, R, 0, TAU);
+  g.fill();
+  g.fillStyle = red;
+  const arms = 6;
+  for (let k = 0; k < arms; k++) {
+    const a0 = rot + (k / arms) * TAU, a1 = a0 + (0.5 / arms) * TAU;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let s = 1; s <= 8; s++) {
+      const rr = (R * s) / 8, a = a0 + (s / 8) * 1.3;
+      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    for (let s = 8; s >= 1; s--) {
+      const rr = (R * s) / 8, a = a1 + (s / 8) * 1.3;
+      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    g.closePath();
+    g.fill();
+  }
+  g.lineWidth = 2;
+  g.strokeStyle = 'rgba(200,40,110,0.55)';
+  g.beginPath();
+  g.arc(x, y, R, 0, TAU);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.85)';
+  g.lineWidth = 2.5;
+  g.beginPath();
+  g.arc(x, y, R * 0.72, Math.PI * 1.1, Math.PI * 1.45);
+  g.stroke();
+}
+
+// One painter per Base Studio floor (the classic lawn is lawnTexture). Coloured: the floor mesh is white.
+// studs = world studs one tile covers.
+const FLOOR_PAINTERS = {
+  stripes: () => ({
+    studs: 8,
+    map: drawTexture(256, 256, (g, w, h) => {
+      g.fillStyle = '#8ade62';
+      g.fillRect(0, 0, w, h / 2);
+      g.fillStyle = '#58ad38';
+      g.fillRect(0, h / 2, w, h / 2);
+      noiseOverlay(g, w, h, 71, 6, 0.35);
+      blades(g, w, h, makeRand(72), 1500, (x, y) => (Math.floor((y / h) * 2) % 2 ? 2.2 : -2.2));
+    }),
+  }),
+  checker: () => ({
+    studs: 8,
+    map: drawTexture(256, 256, (g, w, h) => {
+      for (let i = 0; i < 4; i++) {
+        g.fillStyle = (i + (i >> 1)) % 2 ? '#58b43c' : '#98e571';
+        g.fillRect((i % 2) * 128, (i >> 1) * 128, 128, 128);
+      }
+      noiseOverlay(g, w, h, 73, 6, 0.35);
+      blades(g, w, h, makeRand(74), 1300);
+    }),
+  }),
+  meadow: () => ({
+    studs: 12,
+    map: drawTexture(256, 256, (g, w, h) => {
+      const n = tileNoise(75, 5);
+      const A = hexRgb('#a6e476'), B = hexRgb('#79c654');
+      lowRes(g, w, h, 4, (x, y) => {
+        const v = n(x, y, w, h);
+        return mixRgb(A, B, clamp01((v - 0.35) * 2.2), 0.96 + v * 0.08);
+      });
+      const r = makeRand(76);
+      blades(g, w, h, r, 900);
+      const cols = [['#ff8cc6', '#ffe14d'], ['#ffffff', '#ffc23f'], ['#ffe14d', '#ff8a3a'], ['#c9a0ff', '#fff3a0'], ['#ff6b8a', '#ffe8a0'], ['#8fd0ff', '#ffffff']];
+      for (let i = 0; i < 44; i++) {
+        const x = r() * w, y = r() * h, rad = 5.5 + r() * 3.5, [pc, cc] = r.pick(cols), rot = r() * TAU;
+        wrapped(w, h, x, y, rad * 1.4, (px, py) => flower5(g, px, py, rad, pc, cc, rot));
+      }
+      // little leaf pairs between the flowers
+      for (let i = 0; i < 40; i++) {
+        const x = r() * w, y = r() * h, a = r() * TAU;
+        g.fillStyle = r() < 0.5 ? '#5aa83c' : '#6cc04a';
+        wrapped(w, h, x, y, 6, (px, py) => {
+          for (const s of [-1, 1]) {
+            g.beginPath();
+            g.ellipse(px + Math.cos(a) * 3 * s, py + Math.sin(a) * 3 * s, 3.4, 1.6, a, 0, TAU);
+            g.fill();
+          }
+        });
+      }
+    }),
+  }),
+  beach: () => ({
+    studs: 12,
+    map: drawTexture(256, 256, (g, w, h) => {
+      const n = tileNoise(77, 5);
+      const A = hexRgb('#f7e2a8'), B = hexRgb('#e4c074');
+      lowRes(g, w, h, 2, (x, y) => {
+        const v = n(x, y, w, h);
+        const rip = Math.sin((y / h) * TAU * 6 + (x / w) * TAU + v * 7) * 0.5 + 0.5;
+        return mixRgb(A, B, clamp01((v - 0.32) * 1.7), 0.95 + rip * 0.07);
+      });
+      const r = makeRand(78);
+      for (let i = 0; i < 1500; i++) {
+        g.fillStyle = r() < 0.5 ? 'rgba(120,80,20,0.16)' : 'rgba(255,255,255,0.4)';
+        g.fillRect(r() * w, r() * h, 1.6, 1.6);
+      }
+      for (let i = 0; i < 12; i++) {
+        const x = r() * w, y = r() * h, rx = 2 + r() * 3, rot = r() * 3;
+        g.fillStyle = r.pick(['#c9c2b6', '#b8b0a4', '#e8e2d8']);
+        wrapped(w, h, x, y, rx + 2, (px, py) => {
+          g.beginPath();
+          g.ellipse(px, py, rx, rx * 0.7, rot, 0, TAU);
+          g.fill();
+        });
+      }
+      for (let i = 0; i < 7; i++) {
+        const x = r() * w, y = r() * h, R = 8 + r() * 4, rot = r() * TAU;
+        const [c, rib] = r.pick([['#ffd6e0', '#e89aae'], ['#fff4e6', '#d9b48a'], ['#ffc8a8', '#e0906a'], ['#f4e0ff', '#c29ad8']]);
+        wrapped(w, h, x, y, R + 3, (px, py) => scallop(g, px, py, R, rot, c, rib));
+      }
+      for (let i = 0; i < 4; i++) {
+        const x = r() * w, y = r() * h, R = 10 + r() * 4, rot = r() * TAU, c = r.pick(['#ff8a5c', '#ff6f61', '#ffa63d']);
+        wrapped(w, h, x, y, R + 4, (px, py) => starfish(g, px, py, R, rot, c));
+      }
+    }),
+  }),
+  stone: () => ({
+    studs: 16,
+    map: drawTexture(512, 512, (g, w, h) => {
+      const r = makeRand(80);
+      const tones = [['#d3d6de', '#e4e6ec', '#a9adb8'], ['#bcc0ca', '#d0d3db', '#979ca8'], ['#c7cad3', '#dadce3', '#a2a6b2'], ['#b0b5bf', '#c6cad2', '#8e939f']];
+      g.fillStyle = '#80848e';
+      g.fillRect(0, 0, w, h);
+      for (let row = 0; row < 4; row++) {
+        for (let col = 0; col < 4; col++) {
+          const x0 = col * 128 + (row % 2 ? 64 : 0);
+          const [f, lt, dk] = r.pick(tones);
+          for (const ox of [0, -w]) bevelTile(g, x0 + ox + 4, row * 128 + 4, 120, 120, 9, f, lt, dk);
+        }
+      }
+      noiseOverlay(g, w, h, 79, 8, 0.5);
+      g.lineCap = 'round';
+      for (let i = 0; i < 14; i++) {
+        let x = r() * w, y = r() * h;
+        g.strokeStyle = 'rgba(70,74,84,0.35)';
+        g.lineWidth = 1.2;
+        g.beginPath();
+        g.moveTo(x, y);
+        for (let k = 0; k < 3; k++) {
+          x += (r() - 0.5) * 22;
+          y += (r() - 0.5) * 22;
+          g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+      // moss in the grout
+      for (let i = 0; i < 90; i++) {
+        const row = r.int(0, 3), onRow = r() < 0.5;
+        const x = onRow ? r() * w : ((r.int(0, 3) * 128 + (row % 2 ? 64 : 0)) % w) + r.range(-3, 3);
+        const y = onRow ? row * 128 + r.range(-3, 3) : row * 128 + r() * 128;
+        g.fillStyle = r() < 0.5 ? 'rgba(96,160,70,0.7)' : 'rgba(120,180,80,0.6)';
+        g.beginPath();
+        g.arc(x, y, 1.5 + r() * 2.5, 0, TAU);
+        g.fill();
+      }
+    }),
+  }),
+  candy: () => ({
+    studs: 12,
+    map: drawTexture(256, 256, (g, w, h) => {
+      const A = hexRgb('#ffc2e0'), W = [255, 250, 253];
+      pixels(g, w, h, (x, y) => {
+        const u = x / w, v = y / h;
+        const s = Math.sin((u + v) * TAU * 2 + Math.sin((u - v) * TAU * 2) * 1.3);
+        const t = clamp01((s - 0.45) * 5);
+        return mixRgb(A, W, t, 1 - (1 - t) * (0.04 * Math.sin((u - v) * TAU * 3) + 0.03));
+      });
+      const r = makeRand(82);
+      const reds = ['#ff4f8e', '#ff6fb0', '#ff5a7a'];
+      for (let i = 0; i < 3; i++) {
+        const x = r() * w, y = r() * h, R = 22 + r() * 12, rot = r() * TAU, c = reds[i % 3];
+        wrapped(w, h, x, y, R + 3, (px, py) => peppermint(g, px, py, R, rot, c));
+      }
+      g.lineWidth = 2.6;
+      g.lineCap = 'round';
+      for (let i = 0; i < 80; i++) {
+        const x = r() * w, y = r() * h, a = r() * TAU;
+        g.strokeStyle = r.pick(['#ff3b6b', '#ffd23f', '#3fd0ff', '#7ee36b', '#b36bff', '#ffffff']);
+        wrapped(w, h, x, y, 5, (px, py) => {
+          g.beginPath();
+          g.moveTo(px - Math.cos(a) * 3, py - Math.sin(a) * 3);
+          g.lineTo(px + Math.cos(a) * 3, py + Math.sin(a) * 3);
+          g.stroke();
+        });
+      }
+    }),
+  }),
+  cloud: () => ({
+    studs: 16,
+    map: drawTexture(256, 256, (g, w, h) => {
+      const n = tileNoise(83, 4);
+      const A = hexRgb('#9ed2ff'), B = hexRgb('#7dbcf6');
+      lowRes(g, w, h, 4, (x, y) => mixRgb(A, B, n(x, y, w, h)));
+      const r = makeRand(84);
+      const puffs = [];
+      for (let i = 0; i < 9; i++) {
+        const cx = r() * w, cy = r() * h, k = r.int(5, 8);
+        for (let j = 0; j < k; j++) puffs.push([cx + r.range(-28, 28), cy + r.range(-14, 14), r.range(12, 25)]);
+      }
+      for (const [col, ox, oy, s] of [['#b8c8ee', 3, 6, 1.04], ['#e6eefc', 1, 2, 0.97], ['#ffffff', -1, -1, 0.86], ['rgba(255,255,255,0.95)', -4, -5, 0.5]]) {
+        g.fillStyle = col;
+        for (const [x, y, rr] of puffs) {
+          wrapped(w, h, x, y, rr + 5, (px, py) => {
+            g.beginPath();
+            g.arc(px + ox, py + oy, rr * s, 0, TAU);
+            g.fill();
+          });
+        }
+      }
+      g.fillStyle = 'rgba(255,236,150,0.95)';
+      for (let i = 0; i < 14; i++) {
+        const x = r() * w, y = r() * h;
+        g.beginPath();
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * TAU, rr = k % 2 ? 1.3 : 4;
+          g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+        }
+        g.closePath();
+        g.fill();
+      }
+    }),
+  }),
+  // Starry night: a dark nebula map plus an emissive star map; each star sits alone in one cell of a
+  // cells x cells grid so the floor shader can twinkle every star on its own.
+  space: () => {
+    const S = 512, cells = 32, cw = S / cells;
+    const map = drawTexture(S, S, (g, w, h) => {
+      const n = tileNoise(91, 4);
+      const n2 = tileNoise(92, 6);
+      const A = hexRgb('#1a1446'), B = hexRgb('#2d2468'), P = hexRgb('#5b2d8e'), T = hexRgb('#1d4f86');
+      lowRes(g, w, h, 4, (x, y) => {
+        const v = n(x, y, w, h), v2 = n2(x, y, w, h, 3);
+        let c = mixRgb(A, B, v);
+        c = mixRgb(c, P, clamp01((v2 - 0.58) * 3) * 0.7);
+        return mixRgb(c, T, clamp01((0.4 - v2) * 3) * 0.6);
+      });
+      const r = makeRand(93);
+      for (let i = 0; i < 260; i++) {
+        g.fillStyle = `rgba(255,255,255,${0.25 + r() * 0.35})`;
+        g.fillRect(r() * w, r() * h, 1.5, 1.5);
+      }
+      // ringed planets and a little moon per tile
+      const planet = (x, y, R, body, ring) => {
+        wrapped(w, h, x, y, R * 2.2, (px, py) => {
+          const gr = g.createRadialGradient(px - R * 0.35, py - R * 0.35, R * 0.1, px, py, R);
+          gr.addColorStop(0, '#ffffff');
+          gr.addColorStop(0.25, body);
+          gr.addColorStop(1, 'rgba(20,10,40,1)');
+          g.fillStyle = gr;
+          g.beginPath();
+          g.arc(px, py, R, 0, TAU);
+          g.fill();
+          if (ring) {
+            g.strokeStyle = ring;
+            g.lineWidth = 3;
+            g.beginPath();
+            g.ellipse(px, py, R * 1.9, R * 0.5, -0.4, 0, TAU);
+            g.stroke();
+          }
+        });
+      };
+      planet(r() * w, r() * h, 22, '#ff9f5a', 'rgba(255,220,160,0.9)');
+      planet(r() * w, r() * h, 12, '#8fd8ff', null);
+      planet(r() * w, r() * h, 9, '#ff7ad9', 'rgba(255,190,240,0.8)');
+    });
+    const emissiveMap = drawTexture(S, S, (g) => {
+      g.fillStyle = '#000000';
+      g.fillRect(0, 0, S, S);
+      const r = makeRand(94);
+      for (let cy = 0; cy < cells; cy++) {
+        for (let cx = 0; cx < cells; cx++) {
+          if (r() > 0.42) continue;
+          const x = cx * cw + r.range(4, cw - 4), y = cy * cw + r.range(4, cw - 4);
+          const col = r.pick(['#ffffff', '#ffffff', '#cfeaff', '#fff0b0', '#ffc6f0']);
+          g.fillStyle = col;
+          g.strokeStyle = col;
+          if (r() < 0.16) {
+            g.lineWidth = 1.2;
+            g.beginPath();
+            g.moveTo(x - 3.6, y);
+            g.lineTo(x + 3.6, y);
+            g.moveTo(x, y - 3.6);
+            g.lineTo(x, y + 3.6);
+            g.stroke();
+            g.beginPath();
+            g.arc(x, y, 1.6, 0, TAU);
+            g.fill();
+          } else {
+            g.beginPath();
+            g.arc(x, y, 0.8 + r() * 1.2, 0, TAU);
+            g.fill();
+          }
+        }
+      }
+    });
+    return { studs: 24, map, emissiveMap, cells };
+  },
+  gold: () => ({
+    studs: 8,
+    map: drawTexture(256, 256, (g) => {
+      g.fillStyle = '#9a6a10';
+      g.fillRect(0, 0, 256, 256);
+      for (let ty = 0; ty < 2; ty++) {
+        for (let tx = 0; tx < 2; tx++) {
+          const x0 = tx * 128 + 3, y0 = ty * 128 + 3, s = 122, b = 9;
+          const gr = g.createLinearGradient(x0, y0, x0 + s, y0 + s);
+          gr.addColorStop(0, '#fff2ae');
+          gr.addColorStop(0.45, '#ffd23f');
+          gr.addColorStop(1, '#eeb127');
+          g.fillStyle = gr;
+          g.fillRect(x0, y0, s, s);
+          g.fillStyle = '#fff8d6';
+          g.beginPath();
+          g.moveTo(x0, y0);
+          g.lineTo(x0 + s, y0);
+          g.lineTo(x0 + s - b, y0 + b);
+          g.lineTo(x0 + b, y0 + b);
+          g.lineTo(x0 + b, y0 + s - b);
+          g.lineTo(x0, y0 + s);
+          g.closePath();
+          g.fill();
+          g.fillStyle = '#c48612';
+          g.beginPath();
+          g.moveTo(x0 + s, y0 + s);
+          g.lineTo(x0, y0 + s);
+          g.lineTo(x0 + b, y0 + s - b);
+          g.lineTo(x0 + s - b, y0 + s - b);
+          g.lineTo(x0 + s - b, y0 + b);
+          g.lineTo(x0 + s, y0);
+          g.closePath();
+          g.fill();
+          // embossed diamond
+          const cx = x0 + s / 2, cy = y0 + s / 2, d = 24;
+          g.fillStyle = 'rgba(255,250,215,0.6)';
+          g.strokeStyle = 'rgba(170,110,10,0.55)';
+          g.lineWidth = 3;
+          g.beginPath();
+          g.moveTo(cx, cy - d);
+          g.lineTo(cx + d, cy);
+          g.lineTo(cx, cy + d);
+          g.lineTo(cx - d, cy);
+          g.closePath();
+          g.fill();
+          g.stroke();
+          // glint
+          g.fillStyle = 'rgba(255,255,255,0.95)';
+          const gx = x0 + 26, gy = y0 + 26;
+          g.beginPath();
+          for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * TAU, rr = k % 2 ? 1.6 : 7;
+            g.lineTo(gx + Math.cos(a) * rr, gy + Math.sin(a) * rr);
+          }
+          g.closePath();
+          g.fill();
+        }
+      }
+    }),
+  }),
+};
+
+/** A Base Studio floor ('stripes' ... 'gold'): {map, emissiveMap?, cells?, studs}. Painted on first use. */
+export function floorTexture(id) {
+  return FLOOR_PAINTERS[id] ? once('floor:' + id, FLOOR_PAINTERS[id]) : null;
+}
+
+/** Leafy hedge (coloured), box-projected: one tile = 4 studs. */
+export function hedgeTexture() {
+  return once('hedge', () => drawTexture(256, 256, (g, w, h) => {
+    g.fillStyle = '#2b7329';
+    g.fillRect(0, 0, w, h);
+    const r = makeRand(101);
+    const greens = ['#3f9e3a', '#4cb043', '#358a32', '#5cc050', '#2f8030', '#66cc5c'];
+    for (let i = 0; i < 700; i++) {
+      const x = r() * w, y = r() * h, rl = 8 + r() * 7, rot = r() * TAU, c = r.pick(greens), hi = r() < 0.35;
+      wrapped(w, h, x, y, rl + 2, (px, py) => {
+        g.fillStyle = 'rgba(10,50,10,0.35)';
+        g.beginPath();
+        g.ellipse(px + 1.2, py + 2, rl, rl * 0.55, rot, 0, TAU);
+        g.fill();
+        g.fillStyle = c;
+        g.beginPath();
+        g.ellipse(px, py, rl, rl * 0.55, rot, 0, TAU);
+        g.fill();
+        if (hi) {
+          g.fillStyle = 'rgba(210,255,170,0.35)';
+          g.beginPath();
+          g.ellipse(px - rl * 0.2, py - rl * 0.15, rl * 0.45, rl * 0.2, rot, 0, TAU);
+          g.fill();
+        }
+      });
+    }
+  }));
+}
+
+/** Castle wall stone blocks (coloured), box-projected: one tile = 4 studs, blocks 2 studs long and 1 tall. */
+export function castleTexture() {
+  return once('castle', () => drawTexture(256, 256, (g, w, h) => {
+    const r = makeRand(112);
+    g.fillStyle = '#707480';
+    g.fillRect(0, 0, w, h);
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 2; col++) {
+        const x0 = col * 128 + (row % 2 ? 64 : 0), k = 0.86 + r() * 0.2;
+        const tone = (m) => { const v = Math.min(255, Math.round(192 * k * m)); return `rgb(${v},${Math.min(255, Math.round(v * 1.01))},${Math.min(255, Math.round(v * 1.07))})`; };
+        for (const ox of [0, -w]) bevelTile(g, x0 + ox + 3, row * 64 + 3, 122, 58, 7, tone(1), tone(1.12), tone(0.82));
+      }
+    }
+    noiseOverlay(g, w, h, 111, 6, 0.5);
+    for (let i = 0; i < 70; i++) {
+      g.fillStyle = r() < 0.6 ? 'rgba(90,150,70,0.55)' : 'rgba(40,44,56,0.25)';
+      g.beginPath();
+      g.arc(r() * w, r.int(0, 3) * 64 + r.range(-2, 2), 1.5 + r() * 2.5, 0, TAU);
+      g.fill();
+    }
+  }));
+}
+
+/** Red and white candy-cane stripes for cylinders (u around, v along): 2 stripes around, 8 along. */
+export function candyStripeTexture() {
+  return once('candyStripe', () => drawTexture(64, 256, (g, w, h) => {
+    const R = [255, 58, 92], W = [255, 255, 255];
+    pixels(g, w, h, (x, y) => {
+      const p = ((x + 0.5) / w) * 2 + ((y + 0.5) / h) * 8, f = p - Math.floor(p);
+      const s = f < 0.5 ? Math.min(f, 0.5 - f) : -Math.min(f - 0.5, 1 - f);
+      return mixRgb(W, R, clamp01(0.5 + s / 0.05));
+    });
+  }));
+}
+

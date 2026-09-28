@@ -9,6 +9,10 @@ import { createBanana, createBalloon } from '../fx/props.js';
 import { fmt, SELL_SECONDS } from '../gameplay/game.js';
 import { bus } from '../core/events.js';
 import { createPetView } from '../pets/view.js';
+import { createDropView } from '../pets/dropView.js';
+import { EGG } from '../pets/catalog.js';
+import { TREADMILL } from '../config.js';
+import { beltRect } from '../gameplay/layout.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -40,7 +44,9 @@ export class GameView {
     this.groundViews = new Map();
     this.projViews = new Map();
     this.monsterViews = [];
-    this.petViews = []; // per slot: {id, view, mood} for the pet following that player
+    this.petViews = []; // per slot: [{id, view, mood}] for the pets following that player (team of up to 3)
+    this.dropViews = new Map(); // egg drops: uid -> view
+    this._baseKeys = []; // per garden: what setBase last drew
     this.unsub = [];
     this._build();
   }
@@ -65,6 +71,9 @@ export class GameView {
     // a friend took over a garden, someone changed outfit, or this device's own slot changed
     this.unsub.push(bus.on('slot:changed', ({ slot }) => this._makeAvatar(slot)));
     this.unsub.push(bus.on('player:look', ({ player }) => this._makeAvatar(player.slot)));
+    // base extras: the Guard Gnome swings its noodle, trampolines squash
+    this.unsub.push(bus.on('guard:bonk', ({ garden }) => this.world.gardens?.[garden?.slot]?.guard?.swing?.()));
+    this.unsub.push(bus.on('base:bounce', ({ garden, spot }) => this.world.gardens?.[garden?.slot]?.decor?.[spot]?.userData?.bounce?.()));
   }
 
   _makeAvatar(i) {
@@ -151,7 +160,7 @@ export class GameView {
         celebrating: now < p.celebrateUntil,
         invisible,
         isLocal: p === human,
-        coil: now < p.coilUntil,
+        coil: now < p.coilUntil || now < p.boostUntil,
         interacting: p.interact?.t > 0 ? p.interact.verb : null,
         emote: p.emote && now < p.emote.until ? p.emote.id : null,
         emoteT: p.emote ? now - (p.emote.since ?? now) : 0,
@@ -170,6 +179,9 @@ export class GameView {
         if (tag || carry) L.set('pl' + i, { x: p.pos.x, y: p.pos.y + top + (c ? 3.9 : 1.4), z: p.pos.z }, tag + carry, { cls: 'nametag' + (c?.kind === 'plant' ? ' thief' : ''), maxDist: 110 });
       }
     });
+
+    this._updateDrops(dt, time, camera);
+    this._updateBases(dt, time);
 
     // planters / plants: only the planter nearest the player gets the full card (others get a chip)
     let nearKey = null;
@@ -344,21 +356,100 @@ export class GameView {
   }
 
   _updatePet(i, p, dt, time, now, invisible) {
-    let rec = this.petViews[i];
-    const id = p.pet || null;
-    if ((rec?.id || null) !== id) {
-      if (rec) {
-        this.root.remove(rec.view.object3d);
-        rec.view.dispose();
+    const recs = (this.petViews[i] ||= []);
+    const ids = this.game.activePets ? this.game.activePets(p) : p.pet ? [p.pet] : [];
+    const side0 = i % 2 ? -1 : 1;
+    for (let k = 0; k < 3; k++) {
+      let rec = recs[k];
+      const id = (p.present && ids[k]) || null;
+      if ((rec?.id || null) !== id) {
+        if (rec) {
+          this.root.remove(rec.view.object3d);
+          rec.view.dispose();
+        }
+        // team: one on each side, the third straight behind
+        const opts = k === 0 ? { side: side0 } : k === 1 ? { side: -side0 } : { side: 0, back: 2.2 };
+        rec = recs[k] = id ? { id, view: createPetView(id, opts), mood: { celebrating: false, stunned: false } } : null;
+        if (rec) this.root.add(rec.view.object3d);
       }
-      rec = this.petViews[i] = id ? { id, view: createPetView(id, { side: i % 2 ? -1 : 1 }), mood: { celebrating: false, stunned: false } } : null;
-      if (rec) this.root.add(rec.view.object3d);
+      if (!rec) continue;
+      rec.view.object3d.visible = invisible > 0.05;
+      rec.mood.celebrating = now < p.celebrateUntil;
+      rec.mood.stunned = now < p.stunUntil;
+      rec.view.update(dt, p, time, rec.mood);
     }
-    if (!rec) return;
-    rec.view.object3d.visible = invisible > 0.05;
-    rec.mood.celebrating = now < p.celebrateUntil;
-    rec.mood.stunned = now < p.stunUntil;
-    rec.view.update(dt, p, time, rec.mood);
+  }
+
+  /** Egg drops: falling eggs under balloons, then waiting on the ground. */
+  _updateDrops(dt, time, camera) {
+    const g = this.game;
+    const now = g.time;
+    const L = this.labels;
+    const seen = this._dropSeen || (this._dropSeen = new Set());
+    seen.clear();
+    for (const d of g.drops || []) {
+      seen.add(d.uid);
+      let v = this.dropViews.get(d.uid);
+      if (!v) {
+        v = createDropView(d.egg);
+        v.object3d.position.set(d.x, 0, d.z);
+        this.root.add(v.object3d);
+        this.dropViews.set(d.uid, v);
+      }
+      const far = Math.hypot(d.x - camera.position.x, d.z - camera.position.z) > 420;
+      v.object3d.visible = !far;
+      if (far) continue;
+      const landed = now >= d.landAt;
+      const left = d.expiresAt - now;
+      v.update(dt, time, { y: g.dropY ? g.dropY(d, now) : 0, landed, expiring: landed && left < 10 ? 1 - left / 10 : 0 });
+      const me = g.human;
+      if (landed && me && Math.hypot(d.x - me.pos.x, d.z - me.pos.z) < 45) {
+        const egg = EGG[d.egg];
+        L.set('dr' + d.uid, { x: d.x, y: 4.4, z: d.z }, `<div class="dr-name">${esc(egg?.name || 'Egg')}</div><div class="dr-sub">Touch to hatch!</div>`, { cls: 'droplbl' + (d.egg === 'rainbow' ? ' rainbow' : ''), maxDist: 60 });
+      }
+    }
+    for (const [uid, v] of this.dropViews) {
+      if (seen.has(uid)) continue;
+      v.dispose();
+      this.dropViews.delete(uid);
+    }
+  }
+
+  /** Bases: level + Base Studio look, the Guard Gnome, the home treadmill and the Speed Shop belts. */
+  _updateBases(dt, time) {
+    const g = this.game;
+    const W = this.world;
+    g.gardens.forEach((gd, slot) => {
+      const api = W.gardens?.[slot];
+      if (!api) return;
+      const o = gd.owner;
+      const level = o.present ? o.baseLevel : 1;
+      const look = gd.look;
+      const key = look ? `${level}|${look.floor}|${look.fence}|${look.laser}|${look.decor.join(',')}|${o.treadmillTier}` : '';
+      if (key && key !== this._baseKeys[slot]) {
+        this._baseKeys[slot] = key;
+        try {
+          api.setBase?.({ level, style: look });
+          api.setTreadmillTier?.(o.treadmillTier);
+        } catch (e) {
+          console.warn('[view] base restyle failed', e);
+        }
+      }
+      api.guard?.update?.(dt, time, { alert: !!gd.guardAlert });
+      if (api.treadmill) {
+        const r = (this._homeBelts ||= [])[slot] || (this._homeBelts[slot] = beltRect(gd.L.treadmill));
+        const running = g.players.some((p) => p.present && p.pos.x > r.minX && p.pos.x < r.maxX && p.pos.z > r.minZ && p.pos.z < r.maxZ && p.pos.y < TREADMILL.beltTop + 0.6);
+        api.treadmill.update?.(dt, time, { running });
+      }
+    });
+    const shop = W.speedShop;
+    if (shop?.setBusy) {
+      const rects = this._shopBelts || (this._shopBelts = g.layout.speedStations.map((st) => beltRect(st)));
+      rects.forEach((r, i) => {
+        const busy = g.players.some((p) => p.present && p.pos.x > r.minX && p.pos.x < r.maxX && p.pos.z > r.minZ && p.pos.z < r.maxZ && p.pos.y < TREADMILL.beltTop + 0.6);
+        shop.setBusy(i, busy);
+      });
+    }
   }
 
   dispose() {
@@ -372,7 +463,8 @@ export class GameView {
     this.xray?.dispose();
     this.avatars.forEach((a) => a.dispose?.());
     this.monsterViews.forEach((m) => m.dispose?.());
-    this.petViews.forEach((r) => r?.view.dispose());
+    this.petViews.forEach((list) => list?.forEach((r) => r?.view.dispose()));
+    this.dropViews.forEach((v) => v.dispose());
   }
 }
 

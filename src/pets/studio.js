@@ -206,6 +206,42 @@ export function thumb(kind, id, size = 160) {
   return url;
 }
 
+/**
+ * A cached thumbnail of any small 3D object (Base Studio decorations...). `build()` returns an Object3D
+ * (or {object3d, dispose}); `key` names it in the cache. Same studio and fallbacks as thumb().
+ */
+export function thumbOf(key, build, { size = 128, yaw = 0.55, pitch = 0.3, fill = 1.08 } = {}) {
+  const k = `obj:${key}:${size}`;
+  if (cache.has(k)) return cache.get(k);
+  const st = studio();
+  if (!st) return null;
+  let url = null, obj = null, dispose = null;
+  const hidden = st.stage?.root;
+  try {
+    const made = build();
+    obj = made?.isObject3D ? made : made?.object3d;
+    // a wrapper's own dispose() (never an Object3D's: those free shared geometry)
+    dispose = !made?.isObject3D && typeof made?.dispose === 'function' ? () => made.dispose() : null;
+    if (!obj) return null;
+    if (hidden) hidden.visible = false;
+    st.scene.add(obj);
+    frame(st.camera, obj, { yaw, pitch, fill });
+    st.renderer.setPixelRatio(1);
+    st.renderer.setSize(size, size, false);
+    st.renderer.render(st.scene, st.camera);
+    if (!st.renderer.getContext().isContextLost?.()) url = st.canvas.toDataURL('image/png');
+    else markLost(st);
+  } catch (e) {
+    console.warn('[studio] thumbnail failed', e);
+  }
+  if (obj) st.scene.remove(obj);
+  if (hidden) hidden.visible = true;
+  dispose?.();
+  st.stage?.render(true);
+  if (url) cache.set(k, url);
+  return url;
+}
+
 /** Stage pixel ratio: capped by quality, and never sharper than the game itself is running right now. */
 function stageDpr() {
   const q = qualityId();

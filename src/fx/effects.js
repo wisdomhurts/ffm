@@ -35,6 +35,7 @@ const EVENT_COLORS = {
   golden: ['#ffd23f', '#ffb627', '#fff1a0', '#ff9f1a'],
   diamond: ['#7ee8ff', '#ffffff', '#b8f3ff', '#4fc3ff'],
   rainbow: RAINBOW,
+  eggrain: ['#ffb3d9', '#5cc8ff', '#ffe36b', '#b98cff'],
 };
 // Dizzy-star ring height over a stunned monster (default 4.6: head height of the smaller critters).
 const STUN_STARS_Y = { yeti: 6.4, storm: 5.9 };
@@ -842,14 +843,79 @@ export function createEffects(engine, container) {
       burst('sparks', at(g.x, 0.4, g.z), { color: '#ff9a9a', count: 10, spanZ: g.half, spanY: 3, lod: L, scale: 0.8 });
     },
 
-    'speed:up'({ player }) {
+    'speed:up'({ player, count = 1 }) {
       const isH = player === H();
       const L = lodAt(player.pos.x, 2, player.pos.z, isH ? 400 : 80);
       if (!L || !allowBurst()) return;
       burst('speedlines', player.pos, { lod: L });
       if ((isH || L > 0.6) && allowFloat()) {
-        floatText(`+${PLAYER.speedPerLevel} SPEED!`, at(0, 6.8, 0), { style: 'speed', size: isH ? 'xl' : 's', follow: player.pos, duration: 1.6 });
+        floatText(`+${PLAYER.speedPerLevel * count} SPEED!`, at(0, 6.8, 0), { style: 'speed', size: isH ? 'xl' : 's', follow: player.pos, duration: 1.6 });
       }
+    },
+
+    'boost:start'({ player }) {
+      const isH = player === H();
+      const L = lodAt(player.pos.x, 2, player.pos.z, isH ? 400 : 70);
+      if (!L || !allowBurst()) return;
+      burst('speedlines', player.pos, { lod: L });
+      burst('electric', at(player.pos.x, 1.2, player.pos.z), { color: '#c08bff', lod: L });
+      if (isH && allowFloat()) floatText('BOOST!', at(0, 6.4, 0), { style: 'speed', size: 'l', follow: player.pos, duration: 0.9 });
+    },
+
+    'boost:up'({ player }) {
+      const isH = player === H();
+      const L = lodAt(player.pos.x, 2, player.pos.z, isH ? 400 : 60);
+      if (!L || !allowBurst()) return;
+      burst('electric', at(player.pos.x, 2, player.pos.z), { color: '#c08bff', lod: L });
+      if (isH && allowFloat()) floatText('BOOST UP!', at(0, 6.8, 0), { style: 'speed', size: 'xl', follow: player.pos, duration: 1.4 });
+    },
+
+    'treadmill:up'({ player }) {
+      const isH = player === H();
+      const L = lodAt(player.pos.x, 2, player.pos.z, isH ? 400 : 60);
+      if (!L || !allowBurst()) return;
+      burst('confetti', at(player.pos.x, 4, player.pos.z), { count: 26, lod: L });
+      if (isH && allowFloat()) floatText('NEW TREADMILL!', at(0, 6.8, 0), { style: 'gold', size: 'l', follow: player.pos, duration: 1.6 });
+    },
+
+    'pump:start'({ player }) {
+      const isH = player === H();
+      const L = lodAt(player.pos.x, 2, player.pos.z, isH ? 400 : 70);
+      if (!L || !allowBurst()) return;
+      burst('sparkle', at(player.pos.x, 2.6, player.pos.z), { color: '#ff7ad8', count: 18, lod: L });
+      burst('ring', at(player.pos.x, 0.8, player.pos.z), { color: '#ff4fd8', size: 5, lod: L });
+      if (isH && allowFloat()) floatText('PUMPED!', at(0, 6.8, 0), { style: 'speed', size: 'xl', follow: player.pos, duration: 1.6 });
+    },
+
+    'base:upgraded'({ player, garden }) {
+      const g = garden || game.gardens[player.slot];
+      const c = g?.L?.console || player.pos;
+      const isH = player === H();
+      const L = lodAt(c.x, 3, c.z, isH ? 400 : 120);
+      if (!L || !allowBurst()) return;
+      burst('confetti', at(c.x, 7, c.z), { count: isH ? 60 : 30, lod: L });
+      burst('sparkle', at(c.x, 3, c.z), { color: '#7dffa0', count: 20, scale: 1.4, lod: L });
+      burst('ring', at(c.x, 0.4, c.z), { color: '#ffe36b', size: 9, lod: L });
+      if (isH && allowFloat()) floatText(`BASE LV ${player.baseLevel}!`, at(c.x, 8, c.z), { style: 'gold', size: 'xl', duration: 2.2 });
+    },
+
+    'guard:bonk'({ garden, target }) {
+      const L = lodAt(target.pos.x, 2, target.pos.z, target === H() || garden.owner === H() ? 400 : 90);
+      if (!L || !allowBurst()) return;
+      burst('sparkle', at(target.pos.x, 4.5, target.pos.z), { color: '#ffe36b', count: 12, lod: L });
+      burst('poof', at(target.pos.x, 1.5, target.pos.z), { count: 8, lod: L });
+      if (allowFloat()) floatText('GNOME BONK!', at(target.pos.x, 6.2, target.pos.z), { style: 'gold', size: target === H() || garden.owner === H() ? 'l' : 's', duration: 1.2 });
+    },
+
+    'drop:claimed'({ player, drop }) {
+      if (!drop) return;
+      const isH = player === H();
+      const L = lodAt(drop.x, 1.5, drop.z, isH ? 400 : 110);
+      if (!L || !allowBurst()) return;
+      const rainbow = drop.egg === 'rainbow';
+      burst('rarity', at(drop.x, 0, drop.z), { color: '#ffe36b', rainbow, lod: L });
+      burst('sparkle', at(drop.x, 2, drop.z), { color: rainbow ? '#ffffff' : '#ffe36b', count: 18, lod: L });
+      if (!isH && allowFloat() && L > 0.5) floatText('EGG!', at(drop.x, 5, drop.z), { style: 'gold', size: 's', duration: 1.1 });
     },
 
     rebirth({ player }) {

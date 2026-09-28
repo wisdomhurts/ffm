@@ -6,7 +6,7 @@ import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import {
-  EventCodec, forwarded, mergeSections, vetPlayer, vetGarden, vetPod, vetGround, predict, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
+  EventCodec, forwarded, mergeSections, vetPlayer, vetGarden, vetPod, vetGround, vetDrops, predict, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
 } from './protocol.js';
 
 const RING = 24;
@@ -142,6 +142,7 @@ export class ClientRole {
       if (k === 'm') ok = v && typeof v === 'object' && !Array.isArray(v);
       else if (k === 'pd') ok = Array.isArray(v) && !!(D.pd = v.map(vetPod));
       else if (k === 'gr') ok = Array.isArray(v) && !!(D.gr = vetGround(v));
+      else if (k === 'dr') ok = Array.isArray(v) && !!(D.dr = vetDrops(v));
       else if (k === 'mo') ok = Array.isArray(v) && v.every((m) => m && typeof m === 'object');
       else if (/^p[0-3]$/.test(k)) ok = +k.slice(1) < n && vetPlayer(v, +k.slice(1));
       else if (/^g[0-3]$/.test(k)) ok = +k.slice(1) < n && vetGarden(v, +k.slice(1));
@@ -250,7 +251,7 @@ export class ClientRole {
       e = EventCodec.vet(name, e);
       if (!e) continue;
       // already played on this device the moment it happened
-      if ((name === 'player:jump' || name === 'bonk:swing') && e.player === me) continue;
+      if ((name === 'player:jump' || name === 'bonk:swing' || name === 'boost:start' || name === 'base:bounce') && e.player === me) continue;
       if ((name === 'chat' || name === 'emote') && this.s.isMuted(e.player)) continue;
       relay.depth++;
       try {
@@ -380,6 +381,8 @@ export class ClientRole {
       if (it.selectSlot != null) this.sel = p.selectedItem = Math.max(0, Math.min(ITEMS.length - 1, it.selectSlot | 0));
       if (it.emote) this._edge('m', it.emote);
       if (it.say) this._edge('s', it.say);
+      // boost: starts right here (the host starts it too when the edge arrives, for the rules and everyone's FX)
+      if (it.boost && g.time >= p.boostReadyAt && g.time >= p.stunUntil) this._edge('x', 1);
       it.emote = it.say = null; // the host plays these for everyone
       const held = !!it.interact;
       if (held !== this.held) {

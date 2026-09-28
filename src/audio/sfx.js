@@ -398,7 +398,7 @@ export const SFX = {
   // ---------------------------------------------------------------- events
   /** Weather stinger. o.type: golden | diamond | rainbow */
   event(ac, out, t, o) {
-    o = { ...o, vol: (o.vol ?? 1) * ({ golden: 0.9, diamond: 1, rainbow: 0.6 }[o.type] ?? 1) };
+    o = { ...o, vol: (o.vol ?? 1) * ({ golden: 0.9, diamond: 1, rainbow: 0.6, eggrain: 0.6 }[o.type] ?? 1) };
     const v = o.vol;
     if (o.type === 'diamond') {
       const pent = [0, 2, 4, 7, 9];
@@ -408,7 +408,7 @@ export const SFX = {
       }
       noise(ac, out, t, { filter: 'highpass', f0: 8000, attack: 0.4, dur: 1.4, vol: V(o, 0.06), send: o.send });
       pad(ac, out, t, [62, 69, 74, 76], 1.1 * v, 1.2);
-    } else if (o.type === 'rainbow') {
+    } else if (o.type === 'rainbow' || o.type === 'eggrain') {
       [65, 67, 69, 70, 72, 74, 76, 77].forEach((m, i) => harp(ac, out, t + i * 0.08, m + 12, 0.65 * v, { decay: 1.0, send: o.send }));
       noise(ac, out, t, { filter: 'bandpass', f0: 3200, q: 0.7, attack: 0.5, hold: 0.6, dur: 1.6, vol: V(o, 0.1), lfo: { rate: 13, depth: 900 } });
       [77, 81, 84, 89].forEach((m) => steelPan(ac, out, t + 0.7, m, 0.7 * v, { send: o.send }));
@@ -417,6 +417,37 @@ export const SFX = {
       [96, 93, 91, 88, 84, 81].forEach((m, i) => bell(ac, out, t + 0.2 + i * 0.06, mtof(m), { ratio: 2, index: 0.9, vol: V(o, 0.1), decay: 1.0, send: o.send }));
       cymbal(ac, out, t, 0.4 * v, 1.6);
     }
+  },
+  /** Boost: a short electric whoosh up. */
+  boost(ac, out, t, o) {
+    o = { ...o, vol: (o.vol ?? 1) * 0.8 };
+    const k = kit(ac);
+    tone(ac, out, t, { wave: k.saw, f0: 220, f1: 1500, sweep: 0.22, dur: 0.3, attack: 0.01, vol: V(o, 0.07) });
+    noise(ac, out, t, { filter: 'bandpass', f0: 900, f1: 7000, sweep: 0.25, q: 1.2, attack: 0.02, dur: 0.35, vol: V(o, 0.26) });
+    bell(ac, out, t + 0.12, mtof(93), { ratio: 2.76, index: 0.6, vol: V(o, 0.08), decay: 0.4, send: o.send });
+  },
+  /** Pumped (warm-up done): a bouncy three-note fanfare. */
+  pump(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    [72, 76, 79, 84].forEach((m, i) => steelPan(ac, out, t + i * 0.07, m, 0.8 * v, { send: o.send }));
+    kick(ac, out, t, 0.35 * v);
+  },
+  /** An egg drop lands / is caught. o.kind: 'land' | 'catch' */
+  egg(ac, out, t, o) {
+    if (o.kind === 'land') {
+      tone(ac, out, t, { f0: 180, f1: 90, sweep: 0.08, dur: 0.14, attack: 0.002, vol: V(o, 0.28) });
+      noise(ac, out, t, { filter: 'lowpass', f0: 900, dur: 0.12, attack: 0.002, vol: V(o, 0.25) });
+      return;
+    }
+    [84, 88, 91, 96].forEach((m, i) => bell(ac, out, t + i * 0.06, mtof(m), { ratio: 2, index: 0.8, vol: V(o, 0.12), decay: 0.7, send: o.send }));
+    noise(ac, out, t, { filter: 'highpass', f0: 6000, attack: 0.05, dur: 0.5, vol: V(o, 0.08), send: o.send });
+  },
+  /** Base level up: brass + bells. */
+  baseUp(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    [60, 64, 67, 72].forEach((m) => brass(ac, out, t, m, 0.6 * v, 0.7, { send: o.send }));
+    [84, 88, 91, 96].forEach((m, i) => bell(ac, out, t + 0.15 + i * 0.07, mtof(m), { ratio: 2, index: 0.9, vol: V(o, 0.1), decay: 1.1, send: o.send }));
+    cymbal(ac, out, t + 0.1, 0.35 * v, 1.2);
   },
   /** Confetti pops for the podium. */
   confetti(ac, out, t, o) {
@@ -533,4 +564,5 @@ export const SFX_GAP = {
   plant: 0.08, sprout: 0.1, grown: 0.18, aggro: 0.3, chomp: 0.1, monsterBonk: 0.08, splash: 0.07, slip: 0.2,
   lockOn: 0.2, lockOff: 0.2, item: 0.06, purchase: 0.08, speedUp: 0.15, unlock: 0.15, event: 1, rebirth: 1,
   stolen: 0.5, yoink: 0.3, heist: 0.5, robbed: 0.5, saved: 0.4, dropped: 0.2, shopBell: 0.4, confetti: 0.3,
+  boost: 0.2, pump: 0.5, egg: 0.1, baseUp: 1,
 };

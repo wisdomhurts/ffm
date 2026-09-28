@@ -459,6 +459,57 @@ try {
   X.online.leave();
   live.delete(X);
 
+  // ---------------------------------------------------------------- 15. bases, pet teams, Boost, egg drops over the network
+  {
+    const Q = add(new StubApp('Quinn', { hub, base: 'dorian' }));
+    const R = add(new StubApp('Rosa', { hub, base: 'maddie' }));
+    const codeQ = await Q.online.createRoom({ private: true });
+    H = Q;
+    check(await R.online.joinRoom(codeQ, { typed: true }), 'Rosa joins for the base / pets / boost checks');
+    await step(1);
+    const rs = slotOf(R);
+    const onHost = () => Q.game.players[rs];
+    const me = R.game.players[rs];
+    // her garden: walk in and upgrade the base from her device (the host applies it)
+    onHost().cash = 1e12;
+    const L = Q.game.gardens[rs].L;
+    for (const p of [onHost(), me]) Object.assign(p.pos, { x: L.inside.x, y: 0, z: L.inside.z });
+    await step(0.5);
+    R.act('upgradeBase');
+    R.act('upgradeBase');
+    R.act('upgradeBase');
+    await step(1);
+    check(onHost().baseLevel === 4 && me.baseLevel === 4, `her base levels up on the host and her device (${onHost().baseLevel}/${me.baseLevel})`);
+    R.act('setBaseStyle', { floor: 'beach', fence: 'hedge', decor: ['palm', 'fountain', null, null, null, null], sneaky: 1 });
+    R.act('setPets', ['dragon', 'phoenix', 'axolotl', 'unicorn']);
+    await step(1);
+    check(Q.game.gardens[rs].look.floor === 'beach' && R.game.gardens[rs].look.decor[0] === 'palm', 'the Base Studio look reaches everyone');
+    check(onHost().pets.length === 3 && Q.game.activePets(onHost()).length === 2 && R.game.activePets(me).length === 2, 'a team of 3; Base Lv 4 lets 2 of them count');
+    check(Q.game.decorBoxes[rs][1].off === false, 'her fountain is solid on the host');
+    // Boost: pressed on her device, the host starts it too (rules + FX for everyone)
+    me.controller = { getIntent: () => ({ moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null, boost: true }) };
+    await step(0.2);
+    me.controller = null;
+    await step(0.4);
+    check(onHost().boostReadyAt > Q.game.time && me.boostReadyAt > R.game.time, 'Boost starts on her device and on the host');
+    // egg drops: spawned by the host, seen by her, caught by her
+    // (dropped right where she stands: the host only moves remote players as fast as they can run)
+    const drop = Q.game.spawnDrop({ egg: 'farm', x: onHost().pos.x, z: onHost().pos.z });
+    await step(0.6);
+    check(R.game.drops.some((d) => d.uid === drop.uid && d.egg === 'farm'), 'the egg drop shows up on her device');
+    let hatched = null;
+    const off = bus.on('pet:hatched', (e) => {
+      if (e.player === me) hatched = e;
+    });
+    for (let t = 0; t < 10 && !hatched; t += 0.5) await step(0.5);
+    off();
+    check(!!hatched && hatched.free && !Q.game.drops.length, `she caught it: a free ${hatched?.pet} (relayed to her device)`);
+    R.online.leave();
+    Q.online.leave();
+    live.delete(R);
+    live.delete(Q);
+  }
+
   const perSec = hub.sent / (hub.now || 1);
   console.log(`INFO ${hub.sent} messages sent (${perSec.toFixed(1)}/s over the run), ${(hub.bytes / 1024).toFixed(0)} KB`);
   for (const a of apps) a.online.leave();

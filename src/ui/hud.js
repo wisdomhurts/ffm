@@ -20,6 +20,7 @@ import { mountEmotes } from './emotes.js';
 import { mountSocial } from './trade.js';
 import { mountQuestChip } from './progress.js';
 import { mountRoomPanel } from './lobby.js';
+import { mountSpeedo } from './speedo.js';
 import { fullscreenButton } from './fullscreen.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
@@ -111,7 +112,7 @@ export function createHUD(app) {
   parts.push(createKeyHints(app, root));
   parts.push(createMatchClock(app, alerts));
   // feature widgets (each owns its DOM + styles; see docs/ONLINE.md)
-  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel]) {
+  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel, mountSpeedo]) {
     try {
       const w = mount(app, root, anchors);
       if (w) parts.push(w);
@@ -863,10 +864,10 @@ function createKeyHints(app, parent) {
   const k = (s) => `<kbd>${s}</kbd>`;
   const kb = [
     [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'],
-    [k('Click') + k('F'), 'Bonk'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T'), 'Quick chat'], [k('Right-drag'), 'Camera'], [k('Esc'), 'Menu'],
+    [k('Click') + k('F'), 'Bonk'], [k('Shift'), 'Boost'], [k('X'), 'Speed gear'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T'), 'Quick chat'], [k('Right-drag'), 'Camera'], [k('Esc'), 'Menu'],
   ];
   const gp = [
-    [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('X'), 'Bonk'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],
+    [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('X'), 'Bonk'], [k('RT'), 'Boost'], [k('LT'), 'Speed gear'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],
   ];
   const body = h('div', { class: 'kh-body' });
   const close = noFocus(h('button', { class: 'kh-x', type: 'button', 'aria-label': 'Hide key hints', html: ICON.close }));
