@@ -1,6 +1,6 @@
 // Bot goals: small state machines the brain picks between. Each update() fills the Intent and
 // returns 'running' | 'done' | 'failed'. Movement goes through bot.motor; shared helpers live on the bot.
-import { PLAYER, ITEM, planterCost } from '../config.js';
+import { PLAYER, ITEM, planterCost, BASE, BOOST, TREADMILL } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { hyp, gardenInfo, planterSpot, podSpot, podGuards, yawTo, seedIncome, runSpeed, carrySeedSpeed, wrapAngle } from './util.js';
 import { getBoard, claimPod, releaseClaims } from './blackboard.js';
@@ -692,6 +692,10 @@ export class ShopGoal extends Goal {
     }
     if (this.phase === 'speed') {
       if (bot.wantsMoreSpeed(game, p, 1) && game.buySpeed(p)) return 'running';
+      // while here: Boost Lab levels and a better treadmill when they're small change
+      if (p.boostLevel < BOOST.maxLevel && p.cash >= BOOST.cost(p.boostLevel + 1) * 6 && game.buyBoost(p)) return 'running';
+      const tier = TREADMILL.tiers[p.treadmillTier + 1];
+      if (tier && p.cash >= tier.cost * 8 && game.buyTreadmill(p)) return 'running';
       if (this.plan.items.length) this.setPhase('gear', game);
       else return 'done';
       return 'running';
@@ -732,6 +736,54 @@ export class UnlockGoal extends Goal {
     const r = goToPlanter(bot, game, p, it, dt, g, pl, key, (q) => !q.unlocked || grownPlant(q), this);
     if (r === 'ready') bot.press(it, p);
     return r === 'fail' ? 'failed' : 'running';
+  }
+}
+
+/** Walk to our BASE console and buy the next base level. */
+export class BaseGoal extends Goal {
+  constructor(u) {
+    super('base', u);
+    this.sig = 'base';
+  }
+
+  begin(bot, game, p) {
+    super.begin(bot, game, p);
+    if (p.cash < BASE.cost[p.baseLevel + 1]) this.pre.push({ kind: 'collect' });
+  }
+
+  update(bot, game, p, it, dt) {
+    if (p.carrying || p.baseLevel >= BASE.maxLevel) return 'failed';
+    if (this.age(game) > 25) return 'failed';
+    if (runPre(this, bot, game, p, it, dt)) return 'running';
+    if (p.cash < BASE.cost[p.baseLevel + 1]) return 'failed';
+    const c = game.gardens[p.slot].L.console;
+    const g = game.gardens[p.slot];
+    if (!gardenContains(g.L, p.pos.x, p.pos.z) || hyp(c.x - p.pos.x, c.z - p.pos.z) > 4) {
+      bot.motor.goTo(c.x - g.L.inward * -1.5, c.z - 2.5, { arrive: 1.5, key: 'base' });
+      bot.motor.update(game, p, dt, it);
+      return bot.motor.failed ? 'failed' : 'running';
+    }
+    bot.motor.stop();
+    return game.upgradeBase(p) ? 'done' : 'failed';
+  }
+}
+
+/** Race to an egg drop that has landed (or is about to) and touch it. */
+export class DropGoal extends Goal {
+  constructor(drop, u) {
+    super('drop', u);
+    this.drop = drop;
+    this.sig = 'drop:' + drop.uid;
+  }
+
+  update(bot, game, p, it, dt) {
+    const d = this.drop;
+    if (!game.drops.includes(d) || this.age(game) > 30) return 'done';
+    bot.motor.goTo(d.x, d.z, { arrive: 0.4, key: this.sig });
+    bot.motor.update(game, p, dt, it);
+    if (bot.motor.failed) return 'failed';
+    if (bot.motor.arrived) bot.motor.stop();
+    return 'running';
   }
 }
 
