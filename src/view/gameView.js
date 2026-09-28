@@ -437,15 +437,15 @@ export class GameView {
       }
       api.guard?.update?.(dt, time, { alert: !!gd.guardAlert });
       if (api.treadmill) {
-        const r = gd.homeBelt || beltRect(gd.L.treadmill);
+        const r = (this._homeBelts ||= [])[slot] || (this._homeBelts[slot] = beltRect(gd.L.treadmill));
         const running = g.players.some((p) => p.present && p.pos.x > r.minX && p.pos.x < r.maxX && p.pos.z > r.minZ && p.pos.z < r.maxZ && p.pos.y < TREADMILL.beltTop + 0.6);
         api.treadmill.update?.(dt, time, { running });
       }
     });
     const shop = W.speedShop;
     if (shop?.setBusy) {
-      g.layout.speedStations.forEach((st, i) => {
-        const r = beltRect(st);
+      const rects = this._shopBelts || (this._shopBelts = g.layout.speedStations.map((st) => beltRect(st)));
+      rects.forEach((r, i) => {
         const busy = g.players.some((p) => p.present && p.pos.x > r.minX && p.pos.x < r.maxX && p.pos.z > r.minZ && p.pos.z < r.maxZ && p.pos.y < TREADMILL.beltTop + 0.6);
         shop.setBusy(i, busy);
       });

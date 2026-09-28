@@ -23,6 +23,10 @@ try {
       if (!a.__humanCtrl) a.__humanCtrl = h.controller;
       h.controller = intent ? { getIntent: () => ({ moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null, boost: false, ...intent }) } : a.__humanCtrl;
     };
+    // advance the simulation only (no rendering: software WebGL is slow), for `secs`
+    a.__sim = (secs) => {
+      for (let t = 0; t < secs; t += 1 / 30) a.game.update(1 / 30);
+    };
     a.__put = (x, z, y = 0) => {
       const h = a.game.human;
       Object.assign(h.pos, { x, y, z });
@@ -73,7 +77,8 @@ try {
     a.__put(st.x, st.z, 0.55);
     a.__drive({ moveZ: -0.62 });
   });
-  await stepFrames(page, 30 * 7);
+  await ev(() => window.__app.__sim(7));
+  await stepFrames(page, 2);
   const pumped = await ev(() => {
     const a = window.__app;
     a.__drive(null);
@@ -127,7 +132,7 @@ try {
     a.__put(g.L.inside.x, g.L.inside.z);
     a.game.human.yaw = g.L.west ? -Math.PI / 2 : Math.PI / 2;
   });
-  await stepFrames(page, 20);
+  await stepFrames(page, 4);
   await shot(page, 'r3-base-garden');
   // trampoline: step on it and fly
   await ev(() => {
@@ -142,7 +147,7 @@ try {
   // ---------------------------------------------------------------- pet team (3 slots at Base Lv 8)
   await ev(() => window.__app.act('setPets', ['dragon', 'phoenix', 'unicorn']));
   await ev(() => window.__app.__put(0, 10));
-  await stepFrames(page, 20);
+  await stepFrames(page, 6);
   const team = await ev(() => (window.__app.view.petViews[window.__app.game.human.slot] || []).filter(Boolean).map((r) => r.id));
   check(team.length === 3, `three pets follow you (${team.join(', ')})`);
   await shot(page, 'r3-pet-team');
@@ -154,7 +159,8 @@ try {
     const h = a.game.human;
     a.__drop = a.game.spawnDrop({ egg: 'rainbow', x: h.pos.x + 6, z: h.pos.z + 6 });
   });
-  await stepFrames(page, 30 * 4);
+  await ev(() => window.__app.__sim(4));
+  await stepFrames(page, 2);
   await shot(page, 'r3-drop-falling');
   await ev(() => {
     const a = window.__app;
@@ -162,10 +168,10 @@ try {
     while (a.game.time < d.landAt + 0.2) a.game.update(1 / 30);
     a.__put(d.x, d.z);
   });
-  await stepFrames(page, 10);
+  await stepFrames(page, 3);
   const after = await ev(() => window.__app.profile?.pets?.owned?.length || 0);
   check(after === before + 1, `touching a landed drop hatches it (pets ${before} -> ${after})`);
-  await stepFrames(page, 30);
+  await stepFrames(page, 8);
   await shot(page, 'r3-drop-hatch');
   await ev(() => document.querySelector('.ph-skip, .hatch-skip, [data-hatch-close]')?.click());
   await ev(() => window.__app.game.startEvent('eggrain'));
@@ -174,7 +180,7 @@ try {
     for (let t = 0; t < 30; t += 1 / 30) g.update(1 / 30);
   });
   await ev(() => window.__app.__put(0, 30));
-  await stepFrames(page, 30);
+  await stepFrames(page, 4);
   const drops = await ev(() => window.__app.game.drops.length);
   check(drops >= 4, `Egg Rain drops eggs (${drops})`);
   await shot(page, 'r3-eggrain');
