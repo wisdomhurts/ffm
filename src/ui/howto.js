@@ -1,5 +1,5 @@
 // "How to Play" guide (static, illustrated with the UI's own icons).
-import { RARITIES, BIOMES, MUTATIONS, EVENTS, PLANTERS, LOTS, LOCK } from '../config.js';
+import { RARITIES, BIOMES, MUTATIONS, EVENTS, PLANTERS, LOTS, LOCK, BASE, BOOST, TREADMILL } from '../config.js';
 import { h } from './dom.js';
 import { ICON, ITEM_ICONS, NOODLE, EVENT_ICON, TILE_ICONS } from './icons.js';
 import { isTouch } from './device.js';
@@ -17,14 +17,17 @@ const LOOP = () => [
 ];
 
 const CONTROLS = [
-  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['E', 'Grab (hold to Steal / Sell)'], ['Click / F', 'Bonk with the noodle'], ['1-5', 'Use items'], ['G', 'Emotes'], ['T', 'Quick chat'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['Esc', 'Menu']]],
-  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Bonk', 'Swing the noodle'], ['Jump', 'Jump'], ['Hotbar', 'Tap to use items'], ['Smiley', 'Emotes + quick chat']]],
-  [ICON.gamepad, 'Gamepad', [['Left stick', 'Move'], ['Right stick', 'Camera'], ['A', 'Jump'], ['B', 'Grab / hold to Steal'], ['X', 'Bonk'], ['Y', 'Use item'], ['LB / RB', 'Pick item'], ['Start', 'Menu']]],
+  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['Shift', 'Boost'], ['X', 'Speed gear'], ['E', 'Grab (hold to Steal / Sell)'], ['Click / F', 'Bonk with the noodle'], ['1-5', 'Use items'], ['G', 'Emotes'], ['T', 'Quick chat'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['Esc', 'Menu']]],
+  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Bonk', 'Swing the noodle'], ['Jump', 'Jump'], ['Lightning', 'Boost'], ['Gear chip', 'Speed gear'], ['Hotbar', 'Tap to use items'], ['Smiley', 'Emotes + quick chat']]],
+  [ICON.gamepad, 'Gamepad', [['Left stick', 'Move'], ['Right stick', 'Camera'], ['A', 'Jump'], ['B', 'Grab / hold to Steal'], ['X', 'Bonk'], ['RT', 'Boost'], ['LT', 'Speed gear'], ['Y', 'Use item'], ['LB / RB', 'Pick item'], ['Start', 'Menu']]],
 ];
 
 // The second-wave features, one card each (kept short: kids skim)
 const FEATURES = () => [
-  ['pets', TILE_ICONS.pets, 'Pets', 'Buy an egg at the Pet Shop in the plaza and hatch a buddy. Your pet follows you around and gives a boost, like faster legs or more cash.', []],
+  ['pets', TILE_ICONS.pets, 'Pets', 'Buy an egg at the Pet Shop in the plaza and hatch a buddy. Your pets follow you around and give boosts, like faster legs or more cash. Level up your base to take up to 3 pets along!', []],
+  ['drops', ICON.egg, 'Egg Drops', 'Every couple of minutes an egg floats down on balloons, with a light beam where it lands. Touch it first to hatch it for FREE. Deeper on the road = rarer eggs, and Rainbow Eggs only ever come from drops!', []],
+  ['base', TILE_ICONS.base, 'My Base', `Walk to the BASE console just inside your gate to level up your garden. Every level pays more, and unlocks the Base Studio (floors, fences, laser colours, decorations), a Guard Gnome (Lv ${BASE.guardAt}), a home treadmill (Lv ${BASE.treadmillAt}) and more.`, []],
+  ['speed', ICON.boost, 'Boost & Treadmills', `Boost gives a burst of speed (upgrade it at the Boost Lab). Run on the Warm-Up treadmill without falling off to get Pumped: up to +${Math.round(TREADMILL.tiers[TREADMILL.tiers.length - 1].bonus * 100)}% speed with the best treadmill. Super fast? Switch gears to go slow and steady.`, isTouch() ? [] : [['Shift', 'Boost'], ['X', 'Gear']]],
   ['emotes', ICON.smile, 'Emotes & Quick Chat', isTouch() ? 'Tap the smiley button to wave, cheer or dance, or to send a quick message. The family might answer back!' : 'Wave, cheer or dance, or send a quick message. The family might answer back!', isTouch() ? [] : [['G', 'Emotes'], ['T', 'Quick chat']]],
   ['quests', TILE_ICONS.quests, 'Quests & Badges', 'Three new quests every day. Finish them for cash and stars, then spend your stars in the Wardrobe. Badges are for big moments, like your first steal.', []],
   ['online', ICON.globe, 'Playing Online', 'Tap PLAY ONLINE to hop into a room with up to 4 players. Make a private room and share its 5-letter code with friends. Family bots fill empty gardens, and online games never pause!', []],
@@ -39,7 +42,9 @@ const TIPS = () => [
   `Need more room? The back of your garden is ${LOTS.count} FOR SALE lots. Walk up to one to buy it: +${LOTS.planters} planters each.`,
   'There is no top Speed level. Keep training to outrun the monsters of the far worlds: Frostfall, Candy Canyon and Cloud Kingdom.',
   `Garden full? Hold ${act()} on a grown plant to sell it for 90 seconds of income.`,
-  'Rebirth at the altar for a permanent income boost and a crown star.',
+  'Rebirth at the altar for a permanent income boost and a crown star. Your base level, Boost, treadmill and pets stay with you.',
+  `A Guard Gnome (Base Lv ${BASE.guardAt}) bonks thieves in your garden, even while you're away.`,
+  `The Boost Lab sells ${BOOST.maxLevel} Boost levels: each one is stronger, longer and recharges faster.`,
   'Small screen? The Simple layout (Settings > Screen layout) keeps just the basics. Tap the row of faces at the top to see everyone\'s cash.',
 ];
 
@@ -58,7 +63,8 @@ export function buildHowTo() {
   const muts = h('div', { class: 'ht-chips' }, Object.values(MUTATIONS).filter((m) => m.name).map((m) =>
     h('div', { class: 'ht-rar' }, h('span', { class: `mut mut-${m.id}`, text: m.name }), h('span', { class: 'ht-where', text: `×${m.mult} cash` }))));
   const weather = h('div', { class: 'ht-weather' }, EVENTS.types.map((e) =>
-    h('div', { class: `ht-ev ev-${e.id}` }, h('span', { class: 'bi', html: EVENT_ICON[e.id] }), h('b', { text: e.name }), h('span', { text: `${Math.round(e.chance * 100)}% of new seeds turn ${MUTATIONS[e.mutation].name}!` }))));
+    h('div', { class: `ht-ev ev-${e.id}` }, h('span', { class: 'bi', html: EVENT_ICON[e.id] }), h('b', { text: e.name }),
+      h('span', { text: e.mutation ? `${Math.round(e.chance * 100)}% of new seeds turn ${MUTATIONS[e.mutation].name}!` : e.desc }))));
   const items = h('div', { class: 'ht-items' },
     h('div', { class: 'ht-item' }, h('span', { class: 'hi-ic', html: NOODLE }), h('span', {}, h('b', { text: 'Pool noodle' }), ' Bonk with empty hands. You can\'t swing while carrying.')),
     ...Object.entries(ITEM_ICONS).map(([id, ic]) => h('div', { class: 'ht-item' }, h('span', { class: 'hi-ic', html: ic }), h('span', { text: itemLine(id) }))));
