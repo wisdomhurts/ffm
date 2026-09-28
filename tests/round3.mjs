@@ -56,7 +56,10 @@ try {
   await shot(page, 'r3-speedshop');
   await ev(() => document.querySelector('.sx-boost .sx-btn')?.click());
   check((await ev(() => window.__app.game.human.boostLevel)) === 1, 'Boost Lab button buys Boost Lv 1');
-  await ev(() => window.__app.menus.closeShop());
+  await ev(() => {
+    window.__app.menus.closeShop();
+    window.__app.resume();
+  });
   await stepFrames(page, 2);
 
   // ---------------------------------------------------------------- Boost (Shift)
@@ -124,7 +127,10 @@ try {
   check(look.floor === 'candy' && look.fence === 'candy' && look.laser === 'rainbow', `Base Studio picks show (${look.floor}/${look.fence}/${look.laser})`);
   check(look.decor[0] === 'trampoline' && look.decor[1] === 'fountain', `decorations placed (${look.decor.join(',')})`);
   await shot(page, 'r3-base-panel');
-  await ev(() => window.__app.menus.closeShop());
+  await ev(() => {
+    window.__app.menus.closeShop();
+    window.__app.resume();
+  });
   // look at the garden from above the gate
   await ev(() => {
     const a = window.__app;
@@ -181,8 +187,8 @@ try {
   });
   await ev(() => window.__app.__put(0, 30));
   await stepFrames(page, 4);
-  const drops = await ev(() => window.__app.game.drops.length);
-  check(drops >= 4, `Egg Rain drops eggs (${drops})`);
+  const drops = await ev(() => window.__app.game.event?.dropped || 0);
+  check(drops >= 5, `Egg Rain drops eggs (${drops} so far)`);
   await shot(page, 'r3-eggrain');
   check(errors.length === 0, `no console errors${errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''}`);
 } finally {

@@ -220,7 +220,8 @@ export function thumbOf(key, build, { size = 128, yaw = 0.55, pitch = 0.3, fill 
   try {
     const made = build();
     obj = made?.isObject3D ? made : made?.object3d;
-    dispose = made?.dispose;
+    // a wrapper's own dispose() (never an Object3D's: those free shared geometry)
+    dispose = !made?.isObject3D && typeof made?.dispose === 'function' ? () => made.dispose() : null;
     if (!obj) return null;
     if (hidden) hidden.visible = false;
     st.scene.add(obj);
