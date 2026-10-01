@@ -228,6 +228,10 @@ export function createPetView(petId, opts = {}) {
     get position() {
       return root.position;
     },
+    /** Height of the top of the pet above its ground point (for a name tag). */
+    get top() {
+      return lift.position.y + M.size.minY + M.size.h;
+    },
     dispose() {
       M.dispose();
     },

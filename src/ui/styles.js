@@ -52,6 +52,9 @@ html.menu-screen .labels-layer{visibility:hidden}
 .nt-name{font:var(--fdw) 16px/1 var(--fd);letter-spacing:.02em;padding:3px 11px 4px;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.25),rgba(0,0,0,.08)),var(--c,#556);
   border:2.5px solid var(--ink);box-shadow:0 3px 0 rgba(10,14,40,.55);text-shadow:0 2px 0 rgba(0,0,0,.35)}
 .nt-rb{color:var(--gold);font-size:13px;margin-left:2px}
+.petlbl{gap:0}
+.pt-tag{font:var(--fdw) 13px/1 var(--fd);letter-spacing:.02em;padding:2px 8px 3px;border-radius:999px;background:rgba(16,22,58,.82);color:#fff;
+  border:2px solid var(--c,#556);box-shadow:0 2px 0 rgba(10,14,40,.5);text-shadow:0 1px 0 rgba(0,0,0,.5)}
 .nt-carry{font:800 12px/1 var(--fb);padding:4px 9px 5px;border-radius:999px;background:rgba(16,22,58,.86);border:2px solid var(--ink);text-shadow:0 1px 0 rgba(0,0,0,.6);display:flex;gap:4px;align-items:center}
 .nametag.thief .nt-carry{background:linear-gradient(180deg,#ff5a73,#d81f45);animation:thief .45s ease-in-out infinite alternate}
 .nametag.thief .nt-carry b{color:#fff!important}

@@ -481,8 +481,10 @@ try {
     await step(1);
     check(onHost().baseLevel === 4 && me.baseLevel === 4, `her base levels up on the host and her device (${onHost().baseLevel}/${me.baseLevel})`);
     R.act('setBaseStyle', { floor: 'beach', fence: 'hedge', decor: ['palm', 'fountain', null, null, null, null], sneaky: 1 });
-    R.act('setPets', ['dragon', 'phoenix', 'axolotl', 'unicorn']);
+    R.act('setPets', ['dragon', 'phoenix', 'axolotl', 'unicorn'], ['Sparky', 'sh1t head', 'Bubbles', 'Extra']);
     await step(1);
+    const names = (p) => (p.petNames || []).join('|');
+    check(names(onHost()) === 'Sparky||Bubbles' && names(me) === 'Sparky||Bubbles', `pet nicknames reach the host and come back cleaned (${names(onHost())} / ${names(me)})`);
     check(Q.game.gardens[rs].look.floor === 'beach' && R.game.gardens[rs].look.decor[0] === 'palm', 'the Base Studio look reaches everyone');
     check(onHost().pets.length === 3 && Q.game.activePets(onHost()).length === 2 && R.game.activePets(me).length === 2, 'a team of 3; Base Lv 4 lets 2 of them count');
     check(Q.game.decorBoxes[rs][1].off === false, 'her fountain is solid on the host');

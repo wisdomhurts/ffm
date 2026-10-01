@@ -2,12 +2,13 @@
 //   attachPets(app)              once per page (idempotent): hatched pets -> profile + the hatch moment
 //   buildPetShop(app, close)     the PET EGGS stand panel -> {el, title, dispose} (menus.openShop('pets'))
 //   openPets(app)                "My Pets" inventory: equip, unequip, release (also from the title screen)
-// Pets live on the active profile (profile.pets = {owned: [{uid, id, t}], equipped: uid|null}); main.js turns
-// an equipped change into app.act('setPet', id) while playing.
+// Pets live on the active profile (profile.pets = {owned: [{uid, id, t, name?}], team: [uid...]}); main.js turns
+// a team change (or a new nickname) into app.act('setPets', ids, names) while playing. Nicknames: pets/names.js.
 import { bus } from '../core/events.js';
 import { getProfile, updateProfile } from '../core/profiles.js';
 import { PET, EGG, SHOP_EGGS, PET_CAPACITY, eggOdds, fmtPct, boostLines, petScore } from '../pets/catalog.js';
 import { MAX_TEAM } from '../pets/effects.js';
+import { petLabel, checkPetName, randomPetName, PET_NAME_MAX } from '../pets/names.js';
 import { petSlotsFor, BASE } from '../config.js';
 import { playHatch } from '../pets/hatch.js';
 import { thumb, cachedThumb, configureStudio, onStudioReady } from '../pets/studio.js';
@@ -43,6 +44,19 @@ function writeTeam(p, uids) {
   p.pets.team = [...new Set(uids)].filter((u) => own.has(u)).slice(0, MAX_TEAM);
   p.pets.equipped = p.pets.team[0] || null;
 }
+/** Give an owned pet a nickname ('' = back to its species name). Returns false for a name the filter refuses. */
+export function setPetName(pid, uid, raw) {
+  const r = checkPetName(raw);
+  if (!r.ok) return false;
+  updateProfile(pid, (p) => {
+    const x = p.pets.owned.find((y) => y.uid === uid);
+    if (!x) return;
+    if (r.name) x.name = r.name;
+    else delete x.name;
+  });
+  return true;
+}
+
 /** How many pets count right now (base level in this game; the title screen shows all three). */
 const slotsNow = (app) => (app.human ? petSlotsFor(app.human.baseLevel) : MAX_TEAM);
 
@@ -65,12 +79,14 @@ export function attachPets(app) {
     let released = null;
     // save first: the pet is theirs even if the hatch moment is skipped or the page closes
     updateProfile(pid, (p) => {
-      // a full bag (egg drops are free, so it can happen): the weakest spare pet goes home to make room
+      // a full bag (egg drops are free, so it can happen): the weakest spare pet goes home to make room,
+      // one without a nickname if there is one (a named pet is somebody's favourite)
       if (ownedList(p).length >= PET_CAPACITY) {
         const team = new Set(teamOf(p));
-        const spare = ownedList(p).filter((x) => !team.has(x.uid)).sort((a, b) => petScore(a.id) - petScore(b.id) || (a.t || 0) - (b.t || 0))[0];
+        const spare = ownedList(p).filter((x) => !team.has(x.uid))
+          .sort((a, b) => (a.name ? 1 : 0) - (b.name ? 1 : 0) || petScore(a.id) - petScore(b.id) || (a.t || 0) - (b.t || 0))[0];
         if (spare) {
-          released = spare.id;
+          released = spare;
           p.pets.owned = p.pets.owned.filter((x) => x.uid !== spare.uid);
         }
       }
@@ -81,7 +97,7 @@ export function attachPets(app) {
         equipped = true;
       }
     });
-    if (released) bus.emit('pets:released', { pet: released, reason: 'full', free: !!free });
+    if (released) bus.emit('pets:released', { pet: released.id, name: released.name || '', reason: 'full', free: !!free });
     fresh.add(uid);
     playHatch(app, {
       petId: pet,
@@ -91,6 +107,8 @@ export function attachPets(app) {
       onEquip: () => updateProfile(pid, (p) => {
         if (p.pets.owned.some((x) => x.uid === uid)) writeTeam(p, [uid, ...teamOf(p).filter((u) => u !== uid)]);
       }),
+      // the hatch card has a "Name your pet" box; what's in it when the card closes becomes the nickname
+      onName: (name) => setPetName(pid, uid, name),
     });
   });
 }
@@ -234,14 +252,14 @@ export function buildPetShop(app, close) {
     setText(cash, money(me?.cash || 0));
     // equipped pet summary (the team's leader)
     const eq = owned.find((x) => x.uid === teamOf(prof)[0]);
-    const key = (eq?.uid || '-') + ':' + owned.length + ':' + teamOf(prof).length;
+    const key = (eq?.uid || '-') + ':' + (eq?.name || '') + ':' + owned.length + ':' + teamOf(prof).length;
     if (key !== eqKey) {
       eqKey = key;
       eqWrap.textContent = '';
       const pet = eq && PET[eq.id];
       if (pet) {
         const more = teamOf(prof).length - 1;
-        eqWrap.append(thumbEl('pet', pet.id), h('span', { class: 'ps-eq-t' }, h('b', { text: pet.name + (more > 0 ? ` +${more}` : '') }), h('small', { text: `${pet.boost} · ${owned.length}/${PET_CAPACITY} pets` })));
+        eqWrap.append(thumbEl('pet', pet.id), h('span', { class: 'ps-eq-t' }, h('b', { text: petLabel(eq) + (more > 0 ? ` +${more}` : '') }), h('small', { text: `${pet.boost} · ${owned.length}/${PET_CAPACITY} pets` })));
       } else {
         eqWrap.append(h('span', { class: 'pthumb', html: PAW_ICON, style: 'color:#ffb3d9;padding:6px' }),
           h('span', { class: 'ps-eq-t' }, h('b', { text: owned.length ? 'No pet equipped' : 'No pets yet!' }), h('small', { text: owned.length ? `${owned.length}/${PET_CAPACITY} pets · pick a buddy in My Pets` : 'Your first egg is waiting below' })));
@@ -292,6 +310,9 @@ export function openPets(app) {
   const body = h('div', { class: 'pets-inv-body' });
   let sel = null;
   let confirming = false;
+  let renaming = null; // uid whose name box is open
+  let draft = ''; // what's typed in it (survives a re-render)
+  let nameMsg = null; // {text, bad}
 
   const sorted = (prof) => {
     const team = teamOf(prof);
@@ -352,19 +373,89 @@ export function openPets(app) {
         return h('button', {
           class: `pt-slot${pet ? ' has r-' + pet.rarity : ''}${locked ? ' locked' : ''}`, type: 'button', role: 'listitem',
           style: pet ? `--rc:${RARITY_COLOR[pet.rarity]}` : '',
-          title: locked ? `Opens at Base Lv ${need}${pet ? ' (resting until then)' : ''}` : pet ? pet.name : 'Empty slot',
+          title: locked ? `Opens at Base Lv ${need}${pet ? ' (resting until then)' : ''}` : pet ? petLabel(x) : 'Empty slot',
           onclick: () => {
             if (!x) return;
             sel = x.uid;
             confirming = false;
+            renaming = null;
             uiSound(app, 'click');
             render();
           },
         },
         pet ? thumbEl('pet', pet.id) : h('span', { class: 'pt-empty', html: PAW_ICON }),
-        h('span', { class: 'pt-n', text: pet ? pet.name : locked ? `Base Lv ${need}` : 'Empty' }),
+        h('span', { class: 'pt-n', text: pet ? petLabel(x) : locked ? `Base Lv ${need}` : 'Empty' }),
         locked ? h('span', { class: 'pt-lock', html: ICON.lock }) : null);
       }));
+  }
+
+  /** The name box for one pet: type a nickname (or roll one), Save / Cancel; empty = its species name. */
+  function renameBox(cur, pet) {
+    const input = h('input', {
+      class: 'pet-name-input pi-name-input', type: 'text', maxlength: String(PET_NAME_MAX), autocomplete: 'off', autocapitalize: 'words', spellcheck: 'false', enterkeyhint: 'done',
+      placeholder: pet.name, 'aria-label': `Name for your ${pet.name}`, 'aria-describedby': 'pi-name-msg',
+    });
+    input.value = draft;
+    const msg = h('div', { class: 'pi-name-msg' + (nameMsg?.bad ? ' bad' : ''), id: 'pi-name-msg', 'aria-live': 'polite', text: nameMsg?.text || `Up to ${PET_NAME_MAX} letters. Leave it empty to call it "${pet.name}".` });
+    const show = () => {
+      const r = checkPetName(input.value);
+      msg.textContent = r.text || `Up to ${PET_NAME_MAX} letters. Leave it empty to call it "${pet.name}".`;
+      msg.classList.toggle('bad', !r.ok);
+      input.classList.toggle('bad', !r.ok);
+    };
+    const save = () => {
+      if (!setPetName(pid, cur.uid, input.value)) {
+        nameMsg = { text: checkPetName(input.value).text, bad: true };
+        uiSound(app, 'error');
+        show();
+        input.classList.remove('nope');
+        void input.offsetWidth;
+        input.classList.add('nope');
+        return;
+      }
+      renaming = null;
+      nameMsg = null;
+      uiSound(app, 'unlock');
+      render();
+    };
+    const cancel = () => {
+      renaming = null;
+      nameMsg = null;
+      uiSound(app, 'click');
+      render();
+    };
+    input.addEventListener('input', () => {
+      draft = input.value;
+      nameMsg = null;
+      show();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save();
+      } else if (e.key === 'Escape') {
+        // close the name box, not the whole My Pets window
+        e.preventDefault();
+        e.stopPropagation();
+        cancel();
+      }
+    });
+    const dice = h('button', {
+      class: 'btn btn-gold pet-dice', type: 'button', title: 'Surprise me!', 'aria-label': 'Pick a random name',
+      onclick: () => {
+        input.value = draft = randomPetName(input.value);
+        nameMsg = null;
+        show();
+        uiSound(app, 'click');
+        input.focus();
+      },
+    }, h('span', { class: 'bi', html: ICON.dice }));
+    return h('div', { class: 'pi-rename' },
+      h('div', { class: 'pi-rename-row' }, input, dice),
+      msg,
+      h('div', { class: 'pi-rename-row' },
+        h('button', { class: 'btn btn-green btn-sm', type: 'button', onclick: save }, h('span', { class: 'bi', html: ICON.check }), h('span', { text: 'Save' })),
+        h('button', { class: 'btn btn-grey btn-sm', type: 'button', onclick: cancel }, h('span', { text: 'Cancel' }))));
   }
 
   function render() {
@@ -392,7 +483,7 @@ export function openPets(app) {
       const acts = h('div', { class: 'pi-acts' });
       if (confirming) {
         acts.append(h('div', { class: 'pi-confirm' },
-          h('span', { text: `Release ${pet.name}? It hops back to the wild.` }),
+          h('span', { text: `Release ${petLabel(cur)}? ${cur.name ? 'They hop' : 'It hops'} back to the wild.` }),
           h('button', { class: 'btn btn-grey btn-sm', type: 'button', text: 'Keep', onclick: () => { confirming = false; uiSound(app, 'click'); render(); } }),
           h('button', { class: 'btn btn-red btn-sm', type: 'button', text: 'Release', onclick: () => { confirming = false; release(cur.uid); } })));
       } else {
@@ -400,12 +491,27 @@ export function openPets(app) {
           isEq
             ? h('button', { class: 'btn btn-grey', type: 'button', onclick: () => unequip(cur.uid) }, h('span', { text: 'Unequip' }))
             : h('button', { class: 'btn btn-green', type: 'button', 'data-autofocus': '', onclick: () => equip(cur.uid) }, h('span', { class: 'bi', html: ICON.check }), h('span', { text: team.length >= MAX_TEAM ? 'Swap in' : 'Equip' })),
-          h('button', { class: 'btn btn-red btn-sm', type: 'button', onclick: () => { confirming = true; uiSound(app, 'click'); render(); } }, h('span', { text: 'Release' })));
+          h('button', { class: 'btn btn-red btn-sm', type: 'button', onclick: () => { confirming = true; renaming = null; uiSound(app, 'click'); render(); } }, h('span', { text: 'Release' })));
       }
+      const editing = renaming === cur.uid;
+      const nameRow = editing ? renameBox(cur, pet) : h('div', { class: 'pi-name' },
+        h('b', { text: petLabel(cur) }), rarityTag(pet.rarity), isEq ? h('span', { class: 'ph-eq', text: 'On team' }) : null,
+        h('button', {
+          class: 'btn btn-blue btn-sm pi-rename-btn', type: 'button', 'aria-label': cur.name ? `Rename ${cur.name}` : `Name your ${pet.name}`,
+          onclick: () => {
+            renaming = cur.uid;
+            draft = cur.name || '';
+            nameMsg = null;
+            confirming = false;
+            uiSound(app, 'click');
+            render();
+          },
+        }, h('span', { class: 'bi', html: ICON.pencil }), h('span', { text: cur.name ? 'Rename' : 'Name it!' })));
       parts.push(h('div', { class: `pi-sel r-${pet.rarity}${isEq ? ' eq' : ''}`, style: `--rc:${RARITY_COLOR[pet.rarity]}` },
         thumbEl('pet', pet.id),
         h('div', { class: 'pi-info' },
-          h('div', { class: 'pi-name' }, h('b', { text: pet.name }), rarityTag(pet.rarity), isEq ? h('span', { class: 'ph-eq', text: 'On team' }) : null),
+          nameRow,
+          cur.name ? h('div', { class: 'pi-species', text: `${pet.name} · ${rarityName(pet.rarity)}` }) : null,
           boostChips(pet),
           h('div', { class: 'pi-blurb', text: pet.blurb || '' })),
         acts));
@@ -421,18 +527,25 @@ export function openPets(app) {
         const on = team.includes(x.uid);
         return h('button', {
           class: `pcard r-${p.rarity}${x.uid === sel ? ' sel' : ''}${fresh.has(x.uid) ? ' new' : ''}`, type: 'button', role: 'listitem',
-          style: `--rc:${RARITY_COLOR[p.rarity]}`, 'aria-label': `${p.name}, ${rarityName(p.rarity)}${on ? ', on your team' : ''}`, 'aria-pressed': String(x.uid === sel),
+          style: `--rc:${RARITY_COLOR[p.rarity]}`, 'aria-label': `${x.name ? `${x.name} the ${p.name}` : p.name}, ${rarityName(p.rarity)}${on ? ', on your team' : ''}`, 'aria-pressed': String(x.uid === sel),
           onclick: () => {
             sel = x.uid;
             confirming = false;
+            renaming = null;
             uiSound(app, 'click');
             render();
           },
-        }, thumbEl('pet', x.id), h('span', { class: 'pc-n', text: p.name }), h('span', { class: 'pc-r', text: rarityName(p.rarity) }), on ? h('span', { class: 'pc-eq', html: ICON.check }) : null);
+        }, thumbEl('pet', x.id), h('span', { class: 'pc-n', text: petLabel(x) }), h('span', { class: 'pc-r', text: x.name ? p.name : rarityName(p.rarity) }), on ? h('span', { class: 'pc-eq', html: ICON.check }) : null);
       })));
     }
     parts.push(menus.doneRow(() => m.close()));
     body.replaceChildren(...parts);
+    // the name box takes the focus when it opens, and keeps it across a re-render while typing
+    const box = renaming && body.querySelector('.pi-name-input');
+    if (box) {
+      box.focus({ preventScroll: true });
+      box.setSelectionRange?.(box.value.length, box.value.length);
+    }
   }
 
   const m = menus.openModal(body, { cls: 'pets-inv', label: 'My Pets' });

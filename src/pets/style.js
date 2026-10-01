@@ -181,6 +181,11 @@ const css = `
 .ph-boost i{display:grid;width:22px;height:22px}
 .pet-hatch.info .ph-boosts{animation:petPopIn .45s .22s var(--spring) both}
 .ph-blurb{font:700 14px/1.3 var(--fb);color:var(--txt2)}
+.ph-species{font:900 13px/1 var(--fb);letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--rc) 60%,#fff);margin-top:-3px}
+.ph-namebox{display:flex;flex-direction:column;align-items:center;gap:4px;width:min(360px,100%);visibility:hidden}
+.pet-hatch.btns .ph-namebox{visibility:visible;animation:petPopIn .4s var(--spring) both}
+.ph-name-row{display:flex;gap:7px;width:100%}
+.ph-name-input{text-align:center}
 .ph-btns{display:flex;gap:10px;justify-content:center;margin-top:4px;visibility:hidden}
 .pet-hatch.btns .ph-btns{visibility:visible;animation:petPopIn .4s var(--spring) both}
 .ph-btns .btn{min-width:150px}
@@ -205,6 +210,22 @@ const css = `
 .ph-cssegg.pop{animation:phPop .4s ease-in forwards}
 .ph-csspet{position:absolute;left:var(--cx,50%);top:var(--cy,50%);width:min(34vmin,200px);aspect-ratio:1;transform:translate(-50%,-50%);padding:5%;border-radius:50%;color:#fff;
   background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.5),transparent 45%),var(--rc);border:5px solid var(--ink);animation:petPopIn .5s var(--spring) both}
+/* pet nicknames: the name box in My Pets and on the hatch card */
+.pi-rename-btn{min-height:34px;padding:5px 11px 7px;font-size:14px;gap:5px;margin-left:auto}
+.pi-rename-btn .bi{width:17px;height:17px}
+.pi-species{font:900 12px/1 var(--fb);letter-spacing:.06em;text-transform:uppercase;color:color-mix(in srgb,var(--rc) 65%,#fff);margin-top:-2px}
+.pi-rename{display:flex;flex-direction:column;gap:6px}
+.pi-rename-row{display:flex;gap:7px;align-items:center}
+.pet-name-input{flex:1;min-width:0;height:46px;margin:0;padding:0 12px;border-radius:14px;border:3px solid var(--ink);background:#fff;color:var(--ink);font:var(--fdw) 20px/1 var(--fd);letter-spacing:.02em;
+  box-shadow:inset 0 3px 0 rgba(10,14,40,.14),0 4px 0 var(--ink);outline:none;pointer-events:auto;user-select:text;-webkit-user-select:text;touch-action:manipulation}
+.pet-name-input:focus{box-shadow:inset 0 3px 0 rgba(10,14,40,.14),0 4px 0 var(--ink),0 0 0 4px rgba(255,255,255,.55)}
+.pet-name-input::placeholder{color:#9aa3c7;opacity:1}
+.pet-name-input.bad{border-color:#dc2548;background:#fff0f3}
+.pet-name-input.nope{animation:nope .35s}
+.pet-dice{flex:none;min-height:46px;padding:7px 11px 9px}
+.pet-dice .bi{width:22px;height:22px;color:#fff}
+.pi-name-msg,.ph-name-msg{min-height:16px;font:800 12.5px/1.3 var(--fb);color:var(--txt2)}
+.pi-name-msg.bad,.ph-name-msg.bad{color:#ffb3c0}
 .pthumb.nothumb img{display:none}
 .pthumb.nothumb::after{content:'';width:62%;aspect-ratio:1;border-radius:34%;background:linear-gradient(180deg,rgba(255,255,255,.35),rgba(0,0,0,.12)),var(--rc);border:3px solid var(--ink)}
 @keyframes phFlash{0%{opacity:.95}100%{opacity:0}}
@@ -255,6 +276,8 @@ const css = `
   .ph-name{font-size:24px}
   .ph-blurb{display:none}
   .ph-btns .btn-lg{min-height:46px;font-size:18px;padding:9px 16px 11px}
+  .pet-name-input{height:40px;font-size:18px}
+  .pet-dice{min-height:40px}
   .ps-eggs{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding-right:38px}
   .ec-price{right:6px;left:auto;top:6px;font-size:14px;padding:4px 7px 5px}
   .ec-art{height:90px}

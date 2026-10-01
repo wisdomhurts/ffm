@@ -90,7 +90,7 @@ export class StubApp {
       case 'buyTreadmill': return g.buyTreadmill(p);
       case 'upgradeBase': return g.upgradeBase(p);
       case 'setBaseStyle': return g.setBaseStyle(p, args[0]);
-      case 'setPets': return g.setPets(p, args[0]);
+      case 'setPets': return g.setPets(p, args[0], args[1]);
       case 'rebirth': return g.rebirth(p);
       case 'buyEgg': return g.buyEgg(p, args[0]);
       case 'setPet': g.setPet(p, args[0] ?? null); return true;

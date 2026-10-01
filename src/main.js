@@ -10,7 +10,7 @@ import { settings } from './core/settings.js';
 import { load, save, remove } from './core/save.js';
 import { CHARACTERS, CHARACTER, PLANTS } from './config.js';
 import { LAYOUT } from './gameplay/layout.js';
-import { Game, profileTeam } from './gameplay/game.js';
+import { Game, profileTeam, profileTeamNames } from './gameplay/game.js';
 import { sanitizeBaseStyle, sameBaseStyle } from './gameplay/basestyle.js';
 import { HumanController } from './gameplay/humanController.js';
 import { BotController } from './ai/bot.js';
@@ -127,7 +127,8 @@ class App {
       if (!p || !this.game || profile.id !== p.profileId) return;
       if (!sameLook(profile.look, p.look)) this.act('setLook', profile.look);
       const team = profileTeam(profile);
-      if (team.length !== p.pets.length || team.some((id, i) => id !== p.pets[i])) this.act('setPets', team);
+      const names = profileTeamNames(profile);
+      if (team.length !== p.pets.length || team.some((id, i) => id !== p.pets[i] || names[i] !== (p.petNames[i] || ''))) this.act('setPets', team, names);
       const style = sanitizeBaseStyle(profile.baseStyle);
       if (!sameBaseStyle(style, p.baseStyle)) this.act('setBaseStyle', style);
     });
@@ -279,7 +280,7 @@ class App {
       case 'buyTreadmill': return g.buyTreadmill(p);
       case 'upgradeBase': return g.upgradeBase(p);
       case 'setBaseStyle': return g.setBaseStyle(p, args[0]);
-      case 'setPets': return g.setPets(p, args[0]);
+      case 'setPets': return g.setPets(p, args[0], args[1]);
       case 'rebirth': return g.rebirth(p);
       case 'buyEgg': return g.buyEgg(p, args[0]);
       case 'setPet': g.setPet(p, args[0] ?? null); return true;
