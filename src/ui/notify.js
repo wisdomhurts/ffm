@@ -278,8 +278,9 @@ export function wireNotifications(app, alerts) {
     const p = PET[pet];
     if (drop.egg === 'rainbow' || ['legendary', 'mythic', 'divine'].includes(p?.rarity)) alerts.toast(`${who(player)} caught a ${esc(EGG[drop.egg]?.name || 'egg')} and hatched a <b>${esc(p?.name || 'pet')}</b>!`, 'info', { icon: ICON.egg });
   });
-  on('pets:released', ({ pet }) => {
-    alerts.toast(`Your pet bag was full, so a spare ${esc(PET[pet]?.name || 'pet')} went home to make room.`, 'info', { icon: ICON.paw, duration: 4200 });
+  on('pets:released', ({ pet, name }) => {
+    const who = name ? `${esc(name)} the ${esc(PET[pet]?.name || 'pet')}` : `a spare ${esc(PET[pet]?.name || 'pet')}`;
+    alerts.toast(`Your pet bag was full, so ${who} went home to make room.`, 'info', { icon: ICON.paw, duration: 4200 });
   });
   on('event:start', ({ event }) => {
     alerts.announce({ title: event.def.name.toUpperCase() + '!', sub: esc(event.def.desc), icon: EVENT_ICON[event.type], cls: 'an-ev ev-' + event.type, ms: 3400 });

@@ -29,6 +29,7 @@ export class Player {
     this.look = char.look;
     this.pet = null; // the first active pet's species id (views, older code)
     this.pets = []; // equipped team: up to 3 species ids; only the first petSlotsFor(baseLevel) count
+    this.petNames = []; // their nicknames, same order ('' = none)
     this.mods = NO_MODS; // pet boosts (Game._refreshMods)
     this.baseLevel = 1; // BASE levels: survive rebirth
     this.baseStyle = sanitizeBaseStyle(isHuman ? null : BOT_STYLES[char.id]); // Base Studio picks

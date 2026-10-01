@@ -13,7 +13,7 @@
 // Room channel (event: payload)
 //   hello   {to, v, hn, who, data}              joiner -> the host it picked (who = identity card, data = its garden)
 //   reject  {to, hn, reason}                    host -> joiner ('full' | 'version' | 'kicked')
-//   who     {name, base, id, look, pet, face?}  anyone -> everyone (face only in private rooms, opt-in)
+//   who     {name, base, id, look, pet, pets, petNames, baseStyle, face?}  anyone -> everyone (face only in private rooms, opt-in)
 //   tick    {ep, s, tm, P, M, B, A, E?, D?, K?, O?, bn?}   host -> everyone, 5x a second (+ right after events)
 //   bye     {next?, ep?}                        host leaving / handing over (names its successor)
 // Uplink (member <-> host)
@@ -28,6 +28,7 @@ import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
 import { REPLIES, EMOTE_LINES } from '../social/replies.js';
 import { PRACTICE_LINES } from '../ai/personalities.js';
 import { PETS, PET, EGG } from '../pets/catalog.js';
+import { sanitizePetName } from '../pets/names.js';
 import { sanitizeBaseStyle } from '../gameplay/basestyle.js';
 import { sanitizeLook as canonLook } from '../characters/cosmetics.js';
 import { sanitizeName, isNameAllowed } from '../core/names.js';
@@ -168,6 +169,12 @@ export function sanitizeFace(face) {
 export const sanitizePet = (id) => (own(PET, id) ? id : null);
 /** An equipped pet team: up to 3 known species ids. */
 export const sanitizePets = (list) => (Array.isArray(list) ? list.slice(0, 3).filter((id) => own(PET, id)) : []);
+/** A team with its nicknames: {pets: [id...], petNames: [name...]}, kept in step (names pass the name filter). */
+export function sanitizePetTeam(ids, names) {
+  const nm = Array.isArray(names) ? names : [];
+  const team = (Array.isArray(ids) ? ids : []).slice(0, 3).map((id, i) => ({ id, name: nm[i] })).filter((x) => own(PET, x.id));
+  return { pets: team.map((x) => x.id), petNames: team.map((x) => sanitizePetName(x.name)) };
+}
 export const sanitizeProfileId = (id) => (typeof id === 'string' && (/^p_[a-z0-9]{4,16}$/.test(id) || own(CHARACTER, id)) ? id : null);
 export const sanitizeBase = (id) => (own(CHARACTER, id) ? id : CHARACTERS[0].id);
 
@@ -182,7 +189,7 @@ export function sanitizeWho(w, pid, allowFace) {
     base,
     look: sanitizeLook(w.look, base),
     pet: sanitizePet(w.pet),
-    pets: sanitizePets(Array.isArray(w.pets) ? w.pets : w.pet ? [w.pet] : []),
+    ...sanitizePetTeam(Array.isArray(w.pets) ? w.pets : w.pet ? [w.pet] : [], w.petNames),
     baseStyle: sanitizeBaseStyle(w.baseStyle),
     face: allowFace ? sanitizeFace(w.face) : null,
   };
@@ -575,7 +582,7 @@ export function vetPlayer(d, i) {
   d.profileId = sanitizeProfileId(d.profileId) || CHARACTERS[i].id;
   d.look = sanitizeLook(d.look, CHARACTERS[i].id) || { ...CHARACTERS[i].look };
   d.pet = sanitizePet(d.pet);
-  d.pets = sanitizePets(d.pets);
+  Object.assign(d, sanitizePetTeam(d.pets, d.petNames));
   d.baseStyle = sanitizeBaseStyle(d.baseStyle);
   d.baseLevel = int(d.baseLevel, 1, BASE.maxLevel, 1);
   d.boostLevel = int(d.boostLevel, 0, BOOST.maxLevel, 0);

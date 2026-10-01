@@ -3,8 +3,10 @@
 // its name, rarity and boost. Divine pets get a bigger golden finale: a second layer of gold rays,
 // shockwave rings, a spinning golden halo and a burst of gold stars. Tap to hurry it along. Hatches
 // queue if several arrive at once. Works for every egg in EGGS and every pet in PETS.
-//   playHatch(app, {petId, eggId, isNew, equipped, onEquip}) -> void
+//   playHatch(app, {petId, eggId, isNew, equipped, onEquip, onName}) -> void
 // The pet is already saved to the profile before this plays, so closing early never loses it.
+// With onName the card has a "Name your pet" box: whatever allowed name is in it when the card closes is
+// passed to onName (nothing typed: the pet keeps its species name).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PET, EGG, boostLines } from './catalog.js';
@@ -12,6 +14,8 @@ import { createPetModel } from './models.js';
 import { eggParts, rimTeeth } from './eggs.js';
 import { openStage } from './studio.js';
 import { injectPetStyles, RARITY_COLOR, BOOST_ICON, PAW_ICON, rarityName } from './style.js';
+import { checkPetName, randomPetName, PET_NAME_MAX } from './names.js';
+import { ICON } from '../ui/icons.js';
 
 const queue = [];
 let current = null;
@@ -106,6 +110,27 @@ function run(app, info, done) {
   const equippedTag = el('span', 'ph-eq', 'Equipped!');
   equippedTag.hidden = !info.equipped;
   badges.appendChild(equippedTag);
+  // "Name your pet": the big name shows the nickname as it's typed, with the species under it
+  const species = el('div', 'ph-species');
+  species.hidden = true;
+  let nameBox = null, nameInput = null, nameMsg = null, diceBtn = null;
+  if (info.onName) {
+    nameInput = el('input', 'pet-name-input ph-name-input');
+    nameInput.type = 'text';
+    nameInput.maxLength = PET_NAME_MAX;
+    nameInput.placeholder = 'Name your pet!';
+    for (const [k, v] of [['autocomplete', 'off'], ['autocapitalize', 'words'], ['spellcheck', 'false'], ['enterkeyhint', 'done'], ['aria-label', `Name your ${pet?.name || 'pet'}`]]) nameInput.setAttribute(k, v);
+    diceBtn = el('button', 'btn btn-gold pet-dice ph-dice');
+    diceBtn.type = 'button';
+    diceBtn.title = 'Surprise me!';
+    diceBtn.setAttribute('aria-label', 'Pick a random name');
+    diceBtn.innerHTML = `<span class="bi">${ICON.dice}</span>`;
+    nameMsg = el('div', 'ph-name-msg');
+    const row = el('div', 'ph-name-row');
+    row.append(nameInput, diceBtn);
+    nameBox = el('div', 'ph-namebox');
+    nameBox.append(row, nameMsg);
+  }
   const btns = el('div', 'ph-btns');
   const equipBtn = el('button', 'btn btn-blue btn-lg ph-equip', 'Equip');
   equipBtn.type = 'button';
@@ -113,7 +138,7 @@ function run(app, info, done) {
   const okBtn = el('button', 'btn btn-green btn-lg ph-ok', 'Awesome!');
   okBtn.type = 'button';
   btns.append(equipBtn, okBtn);
-  infoEl.append(rar, name, badges, boosts, blurb, btns);
+  infoEl.append(rar, name, species, badges, boosts, blurb, ...(nameBox ? [nameBox] : []), btns);
   const hint = el('div', 'ph-hint', 'Tap to hatch faster!');
   // divine finale: shockwave rings (CSS shows them for .r-divine only)
   const rings = el('div', 'ph-rings');
@@ -438,31 +463,82 @@ function run(app, info, done) {
   function onKey(e) {
     if (closed) return;
     const k = e.key;
+    if (nameInput && e.target === nameInput) {
+      // typing a name: keys are letters, Enter saves and closes, Esc closes (keeping an allowed name)
+      if (k === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        finish();
+      } else if (k === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        commitName(true);
+        close();
+      } else if (k === 'Tab') trapTab(e);
+      return;
+    }
     if (k === 'Escape' || k === 'Enter' || k === ' ' || k === 'Spacebar') {
       e.preventDefault();
       e.stopPropagation();
       if (t < T_BTNS) {
         if (k === 'Escape') t = Math.max(t, T_BTNS); // Esc: straight to the reveal (a second Esc closes)
         else skip();
-      } else if (k === 'Escape') close();
-      else if (document.activeElement?.closest?.('.ph-btns')) document.activeElement.click();
-      else close();
-    } else if (k === 'Tab' && btnsShown) {
-      // keep focus inside the dialog
-      const f = [equipBtn, okBtn].filter((b) => !b.hidden);
-      const i = f.indexOf(document.activeElement);
-      e.preventDefault();
-      f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length]?.focus();
+      } else if (k === 'Escape') {
+        commitName(true);
+        close();
+      } else if (document.activeElement?.closest?.('.ph-btns, .ph-namebox')) document.activeElement.click();
+      else finish();
+    } else if (k === 'Tab' && btnsShown) trapTab(e);
+  }
+  function trapTab(e) {
+    // keep focus inside the dialog
+    const f = [nameInput, diceBtn, equipBtn, okBtn].filter((b) => b && !b.hidden);
+    const i = f.indexOf(document.activeElement);
+    e.preventDefault();
+    f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length]?.focus();
+  }
+  /** Save what's in the name box. quiet: drop a name the filter refuses instead of asking for another. */
+  function commitName(quiet = false) {
+    if (!nameInput) return true;
+    const r = checkPetName(nameInput.value);
+    if (!r.ok && !quiet) return false;
+    if (r.ok && r.name) info.onName(r.name);
+    return true;
+  }
+  /** OK / Enter: save the name and close, or point at a name that isn't allowed. */
+  function finish() {
+    if (commitName()) {
+      play(app, 'click');
+      close();
+      return;
     }
+    play(app, 'error');
+    showName();
+    nameInput.classList.remove('nope');
+    void nameInput.offsetWidth;
+    nameInput.classList.add('nope');
+    nameInput.focus({ preventScroll: true });
+  }
+  function showName() {
+    const r = checkPetName(nameInput.value);
+    name.textContent = (r.ok && r.name) || pet?.name || 'Pet';
+    species.textContent = `the ${pet?.name || 'pet'}`;
+    species.hidden = !(r.ok && r.name);
+    nameMsg.textContent = r.text;
+    nameMsg.classList.toggle('bad', !r.ok);
+    nameInput.classList.toggle('bad', !r.ok);
   }
   window.addEventListener('keydown', onKey, true);
   wrap.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('button')) return;
+    if (e.target.closest('button, input, .ph-namebox')) return;
     skip();
   });
-  okBtn.addEventListener('click', () => {
+  okBtn.addEventListener('click', finish);
+  nameInput?.addEventListener('input', showName);
+  diceBtn?.addEventListener('click', () => {
+    nameInput.value = randomPetName(nameInput.value);
+    showName();
     play(app, 'click');
-    close();
   });
   equipBtn.addEventListener('click', () => {
     info.onEquip?.();

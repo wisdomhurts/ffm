@@ -25,7 +25,7 @@ profile = {
   shareFace: false,          // opt-in: send my Photo Booth face to people in PRIVATE rooms
   stars: 0,                  // ⭐ earned from quests + badges, spent in the Wardrobe
   unlocks: [],               // cosmetic ids owned ('hat:crown', ...); free items need no unlock
-  pets: { owned: [{ uid, id }], equipped: null, team: [] },   // team = up to 3 equipped uids (equipped = team[0])
+  pets: { owned: [{ uid, id, t, name? }], equipped: null, team: [] },   // name: the nickname (pets/names.js); team = up to 3 equipped uids (equipped = team[0])
   baseStyle: { floor, fence, laser, decor: [id|null x6] },    // Base Studio picks (what shows depends on the base level)
   badges: { [badgeId]: epochMs },
   quests: { day: 'YYYY-MM-DD', list: [{ id, target, progress, claimed }] },
@@ -43,7 +43,8 @@ Solo Endless saves stay per profile under `save:endless:<profileId>` (whole 4-ga
 ## Player identity in the Game (`src/gameplay/*`, integrator)
 `Player` gains: `profileId`, `faceKey` (key for faces/avatars; = profile id, or `r_<pid>` for remote
 players), `name`, `look` (full Look), `pets` (equipped team: up to 3 species ids; only the first
-`petSlotsFor(baseLevel)` count, see `game.activePets(p)`), `pet` (the first active one), `baseLevel`, `baseStyle`,
+`petSlotsFor(baseLevel)` count, see `game.activePets(p)`), `petNames` (their nicknames, same order, `''` = none),
+`pet` (the first active one), `baseLevel`, `baseStyle`,
 `boostLevel`/`boostUntil`/`boostReadyAt`, `treadmillTier`, `pumpUntil`/`pumpMult`/`trainT` (warm-up), `kind`
 (`'local'|'remote'|'bot'|'empty'`), `pid` (network id, remote/local online players), `emote` (`{id, until}` or null).
 `p.char` stays the slot's family character (garden colours, bot personality, chat lines).
@@ -63,7 +64,8 @@ Game additions:
   drop-only eggs). Egg drops: `game.drops` `[{uid, egg, x, z, spawnAt, landAt, expiresAt, biome}]` (height =
   `game.dropY(d)`); touching a landed one emits `drop:claimed {player, drop, pet}` + `pet:hatched {..., free: true}`;
   also `drop:spawn`, `drop:expired`. Bots keep their best 3 drop pets.
-* `game.setPets(p, [petId...])` (and `setPet(p, id)` = a team of one), `game.setLook(p, look)` (emits `player:look {player}`).
+* `game.setPets(p, [petId...], [nickname...])` (names optional, cleaned with the name filter; `setPet(p, id)` = a team of one),
+  `game.setLook(p, look)` (emits `player:look {player}`). `profileTeamPets(profile)` -> `[{id, name}]` for a profile's team.
 * Bases: `game.upgradeBase(p)` (in your own garden) -> `base:upgraded {player, level, cost, garden}`;
   `game.setBaseStyle(p, style)` -> `base:style {player, garden}`; each garden's `g.look` is what it shows
   (`effectiveBaseStyle`). Guard Gnome: `guard:bonk {garden, target}`; trampolines: `base:bounce {player, garden, spot}`.
@@ -79,7 +81,7 @@ Game additions:
 Anything the UI changes in the game goes through `app.act(name, ...args)` so it also works as a
 client in an online room (the host applies it for the right player):
 `buyItem(id, qty)`, `buySpeed(n)`, `buyBoost()`, `buyTreadmill()`, `upgradeBase()`, `setBaseStyle(style)`, `rebirth()`,
-`buyEgg(eggId)`, `setPet(petId)`, `setPets(ids)`, `setLook(look)`,
+`buyEgg(eggId)`, `setPet(petId)`, `setPets(ids, names)`, `setLook(look)`,
 `gift(toSlot, planterIndex)`, `tradeRequest(toSlot)`, `tradeOffer(offer)`, `tradeReady(bool)`,
 `tradeCancel()`, `emote(id)`, `say(phraseId)`. Returns `true/false` offline, `undefined` (async) online.
 
@@ -146,7 +148,12 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 * `src/pets/view.js`: `createPetView(petId)` -> `{object3d, update(dt, ownerPos, ownerYaw, moving)}` (follows
   its owner, hops, idles); GameView creates it for `p.pet`.
 * `src/world/petshop.js`: `createPetShop()` mesh (egg stand in the plaza, spot `LAYOUT.shops.pets`).
-* `openPets(app)` (inventory, equip, hatch sequence UI) and the egg shop panel (`buildPetShop(app, close)`).
+* `openPets(app)` (inventory, equip, rename, hatch sequence UI) and the egg shop panel (`buildPetShop(app, close)`).
+* Nicknames (`src/pets/names.js`): `checkPetName(raw)`, `sanitizePetName`, `petLabel(owned)` (nickname or species
+  name), `randomPetName()`. Up to 14 characters, the player-name word filter (`core/names.js`), since they are
+  shown to everyone online: in `who` cards (`pets` + `petNames`), in the player state and as name tags over pets.
+  Named on the hatch card (`playHatch(..., {onName})`) or in My Pets (`setPetName(profileId, uid, name)`).
+  A full bag sends home an unnamed spare first.
 
 ## Progress: quests, badges, stars (`src/progress/**` + `src/ui/progress.js`, progress agent)
 * `attachProgress(app)`: listens to bus events for the LOCAL player (`player === app.human`), updates

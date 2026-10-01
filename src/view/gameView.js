@@ -377,6 +377,14 @@ export class GameView {
       rec.mood.celebrating = now < p.celebrateUntil;
       rec.mood.stunned = now < p.stunUntil;
       rec.view.update(dt, p, time, rec.mood);
+      // a nicknamed pet wears a small name tag (hidden with its owner's cloak)
+      const nick = p.petNames?.[k];
+      if (nick && invisible > 0.05) {
+        const at = rec.view.object3d.position;
+        const html = rec.tagFor === nick ? rec.tag : (rec.tag = `<div class="pt-tag" style="--c:${p.char.color}">${esc(nick)}</div>`);
+        rec.tagFor = nick;
+        this.labels.set('pt' + i + ':' + k, { x: at.x, y: at.y + rec.view.top + 0.55, z: at.z }, html, { cls: 'petlbl', maxDist: 48 });
+      }
     }
   }
 

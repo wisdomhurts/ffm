@@ -7,6 +7,7 @@ import { bus } from './events.js';
 import { sanitizeName } from './names.js';
 import { sanitizeLook } from '../characters/cosmetics.js';
 import { PET } from '../pets/catalog.js';
+import { sanitizePetName } from '../pets/names.js';
 import { sanitizeBaseStyle } from '../gameplay/basestyle.js';
 
 const INDEX_KEY = 'profiles';
@@ -33,7 +34,7 @@ function blank(id, base, name, family) {
     shareFace: false,
     stars: 0,
     unlocks: [],
-    pets: { owned: [], equipped: null, team: [] }, // team: up to 3 equipped uids (team[0] === equipped)
+    pets: { owned: [], equipped: null, team: [] }, // owned: [{uid, id, t, name?}] (name: the player's nickname); team: up to 3 equipped uids (team[0] === equipped)
     baseStyle: sanitizeBaseStyle(null), // Base Studio picks (what shows depends on the base level in each game)
     badges: {},
     quests: { day: '', list: [] },
@@ -59,7 +60,12 @@ function normalize(p, id) {
   out.stars = Number.isFinite(p.stars) && p.stars > 0 ? Math.floor(p.stars) : 0;
   if (Array.isArray(p.unlocks)) out.unlocks = p.unlocks.filter((u) => typeof u === 'string');
   if (obj(p.pets)) {
-    out.pets.owned = Array.isArray(p.pets.owned) ? p.pets.owned.filter((x) => x && typeof x.id === 'string' && Object.hasOwn(PET, x.id)) : [];
+    out.pets.owned = Array.isArray(p.pets.owned) ? p.pets.owned.filter((x) => x && typeof x.id === 'string' && Object.hasOwn(PET, x.id)).map((x) => {
+      // a nickname is kept only while it passes the name filter (it is shown to other players online)
+      const { name, ...rest } = x;
+      const nick = sanitizePetName(name);
+      return nick ? { ...rest, name: nick } : rest;
+    }) : [];
     out.pets.equipped = out.pets.owned.some((x) => x.uid === p.pets.equipped) ? p.pets.equipped : null;
     const team = Array.isArray(p.pets.team) ? p.pets.team : out.pets.equipped ? [out.pets.equipped] : [];
     out.pets.team = [...new Set(team)].filter((u) => out.pets.owned.some((x) => x.uid === u)).slice(0, 3);

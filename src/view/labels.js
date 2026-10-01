@@ -14,7 +14,7 @@ function priorityOf(cls) {
   if (cls.includes('bubble')) return 4;
   if (cls.includes('compact')) return 1;
   if (cls.includes('plantlbl') || cls.includes('podlbl')) return 3;
-  if (cls.includes('padlbl')) return 2;
+  if (cls.includes('padlbl') || cls.includes('petlbl')) return 2;
   return 3;
 }
 

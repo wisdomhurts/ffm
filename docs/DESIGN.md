@@ -102,6 +102,8 @@ Income accumulates into the garden's cash pile; step on the COLLECT pad to bank 
   longer, Lv 10 golden base + Golden Statue. Solid decorations block walking; the trampoline launches you.
 * **Egg drops**: every 100-170 s an egg floats down on balloons (a light beam marks where it lands) on the plaza
   or the Seed Road (deeper = rarer eggs; 5% Rainbow Eggs). First to touch it after it lands hatches it for free.
+* **Name a pet**: a "Name your pet!" box on the hatch card (dice button for ideas), or Rename in My Pets. Up to
+  14 letters, same kid-safe filter as player names; the name floats over the pet and shows in every pet list.
 * **Expand** (walk into your next FOR SALE lot): +5 planters.
 * **Items** (Gear Shop, hotbar 1–5): Banana Peel, Water Balloon, Speed Coil, Invisibility Cloak,
   Water Bucket (halves remaining growth time of the plant you stand next to).

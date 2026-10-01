@@ -10,6 +10,8 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * Online rooms with up to 4 players; the host picks how many computer players fill the empty gardens (None to All).
 * 37 pets from 10 eggs (Farm, Ocean, Frost, Candy, Cloud...), with a team of up to 3 at once. Eggs also float
   down from the sky as free **egg drops** (the Rainbow Egg only comes that way), plus an Egg Rain weather event.
+* **Name your pets**: right when they hatch, or any time in My Pets. The name floats over your pet in the world
+  (other players see it online; names go through the same kid-safe filter as player names).
 * **Base levels 1-10**: every level pays more and unlocks the **Base Studio** (floors, fences, gate-laser colours and
   decorations like trampolines and fountains), a Guard Gnome that bonks thieves, a home treadmill, sprinklers and
   a golden base.
@@ -59,6 +61,6 @@ npm install
 node build.mjs            # dist/index.html (public), dist/family.html + dist/artifact.html (with photos)
 node tests/smoke.mjs      # headless Playwright smoke test of the core loop
 node tests/fullscreen.test.mjs   # full screen on Android, iPhone and computers
-node --test tests/gameplay/*.test.mjs   # garden lots, Speed, far biomes, bases, pets, egg drops, Boost (no browser)
+node --test tests/gameplay/*.test.mjs   # garden lots, Speed, far biomes, bases, pets, pet names, egg drops, Boost (no browser)
 ```
 Read `docs/DESIGN.md` for the game design and `docs/ARCHITECTURE.md` for how the code fits together.

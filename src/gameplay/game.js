@@ -12,21 +12,31 @@ import { makeRng } from '../core/rng.js';
 import { Player, emptyIntent } from './player.js';
 import { teamMods, MAX_TEAM } from '../pets/effects.js';
 import { PET, EGG, petScore } from '../pets/catalog.js';
+import { sanitizePetName } from '../pets/names.js';
 import { sanitizeBaseStyle, sameBaseStyle, effectiveBaseStyle, DECOR, BOT_STYLES } from './basestyle.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { sanitizeLook, sameLook } from '../characters/cosmetics.js';
 
-/** A profile's equipped pet team as species ids (profile.pets.team = [uid...], older saves: equipped uid;
- *  online profile summaries may send `pets: [id...]` or `pet: id`). */
-export function profileTeam(profile) {
+/** A profile's equipped pet team as [{id, name}] (name: the nickname, '' if none). profile.pets.team = [uid...],
+ *  older saves: equipped uid; online profile summaries send `pets: [id...]` + `petNames: [...]` or `pet: id`. */
+export function profileTeamPets(profile) {
   const pets = profile?.pets;
-  if (Array.isArray(pets)) return pets.filter((id) => typeof id === 'string' && PET[id]).slice(0, MAX_TEAM);
-  const owned = Array.isArray(pets?.owned) ? pets.owned : [];
-  const uids = Array.isArray(pets?.team) && pets.team.length ? pets.team : pets?.equipped ? [pets.equipped] : [];
-  const ids = uids.map((u) => owned.find((x) => x && x.uid === u)?.id).filter((id) => id && PET[id]);
-  if (!ids.length && typeof profile?.pet === 'string' && PET[profile.pet]) ids.push(profile.pet);
-  return ids.slice(0, MAX_TEAM);
+  let list;
+  if (Array.isArray(pets)) {
+    const names = Array.isArray(profile.petNames) ? profile.petNames : [];
+    list = pets.map((id, i) => ({ id, name: names[i] }));
+  } else {
+    const owned = Array.isArray(pets?.owned) ? pets.owned : [];
+    const uids = Array.isArray(pets?.team) && pets.team.length ? pets.team : pets?.equipped ? [pets.equipped] : [];
+    list = uids.map((u) => owned.find((x) => x && x.uid === u)).filter(Boolean);
+    if (!list.length && typeof profile?.pet === 'string') list = [{ id: profile.pet }];
+  }
+  return list.filter((x) => typeof x.id === 'string' && PET[x.id]).slice(0, MAX_TEAM).map((x) => ({ id: x.id, name: sanitizePetName(x.name) }));
 }
+/** A profile's equipped pet team as species ids. */
+export const profileTeam = (profile) => profileTeamPets(profile).map((x) => x.id);
+/** The nicknames of profileTeam(profile), in the same order ('' = no nickname). */
+export const profileTeamNames = (profile) => profileTeamPets(profile).map((x) => x.name);
 
 let UID = 1;
 const uid = () => UID++;
@@ -1500,12 +1510,17 @@ export class Game {
     return this.setPets(p, petId ? [petId] : []);
   }
 
-  /** Equip a team (up to MAX_TEAM pet ids; only the first petSlotsFor(base level) count). */
-  setPets(p, ids) {
-    const next = (Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string' && PET[id]).slice(0, MAX_TEAM);
+  /** Equip a team (up to MAX_TEAM pet ids; only the first petSlotsFor(base level) count). `names`: their
+   *  nicknames in the same order (cleaned here: other players see them). */
+  setPets(p, ids, names = []) {
+    const nm = Array.isArray(names) ? names : [];
+    const team = (Array.isArray(ids) ? ids : []).map((id, i) => ({ id, name: nm[i] })).filter((x) => typeof x.id === 'string' && PET[x.id]).slice(0, MAX_TEAM);
+    const next = team.map((x) => x.id);
+    const nextNames = team.map((x) => sanitizePetName(x.name));
     const before = p.pet;
     const same = next.length === p.pets.length && next.every((id, i) => id === p.pets[i]);
     p.pets = next;
+    p.petNames = nextNames;
     this._refreshMods(p);
     if (!same || before !== p.pet) bus.emit('pet:equipped', { player: p, pet: p.pet, pets: this.activePets(p) });
     return true;
@@ -1599,7 +1614,9 @@ export class Game {
       p.faceKey = kind === 'remote' ? 'r_' + pid : profile.id;
       p.name = profile.name || p.char.name;
       p.look = sanitizeLook({ ...p.char.look, ...(profile.look || {}) }, p.char.id);
-      p.pets = profileTeam(profile);
+      const team = profileTeamPets(profile);
+      p.pets = team.map((x) => x.id);
+      p.petNames = team.map((x) => x.name);
       p.baseStyle = sanitizeBaseStyle(profile.baseStyle);
     } else {
       p.profileId = p.char.id;
@@ -1607,6 +1624,7 @@ export class Game {
       p.name = p.char.name;
       p.look = p.char.look;
       p.pets = [];
+      p.petNames = [];
       p.baseStyle = sanitizeBaseStyle(BOT_STYLES[p.char.id]);
     }
     this._refreshMods(p);
@@ -1717,7 +1735,7 @@ export class Game {
         const it = p.interact;
         return {
           kind: p.kind === 'bot' || p.kind === 'empty' ? p.kind : 'player', pid: p.pid, profileId: p.profileId, name: p.name, look: p.look, pet: p.pet,
-          pets: [...p.pets], baseLevel: p.baseLevel, baseStyle: p.baseStyle, boostLevel: p.boostLevel, boostUntil: p.boostUntil, boostReadyAt: p.boostReadyAt,
+          pets: [...p.pets], petNames: [...p.petNames], baseLevel: p.baseLevel, baseStyle: p.baseStyle, boostLevel: p.boostLevel, boostUntil: p.boostUntil, boostReadyAt: p.boostReadyAt,
           treadmillTier: p.treadmillTier, pumpUntil: p.pumpUntil, pumpMult: p.pumpMult, trainT: p.trainT,
           pos: { x: p.pos.x, y: p.pos.y, z: p.pos.z }, vel: { x: p.vel.x, y: p.vel.y, z: p.vel.z }, yaw: p.yaw, onGround: p.onGround,
           cash: p.cash, speedLevel: p.speedLevel, rebirths: p.rebirths, upgradeSpend: p.upgradeSpend, items: { ...p.items }, selectedItem: p.selectedItem,
@@ -1790,6 +1808,7 @@ export class Game {
         p.pets = pets.filter((id) => typeof id === 'string' && PET[id]).slice(0, MAX_TEAM);
         this._refreshMods(p);
       }
+      p.petNames = p.pets.map((_, j) => sanitizePetName(Array.isArray(d.petNames) ? d.petNames[j] : ''));
       if (baseChanged) p._baseDirty = true;
       if (!mine || force) {
         Object.assign(p.pos, d.pos);

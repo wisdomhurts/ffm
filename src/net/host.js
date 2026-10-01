@@ -9,7 +9,7 @@ import { EMOTE, PHRASE } from '../social/catalog.js';
 import { BotController } from '../ai/bot.js';
 import {
   RATES, TIMEOUTS, MAX_HUMANS, EventCodec, forwarded, packPlayers, packMonsters, packProjectiles, sectionize, signature,
-  stringifyR, num, int, isId, isObj, own, sanitizeLook, sanitizePet, sanitizePets, vetSlotData, RateLimiter, upTopic, relay, isPid, predict,
+  stringifyR, num, int, isId, isObj, own, sanitizeLook, sanitizePet, sanitizePetTeam, vetSlotData, RateLimiter, upTopic, relay, isPid, predict,
 } from './protocol.js';
 
 const R = WORLD.playerRadius;
@@ -159,7 +159,7 @@ export class HostRole {
 
   _addMember(pid, slot, who, data) {
     const g = this.game;
-    const profile = { id: who.id, name: who.name, look: who.look || undefined, pet: who.pet, pets: who.pets, baseStyle: who.baseStyle };
+    const profile = { id: who.id, name: who.name, look: who.look || undefined, pet: who.pet, pets: who.pets, petNames: who.petNames, baseStyle: who.baseStyle };
     let p;
     try {
       p = g.setSlot(slot, { kind: 'remote', profile, pid, data: data && typeof data === 'object' ? data : null });
@@ -530,7 +530,11 @@ export class HostRole {
       case 'rebirth': return g.rebirth(p);
       case 'buyEgg': return isId(args[0]) ? g.buyEgg(p, args[0]) : null;
       case 'setPet': g.setPet(p, sanitizePet(args[0])); return true;
-      case 'setPets': g.setPets(p, sanitizePets(args[0])); return true;
+      case 'setPets': {
+        const t = sanitizePetTeam(args[0], args[1]);
+        g.setPets(p, t.pets, t.petNames);
+        return true;
+      }
       case 'setLook': {
         const look = sanitizeLook(args[0], this.s.who.get(p.pid)?.base || p.char.id);
         if (look) g.setLook(p, look);
