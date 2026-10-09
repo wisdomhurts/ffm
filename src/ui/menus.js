@@ -15,6 +15,7 @@ import { avatarEl, lookFigure } from './avatars.js';
 import { ICON, TILE_ICONS, LOGO_SPROUT } from './icons.js';
 import { buildShop } from './shops.js';
 import { buildSettings } from './settingsPanel.js';
+import { buildSoundControls } from './soundControls.js';
 import { buildPhotoBooth } from './photobooth.js';
 import { buildHowTo } from './howto.js';
 import { buildPetShop, openPets } from './pets.js';
@@ -711,6 +712,7 @@ export function createMenus(app) {
       })
       : btn(iconLabel(ICON.home, g?.match || !storageOK ? 'Quit to Title' : 'Save & Quit'), 'btn-red pb-quit', () => app.quitToTitle());
     const fs = fullscreenButton('btn btn-ghost btn-round pp-fs', { onHelp: openFullscreenHelp });
+    const sound = buildSoundControls(app, { compact: true, pad: true }); // music + effects switches and volumes
     const panel = h('div', { class: 'panel pause-panel' + (online ? ' online' : '') },
       fs,
       online ? h('div', { class: 'pp-live' }, h('i'), h('span', { text: code ? `Live in room ${code}` : 'Live online game' })) : null,
@@ -725,13 +727,17 @@ export function createMenus(app) {
           quick('pets', 'Pets', openPets, 'Pets'),
           quick('base', 'My Base', () => openShop('base'), 'My Base'),
           quick('quests', 'Quests', openProgress, 'Quests & Badges')),
+        sound.el,
         h('div', { class: 'pause-util' },
           btn(iconLabel(ICON.gear, 'Settings'), 'btn-blue', openSettings),
           btn(iconLabel(ICON.camera, 'Photo Booth'), 'btn-blue', openPhotoBooth),
           btn(iconLabel(ICON.help, 'How to Play'), 'btn-blue', openHowTo))),
       h('p', { class: 'pause-note', text: note }));
     const sc = setScreen('pause', panel);
-    if (fs) sc.dispose = () => fs._dispose?.();
+    sc.dispose = () => {
+      fs?._dispose?.();
+      sound.dispose();
+    };
   }
 
   function hidePause() {

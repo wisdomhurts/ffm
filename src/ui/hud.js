@@ -7,7 +7,7 @@ import { settings } from '../core/settings.js';
 import { load, save } from '../core/save.js';
 import { LAYOUT, gardenContains } from '../gameplay/layout.js';
 import { rarityColor } from '../view/gameView.js';
-import { h, esc, setText, setHTML, setStyle, toggle, money, clock, noFocus, screenAngle, uiSound, setMuted } from './dom.js';
+import { h, esc, setText, setHTML, setStyle, toggle, money, clock, noFocus, screenAngle, uiSound } from './dom.js';
 import { avatarEl } from './avatars.js';
 import { ICON, ITEM_ICONS, EVENT_ICON } from './icons.js';
 import { createAlerts } from './alerts.js';
@@ -22,6 +22,7 @@ import { mountQuestChip } from './progress.js';
 import { mountRoomPanel } from './lobby.js';
 import { mountSpeedo } from './speedo.js';
 import { fullscreenButton } from './fullscreen.js';
+import { mountSoundButton } from './soundControls.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
@@ -282,30 +283,20 @@ export function createHUD(app) {
 
 function createMenuButtons(app, parent) {
   const pause = noFocus(h('button', { class: 'hbtn', type: 'button', 'aria-label': 'Pause menu', title: 'Menu (Esc)', html: ICON.pause }));
-  const mute = noFocus(h('button', { class: 'hbtn', type: 'button', 'aria-label': 'Mute', title: 'Sound on/off' }));
-  const paint = () => {
-    const m = !!settings.muted;
-    mute.innerHTML = m ? ICON.soundOff : ICON.soundOn;
-    mute.setAttribute('aria-pressed', String(m));
-    mute.classList.toggle('off', m);
-  };
-  paint();
+  // the speaker: tap for the music / sound effects pop-up, hold to mute everything (ui/soundControls.js)
+  const mute = noFocus(h('button', { class: 'hbtn', type: 'button' }));
+  const sound = mountSoundButton(app, mute, parent.closest('.hud') || parent);
   onPress(pause, () => {
     uiSound(app, 'click');
     app.pause();
   }, 'up');
-  onPress(mute, () => {
-    setMuted(app, !settings.muted);
-    paint();
-  }, 'up');
-  const off = bus.on('settings:changed', ({ key }) => (key === 'muted' || key === 'music' || key === 'sfx') && paint());
   // full screen (hidden where the browser can't do it: iPhone Safari, sandboxed frames; on portrait phones the
   // one under the family board shows instead)
   const fs = fullscreenButton('hbtn', { hud: true, bind: (el, fn) => onPress(el, fn, 'up'), onToggle: () => uiSound(app, 'click') });
   parent.appendChild(h('div', { class: 'hud-btns' }, pause, mute, fs));
   return {
     dispose() {
-      off();
+      sound.dispose();
       fs?._dispose?.();
     },
   };
@@ -864,7 +855,7 @@ function createKeyHints(app, parent) {
   const k = (s) => `<kbd>${s}</kbd>`;
   const kb = [
     [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'],
-    [k('Click') + k('F'), 'Bonk'], [k('Shift'), 'Boost'], [k('X'), 'Speed gear'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T'), 'Quick chat'], [k('Right-drag'), 'Camera'], [k('Esc'), 'Menu'],
+    [k('Click') + k('F'), 'Bonk'], [k('Shift'), 'Boost'], [k('X'), 'Speed gear'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T'), 'Quick chat'], [k('Right-drag'), 'Camera'], [k('M'), 'Music on/off'], [k('Esc'), 'Menu'],
   ];
   const gp = [
     [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('X'), 'Bonk'], [k('RT'), 'Boost'], [k('LT'), 'Speed gear'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],

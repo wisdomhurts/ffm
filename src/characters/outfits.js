@@ -937,25 +937,56 @@ export function shoeColors(look) {
   return [look.shoes, sandal ? shade(look.shoes, -0.35) : look.shoes === '#ffffff' ? '#cfd6e2' : '#f4f4f4'];
 }
 
+/**
+ * How light a hair colour is. Light hair (silver, platinum, white: light) loses the usual white streaks and
+ * sheen, so it is drawn with darker strands and a shine made of shade around a bright band: neutral light
+ * hair (silver, white: cool) in a cool slate so it reads as white rather than grey or cream, warm light hair
+ * (platinum) in a deeper shade of its own colour. lum 0..1 also scales the hair's glow (avatar.js).
+ */
+export function hairTone(hex) {
+  const n = parseInt(String(hex).slice(1), 16) || 0;
+  const c = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const l = (c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11) / 255;
+  const light = l > 0.78;
+  const cool = light && Math.max(...c) - Math.min(...c) < 32;
+  return { lum: l, light, cool, tint: cool ? '72,84,118' : shade(hex, -0.5).slice(4, -1) };
+}
+
 // Hair: left half = strands (with a sheen band), right half = short fade (hair -> scalp).
 function drawHair(look, skin, seed) {
   const r = rng(seed);
   const c = canvas(256, 256);
   const g = c.getContext('2d');
   const hc = look.hairColor;
+  const tone = hairTone(hc);
   g.fillStyle = hc;
   g.fillRect(0, 0, 128, 256);
-  for (let i = 0; i < 70; i++) {
-    const x = r() * 128;
-    const w = 1 + r() * 3;
-    g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,' + (0.03 + r() * 0.07) + ')' : 'rgba(0,0,0,' + (0.1 + r() * 0.15) + ')';
-    g.fillRect(x, 0, w, 256);
-  }
   const sheen = g.createLinearGradient(0, 0, 0, 256);
-  sheen.addColorStop(0, 'rgba(255,255,255,0)');
-  sheen.addColorStop(0.22, 'rgba(255,255,255,0.13)');
-  sheen.addColorStop(0.34, 'rgba(255,255,255,0)');
-  sheen.addColorStop(1, 'rgba(0,0,0,0.12)');
+  if (tone.light) {
+    const d = tone.tint;
+    for (let i = 0; i < 80; i++) {
+      const x = r() * 128;
+      const w = 1 + r() * 3;
+      g.fillStyle = r() < 0.35 ? 'rgba(255,255,255,' + (0.35 + r() * 0.35) + ')' : `rgba(${d},${0.06 + r() * 0.11})`;
+      g.fillRect(x, 0, w, 256);
+    }
+    sheen.addColorStop(0, `rgba(${d},0.1)`);
+    sheen.addColorStop(0.15, `rgba(${d},0.03)`);
+    sheen.addColorStop(0.24, 'rgba(255,255,255,0.45)');
+    sheen.addColorStop(0.34, `rgba(${d},0.03)`);
+    sheen.addColorStop(1, `rgba(${d},0.16)`);
+  } else {
+    for (let i = 0; i < 70; i++) {
+      const x = r() * 128;
+      const w = 1 + r() * 3;
+      g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,' + (0.03 + r() * 0.07) + ')' : 'rgba(0,0,0,' + (0.1 + r() * 0.15) + ')';
+      g.fillRect(x, 0, w, 256);
+    }
+    sheen.addColorStop(0, 'rgba(255,255,255,0)');
+    sheen.addColorStop(0.22, 'rgba(255,255,255,0.13)');
+    sheen.addColorStop(0.34, 'rgba(255,255,255,0)');
+    sheen.addColorStop(1, 'rgba(0,0,0,0.12)');
+  }
   g.fillStyle = sheen;
   g.fillRect(0, 0, 128, 256);
   const fade = g.createLinearGradient(0, 0, 0, 256);
@@ -1061,6 +1092,7 @@ export function drawHeadAtlas(faceCanvas, look, skin, target) {
   const g = c.getContext('2d');
   g.drawImage(faceCanvas, 0, 0, 512, 512);
   const hc = look.hairColor;
+  const tone = hairTone(hc);
   const r = rng(99);
   // how far down the sides/back the hair colour reaches (0..1 of the head height)
   const P = HEAD_PAINT[look.hair] || HEAD_PAINT.long;
@@ -1085,6 +1117,18 @@ export function drawHeadAtlas(faceCanvas, look, skin, target) {
       // stubble speckle in the fade
       g.fillStyle = 'rgba(0,0,0,0.13)';
       for (let i = 0; i < 700; i++) g.fillRect(x + r() * w, y + (0.2 + r() * 0.55) * h, 1.5, 1.5);
+    } else if (tone.light) {
+      // light hair: darker strands, and a soft shade where it meets the skin (white hair on pale skin)
+      g.fillStyle = `rgba(${tone.tint},0.1)`;
+      for (let i = 0; i < 40; i++) g.fillRect(x + r() * w, y, 1 + r() * 2, h * solid);
+      const y0 = y + h * Math.max(0, solid - 0.06);
+      const y1 = y + h * Math.min(1, fadeTo + 0.06);
+      const edge = g.createLinearGradient(0, y0, 0, y1);
+      edge.addColorStop(0, `rgba(${tone.tint},0)`);
+      edge.addColorStop(0.5, `rgba(${tone.tint},0.22)`);
+      edge.addColorStop(1, `rgba(${tone.tint},0)`);
+      g.fillStyle = edge;
+      g.fillRect(x, y0, w, y1 - y0);
     } else {
       g.fillStyle = 'rgba(255,255,255,0.05)';
       for (let i = 0; i < 40; i++) g.fillRect(x + r() * w, y, 1 + r() * 2, h * solid);

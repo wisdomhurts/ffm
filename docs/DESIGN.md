@@ -56,6 +56,8 @@ Top-down, **+Z is north** (towards the road). Y is up.
 Avatars are blocky R6-style (legs, torso, arms, big head) with the family member's
 **photo face** on the head (feathered oval decal over a matched skin tone) and a hair
 accessory. Photos are private (never committed); without them a classic cartoon face is used.
+Wardrobe hair colours: natural shades (black to platinum, grey, **silver** and **white**) and fun dyes;
+light hair is drawn with cool strands and a softer glow so white reads as white in sun and shade.
 
 ## 3. Seeds, plants, rarity
 
@@ -130,3 +132,9 @@ biome, and knock the seed out of your hands if they catch you. Out-run them (Spe
   1–5 items · right-drag or Q/Z… orbit camera · wheel zoom · Esc pause.
 * Touch: left joystick · drag right side to orbit · Jump / Bonk / Action buttons · tap hotbar.
 * Gamepad: left stick, right stick camera, A jump, X bonk, B interact, LB/RB cycle items, Y use item.
+* Sound: music and sound effects each have an on/off switch and a volume, fully independent; off keeps
+  the volume for next time, and turning a volume up switches it on. "Mute all" = both switches off (the
+  volumes stay); un-muting brings back the switches that were on. Where: Settings, the pause menu (gamepad:
+  D-pad picks a row, left/right volume, A on/off), and the in-game speaker (tap: a pop-up with both rows;
+  hold: mute all). M turns the music on/off. Music switched off stops scheduling and picks the song up at
+  the next bar; effects switched off cost nothing (audio/levels.js).

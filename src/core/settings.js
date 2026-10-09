@@ -1,5 +1,5 @@
 // User settings, persisted per device.
-import { load, save } from './save.js';
+import { load, save, remove } from './save.js';
 import { bus } from './events.js';
 
 const DEFAULTS = {
@@ -13,7 +13,7 @@ const DEFAULTS = {
   invertY: false,
   autoRotate: true,
   tips: true,
-  muted: false,
+  muted: false, // "mute all" (hold the HUD speaker): true exactly while both switches are off (audio/levels.js)
   autoFullscreen: true, // phones and tablets go full screen when a game starts (ui/fullscreen.js)
   hudLayout: 'auto', // 'auto' | 'simple' | 'full' (ui/hudLayout.js: auto = Simple on small screens)
   onlineBots: 3, // online rooms you host: how many empty gardens get a computer player (0-3)
@@ -43,7 +43,48 @@ function clean(stored) {
   return out;
 }
 
-export const settings = clean(load('settings', {}));
+// Sound before the on/off switches: Mute zeroed both volumes (the old levels waited under 'ui:unmute') and
+// "music off" meant a volume of 0. Carried over once: the volumes come back, the switches take over, and no
+// sound turns itself back on. Returns null when there is nothing to carry over, else {unmute}: what un-muting
+// brings back (audio/levels.js). `out` is the cleaned settings (changed in place).
+export function migrateSound(out, stored, unmute) {
+  if (!stored || typeof stored !== 'object' || !('music' in stored || 'muted' in stored)) return null;
+  const zeroed = out.muted && out.music === 0 && out.sfx === 0; // an old-style mute, whatever else is saved
+  if (typeof stored.musicOn === 'boolean' && !zeroed) return null;
+  const vol = (v, def) => (typeof v === 'number' && v > 0 && v <= 1 ? v : def);
+  let back = null;
+  if (out.muted) {
+    // ?? not ||: a remembered level of 0 was that channel switched off, so it stays off after un-muting
+    const m = unmute?.music ?? DEFAULTS.music;
+    const s = unmute?.sfx ?? DEFAULTS.sfx;
+    back = { musicOn: !(m <= 0), sfxOn: !(s <= 0) };
+    out.music = vol(m, DEFAULTS.music);
+    out.sfx = vol(s, DEFAULTS.sfx);
+    out.musicOn = out.sfxOn = false;
+  } else {
+    out.musicOn = out.music > 0;
+    out.sfxOn = out.sfx > 0;
+    out.music = vol(out.music, DEFAULTS.music);
+    out.sfx = vol(out.sfx, DEFAULTS.sfx);
+  }
+  out.muted = !out.musicOn && !out.sfxOn;
+  return { unmute: back };
+}
+
+function loadSettings() {
+  const stored = load('settings', {});
+  const out = clean(stored);
+  const moved = migrateSound(out, stored, load('ui:unmute', null));
+  if (moved) {
+    save('settings', out);
+    if (moved.unmute) save('ui:unmute', moved.unmute);
+    else remove('ui:unmute');
+  }
+  out.muted = !out.musicOn && !out.sfxOn; // "mute all" is exactly both switches off
+  return out;
+}
+
+export const settings = loadSettings();
 
 export function setSetting(key, value) {
   settings[key] = value;

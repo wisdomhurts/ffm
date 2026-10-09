@@ -137,6 +137,8 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 ```
 * `src/characters/cosmetics.js`: catalog `{hair[], shirts[], hats[], accs[], faces[], trails[], colors}` with
   `price` (⭐ stars, 0 = free) and `unlock` (optional badge id).
+* Colours travel as any `#rrggbb` (sanitizeLook), so palette additions (white `#f2f1ec` and silver `#cfd3dc` hair)
+  need no protocol change; older clients draw them too.
 * `createAvatar(char, face, skin, look?)` renders any Look; `avatar.setLook(look)` rebuilds in place.
 * Emote + dance animations in the avatar: `avatar.update(dt, {..., emote: id|null, emoteT})`
   (`wave`, `cheer`, `laugh`, `point`, `dance1`, `dance2`, `dance3`, `sit`).

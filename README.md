@@ -17,6 +17,9 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
   a golden base.
 * **Speed Shop 2.0**: buy Speed x10 or MAX, a Boost burst (Shift) with 10 upgrade levels, treadmill tiers, moving
   belts, the Warm-Up treadmill that makes you Pumped, and speed gears for fine control at super speed.
+* **Sound your way**: music and sound effects each get their own on/off switch and volume (Settings, the pause
+  menu, or tap the speaker in the game; hold the speaker to mute everything, M turns the music on/off).
+* **White and silver hair** in the Wardrobe, for every hairstyle.
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.
@@ -36,6 +39,7 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 | Speed gear | X | gear chip | LT |
 | Items | 1–5 | tap hotbar | Y / bumpers |
 | Pause | Esc | pause button | Start |
+| Sound | M = music on/off | tap the speaker (hold: mute all) | pause menu: D-pad, left/right, A |
 
 ## Full screen on phones
 * **Android** (and iPads and computers): tap the full screen button on the title, in the pause menu or

@@ -6,9 +6,12 @@
 //   play(name, opts): one-shot SFX ('click', 'hover', 'coins', ... see sfx.js). opts: {vol, x, z, ...recipe options}
 //   update(dt, {game, human, state}): every frame; drives the chase/event layers, alarms and listener position.
 // Extras: audio.ctx, audio.stats(), audio.music (MusicEngine), audio.supported, audio.setMuted(bool).
+// Levels: music and effects each play at levels.js level(kind) (switch off or 0% = silent). Effects at 0 skip
+// all work; music at 0 stops scheduling and later picks up again on the next bar (music.js).
 // Everything is a silent no-op before unlock, without WebAudio, and while the page is hidden.
 import { bus } from '../core/events.js';
 import { settings } from '../core/settings.js';
+import { level, SOUND_KEYS } from './levels.js';
 import { RARITY } from '../config.js';
 import { createMixer } from './mixer.js';
 import { MusicEngine } from './music.js';
@@ -55,11 +58,15 @@ class GameAudio {
     this._camera = null;
     this._unlockAt = 0;
     this.muted = !!settings.muted;
+    this._levels();
     if (!W) return;
     bus.on('settings:changed', ({ key }) => {
-      if (key === 'music' || key === 'sfx') this._applyLevels();
-      if (key === 'music') this._syncMusic();
       if (key === 'muted') this.setMuted(!!settings.muted);
+      else if (SOUND_KEYS.has(key)) {
+        this._applyLevels();
+        if (key === 'music' || key === 'musicOn') this._syncMusic();
+        if (this.sfxLv <= 0) this._stopLoops();
+      }
     });
     bus.on('app:state', ({ state }) => {
       this.appState = state;
@@ -140,17 +147,25 @@ class GameAudio {
   /** Master mute (the UI's mute button). Also stops scheduling so a muted game costs no CPU. */
   setMuted(muted) {
     this.muted = !!muted;
+    this._applyLevels();
     if (!this.mixer) return;
     this.mixer.master.gain.setTargetAtTime(this.muted ? 0 : 0.9, this.ctx.currentTime, 0.05);
     if (this.muted) this._stopLoops();
     this._syncMusic();
   }
 
+  // the two channel levels after the switches and the perceptual curve (0 = that channel is silent)
+  _levels() {
+    this.musicLv = perceptual(level('music'));
+    this.sfxLv = perceptual(level('sfx'));
+  }
+
   _applyLevels(tc) {
+    this._levels();
     if (!this.mixer) return;
     const duck = DUCK[this.appState] ?? 1;
-    this.mixer.setMusic(perceptual(settings.music) * MUSIC_TRIM * duck, this.appState === 'paused', tc);
-    this.mixer.setSfx(perceptual(settings.sfx) * SFX_TRIM, tc);
+    this.mixer.setMusic(this.musicLv * MUSIC_TRIM * duck, this.appState === 'paused', tc);
+    this.mixer.setSfx(this.sfxLv * SFX_TRIM, tc);
   }
 
   // ------------------------------------------------------------------ music
@@ -182,8 +197,8 @@ class GameAudio {
   _syncMusic() {
     const m = this.music;
     if (!m || this.ctx.state === 'closed') return;
-    // muted music costs nothing: stop scheduling entirely
-    m.setMode(this.muted || perceptual(settings.music) < 1e-4 ? 'off' : this.baseMode);
+    // muted or switched-off music costs nothing: stop scheduling entirely
+    m.setMode(this.muted || this.musicLv < 1e-4 ? 'off' : this.baseMode);
     if (this.forceChase) m.setChase(true);
     if (this.forceEvent) m.setEvent(this.game?.event?.type || 'golden');
     this._tick();
@@ -197,7 +212,8 @@ class GameAudio {
    */
   play(name, opts = {}) {
     const ac = this.ctx;
-    if (!ac || this.muted || hidden()) return;
+    // effects switched off (or at 0%): no work at all
+    if (!ac || this.muted || this.sfxLv <= 0 || hidden()) return;
     // allow the brief 'suspended' window right after an unlock (the very first UI click)
     if (ac.state !== 'running' && !(ac.state === 'suspended' && performance.now() - (this._unlockAt || -1e9) < 1000)) return;
     const fn = SFX[name];
@@ -230,7 +246,10 @@ class GameAudio {
 
   /** Voice/node bookkeeping for tests. */
   stats() {
-    return { active: voiceStats.active, created: voiceStats.created, state: this.ctx?.state || 'none', music: this.music?.describe() };
+    return {
+      active: voiceStats.active, created: voiceStats.created, state: this.ctx?.state || 'none', music: this.music?.describe(),
+      levels: { music: this.musicLv, sfx: this.sfxLv },
+    };
   }
 
   // ------------------------------------------------------------------ game wiring
@@ -440,7 +459,7 @@ class GameAudio {
 
   _startAlarm() {
     const ac = this.ctx;
-    if (!ac || ac.state !== 'running' || this.muted || hidden()) return;
+    if (!ac || ac.state !== 'running' || this.muted || this.sfxLv <= 0 || hidden()) return;
     if (this.alarm && ac.currentTime < this.alarm.endsAt - 0.3) return;
     this.alarm?.stop(ac.currentTime + 0.01);
     this.alarm = alarmLoop(ac, this.mixer.sfxIn, ac.currentTime + 0.01, { max: 4 });
@@ -537,7 +556,7 @@ class GameAudio {
     // --- rising tension while you hold "steal"
     const it = H.interact;
     const stealingNow = it && it.verb === 'Steal' && it.t > 0 && !it.fired && it.hold > 0;
-    if (stealingNow && !this.muted) {
+    if (stealingNow && !this.muted && this.sfxLv > 0) {
       if (!this.stealing || now > this.stealing.endsAt - 0.2) {
         this.stealing?.stop(now + 0.01);
         this.stealing = stealLoop(ac, this.mixer.sfxIn, now + 0.01);

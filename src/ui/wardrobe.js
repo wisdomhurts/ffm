@@ -11,7 +11,7 @@ import { h, uiSound } from './dom.js';
 import { ICON } from './icons.js';
 import { EMOTES } from '../social/catalog.js';
 import {
-  COLORS, BUILDS, HAIR, SHIRTS, LEGS, HATS, ACCS, FACES, TRAILS, HAT_BY_ID, ACC_BY_ID,
+  COLORS, HAIR_NAMES, BUILDS, HAIR, SHIRTS, LEGS, HATS, ACCS, FACES, TRAILS, HAT_BY_ID, ACC_BY_ID,
   sanitizeLook, sameLook, isOwned, unownedParts, unlockKey, randomLook, baseLook, legsOf,
 } from '../characters/cosmetics.js';
 import { composeFaceCanvas, getFace, familyFaceData } from '../characters/faces.js';
@@ -637,7 +637,7 @@ function createWardrobe(app, close, opts = {}) {
     return h('div', { class: 'wd-sec' }, h('div', { class: 'wd-sec-l' }, h('span', { text: label }), note ? h('small', { text: note }) : null), ...kids);
   }
 
-  function swatches(field, colors, { family = null, label, fallback = null } = {}) {
+  function swatches(field, colors, { family = null, label, fallback = null, names = null } = {}) {
     const cur = draft[field] ?? fallback;
     const list = [...new Set(colors)];
     if (cur && !list.includes(cur)) list.unshift(cur);
@@ -652,8 +652,9 @@ function createWardrobe(app, close, opts = {}) {
       }));
     }
     for (const c of list) {
+      const name = names?.[c] || c;
       sws.push(h('button', {
-        class: 'wd-sw' + (cur === c ? ' on' : ''), type: 'button', style: `--c:${c}`, 'aria-label': (label || 'Colour') + ' ' + c, 'aria-pressed': String(cur === c), title: c,
+        class: 'wd-sw' + (cur === c ? ' on' : ''), type: 'button', style: `--c:${c}`, 'aria-label': (label || 'Colour') + ' ' + name, 'aria-pressed': String(cur === c), title: name,
         onclick: () => {
           uiSound(app, 'click');
           setDraft({ [field]: c });
@@ -692,7 +693,7 @@ function createWardrobe(app, close, opts = {}) {
       case 'hair':
         out.push(info());
         out.push(h('div', { class: 'wd-grid' }, HAIR.map((it) => tile({ name: it.name, vis: thumbVis('hair', it.id, d), on: d.hair === it.id, cat: 'hair', item: it, onPick: pick('hair', 'hair', it) }))));
-        out.push(section('Hair colour', null, swatches('hairColor', COLORS.hair, { label: 'Hair colour' })));
+        out.push(section('Hair colour', null, swatches('hairColor', COLORS.hair, { label: 'Hair colour', names: HAIR_NAMES })));
         break;
       case 'face': {
         out.push(info());

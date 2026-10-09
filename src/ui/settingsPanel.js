@@ -3,12 +3,13 @@ import { DIFFICULTY } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings, setSetting } from '../core/settings.js';
 import { save } from '../core/save.js';
-import { h, uiSound, setMuted } from './dom.js';
+import { h, uiSound } from './dom.js';
 import { ICON } from './icons.js';
 import { resetTutorial } from './tutorial.js';
 import { fsMode, isFullscreen, toggleFullscreen, onFullscreenChange, autoFullscreenApplies } from './fullscreen.js';
 import { openCloudSave } from './cloudsave.js';
 import { onlineConfigured } from '../online/config.js';
+import { buildSoundControls } from './soundControls.js';
 
 export function buildSettings(app) {
   const rows = [];
@@ -30,8 +31,6 @@ export function buildSettings(app) {
     };
     input.addEventListener('input', () => {
       setSetting(key, +input.value);
-      // turning a volume up un-mutes
-      if (settings.muted && +input.value > 0) setSetting('muted', false);
       paint();
     });
     paint();
@@ -73,15 +72,12 @@ export function buildSettings(app) {
     toggles.push(paint);
     b.addEventListener('click', () => {
       uiSound(app, 'click');
-      if (key === 'muted') setMuted(app, !settings.muted);
-      else setSetting(key, !settings[key]);
+      setSetting(key, !settings[key]);
       paint();
     });
     paint();
     return b;
   };
-
-  const pct = (v) => Math.round(v * 100) + '%';
 
   // Cloud Save (save codes) lives here; the panel itself comes from the backend module. Until a backend
   // is configured it is a quiet "coming soon" row (the panel then shows a coming-soon card).
@@ -100,9 +96,9 @@ export function buildSettings(app) {
   const cloudRow = cloudOn ? null : row('Cloud Save', cloudBtn, 'Save codes to take your garden to another phone or computer.');
   const qualityNote = h('span', { class: 'set-note warn', text: 'Applies after you reload the page.', hidden: true });
 
-  row('Music', slider('music', 0, 1, 0.05, pct));
-  row('Sound effects', slider('sfx', 0, 1, 0.05, pct));
-  row('Mute everything', toggleCtl('muted', 'Mute'));
+  // Music and sound effects: an on/off switch and a volume each (ui/soundControls.js)
+  const sound = buildSoundControls(app, { rowClass: 'set-row' });
+  rows.push(sound.el);
 
   // Full screen: a live switch where the browser allows it (plus "go full screen by yourself" on phones and
   // tablets); iPhones get a button that opens the Add to Home Screen guide instead
@@ -163,6 +159,7 @@ export function buildSettings(app) {
     dispose() {
       off();
       offFs();
+      sound.dispose();
     },
   };
 }

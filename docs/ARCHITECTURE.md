@@ -114,6 +114,8 @@ The placeholder file for each module documents its exact exported API at the top
 * `characters/avatar.js` → `createAvatar(charDef, faceImage, skinHex)`; `characters/monsters.js` → `createMonster(type)`.
 * `plants/plantMeshes.js` → `createPlantView`, `createSeedView`, `createCarriedPlantView`, `createPodView`.
 * `fx/effects.js` → `createEffects(engine, container)` (+ `attach(game)`); `fx/props.js` → `createBanana`, `createBalloon`, `createNoodle`.
+* `audio/levels.js` → the sound settings rules (`level(kind)`, `setChannelOn`, `setVolume`, `setAllMuted`; no DOM):
+  music and effects each play at `level(kind)` (`settings.musicOn ? music : 0`, same for `sfx`). UI: `ui/soundControls.js`.
 * `audio/audio.js` → `audio` singleton (`unlock, attach, setMusicMode, play, update, setMuted`). Named sounds for
   `audio.play(name, opts)`: UI `click`, `hover`, `error`, `shopBell`, `confetti`; gameplay `coins {amount}`,
   `grab {tier, mutation}`, `purchase`, `speedUp`, `unlock`, `rebirth`, `event {type}`; pass `{x, z}` for positional sounds.

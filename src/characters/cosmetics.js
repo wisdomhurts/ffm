@@ -14,12 +14,22 @@ import { CHARACTER, CHARACTERS } from '../config.js';
 
 // ------------------------------------------------------------------ colour palettes
 
+// Hair: natural shades (dark to light, then grey, silver and white) and fun dyes. randomLook() mostly picks natural.
+export const HAIR_NATURAL = ['#17110f', '#3a2a20', '#5a3b28', '#8a4b2a', '#c8642a', '#e2b85c', '#f3e3b5', '#b9b9c4', '#cfd3dc', '#f2f1ec'];
+export const HAIR_FUN = ['#e8323c', '#ff6fb5', '#9b5cff', '#3d9bff', '#2fd6a0'];
+/** Names for the Wardrobe swatches. */
+export const HAIR_NAMES = {
+  '#17110f': 'Black', '#3a2a20': 'Dark brown', '#5a3b28': 'Brown', '#8a4b2a': 'Auburn', '#c8642a': 'Ginger', '#e2b85c': 'Blonde',
+  '#f3e3b5': 'Platinum', '#b9b9c4': 'Grey', '#cfd3dc': 'Silver', '#f2f1ec': 'White',
+  '#e8323c': 'Red', '#ff6fb5': 'Pink', '#9b5cff': 'Purple', '#3d9bff': 'Blue', '#2fd6a0': 'Mint',
+};
+
 export const COLORS = {
   cloth: [
     '#ffffff', '#c9ced8', '#4a4f5c', '#1d1d1d', '#e8323c', '#ff6b5a', '#ff8a1a', '#ffd23f', '#9be34a', '#2fb84f', '#8ff0d8',
     '#1ec8a5', '#5cc8ff', '#2f80ed', '#2b3a55', '#8a5cc8', '#c9a6ff', '#ff4f9a', '#ffb3d1', '#8a5a34', '#c8b48a',
   ],
-  hair: ['#17110f', '#3a2a20', '#5a3b28', '#8a4b2a', '#c8642a', '#e2b85c', '#f3e3b5', '#b9b9c4', '#e8323c', '#ff6fb5', '#9b5cff', '#3d9bff', '#2fd6a0'],
+  hair: [...HAIR_NATURAL, ...HAIR_FUN],
   skin: ['#f7d7c4', '#eec1a4', '#e0ac8a', '#d19a82', '#c98d78', '#b87a5a', '#9c6444', '#7d4a30', '#5c3622', '#3f2518', '#f5cd30'],
   noodle: ['#ff4f9a', '#2f80ed', '#9b5cff', '#1ec8a5', '#ffd23f', '#ff8a1a', '#e8323c', '#63d45a', '#5cc8ff', '#ffffff', '#1d1d1d', '#ffb3d1'],
   shoes: ['#ffffff', '#1d1d1d', '#e8323c', '#ff8a1a', '#ffd23f', '#2fb84f', '#1ec8a5', '#2f80ed', '#8a5cc8', '#ff4f9a', '#8a5a34', '#f2d0b8'],
@@ -264,7 +274,7 @@ export function randomLook(profile, current, r = Math.random) {
   const look = {
     ...c,
     hair: pickOf(own('hair', HAIR), r).id,
-    hairColor: r() < 0.75 ? pickOf(COLORS.hair.slice(0, 8), r) : pickOf(COLORS.hair, r),
+    hairColor: r() < 0.75 ? pickOf(HAIR_NATURAL, r) : pickOf(COLORS.hair, r),
     shirt,
     shirtColor: c1,
     shirtColor2: c2,
