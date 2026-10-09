@@ -50,11 +50,14 @@ export class ClientRole {
     this.edgeN = 0;
     this.held = false;
     this.ip = 0;
+    this.sellHeld = false; // the Sell button (its own hold, sent as s / sp like i / ip)
+    this.sp = 0;
     this.sel = null;
     this.lastKick = 0;
     this.urgent = true;
     this.sentAt = -9;
     this.li = { key: null, t: 0, hold: 0, label: '', verb: '', rarity: undefined, fired: false };
+    this.ls = { key: null, t: 0, hold: 0, label: '', verb: '', rarity: undefined, value: 0, fired: false };
     this.predSwing = -9;
     this.predReady = 0;
     this.simulating = false;
@@ -199,6 +202,15 @@ export class ClientRole {
     it.label = li.label;
     it.verb = li.verb;
     it.rarity = li.rarity;
+    const st = p.sell;
+    const ls = this.ls;
+    st.key = ls.key;
+    st.t = ls.t;
+    st.hold = ls.hold;
+    st.label = ls.label;
+    st.verb = ls.verb;
+    st.rarity = ls.rarity;
+    st.value = ls.value;
   }
 
   _store(tm, P, M) {
@@ -254,6 +266,7 @@ export class ClientRole {
       if (!e) continue;
       // already played on this device the moment it happened
       if ((name === 'player:jump' || name === 'bonk:swing' || name === 'boost:start' || name === 'base:bounce') && e.player === me) continue;
+      if (name === 'pet:trick' && e.player === me) continue; // our own clicks start the trick right here (act)
       if ((name === 'chat' || name === 'emote') && this.s.isMuted(e.player)) continue;
       relay.depth++;
       try {
@@ -306,6 +319,13 @@ export class ClientRole {
       if (PHRASE[args[0]]) this._edge('s', args[0]);
       return undefined;
     }
+    if (name === 'petTrick') {
+      // play it here right away (this mirror picks the trick and keeps its own cooldown); the host checks it
+      // again, shows everyone the same trick and we skip its echo
+      const trick = this.game.petTrick(this.me, args[0], args[1]);
+      if (trick) this._edge('a', ['petTrick', [args[0], args[1], trick]]);
+      return !!trick;
+    }
     let json;
     try {
       json = JSON.stringify(args ?? []);
@@ -340,7 +360,7 @@ export class ClientRole {
     const moving = !p.onGround || Math.abs(p.vel.x) + Math.abs(p.vel.z) > 0.3;
     if (this.moving && !moving) this.urgent = true; // just stopped: say where right away
     this.moving = moving;
-    const heartbeat = this.held ? 0.5 : 1 / R.inHeartbeat;
+    const heartbeat = this.held || this.sellHeld ? 0.5 : 1 / R.inHeartbeat;
     // a small burst allowance: starting, stopping and turning get through quickly, steady running is cheap
     this.tokens = Math.min(R.inBurst, (this.tokens ?? R.inBurst) + (now - (this.tokAt ?? now)) * R.inMax);
     this.tokAt = now;
@@ -353,6 +373,8 @@ export class ClientRole {
       p: [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.vel.x), r2(p.vel.y), r2(p.vel.z), r3(p.yaw), p.onGround ? 1 : 0, r2(tvx), r2(tvz)],
       i: this.held ? 1 : 0,
       ip: this.ip,
+      s: this.sellHeld ? 1 : 0,
+      sp: this.sp,
       sel: p.selectedItem,
       e: this.q.slice(0, 16),
       ka: this.lastKick,
@@ -392,6 +414,12 @@ export class ClientRole {
         this.held = held;
         this.urgent = true;
       }
+      const sh = !!it.sell;
+      if (sh !== this.sellHeld) {
+        if (sh) this.sp++;
+        this.sellHeld = sh;
+        this.urgent = true;
+      }
       // the velocity we're steering towards (what the host's guess assumes we keep doing)
       const stunned = g.time < p.stunUntil;
       let mx = stunned ? 0 : it.moveX, mz = stunned ? 0 : it.moveZ;
@@ -421,6 +449,7 @@ export class ClientRole {
     this._draw(hostNow);
     this._advanceLocal(dt);
     this._prompt(p, dt);
+    this._sellPrompt(p, dt);
     this._keepLocal(p);
     this._send();
   }
@@ -566,6 +595,41 @@ export class ClientRole {
     } else {
       li.t = 0;
       li.fired = false;
+    }
+  }
+
+  // Our own Sell prompt (findSell), the same way: fills here while the Sell button is held.
+  _sellPrompt(p, dt) {
+    const ls = this.ls;
+    const f = this.game.findSell(p);
+    if (!f) {
+      ls.key = null;
+      ls.t = ls.hold = ls.value = 0;
+      ls.label = ls.verb = '';
+      ls.fired = false;
+      return;
+    }
+    if (f.key !== ls.key) {
+      ls.key = f.key;
+      ls.t = 0;
+      ls.fired = false;
+    }
+    ls.hold = f.hold;
+    ls.label = f.label;
+    ls.verb = f.verb;
+    ls.rarity = f.rarity;
+    ls.value = f.value;
+    if (this.sellHeld) {
+      if (!ls.fired) {
+        ls.t += dt / (p.mods?.hold || 1);
+        if (ls.t >= f.hold) {
+          ls.t = f.hold;
+          ls.fired = true;
+        }
+      }
+    } else {
+      ls.t = 0;
+      ls.fired = false;
     }
   }
 }

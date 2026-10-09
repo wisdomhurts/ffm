@@ -65,7 +65,7 @@ export function goToPlanter(bot, game, p, it, dt, g, pl, key, interactable, hold
   if (!spot) return 'fail';
   const px = p.pos.x, pz = p.pos.z;
   const dc = hyp(pl.x - px, pl.z - pz);
-  if ((key && p.interact.key === key) || (!key && dc < 3.98)) {
+  if ((key && (p.interact.key === key || p.sell.key === key)) || (!key && dc < 3.98)) {
     bot.motor.stop();
     it.moveX = 0;
     it.moveZ = 0;
@@ -116,7 +116,7 @@ function stepSell(bot, game, p, it, dt, s) {
   if (info.free > 0 || !info.weakest) return true;
   if (!s.pl || !s.pl.plant) s.pl = info.weakest;
   const r = goToPlanter(bot, game, p, it, dt, info.g, s.pl, 'sell' + s.pl.index, grownPlant, s);
-  if (r === 'ready') it.interact = true;
+  if (r === 'ready') it.sell = true; // its own button, like a person (ready = this planter's Sell prompt is up)
   return r === 'fail';
 }
 
@@ -185,7 +185,7 @@ export class ReturnGoal extends Goal {
       const pl = info.weakest;
       const r = goToPlanter(bot, game, p, it, dt, g, pl, 'sell' + pl.index, grownPlant, this);
       if (r === 'ready') {
-        if (p.interact.key === 'sell' + pl.index) it.interact = true;
+        if (p.sell.key === 'sell' + pl.index) it.sell = true;
         else if ((this.sellT += dt) >= PLAYER.sellHold) {
           this.sellT = 0;
           game.sellPlant(p, pl);

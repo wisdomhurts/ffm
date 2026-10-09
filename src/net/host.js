@@ -22,6 +22,8 @@ export class RemoteController {
   constructor() {
     this.held = false;
     this.release = false; // report one released tick (a fresh press while still held)
+    this.sellHeld = false; // the Sell button: the same, on its own
+    this.sellRelease = false;
     this.sel = null;
     this.q = []; // pending one-shot actions: ['j'|'b'|'u'|'m'|'s', value]
   }
@@ -32,6 +34,8 @@ export class RemoteController {
     const it = emptyIntent();
     it.interact = this.held && !this.release;
     this.release = false;
+    it.sell = this.sellHeld && !this.sellRelease;
+    this.sellRelease = false;
     if (this.sel != null) {
       it.selectSlot = this.sel;
       this.sel = null;
@@ -76,6 +80,7 @@ export class HostRole {
     this.limitIn = new RateLimiter(40, 60);
     this.limitHello = new RateLimiter(1, 4);
     this.limitAct = new RateLimiter(6, 16); // shop/look/gift/trade actions per member
+    this.limitTrick = new RateLimiter(4, 8); // pet tricks: their own budget, so clicking pets never blocks a purchase
     this.forceKey = true;
     this.off = [
       bus.on('*', ({ name, payload }) => {
@@ -183,7 +188,7 @@ export class HostRole {
       pid, slot: p.slot, ctrl, up: null,
       base: { x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: 0, vy: 0, vz: 0, tx: 0, tz: 0, yaw: p.yaw, og: true, t: this.s.clock, c: null },
       ex: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
-      lastIn: this.s.clock, goneAt: null, lastEdge: 0, ip: 0, welcomedAt: -9, hn: null,
+      lastIn: this.s.clock, goneAt: null, lastEdge: 0, ip: 0, sp: 0, welcomedAt: -9, hn: null,
       show: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw },
       kick: 0, kickPending: false, kickAt: 0, kickTries: 0, kickGraceUntil: 0, needKick: false, fixAt: 0,
     };
@@ -339,6 +344,13 @@ export class HostRole {
       m.ip = msg.ip;
     }
     ctrl.held = held;
+    // held Sell, the same way
+    const sh = !!msg.s;
+    if (Number.isInteger(msg.sp) && msg.sp !== m.sp) {
+      if (ctrl.sellHeld && sh) ctrl.sellRelease = true;
+      m.sp = msg.sp;
+    }
+    ctrl.sellHeld = sh;
     if (Number.isInteger(msg.sel) && msg.sel >= 0 && msg.sel < ITEMS.length && msg.sel !== p.selectedItem) ctrl.sel = msg.sel;
     if (m.kickPending && Number.isInteger(msg.ka) && msg.ka >= m.kick) {
       m.kickPending = false;
@@ -366,7 +378,8 @@ export class HostRole {
     } else if (k === 's') {
       if (own(PHRASE, v)) ctrl.push('s', v);
     } else if (k === 'a' && Array.isArray(v) && typeof v[0] === 'string') {
-      if (this.limitAct.allow(m.pid, this.s.clock)) this.act(p, v[0], Array.isArray(v[1]) ? v[1].slice(0, 4) : []);
+      const limit = v[0] === 'petTrick' ? this.limitTrick : this.limitAct;
+      if (limit.allow(m.pid, this.s.clock)) this.act(p, v[0], Array.isArray(v[1]) ? v[1].slice(0, 4) : []);
     }
   }
 
@@ -548,6 +561,8 @@ export class HostRole {
         const to = g.players[int(args[0], 0, 3, -1)];
         return to ? g.giftPlant(p, to, int(args[1], 0, WORLD.planterCount - 1, -1)) : false;
       }
+      case 'petTrick': // ownerSlot, pet index, the trick their device already started (kept if that pet knows it)
+        return !!g.petTrick(p, int(args[0], 0, 3, -1), int(args[1], 0, 2, -1), isId(args[2]) ? args[2] : null);
       case 'addCash':
         return false; // quest cash is banked on the device for solo play; online nobody prints money
       case 'chat': return postTyped(g, p, args[0], this.s.clock); // typed chat: filtered again, rate limited per player
@@ -593,7 +608,7 @@ export class HostRole {
       m.ex.x = p.pos.x;
       m.ex.y = p.pos.y;
       m.ex.z = p.pos.z;
-      if (now - m.lastIn > 1.3) m.ctrl.held = false; // lost contact: let go of the E key
+      if (now - m.lastIn > 1.3) m.ctrl.held = m.ctrl.sellHeld = false; // lost contact: let go of E and Sell
     }
     g.paused = false; // an online world never pauses (the pause menu is just an overlay)
     g.update(dt);

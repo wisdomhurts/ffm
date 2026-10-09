@@ -23,7 +23,7 @@
 //   welcome {to, hn, slot, ep, order, priv, st} host -> joiner (st = full world state)
 //   kick    {to, k, p, v, su, iu}               host -> member: the rules moved you (knockback, caught, respawn)
 //   kicked  {to}                                host -> member: removed from the room
-import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL } from '../config.js';
+import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL, PET_TRICKS, RARITY } from '../config.js';
 import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
 import { REPLIES, EMOTE_LINES, TYPED_REPLIES } from '../social/replies.js';
 import { isTypedLine } from '../social/chat.js';
@@ -492,6 +492,8 @@ export class EventCodec {
       else delete e.typed;
     }
     if (name === 'emote' && !own(EMOTE, e.id)) return null;
+    if (name === 'pet:trick' && (int(e.owner, 0, 3, -1) < 0 || int(e.k, 0, 2, -1) < 0 ||
+      (!PET_TRICKS.walk.includes(e.trick) && !PET_TRICKS.fly.includes(e.trick)))) return null;
     return e;
   }
 }
@@ -516,8 +518,8 @@ export function sectionize(full) {
 /** The part of a section whose change must reach clients right away. */
 export function signature(key, v) {
   if (key[0] === 'p' && key !== 'pd') {
-    const { pos, vel, yaw, onGround, interact, trainT, ...rest } = v;
-    return stringifyR([rest, interact.key, interact.verb, interact.label, trainT > 0]);
+    const { pos, vel, yaw, onGround, interact, sell, trainT, ...rest } = v;
+    return stringifyR([rest, interact.key, interact.verb, interact.label, sell?.key, sell?.label, trainT > 0]);
   }
   if (key[0] === 'g' && key !== 'gr') {
     return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.guardReadyAt, v.guardAlert, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0]])]);
@@ -615,5 +617,10 @@ export function vetPlayer(d, i) {
   d.items = items;
   const it = d.interact;
   for (const k of ['label', 'verb', 'key', 'rarity']) if (it[k] != null && (typeof it[k] !== 'string' || it[k].length > 64)) it[k] = '';
+  // the Sell prompt (its own button): same shape as interact, plus what it sells for
+  const sl = isObj(d.sell) ? d.sell : {};
+  d.sell = { key: null, t: num(sl.t), hold: num(sl.hold), label: '', verb: '', rarity: undefined, value: Math.max(0, num(sl.value)) };
+  for (const k of ['label', 'verb', 'key']) if (typeof sl[k] === 'string' && sl[k].length <= 64) d.sell[k] = sl[k];
+  if (own(RARITY, sl.rarity)) d.sell.rarity = sl.rarity;
   return true;
 }

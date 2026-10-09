@@ -61,6 +61,8 @@ export class HumanController {
       this._tapHold = Math.max(0, (this._tapHold || 0) - dt);
     }
     this._lastInteract = it.interact;
+    // Sell is always a real hold (1 s), so no tap trick: held while V / Sell / D-pad down is down
+    it.sell = this.input.sellHeld();
     const e = this.frameEdges;
     if (e) {
       it.jump = !!e.jump;

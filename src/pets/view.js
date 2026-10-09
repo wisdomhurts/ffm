@@ -7,9 +7,13 @@
 //   update(dt, owner, time, mood?)  // owner: {pos:{x,y,z}, yaw, vel:{x,y,z}, onGround} (a Player works as-is)
 //                                   // mood (optional): {celebrating, stunned}
 //   place(owner),                   // snap next to the owner now (with a little pop)
+//   trick(id),                      // a trick (PET_TRICKS: walkers backflip/spin/jump/dance/roll, flyers
+//                                   // loop/barrel/spinrise/dive), ~1 s on top of the follow pose; false if unknown
+//   center(out), radius,            // a sphere around the body (picking: GameView.pickPet)
 //   petId, dispose()
 // }
 import { createPetModel } from './models.js';
+import { reducedMotion } from '../core/camera.js';
 
 const TAU = Math.PI * 2;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -20,6 +24,82 @@ const easeOutBack = (t) => {
 };
 
 let SEQ = 1;
+
+// ------------------------------------------------------------------ tricks
+// Each writes offsets for normalised time u (0..1) into o: lift position (tx, ty, tz; z = the pet's forward),
+// flips (rx nose-up negative, rz roll; both turn around the body's middle), extra facing (yaw), squash (sq),
+// head bob and wing flap speed. All start and end at rest, so the pet eases back into its follow pose.
+const hop = (u) => 4 * u * (1 - u);
+const seg = (u, a, b) => Math.min(1, Math.max(0, (u - a) / (b - a)));
+// crouch, fly, land: squash before take-off and on landing, stretch in the air
+const springy = (u, a, b, k = 1) => (u < a ? -0.22 * Math.sin((u / a) * Math.PI) : u < b ? 0.12 * Math.sin(seg(u, a, b) * Math.PI) : -0.18 * Math.sin(seg(u, b, 1) * Math.PI)) * k;
+const TRICKS = {
+  // walkers
+  backflip: { dur: 1.0, fn(u, o) {
+    const v = seg(u, 0.18, 0.86);
+    o.ty = hop(v) * 2.1;
+    o.rx = -TAU * easeInOut(v);
+    o.sq = springy(u, 0.18, 0.86);
+  } },
+  spin: { dur: 0.9, fn(u, o) {
+    o.yaw = TAU * 2 * easeInOut(u);
+    o.ty = hop(u) * 0.8;
+    o.sq = 0.06 * Math.sin(u * Math.PI);
+  } },
+  jump: { dur: 0.95, fn(u, o) {
+    const v = seg(u, 0.2, 0.88);
+    o.ty = hop(v) * 3.0;
+    o.rx = -0.35 * Math.sin(v * Math.PI); // a happy tuck, chin up
+    o.sq = springy(u, 0.2, 0.88, 1.25);
+    o.bob = -0.3 * Math.sin(v * Math.PI);
+  } },
+  dance: { dur: 1.2, fn(u, o) {
+    const e = Math.sin(u * Math.PI); // fades in and out
+    o.yaw = Math.sin(u * TAU * 2) * 0.55 * e;
+    o.rz = Math.sin(u * TAU * 3) * 0.3 * e;
+    o.ty = Math.abs(Math.sin(u * TAU * 3)) * 0.45 * e;
+    o.bob = Math.sin(u * TAU * 6) * 0.22 * e;
+    o.sq = Math.sin(u * TAU * 6) * 0.05 * e;
+  } },
+  roll: { dur: 1.0, fn(u, o) {
+    const v = seg(u, 0.08, 0.92);
+    o.rz = TAU * easeInOut(v);
+    o.ty = hop(v) * 1.0;
+    o.tx = Math.sin(v * Math.PI) * 0.5;
+  } },
+  // flyers
+  loop: { dur: 1.2, fn(u, o) {
+    const a = TAU * easeInOut(u);
+    o.tz = Math.sin(a) * 1.6;
+    o.ty = (1 - Math.cos(a)) * 1.6;
+    o.rx = -a;
+    o.flap = 1.8;
+  } },
+  barrel: { dur: 0.95, fn(u, o) {
+    const a = TAU * easeInOut(u);
+    o.rz = a;
+    o.tx = Math.sin(a) * 0.8;
+    o.ty = (1 - Math.cos(a)) * 0.35;
+    o.flap = 1.6;
+  } },
+  spinrise: { dur: 1.15, fn(u, o) {
+    o.ty = Math.sin(u * Math.PI) * 2.2;
+    o.yaw = TAU * 3 * easeInOut(u);
+    o.sq = 0.08 * Math.sin(u * Math.PI);
+    o.flap = 2.2;
+  } },
+  dive: { dur: 1.05, fn(u, o, fly) {
+    const e = Math.sin(u * Math.PI);
+    o.ty = -Math.min(2.2, fly * 0.7) * e;
+    o.tz = 1.8 * e;
+    o.rx = 0.85 * Math.sin(u * TAU); // nose down into the dive, up out of it
+  } },
+};
+// reduced motion: every trick is a small happy hop
+const GENTLE = { dur: 0.7, fn(u, o) {
+  o.ty = hop(u) * 0.6;
+  o.sq = 0.05 * Math.sin(u * Math.PI);
+} };
 
 export function createPetView(petId, opts = {}) {
   // a touch bigger than the models' base size so buddies read well behind a 5-stud avatar
@@ -47,7 +127,10 @@ export function createPetView(petId, opts = {}) {
     idle: 0,
     wasStunned: false,
     bank: 0, pitch: 0,
+    trick: null, trickT: 0,
   };
+  const tr = { tx: 0, ty: 0, tz: 0, rx: 0, rz: 0, yaw: 0, sq: 0, bob: 0, flap: 1 }; // this frame's trick offsets
+  const cy = M.size.minY + M.size.h * 0.5; // flips turn around the body's middle
 
   function target(owner, out) {
     const yaw = owner.yaw || 0;
@@ -139,7 +222,7 @@ export function createPetView(petId, opts = {}) {
     const stunned = !!mood?.stunned;
     if (stunned && !s.wasStunned) s.happyT = 0; // startled jump when the owner gets bonked
     s.wasStunned = stunned;
-    if (s.happyT < 0 && !moving && (celebrating || time > s.happyAt)) {
+    if (s.happyT < 0 && !moving && !s.trick && (celebrating || time > s.happyAt)) {
       s.happyT = 0;
       s.spin = celebrating || rnd() < 0.5 ? 1 : 0;
       s.happyAt = time + 7 + rnd() * 9;
@@ -153,13 +236,22 @@ export function createPetView(petId, opts = {}) {
       if (s.happyT >= 1) s.happyT = -1;
     }
 
+    // a trick (someone clicked this pet): offsets on top of everything else
+    tr.tx = tr.ty = tr.tz = tr.rx = tr.rz = tr.yaw = tr.sq = tr.bob = 0;
+    tr.flap = 1;
+    if (s.trick) {
+      s.trickT += dt / s.trick.dur;
+      s.trick.fn(Math.min(1, s.trickT), tr, fly);
+      if (s.trickT >= 1) s.trick = null;
+    }
+
     // body motion
     let y = 0, sqY = 1;
     if (fly) {
       y = fly + Math.sin(time * 2.3 + seed) * 0.28 + happyY;
       s.pitch += ((moving ? -Math.min(0.35, speed * 0.012) : 0) - s.pitch) * damp(5, dt);
       s.bank += (Math.max(-0.5, Math.min(0.5, -s.yawRate * 0.12)) - s.bank) * damp(6, dt);
-      const flap = time * M.wingSpeed * (moving ? 1.35 : 1) + seed;
+      const flap = time * M.wingSpeed * (moving ? 1.35 : 1) * tr.flap + seed;
       for (const w of wings) w.rotation.z = (M.wingBase + Math.sin(flap) * M.wingAmp) * w.userData.side;
       sqY = 1 + Math.sin(time * 2.3 + seed + 1) * 0.02;
     } else {
@@ -198,10 +290,11 @@ export function createPetView(petId, opts = {}) {
       }
       s.headYaw += (s.headYawT - s.headYaw) * damp(6, dt);
       s.headTilt += (s.headTiltT - s.headTilt) * damp(5, dt);
-      headPivot.rotation.set(Math.sin(time * 1.7 + seed) * 0.04 - (moving ? 0.06 : 0), s.headYaw, s.headTilt);
+      headPivot.rotation.set(Math.sin(time * 1.7 + seed) * 0.04 - (moving ? 0.06 : 0) + tr.bob, s.headYaw, s.headTilt);
     }
     if (tailPivot) {
-      const wag = Math.sin(time * (moving || celebrating ? 16 : 7) + seed) * (moving || celebrating ? 0.5 : 0.28);
+      const excited = moving || celebrating || !!s.trick;
+      const wag = Math.sin(time * (excited ? 16 : 7) + seed) * (excited ? 0.5 : 0.28);
       if (M.tailAxis === 'y') tailPivot.rotation.y = wag;
       else tailPivot.rotation.z = wag;
     }
@@ -211,13 +304,24 @@ export function createPetView(petId, opts = {}) {
     const pop = s.pop < 1 ? Math.max(0.01, easeOutBack(s.pop)) : 1;
 
     root.position.set(s.x, s.ground, s.z);
-    root.rotation.y = s.yaw + spinYaw;
-    lift.position.y = y;
-    lift.rotation.set(s.pitch, 0, s.bank);
-    const sq = Math.max(0.6, sqY);
+    root.rotation.y = s.yaw + spinYaw + tr.yaw;
+    // (a flip's rotation would swing the body around the feet: shift it so the middle stays put)
+    lift.position.set(tr.tx + cy * Math.sin(tr.rz), y + tr.ty + cy * (2 - Math.cos(tr.rx) - Math.cos(tr.rz)), tr.tz - cy * Math.sin(tr.rx));
+    lift.rotation.set(s.pitch + tr.rx, 0, s.bank + tr.rz);
+    const sq = Math.max(0.6, sqY + tr.sq);
+    s.midY = y + tr.ty + cy * sq;
     lift.scale.set(pop / Math.sqrt(sq), pop * sq, pop / Math.sqrt(sq));
     // the blob shadow shrinks as the pet rises (the material is shared, so size carries the height)
-    if (M.shadow) M.shadow.scale.setScalar(M.shadowSize * pop * Math.max(0.45, 1 - y * 0.12));
+    if (M.shadow) M.shadow.scale.setScalar(M.shadowSize * pop * Math.max(0.45, 1 - (y + tr.ty) * 0.12));
+  }
+
+  function trick(id) {
+    const def = TRICKS[id];
+    if (!def) return false;
+    s.trick = reducedMotion() ? GENTLE : def;
+    s.trickT = 0;
+    s.happyT = -1;
+    return true;
   }
 
   return {
@@ -225,6 +329,15 @@ export function createPetView(petId, opts = {}) {
     petId,
     update,
     place,
+    trick,
+    /** World-space middle of the body (for picking). */
+    center(out) {
+      return out.set(root.position.x, root.position.y + (s.midY ?? cy), root.position.z);
+    },
+    radius: 0.6 * Math.max(M.size.h, M.size.w, M.size.d),
+    get tricking() {
+      return !!s.trick;
+    },
     get position() {
       return root.position;
     },

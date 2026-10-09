@@ -19,6 +19,10 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
   down from the sky as free **egg drops** (the Rainbow Egg only comes that way), plus an Egg Rain weather event.
 * **Name your pets**: right when they hatch, or any time in My Pets. The name floats over your pet in the world
   (other players see it online; names go through the same kid-safe filter as player names).
+* **Pet tricks**: click or tap any pet (yours or a friend's) and it does a trick: backflips, spins, dances and rolls
+  for walkers, loops, barrel rolls and dives for flyers. Everyone in the room sees it.
+* **Sell has its own button** (V, the gold Sell button on touch, D-pad down), so grabbing or stealing with E never
+  sells a plant by accident.
 * **Base levels 1-10**: every level pays more and unlocks the **Base Studio** (floors, fences, gate-laser colours and
   decorations like trampolines and fountains), a Guard Gnome that bonks thieves, a home treadmill, sprinklers and
   a golden base.
@@ -40,7 +44,9 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 | Move | WASD / arrows | left thumb joystick | left stick |
 | Camera | right-drag or left-drag, wheel to zoom | drag right side, pinch | right stick |
 | Jump | Space | Jump button | A |
-| Grab / Steal / Sell | E (hold to steal) | Action button | B |
+| Grab / Steal | E (hold to steal) | Action button | B |
+| Sell a grown plant | V (hold) | gold Sell button (hold) | D-pad down (hold) |
+| Pet trick | click a pet | tap a pet | |
 | Pool-noodle bonk | click or F | Bonk button | X |
 | Boost | Shift | lightning button | RT |
 | Speed gear | X | gear chip | LT |
@@ -73,6 +79,6 @@ npm install
 node build.mjs            # dist/index.html (public), dist/family.html + dist/artifact.html (with photos)
 node tests/smoke.mjs      # headless Playwright smoke test of the core loop
 node tests/fullscreen.test.mjs   # full screen on Android, iPhone and computers
-node --test tests/gameplay/*.test.mjs   # garden lots, Speed, far biomes, bases, pets, pet names, egg drops, Boost (no browser)
+node --test tests/gameplay/*.test.mjs   # garden lots, Speed, far biomes, bases, pets, pet names, egg drops, Boost, Sell button, pet tricks (no browser)
 ```
 Read `docs/DESIGN.md` for the game design and `docs/ARCHITECTURE.md` for how the code fits together.

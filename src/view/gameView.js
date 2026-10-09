@@ -26,6 +26,10 @@ export function mutationTag(mut) {
   return m.name ? `<span class="mut mut-${m.id}">${m.name}</span>` : '';
 }
 
+// pickPet scratch (no allocations per click or hover)
+const PICK = { ray: new THREE.Raycaster(), ndc: new THREE.Vector2(), c: new THREE.Vector3(), d: new THREE.Vector3() };
+const CHEERS = { backflip: 'Flip!', spin: 'Wheee!', jump: 'Boing!', dance: 'Dance!', roll: 'Roll!', loop: 'Loop!', barrel: 'Woosh!', spinrise: 'Wheee!', dive: 'Zoom!' };
+
 export class GameView {
   constructor({ engine, game, world, labels, fx }) {
     this.engine = engine;
@@ -74,6 +78,57 @@ export class GameView {
     // base extras: the Guard Gnome swings its noodle, trampolines squash
     this.unsub.push(bus.on('guard:bonk', ({ garden }) => this.world.gardens?.[garden?.slot]?.guard?.swing?.()));
     this.unsub.push(bus.on('base:bounce', ({ garden, spot }) => this.world.gardens?.[garden?.slot]?.decor?.[spot]?.userData?.bounce?.()));
+    // someone clicked a pet: everyone sees it do the trick
+    this.unsub.push(bus.on('pet:trick', (e) => this._petTrick(e)));
+  }
+
+  /**
+   * The pet under a screen point (client pixels), own or anyone else's: {slot, k} or null. A ray against a
+   * sphere round each visible pet, nearest hit first. `touch`: a fingertip, so the spheres are a bit bigger.
+   */
+  pickPet(x, y, touch = false) {
+    const r = this.engine.renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    PICK.ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+    PICK.ray.setFromCamera(PICK.ndc, this.engine.camera);
+    const ray = PICK.ray.ray;
+    let best = null;
+    let bestT = 160; // studs: further pets are specks
+    for (let slot = 0; slot < this.petViews.length; slot++) {
+      const recs = this.petViews[slot];
+      if (!recs || !this.game.players[slot]?.present) continue;
+      for (let k = 0; k < recs.length; k++) {
+        const rec = recs[k];
+        if (!rec || !rec.view.object3d.visible || !rec.view.center) continue;
+        const c = rec.view.center(PICK.c);
+        const t = PICK.d.subVectors(c, ray.origin).dot(ray.direction);
+        if (t < 0.5 || t > bestT) continue;
+        // far pets get a little extra so they stay clickable (a fingertip gets more)
+        const rad = rec.view.radius * (touch ? 1.3 : 1) + t * (touch ? 0.03 : 0.01);
+        if (ray.distanceSqToPoint(c) > rad * rad) continue;
+        bestT = t;
+        best = { slot, k };
+      }
+    }
+    return best;
+  }
+
+  _petTrick({ owner, k, trick, player }) {
+    const rec = this.petViews[owner]?.[k];
+    if (!rec || !rec.view.object3d.visible || !rec.view.trick?.(trick)) return;
+    const c = rec.view.center(PICK.c);
+    const cam = this.engine.camera.position;
+    const d = Math.hypot(c.x - cam.x, c.z - cam.z);
+    if (d > 90 || !this.fx) return;
+    const near = d < 40 ? 1 : 0.6;
+    const at = { x: c.x, y: c.y + 0.4, z: c.z };
+    this.fx.burst('sparkle', at, { count: 10, scale: 0.6, lod: near, colors: ['#fff6a8', '#ff9ed8', '#9ee8ff', '#ffffff'] });
+    this.fx.burst('hearts', { x: c.x, y: c.y + 0.8, z: c.z }, { count: 3, scale: 0.55, lod: near });
+    // a little cheer over the pet, for whoever clicked it and the pet's owner
+    const me = this.game.human;
+    if (me && (player === me || this.game.players[owner] === me)) {
+      this.fx.floatText(CHEERS[trick] || 'Wheee!', { x: c.x, y: c.y + rec.view.radius + 1.6, z: c.z }, { style: 'comic', size: 's', duration: 1.1, rise: 1.6 });
+    }
   }
 
   _makeAvatar(i) {
@@ -161,7 +216,7 @@ export class GameView {
         invisible,
         isLocal: p === human,
         coil: now < p.coilUntil || now < p.boostUntil,
-        interacting: p.interact?.t > 0 ? p.interact.verb : null,
+        interacting: p.interact?.t > 0 ? p.interact.verb : p.sell?.t > 0 ? 'Sell' : null,
         emote: p.emote && now < p.emote.until ? p.emote.id : null,
         emoteT: p.emote ? now - (p.emote.since ?? now) : 0,
       });

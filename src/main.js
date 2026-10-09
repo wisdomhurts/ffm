@@ -33,6 +33,7 @@ import { reactToSocial } from './social/botReact.js';
 import { postTyped } from './social/chat.js';
 import { attachCloudSync } from './online/sync.js';
 import { attachPets } from './ui/pets.js';
+import { attachPetTricks } from './pets/tricks.js';
 import { sameLook } from './characters/cosmetics.js';
 import { createTradeManager } from './social/trades.js';
 
@@ -81,6 +82,7 @@ class App {
     this.menus = createMenus(this);
     attachPets(this); // hatching (solo and online) adds pets to the profile
     this.touch = createTouchControls(this);
+    attachPetTricks(this); // click / tap a pet: it does a trick (instead of a bonk)
     this.profileId = activeProfileId() || CHARACTERS[0].id;
     this.progress = attachProgress(this);
     this.online = createOnline(this);
@@ -289,6 +291,7 @@ class App {
       case 'setPet': g.setPet(p, args[0] ?? null); return true;
       case 'setLook': g.setLook(p, args[0]); return true;
       case 'gift': return g.giftPlant(p, g.players[args[0]], args[1]);
+      case 'petTrick': return !!g.petTrick(p, args[0], args[1]);
       case 'emote':
       case 'say':
         this.humanCtrl?.queue(name, args[0]);

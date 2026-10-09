@@ -10,12 +10,13 @@ import { postTyped } from '../../src/social/chat.js';
 
 export { MemoryHub };
 
-/** Scripted "gamepad": set moveX/moveZ/hold, press('jump'|'bonk'|..) for one-shot edges. */
+/** Scripted "gamepad": set moveX/moveZ/hold (interact) / sell, press('jump'|'bonk'|..) for one-shot edges. */
 export class Pad {
   constructor() {
     this.moveX = 0;
     this.moveZ = 0;
     this.hold = false;
+    this.sell = false;
     this.edges = {};
     this._queued = null;
   }
@@ -30,6 +31,7 @@ export class Pad {
     it.moveX = this.moveX;
     it.moveZ = this.moveZ;
     it.interact = this.hold;
+    it.sell = this.sell;
     Object.assign(it, this.edges);
     this.edges = {};
     if (this._queued) {
@@ -97,6 +99,7 @@ export class StubApp {
       case 'setPet': g.setPet(p, args[0] ?? null); return true;
       case 'setLook': g.setLook(p, args[0]); return true;
       case 'gift': return g.giftPlant(p, g.players[args[0]], args[1]);
+      case 'petTrick': return !!g.petTrick(p, args[0], args[1]);
       case 'emote':
       case 'say':
         this.humanCtrl?.queue(name, args[0]);

@@ -3,7 +3,7 @@
 import {
   ROAD_END_Z, WORLD, PLAYER, PLANTS, PLANT, RARITIES, RARITY, MUTATIONS, BASE_MUTATION_CHANCE, BIOMES, PODS, ITEMS, ITEM,
   EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, LOTS, REBIRTH, NAMESAKE_BONUS, speedCost, TOP_TIER, planterCost, accelFor,
-  BASE, BOOST, TREADMILL, DROPS, baseIncomeMult, petSlotsFor,
+  BASE, BOOST, TREADMILL, DROPS, baseIncomeMult, petSlotsFor, PET_TRICKS,
 } from '../config.js';
 import { LAYOUT, gardenContains, lotPlanterBoxes, beltRect } from './layout.js';
 import { PhysicsWorld } from '../core/physics.js';
@@ -382,6 +382,7 @@ export class Game {
       this._handleItems(p);
       this._handleBonk(p);
       this._handleInteraction(p, dt);
+      this._handleSell(p, dt);
       this._handlePads(p);
       this._handleAutoPlant(p);
       this._handleTraining(p, dt);
@@ -557,8 +558,9 @@ export class Game {
   // ------------------------------------------------------------------ interactions
 
   /** Returns the thing this player can interact with right now, or null.
-   *  {key, verb, label, hold, action(), target} */
-  // Carrying a seed into your own garden with no free planter: only offer Sell prompts so you can make room.
+   *  {key, verb, label, hold, action(), target}. Selling is NOT an interaction: it has its own button (findSell). */
+  // Carrying a seed into your own garden with no free planter: only offer Unlock / Expand / Drop here (and Sell on the
+  // Sell button) so you can make room.
   _ownGardenFull(p) {
     const g = this.gardens[p.slot];
     return gardenContains(g.L, p.pos.x, p.pos.z) && !g.planters.some((pl) => pl.unlocked && !pl.plant);
@@ -617,10 +619,6 @@ export class Game {
             const cost = PLANTERS.unlockCost[pl.index];
             consider(d2, { key: 'unlock' + pl.index, verb: 'Unlock', label: `Planter ($${fmt(cost)})`, hold: 0, cost, target: pl,
               action: () => this.unlockPlanter(p, pl.index) });
-          } else if (pl.plant && pl.plant.growLeft <= 0) {
-            const value = Math.round(this.plantIncome(pl.plant, p) * SELL_SECONDS);
-            consider(d2, { key: 'sell' + pl.index, verb: 'Sell', label: `${this.plantName(pl.plant.speciesId, pl.plant.mutation)} (+$${fmt(value)})`,
-              hold: PLAYER.sellHold, rarity: PLANT[pl.plant.speciesId].rarity, target: pl, action: () => this.sellPlant(p, pl) });
           }
         } else if (!swapping && pl.plant && pl.plant.growLeft <= 0) {
           consider(d2, { key: 'steal' + g.slot + '_' + pl.index, verb: 'Steal', label: this.plantName(pl.plant.speciesId, pl.plant.mutation),
@@ -630,7 +628,7 @@ export class Game {
     }
     // shops (human-facing prompts; bots call the buy methods directly)
     if (swapping) {
-      // nothing to sell or unlock: let them put the seed down instead of carrying it forever
+      // nothing to unlock: let them put the seed down instead of carrying it forever (or sell with the Sell button)
       if (!best) best = { key: 'drop', verb: 'Drop', label: 'Seed (garden full)', hold: 0.4, action: () => this.dropCarried(p, null, 'drop') };
       return best;
     }
@@ -711,6 +709,63 @@ export class Game {
       s.fired = false;
     }
     p.prevInteract = pressed;
+  }
+
+  /** The grown plant in your own garden you could sell right now (its own button: V / Sell / D-pad down), or
+   *  null. Like findInteraction: not while stunned, and only empty-handed or with a seed for a full garden.
+   *  {key, verb, label (the plant's name), value (what it sells for), hold, rarity, target, action()} */
+  findSell(p) {
+    const swapping = p.carrying?.kind === 'seed' && this._ownGardenFull(p);
+    if (this.time < p.stunUntil || (p.carrying && !swapping)) return null;
+    const g = this.gardenAt(p.pos.x, p.pos.z);
+    if (!g || g.owner !== p) return null;
+    let best = null;
+    let bestD = 4.8 * 4.8;
+    for (const pl of g.planters) {
+      if (!pl.unlocked || !pl.plant || pl.plant.growLeft > 0) continue;
+      const d2 = dist2(p.pos, pl);
+      if (d2 < bestD) {
+        bestD = d2;
+        best = pl;
+      }
+    }
+    if (!best) return null;
+    const plant = best.plant;
+    const value = Math.round(this.plantIncome(plant, p) * SELL_SECONDS);
+    return {
+      key: 'sell' + best.index, verb: 'Sell', label: this.plantName(plant.speciesId, plant.mutation), value,
+      hold: PLAYER.sellHold, rarity: PLANT[plant.speciesId].rarity, target: best, action: () => this.sellPlant(p, best),
+    };
+  }
+
+  // Same hold rules as _handleInteraction (pets' hold boost counts; one hold = one sale), on intent.sell.
+  _handleSell(p, dt) {
+    const it = this.findSell(p);
+    const pressed = !!p.intent.sell;
+    if (!pressed) p.sellSpent = false;
+    if (!it) {
+      if (p.sell.key) p.sell = { key: null, t: 0, hold: 0, label: '', verb: '', value: 0, fired: false };
+      p.prevSell = pressed;
+      return;
+    }
+    if (it.key !== p.sell.key) p.sell = { key: it.key, t: 0, hold: it.hold, label: it.label, verb: it.verb, rarity: it.rarity, value: it.value, fired: false, target: it.target };
+    const s = p.sell;
+    s.label = it.label;
+    s.value = it.value;
+    if (pressed) {
+      if (!s.fired && !p.sellSpent) {
+        s.t += dt / p.mods.hold;
+        if (s.t >= it.hold) {
+          s.fired = true;
+          p.sellSpent = true; // release before the next sale charges
+          it.action();
+        }
+      }
+    } else {
+      s.t = 0;
+      s.fired = false;
+    }
+    p.prevSell = pressed;
   }
 
   _clearStealer(pl, p) {
@@ -1526,6 +1581,34 @@ export class Game {
     return true;
   }
 
+  /** Player `by` clicked (or tapped) pet `k` of the player in slot `ownerSlot`: it does a trick that everyone
+   *  sees ('pet:trick'). Cosmetic, one per pet per PET_TRICKS.cooldown s. Walkers and flyers know different
+   *  tricks; `want` (a trick a client already started, online) is kept when the pet knows it. Returns the
+   *  trick id, or null. */
+  petTrick(by, ownerSlot, k, want = null) {
+    const owner = this.players[ownerSlot];
+    if (!by || !owner?.present || !Number.isInteger(k) || k < 0) return null;
+    const id = this.activePets(owner)[k];
+    if (!PET[id]) return null;
+    const key = ownerSlot * MAX_TEAM + k;
+    const ready = (this._trickReady ||= []);
+    if (this.time < (ready[key] ?? -Infinity)) return null;
+    ready[key] = this.time + PET_TRICKS.cooldown;
+    const list = PET[id].flies ? PET_TRICKS.fly : PET_TRICKS.walk;
+    const last = (this._trickLast ||= [])[key];
+    let trick = list.includes(want) ? want : null;
+    if (!trick) {
+      // never the same one twice in a row (its own dice: the rules' random stream stays untouched)
+      const rng = (this._trickRng ||= makeRng(0x7e7));
+      do {
+        trick = rng.pick(list);
+      } while (trick === last && list.length > 1);
+    }
+    this._trickLast[key] = trick;
+    bus.emit('pet:trick', { player: by, owner: ownerSlot, k, trick, pet: id });
+    return trick;
+  }
+
   setLook(p, look) {
     if (!look || typeof look !== 'object') return;
     const next = sanitizeLook({ ...p.look, ...look }, p.char.id);
@@ -1665,8 +1748,9 @@ export class Game {
     const fresh = new Player(slot, p.char, false);
     for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'items', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt',
       'swingStart', 'coilUntil', 'cloakUntil', 'celebrateUntil', 'interact', 'prevInteract', 'intent', 'lastHitBy', 'stats',
-      'baseLevel', 'boostLevel', 'treadmillTier', 'boostUntil', 'boostReadyAt', 'pumpUntil', 'pumpMult', 'trainT']) p[k] = fresh[k];
+      'baseLevel', 'boostLevel', 'treadmillTier', 'boostUntil', 'boostReadyAt', 'pumpUntil', 'pumpMult', 'trainT', 'sell', 'prevSell']) p[k] = fresh[k];
     p.holdSpent = false;
+    p.sellSpent = false;
     p._jumpQ = 0;
     const g = this.gardens[slot];
     const blankG = this._makeGarden(slot, p);
@@ -1743,6 +1827,7 @@ export class Game {
           stunUntil: p.stunUntil, invulnUntil: p.invulnUntil, bonkReadyAt: p.bonkReadyAt, swingStart: p.swingStart,
           coilUntil: p.coilUntil, cloakUntil: p.cloakUntil, celebrateUntil: p.celebrateUntil,
           interact: { key: it.key, t: it.t, hold: it.hold, label: it.label, verb: it.verb, rarity: it.rarity },
+          sell: { key: p.sell.key, t: p.sell.t, hold: p.sell.hold, label: p.sell.label, verb: p.sell.verb, rarity: p.sell.rarity, value: p.sell.value || 0 },
           emote: p.emote, stats: { ...p.stats },
         };
       }),
@@ -1828,6 +1913,7 @@ export class Game {
       p.carrying = !c ? null : c.kind === 'plant' ? { kind: 'plant', plant: plant(c.plant), fromSlot: c.fromSlot, fromIndex: c.fromIndex } : { ...c };
       if (p.carrying?.kind === 'plant' && !p.carrying.plant) p.carrying = null;
       Object.assign(p.interact, d.interact);
+      if (d.sell) Object.assign(p.sell, d.sell);
       p.emote = d.emote;
     });
     s.gardens.forEach((d, i) => {

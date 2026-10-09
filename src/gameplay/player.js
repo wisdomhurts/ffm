@@ -6,10 +6,10 @@ import { sanitizeBaseStyle, BOT_STYLES } from './basestyle.js';
  * Intent: what a controller (human input or bot brain) wants this tick.
  * moveX/moveZ: desired world-space direction (length 0..1).
  * jump/bonk/useItem are edge-triggered (true only on the tick they are pressed).
- * interact is held (true while the button is down).
+ * interact and sell are held (true while the button is down).
  */
 export function emptyIntent() {
-  return { moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null, boost: false };
+  return { moveX: 0, moveZ: 0, jump: false, interact: false, sell: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null, boost: false };
 }
 
 const NO_MODS = Object.freeze({ income: 1, speed: 1, hold: 1, magnet: 0, bonkCd: 1, grow: 1 });
@@ -62,6 +62,8 @@ export class Player {
     this.celebrateUntil = 0;
     this.interact = { key: null, t: 0, hold: 0, label: '' };
     this.prevInteract = false;
+    this.sell = { key: null, t: 0, hold: 0, label: '' }; // the Sell prompt (its own button: V / Sell / D-pad down)
+    this.prevSell = false;
     this.intent = null;
     this.controller = null;
     this.lastHitBy = null;

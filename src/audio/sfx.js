@@ -465,6 +465,17 @@ export const SFX = {
       tone(ac, out, tt, { f0: rnd(500, 900), f1: 180, sweep: 0.04, dur: 0.07, attack: 0.001, vol: V(o, 0.15) });
     }
   },
+  /** A pet does a trick: a springy boing (walkers) or a happy two-note chirp (flyers, o.fly), plus a sparkle. */
+  petTrick(ac, out, t, o) {
+    if (o.fly) {
+      for (let i = 0; i < 2; i++) {
+        tone(ac, out, t + i * 0.09, { f0: rnd(1250, 1400), f1: rnd(2200, 2500), sweep: 0.06, dur: 0.09, attack: 0.003, vol: V(o, 0.15), vib: { rate: 34, depth: 0.03 } });
+      }
+    } else {
+      tone(ac, out, t, { type: 'triangle', f0: 190, pts: [[0.12, 620], [0.36, 300]], dur: 0.42, attack: 0.004, vol: V(o, 0.3), vib: { rate: 15, depth: 0.12, fade: 0.2 } });
+    }
+    [88, 93].forEach((m, i) => bell(ac, out, t + 0.1 + i * 0.07, mtof(m), { ratio: 2, index: 0.7, vol: V(o, 0.06), decay: 0.45, send: o.send }));
+  },
 };
 
 // ------------------------------------------------------------------ loops (start/stop handles)
@@ -572,4 +583,5 @@ export const SFX_GAP = {
   lockOn: 0.2, lockOff: 0.2, item: 0.06, purchase: 0.08, speedUp: 0.15, unlock: 0.15, event: 1, rebirth: 1,
   stolen: 0.5, yoink: 0.3, heist: 0.5, robbed: 0.5, saved: 0.4, dropped: 0.2, shopBell: 0.4, confetti: 0.3,
   boost: 0.2, pump: 0.5, egg: 0.1, baseUp: 1,
+  petTrick: 0.12,
 };

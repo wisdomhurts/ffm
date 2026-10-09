@@ -25,6 +25,7 @@ import { mountChat } from './chat.js';
 import { typedChatAllowed } from '../social/chat.js';
 import { fullscreenButton } from './fullscreen.js';
 import { mountSoundButton } from './soundControls.js';
+import { createSellPrompt, sellHow } from './sell.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
@@ -107,6 +108,7 @@ export function createHUD(app) {
   if (me) {
     parts.push(createRoadMeter(app, root, me));
     parts.push(createPrompt(app, bottom, me));
+    parts.push(createSellPrompt(app, bottom, me)); // Sell has its own button (V): the gold pill
     bottom.appendChild(anchors.social);
     parts.push(createCarry(app, bottom, me));
     parts.push(createHotbar(app, bottom, me, anchors.emote, root));
@@ -626,7 +628,7 @@ function createCarry(app, parent, me) {
         toggle(carry.el, 'stolen', c.kind === 'plant');
         toggle(carry.el, 'full', full);
         setHTML(carry.l1, c.kind === 'plant' ? `STOLEN ${name}` : `Carrying ${name}`);
-        if (full) setHTML(carry.l2, 'Garden full! Sell a grown plant or drop the seed');
+        if (full) setHTML(carry.l2, `Garden full! Sell a plant (${sellHow(app)}) or drop the seed`);
         else {
           const g = guide(L.inside);
           aim(carry, g);
@@ -860,11 +862,11 @@ function createKeyHints(app, parent) {
   if (load('ui:hints-off', false) || settings.tips === false) return {};
   const k = (s) => `<kbd>${s}</kbd>`;
   const kb = [
-    [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'],
+    [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'], [k('V'), 'Hold to Sell'],
     [k('Click') + k('F'), 'Bonk'], [k('Shift'), 'Boost'], [k('X'), 'Speed gear'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T') + k('Enter'), 'Chat'], [k('Right-drag'), 'Camera'], [k('M'), 'Music on/off'], [k('Esc'), 'Menu'],
   ];
   const gp = [
-    [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('X'), 'Bonk'], [k('RT'), 'Boost'], [k('LT'), 'Speed gear'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],
+    [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('\u2193'), 'D-pad: hold to Sell'], [k('X'), 'Bonk'], [k('RT'), 'Boost'], [k('LT'), 'Speed gear'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],
   ];
   const body = h('div', { class: 'kh-body' });
   const close = noFocus(h('button', { class: 'kh-x', type: 'button', 'aria-label': 'Hide key hints', html: ICON.close }));

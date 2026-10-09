@@ -95,7 +95,12 @@ Income accumulates into the garden's cash pile; step on the COLLECT pad to bank 
 * **Lock** (step on your LOCK pad): laser gate for 40 s (+10 s per rebirth); only the owner passes.
   60 s recharge.
 * **Collect** (step on COLLECT pad): bank your garden's cash pile.
-* **Sell** (hold E on your own grown plant): +90 s worth of its income.
+* **Sell** (hold V / the gold Sell button / D-pad down for 1 s by your own grown plant): +90 s worth of its income.
+  Selling has its own button and prompt (a gold pill), so E (grab, steal, unlock, drop...) never sells. Carrying a seed
+  into a full garden: E offers Drop, the Sell button makes room (the seed then plants itself). Bots hold Sell too.
+* **Pet tricks** (click or tap any pet you can see): it does a trick everyone sees. Walkers: backflip, spin, jump,
+  dance, roll; flyers: loop, barrel roll, spin-rise, dive (`PET_TRICKS` in config.js). One per pet per second;
+  purely for fun (no rules change). A click that misses the pets still bonks; F always bonks.
 * **Train** (Speed Shop, three treadmill stations): the **Speed** treadmill sells the next Speed level (+2 studs/s;
   the shop panel also buys x10 or MAX). There is no top level: each one costs 55% more than the last. Grip grows
   with top speed (above 50 studs/s) so fast players still steer. The **Boost Lab** sells Boost levels 1-10.
@@ -149,12 +154,13 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
   steal, race, trade, pets, bragging, nice, wow) in their own voices; a bot called by name ("hi mom") answers first.
 
 ## 8. Controls
-* Desktop: WASD/arrows move · Space jump · E interact (hold) · Click or F bonk ·
+* Desktop: WASD/arrows move · Space jump · E interact (hold) · V sell (hold) · Click or F bonk (click a pet: trick) ·
   1–5 items · right-drag or Q/Z… orbit camera · wheel zoom · Esc pause · G emotes · T quick chat ·
   Enter typed chat (Enter sends, Esc closes; game keys are ignored while typing).
-* Touch: left joystick · drag right side to orbit · Jump / Bonk / Action buttons · tap hotbar · chat button
+* Touch: left joystick · drag right side to orbit · Jump / Bonk / Action buttons · gold Sell button (only by a grown
+  plant of yours) · tap a pet for a trick · tap hotbar · chat button
   (the panel opens at the top of the screen, input first, so the keyboard never covers it).
-* Gamepad: left stick, right stick camera, A jump, X bonk, B interact, LB/RB cycle items, Y use item.
+* Gamepad: left stick, right stick camera, A jump, X bonk, B interact, D-pad down sell (hold), LB/RB cycle items, Y use item.
 * Sound: music and sound effects each have an on/off switch and a volume, fully independent; off keeps
   the volume for next time, and turning a volume up switches it on. "Mute all" = both switches off (the
   volumes stay); un-muting brings back the switches that were on. Where: Settings, the pause menu (gamepad:

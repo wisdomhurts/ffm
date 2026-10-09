@@ -8,6 +8,7 @@ import { esc, money } from './dom.js';
 import { who } from './alerts.js';
 import { ICON, EVENT_ICON, ITEM_ICONS, NOODLE } from './icons.js';
 import { isTouch } from './device.js';
+import { sellKeyName } from './sell.js';
 
 export function wireNotifications(app, alerts) {
   const game = app.game;
@@ -139,7 +140,7 @@ export function wireNotifications(app, alerts) {
   });
   on('garden:full', ({ player }) => {
     if (player !== me) return;
-    alerts.show({ key: 'full', kind: 'warn', icon: ICON.sprout, duration: 3600, html: `Your garden is full!<small>Hold ${isTouch() ? 'Action' : 'E'} on a grown plant to sell it, or drop the seed.</small>` });
+    alerts.show({ key: 'full', kind: 'warn', icon: ICON.sprout, duration: 3600, html: `Your garden is full!<small>Hold ${sellKeyName(app)} by a grown plant to sell it, or drop the seed.</small>` });
   });
   // pressing Bonk with full hands: the noodle is busy, so tell them to run (throttled)
   let blockedAt = -Infinity;

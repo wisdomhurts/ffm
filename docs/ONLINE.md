@@ -87,7 +87,10 @@ client in an online room (the host applies it for the right player):
 `buyItem(id, qty)`, `buySpeed(n)`, `buyBoost()`, `buyTreadmill()`, `upgradeBase()`, `setBaseStyle(style)`, `rebirth()`,
 `buyEgg(eggId)`, `setPet(petId)`, `setPets(ids, names)`, `setLook(look)`,
 `gift(toSlot, planterIndex)`, `tradeRequest(toSlot)`, `tradeOffer(offer)`, `tradeReady(bool)`,
-`tradeCancel()`, `emote(id)`, `say(phraseId)`, `chat(text)`. Returns `true/false` offline, `undefined` (async) online.
+`tradeCancel()`, `emote(id)`, `say(phraseId)`, `chat(text)`, `petTrick(ownerSlot, k)` (click a pet: `game.petTrick(by, ownerSlot, k)`
+emits `pet:trick {player, owner, k, trick, pet}`; a client starts it at once, sends the trick it picked as a third
+argument and skips the host's echo; the host checks slot, pet, cooldown and trick id, with its own rate limit).
+Returns `true/false` offline, `undefined` (async) online (`petTrick`: true/false, it plays locally).
 
 ## Multiplayer (`src/net/**`, net agent)
 Host-authoritative rooms with **client-authoritative movement**:
@@ -113,7 +116,8 @@ Host-authoritative rooms with **client-authoritative movement**:
 * Topics: lobby `sas:lobby` (public rooms `track` `{code, name, host, n, max, v}`), room `sas:room:<CODE>`.
 * Messages (room): `hello` (join: pid, profile summary {name, look, base, pet, face?}), `welcome`
   (host -> joiner: slot, full state), `in` (client -> host: pos/vel/yaw/onGround, edge counters for
-  jump/bonk/boost/item/emote/say, interact held, action queue), `snap` (host, 15 Hz: fast motion of players,
+  jump/bonk/boost/item/emote/say, interact held `i` + press counter `ip`, Sell held `s` + press counter `sp`, action
+  queue), `snap` (host, 15 Hz: fast motion of players,
   monsters, projectiles), `state` (host, 4 Hz: `serializeFull()` or a delta), `ev` (host: encoded bus events
   for FX/UI/audio), `kick` (host -> one client: set pos/vel), `act` (client -> host: actions), `bye`.
 * Host election: earliest `joinedAt` in room presence (tie: lowest pid). On host loss the next member
