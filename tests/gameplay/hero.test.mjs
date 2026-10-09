@@ -7,7 +7,6 @@ import { bus } from '../../src/core/events.js';
 import { PLANTS, HERO, PLAYER, BASE } from '../../src/config.js';
 import { emptyIntent } from '../../src/gameplay/player.js';
 import { BotController } from '../../src/ai/bot.js';
-import { chooseGoal } from '../../src/ai/brain.js';
 import { callForHelp, helpTarget, owesHero, thankHero, robberOf } from '../../src/ai/family.js';
 import { reactToSocial } from '../../src/social/botReact.js';
 import { EventCodec, vetFull, vetPlayer, isBotLine } from '../../src/net/protocol.js';
@@ -276,8 +275,10 @@ test('online: the host tips the hero; a friend sees steal:rescued once and the H
     bus.on('steal:rescued', (e) => {
       if (B.game.players.includes(e.hero)) onB.push(e);
     });
+    place(thief, 0, 10); // out on the plaza (in its own garden the plant would plant itself right away)
     robbed(A.game, thief, victim);
     await step(0.4);
+    assert.ok(thief.carrying, 'running off with it');
     const cashB = B.game.players[sA].cash;
     bonk(A.game, hero, thief);
     await step(0.8);
