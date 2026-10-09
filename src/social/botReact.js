@@ -224,6 +224,7 @@ function plan(game, s, e) {
     called = bots.find((b) => b.controller.goal?.type !== 'practice' && callsBot(e.text, b)) || null;
     id = typedIntent(e.text) || (called ? 'huh' : null);
   }
+  if (id === 'trade') return out; // trade talk: a bot answers in social/botTrade.js (and may ask back)
   const table = e.typed ? TYPED_REPLIES[id] || REPLIES[id] : REPLIES[id];
   if (!table) return out;
   let order = called ? [called, ...talkers.filter((b) => b !== called)] : talkers;

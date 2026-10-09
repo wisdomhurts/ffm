@@ -11,7 +11,7 @@ import { bus } from '../core/events.js';
 import { makeRng } from '../core/rng.js';
 import { Player, emptyIntent } from './player.js';
 import { teamMods, MAX_TEAM } from '../pets/effects.js';
-import { PET, EGG, petScore } from '../pets/catalog.js';
+import { PET, EGG, petScore, PET_CAPACITY } from '../pets/catalog.js';
 import { sanitizePetName } from '../pets/names.js';
 import { sanitizeBaseStyle, sameBaseStyle, effectiveBaseStyle, DECOR, BOT_STYLES } from './basestyle.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
@@ -40,6 +40,9 @@ export const profileTeamNames = (profile) => profileTeamPets(profile).map((x) =>
 
 let UID = 1;
 const uid = () => UID++;
+// pet-trade mail ids stay unique across matches, page loads and hosts (devices remember the ones they applied)
+let MAIL = 0;
+const mailId = () => 'm' + Date.now().toString(36) + (++MAIL).toString(36) + Math.random().toString(36).slice(2, 6);
 // keep locally made ids above any id received from an online host (see applyFull)
 const bumpUid = (n) => {
   if (Number.isFinite(n) && n >= UID) UID = Math.floor(n) + 1;
@@ -70,6 +73,16 @@ function homeTreadmillBoxes(t) {
     { minX: c.x - cx, maxX: c.x + cx, minZ: c.z - cz, maxZ: c.z + cz, minY: 0, maxY: 4.6, tag: 'deco', off: true },
   ];
 }
+
+/** A copy of pet-trade mail ([{tid, give: [uid], get: [{id, name}]}]) without anything malformed. */
+const copyMail = (list) => (Array.isArray(list) ? list : []).filter((m) => m && typeof m.tid === 'string').map((m) => ({
+  tid: m.tid,
+  give: Array.isArray(m.give) ? m.give.filter((u) => typeof u === 'string') : [],
+  get: Array.isArray(m.get) ? m.get.filter((x) => x && PET[x.id]).map((x) => ({ id: x.id, name: sanitizePetName(x.name) })) : [],
+}));
+
+/** Which seed someone carries (trades drop a seed from an offer when this changes). */
+export const seedSig = (c) => (c?.kind === 'seed' ? `${c.speciesId}|${c.mutation}|${c.podId ?? ''}` : '');
 
 export const SELL_SECONDS = 90;
 export const NETWORTH_PLANT_SECONDS = 60;
@@ -1362,7 +1375,20 @@ export class Game {
 
   /** Bots keep their three best pets (from egg drops) as their team. */
   _botAdoptPet(p, pet) {
-    p.pets = [...new Set([...p.pets, pet])].sort((a, b) => petScore(b) - petScore(a)).slice(0, MAX_TEAM);
+    const team = this._botTeam(p);
+    if (!team.some((x) => x.id === pet)) team.push({ id: pet, name: '' });
+    this._setBotTeam(p, team);
+  }
+
+  /** A bot's team as [{id, name}] (a pet traded to a bot keeps its nickname). */
+  _botTeam(p) {
+    return p.pets.map((id, i) => ({ id, name: p.petNames[i] || '' }));
+  }
+
+  _setBotTeam(p, team) {
+    const best = team.slice().sort((a, b) => petScore(b.id) - petScore(a.id)).slice(0, MAX_TEAM);
+    p.pets = best.map((x) => x.id);
+    p.petNames = best.map((x) => x.name);
     this._refreshMods(p);
     bus.emit('pet:equipped', { player: p, pet: p.pet });
   }
@@ -1650,24 +1676,55 @@ export class Game {
   }
 
   /**
-   * Swap plants and cash between two players in one go. offer = {planters: [index...], cash}.
-   * Everything is checked first; nothing changes unless the whole trade fits.
+   * Swap plants, cash, pets and seeds between two players in one go.
+   * offer = {planters: [index...], cash, pets: [{uid, id, name, k?}], seed, petRoom}
+   *   pets: a person's come from their device's pet bag (uid = its id there, the host can't see the bag); a
+   *         bot's are its egg-drop team (k = its index in p.pets, which must still hold that species)
+   *   seed: true (or seedSig of it) = the seed in their hands: it is planted straight into a free planter of
+   *         the other garden (a new plant, full grow time), like a gift
+   *   petRoom: free spots in a person's pet bag (their device says so); a bot holds MAX_TEAM pets
+   * Everything is checked first; nothing changes unless the whole trade fits. A person's pets move through
+   * p.petMail (replicated state, so a lost tick or a new host can't lose them): their device applies each
+   * mail once and acks it (ui/pets.js attachPetMail -> petMailAck).
    */
   trade(a, b, offerA, offerB) {
     if (!a || !b || a === b) return false;
-    const norm = (o) => ({
-      planters: [...new Set((Array.isArray(o?.planters) ? o.planters : []).filter((i) => Number.isInteger(i)))].slice(0, 10),
-      cash: Math.max(0, Math.floor(Number(o?.cash) || 0)),
-    });
-    const oa = norm(offerA), ob = norm(offerB);
+    const norm = (p, o) => {
+      const out = {
+        planters: [...new Set((Array.isArray(o?.planters) ? o.planters : []).filter((i) => Number.isInteger(i)))].slice(0, 10),
+        cash: Math.max(0, Math.floor(Number(o?.cash) || 0)),
+        pets: [],
+        seed: false,
+        petRoom: p.kind === 'bot' ? Math.max(0, MAX_TEAM - p.pets.length) : Number.isFinite(o?.petRoom) ? clamp(Math.floor(o.petRoom), 0, PET_CAPACITY) : PET_CAPACITY,
+        bad: false,
+      };
+      for (const x of Array.isArray(o?.pets) ? o.pets.slice(0, MAX_TEAM + 1) : []) {
+        const dup = out.pets.some((y) => (p.kind === 'bot' ? y.k === x?.k : y.uid === x?.uid));
+        const fine = p.kind === 'bot'
+          ? Number.isInteger(x?.k) && p.pets[x.k] === x.id && !dup
+          : typeof x?.uid === 'string' && x.uid.length <= 40 && typeof x.id === 'string' && !!PET[x.id] && !dup;
+        if (!fine || out.pets.length >= MAX_TEAM) out.bad = true;
+        else out.pets.push(p.kind === 'bot' ? { k: x.k, id: x.id, name: p.petNames[x.k] || '' } : { uid: x.uid, id: x.id, name: sanitizePetName(x.name) });
+      }
+      if (o?.seed) {
+        const c = p.carrying;
+        if (c?.kind === 'seed' && PLANT[c.speciesId] && (o.seed === true || o.seed === seedSig(c))) out.seed = true;
+        else out.bad = true;
+      }
+      return out;
+    };
+    const oa = norm(a, offerA), ob = norm(b, offerB);
     const ga = this.gardens[a.slot], gb = this.gardens[b.slot];
-    const ok = (p, g, o) => p.cash >= o.cash && o.planters.every((i) => g.planters[i]?.plant && g.planters[i].stealer == null);
-    const room = (g, give, get) => g.planters.filter((x) => x.unlocked && !x.plant).length + give >= get;
-    if (!ok(a, ga, oa) || !ok(b, gb, ob) || !room(ga, oa.planters.length, ob.planters.length) || !room(gb, ob.planters.length, oa.planters.length)) {
+    const ok = (p, g, o) => !o.bad && p.cash >= o.cash && o.planters.every((i) => g.planters[i]?.plant && g.planters[i].stealer == null);
+    // plants given free their planters; a seed coming in needs one too; pets need room in the bag
+    const room = (g, o, other) => g.planters.filter((x) => x.unlocked && !x.plant).length + o.planters.length >= other.planters.length + (other.seed ? 1 : 0) &&
+      o.petRoom + o.pets.length >= other.pets.length;
+    if (!ok(a, ga, oa) || !ok(b, gb, ob) || !room(ga, oa, ob) || !room(gb, ob, oa)) {
       bus.emit('trade:fail', { a, b });
       return false;
     }
-    if (!oa.planters.length && !ob.planters.length && !oa.cash && !ob.cash) return false;
+    const empty = (o) => !o.planters.length && !o.cash && !o.pets.length && !o.seed;
+    if (empty(oa) && empty(ob)) return false;
     const take = (g, o) => o.planters.map((i) => {
       const plant = g.planters[i].plant;
       g.planters[i].plant = null;
@@ -1680,10 +1737,46 @@ export class Game {
     });
     place(ga, a.slot, fromB);
     place(gb, b.slot, fromA);
+    const seedA = this._tradeSeed(a, b, oa.seed), seedB = this._tradeSeed(b, a, ob.seed);
+    const petsA = oa.pets.map((x) => ({ id: x.id, name: x.name })), petsB = ob.pets.map((x) => ({ id: x.id, name: x.name }));
+    const tid = mailId();
+    this._tradePets(a, oa.pets, petsB, tid);
+    this._tradePets(b, ob.pets, petsA, tid);
     a.cash += ob.cash - oa.cash;
     b.cash += oa.cash - ob.cash;
-    bus.emit('trade:done', { a, b, offerA: oa, offerB: ob, plantsA: fromA, plantsB: fromB });
+    const pub = (o, pets) => ({ planters: o.planters, cash: o.cash, pets, seed: o.seed });
+    bus.emit('trade:done', { a, b, offerA: pub(oa, petsA), offerB: pub(ob, petsB), plantsA: fromA, plantsB: fromB, seedA, seedB, petsA, petsB, tid });
     return true;
+  }
+
+  // the seed in `from`'s hands grows in `to`'s garden now (trade checked the room)
+  _tradeSeed(from, to, on) {
+    const c = on ? from.carrying : null;
+    if (!c) return null;
+    from.carrying = null;
+    const sp = PLANT[c.speciesId];
+    const pl = this.gardens[to.slot].planters.find((x) => x.unlocked && !x.plant);
+    pl.plant = { uid: uid(), speciesId: c.speciesId, mutation: c.mutation, growTotal: sp.grow, growLeft: sp.grow, owner: to.slot };
+    return { speciesId: c.speciesId, mutation: c.mutation };
+  }
+
+  // pets leave `p` (`gave`) and arrive (`got`, [{id, name}]): a bot's team changes here, a person gets mail
+  _tradePets(p, gave, got, tid) {
+    if (!gave.length && !got.length) return;
+    if (p.kind === 'bot') {
+      this._setBotTeam(p, [...this._botTeam(p).filter((_, k) => !gave.some((x) => x.k === k)), ...got]);
+      return;
+    }
+    p.petMail.push({ tid, give: gave.map((x) => x.uid), get: got.map((x) => ({ id: x.id, name: x.name })) });
+    if (p.petMail.length > 8) p.petMail.shift();
+  }
+
+  /** `p`'s device applied pet mail `tid` (ui/pets.js): forget it. */
+  petMailAck(p, tid) {
+    if (!p || typeof tid !== 'string' || !p.petMail.length) return false;
+    const n = p.petMail.length;
+    p.petMail = p.petMail.filter((m) => m.tid !== tid);
+    return p.petMail.length < n;
   }
 
   // ------------------------------------------------------------------ slots (who plays which garden)
@@ -1752,6 +1845,7 @@ export class Game {
     p.holdSpent = false;
     p.sellSpent = false;
     p._jumpQ = 0;
+    p.petMail = []; // the next player in this garden never gets the last one's pet trades
     const g = this.gardens[slot];
     const blankG = this._makeGarden(slot, p);
     g.cashPile = 0;
@@ -1829,6 +1923,7 @@ export class Game {
           interact: { key: it.key, t: it.t, hold: it.hold, label: it.label, verb: it.verb, rarity: it.rarity },
           sell: { key: p.sell.key, t: p.sell.t, hold: p.sell.hold, label: p.sell.label, verb: p.sell.verb, rarity: p.sell.rarity, value: p.sell.value || 0 },
           emote: p.emote, stats: { ...p.stats },
+          petMail: copyMail(p.petMail),
         };
       }),
       gardens: this.gardens.map((g) => ({
@@ -1915,6 +2010,8 @@ export class Game {
       Object.assign(p.interact, d.interact);
       if (d.sell) Object.assign(p.sell, d.sell);
       p.emote = d.emote;
+      // pet trades waiting for their device (a promoted host keeps sending them until they're acked)
+      p.petMail = copyMail(d.petMail);
     });
     s.gardens.forEach((d, i) => {
       const g = this.gardens[i];

@@ -69,11 +69,61 @@ export const REPLIES = {
     maddie: ["You're ON!", "I'm the fastest! Let's go!"],
     micah: ['Race you to Starbloom!', 'Last one there is a rotten seed!'],
   },
+  // trading (social/botTrade.js): "Trade?" from too far away gets 'trade'; the rest answer invites and offers.
+  // {thing} = one of the bot's plants or pets it proposes
   trade: {
-    dorian: ["Ha! My plants aren't for sale!", 'Trade with a friend online, champ!'],
-    esther: ["Sorry sweetie, I'm keeping mine!", 'Find a friend online to trade with!'],
-    maddie: ['No way! Mine are the best!', 'Trade with a friend online!'],
+    dorian: ['Come on over and we can trade, champ!', 'Walk over here and we can make a deal!'],
+    esther: ['Come here, sweetie, and we can trade!', 'Come closer and we can swap, {name}!'],
+    maddie: ['Race over here and we can trade!', 'Come here! Trade time!'],
+    micah: ['Come closer... if you dare. Hehe.', 'Over here, {name}. Let us talk.'],
+  },
+  tradeYes: {
+    dorian: ["Let's make a deal, champ!", 'Deal! Pleasure doing business.', "You've got a deal, {name}!"],
+    esther: ["Of course, sweetie! Let's trade.", 'Sounds lovely, {name}!', 'Deal, sweetie!'],
+    maddie: ['Ooh, yes! Trade time!', 'Deal! Pinky promise!', 'Yes yes yes!'],
+    micah: ['Fine, deal. Hehe.', 'Okay okay, you got me. Deal!'],
+  },
+  tradeNo: {
+    dorian: ['Not right now, champ!', 'Maybe later, kiddo!'],
+    esther: ['Not now, sweetie. Maybe later!', "Sorry sweetie, I'm busy!"],
+    maddie: ['No way! Mine are the best!', "Not now, I'm racing!"],
     micah: ["Trade? I'd rather STEAL. Hehe.", 'Nope! Sneaky Micah never trades.'],
+  },
+  tradeUnfair: {
+    dorian: ['Sweeten the deal a little, champ!', "Add a bit more and it's a deal!"],
+    esther: ['Almost, sweetie! Just a tiny bit more?', 'So close! A little more?'],
+    maddie: ["Add a little more and I'll say yes!", 'Hmm, not enough! More please!'],
+    micah: ['Make it way better and we have a deal. Hehe.', 'Ha! I want MORE than that.'],
+  },
+  tradeOffer: {
+    dorian: ['How about my {thing}, champ?', 'I can give you my {thing}!'],
+    esther: ['You can have my {thing}, sweetie!', 'How about my {thing}?'],
+    maddie: ['Ooh! I can give you my {thing}!', 'Want my {thing}?'],
+    micah: ['Fine, you can have my {thing}. Hehe.', 'My {thing}? Okay...'],
+  },
+  tradeCash: {
+    dorian: ['How about some cash for it, champ?'],
+    esther: ['I can pay you for it, sweetie!'],
+    maddie: ['I can give you some coins!'],
+    micah: ['I can pay you. A little. Hehe.'],
+  },
+  tradeGift: {
+    dorian: ['A present? Thanks, champ!'],
+    esther: ['Aww, for me? Thank you, sweetie!'],
+    maddie: ['For me?! Yay, thank you!'],
+    micah: ['Free stuff? Hehe, thanks!'],
+  },
+  tradeDone: {
+    dorian: ['Pleasure doing business, champ!', 'Great trade!'],
+    esther: ['Enjoy, sweetie!', 'What a lovely trade!'],
+    maddie: ['Yay! Best trade ever!', 'Woohoo! Trade done!'],
+    micah: ['Hehe, I win this one.', 'Nice doing business. Hehe.'],
+  },
+  tradeBye: {
+    dorian: ['Back to work for me. Bye, champ!', "Let's trade another time!"],
+    esther: ["Let's trade later, sweetie!", 'Maybe another time, sweetie!'],
+    maddie: ['Too slow! Gotta zoom!', 'Bye! Trade later!'],
+    micah: ["Boring! I'm out. Hehe.", 'Later, {name}!'],
   },
   help: {
     dorian: ["Bonk 'em, champ!", 'You can do it!'],

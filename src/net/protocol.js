@@ -622,5 +622,17 @@ export function vetPlayer(d, i) {
   d.sell = { key: null, t: num(sl.t), hold: num(sl.hold), label: '', verb: '', rarity: undefined, value: Math.max(0, num(sl.value)) };
   for (const k of ['label', 'verb', 'key']) if (typeof sl[k] === 'string' && sl[k].length <= 64) d.sell[k] = sl[k];
   if (own(RARITY, sl.rarity)) d.sell.rarity = sl.rarity;
+  d.petMail = vetPetMail(d.petMail);
   return true;
+}
+
+/** Pet-trade mail for a player's device ([{tid, give: [uid], get: [{id, name}]}], game.js trade): ids that look
+ *  like ids, known pets, names through the pet-name filter, a few at most. */
+export function vetPetMail(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(-8).filter((m) => isObj(m) && isId(m.tid)).map((m) => ({
+    tid: m.tid,
+    give: Array.isArray(m.give) ? [...new Set(m.give.filter(isId))].slice(0, 3) : [],
+    get: Array.isArray(m.get) ? m.get.slice(0, 3).filter((x) => isObj(x) && own(PET, x.id)).map((x) => ({ id: x.id, name: sanitizePetName(x.name) })) : [],
+  }));
 }

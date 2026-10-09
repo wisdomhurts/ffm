@@ -2,19 +2,24 @@
 //   attachPets(app)              once per page (idempotent): hatched pets -> profile + the hatch moment
 //   buildPetShop(app, close)     the PET EGGS stand panel -> {el, title, dispose} (menus.openShop('pets'))
 //   openPets(app)                "My Pets" inventory: equip, unequip, release (also from the title screen)
+//   attachPetMail(app) -> {update()}  pets traded away / to this player (Game.trade -> player.petMail): applied to
+//                                the profile once per mail id (profile.pets.mailDone), then acked (app.act('petMailAck'))
+//   petBag(app)                  the local player's bag for the trade window: {pid, owned, team, room}
+//   releasePet(pid, uid)         let a pet go (refused while it's on offer in a trade: socialUi.tradePets)
 // Pets live on the active profile (profile.pets = {owned: [{uid, id, t, name?}], team: [uid...]}); main.js turns
 // a team change (or a new nickname) into app.act('setPets', ids, names) while playing. Nicknames: pets/names.js.
 import { bus } from '../core/events.js';
 import { getProfile, updateProfile } from '../core/profiles.js';
 import { PET, EGG, SHOP_EGGS, PET_CAPACITY, eggOdds, fmtPct, boostLines, petScore } from '../pets/catalog.js';
 import { MAX_TEAM } from '../pets/effects.js';
-import { petLabel, checkPetName, randomPetName, PET_NAME_MAX } from '../pets/names.js';
+import { petLabel, checkPetName, randomPetName, sanitizePetName, PET_NAME_MAX } from '../pets/names.js';
 import { petSlotsFor, BASE } from '../config.js';
 import { playHatch } from '../pets/hatch.js';
 import { thumb, cachedThumb, configureStudio, onStudioReady } from '../pets/studio.js';
 import { injectPetStyles, RARITY_COLOR, BOOST_ICON, PAW_ICON, EGG_ICON, rarityName } from '../pets/style.js';
 import { h, money, setText, uiSound } from './dom.js';
 import { ICON } from './icons.js';
+import { socialUi } from '../social/uiState.js';
 
 export { PAW_ICON as PET_ICON };
 
@@ -57,6 +62,23 @@ export function setPetName(pid, uid, raw) {
   return true;
 }
 
+/** The pet a full bag sends home first: not on the team, not on offer in a trade, unnamed if possible, the weakest. */
+function weakestSpare(p, team) {
+  return ownedList(p).filter((x) => !team.has(x.uid) && !socialUi.tradePets.has(x.uid))
+    .sort((a, b) => (a.name ? 1 : 0) - (b.name ? 1 : 0) || petScore(a.id) - petScore(b.id) || (a.t || 0) - (b.t || 0))[0] || null;
+}
+
+/** Let a pet go back to the wild (My Pets). Not while it's on offer in a trade (socialUi.tradePets). */
+export function releasePet(pid, uid) {
+  if (socialUi.tradePets.has(uid) || !ownedList(getProfile(pid)).some((x) => x.uid === uid)) return false;
+  fresh.delete(uid);
+  updateProfile(pid, (p) => {
+    p.pets.owned = p.pets.owned.filter((x) => x.uid !== uid);
+    writeTeam(p, teamOf(p).filter((u) => u !== uid));
+  });
+  return true;
+}
+
 /** How many pets count right now (base level in this game; the title screen shows all three). */
 const slotsNow = (app) => (app.human ? petSlotsFor(app.human.baseLevel) : MAX_TEAM);
 
@@ -83,8 +105,7 @@ export function attachPets(app) {
       // one without a nickname if there is one (a named pet is somebody's favourite)
       if (ownedList(p).length >= PET_CAPACITY) {
         const team = new Set(teamOf(p));
-        const spare = ownedList(p).filter((x) => !team.has(x.uid))
-          .sort((a, b) => (a.name ? 1 : 0) - (b.name ? 1 : 0) || petScore(a.id) - petScore(b.id) || (a.t || 0) - (b.t || 0))[0];
+        const spare = weakestSpare(p, team);
         if (spare) {
           released = spare;
           p.pets.owned = p.pets.owned.filter((x) => x.uid !== spare.uid);
@@ -111,6 +132,95 @@ export function attachPets(app) {
       onName: (name) => setPetName(pid, uid, name),
     });
   });
+}
+
+// ------------------------------------------------------------------ trades (pet mail)
+
+/** The local player's pet bag (the trade window offers from it): {pid, owned: [{uid, id, name?}], team: [uid], room}. */
+export function petBag(app) {
+  const pid = profileIdFor(app, app.human);
+  const prof = getProfile(pid);
+  const owned = ownedList(prof);
+  return { pid, owned, team: teamOf(prof), room: Math.max(0, PET_CAPACITY - owned.length) };
+}
+
+/**
+ * Apply one pet-trade mail ({tid, give: [uid], get: [{id, name}]}) to profile `pid`, once: the pets given
+ * leave the bag (and the team), the pets received arrive with new uids and their nicknames (and join the team
+ * while it has a free slot; a full bag sends its weakest spare home first, like a hatch). Returns the pets that
+ * arrived ([{uid, id, name}]), or null when this mail was applied before (profile.pets.mailDone).
+ */
+export function applyPetMail(pid, mail, slots = MAX_TEAM) {
+  let got = null;
+  let gave = [];
+  const released = [];
+  updateProfile(pid, (p) => {
+    const done = Array.isArray(p.pets.mailDone) ? p.pets.mailDone : (p.pets.mailDone = []);
+    if (!mail?.tid || done.includes(mail.tid)) return;
+    const give = new Set(Array.isArray(mail.give) ? mail.give : []);
+    gave = ownedList(p).filter((x) => give.has(x.uid));
+    p.pets.owned = p.pets.owned.filter((x) => !give.has(x.uid));
+    got = [];
+    for (const x of Array.isArray(mail.get) ? mail.get : []) {
+      if (!PET[x?.id]) continue;
+      if (ownedList(p).length >= PET_CAPACITY) {
+        const spare = weakestSpare(p, new Set(teamOf(p)));
+        if (spare) {
+          released.push(spare);
+          p.pets.owned = p.pets.owned.filter((y) => y.uid !== spare.uid);
+        }
+      }
+      const uid = newUid();
+      const name = sanitizePetName(x.name);
+      p.pets.owned.push(name ? { uid, id: x.id, t: Date.now(), name } : { uid, id: x.id, t: Date.now() });
+      got.push({ uid, id: x.id, name });
+    }
+    const team = teamOf(p);
+    for (const x of got) if (team.length < Math.max(1, slots)) team.push(x.uid);
+    writeTeam(p, team);
+    done.push(mail.tid);
+    if (done.length > 60) done.splice(0, done.length - 60);
+  });
+  for (const x of released) bus.emit('pets:released', { pet: x.id, name: x.name || '', reason: 'full', free: true });
+  if (got) {
+    for (const x of got) fresh.add(x.uid);
+    bus.emit('pets:traded', { pid, tid: mail.tid, got, gave: gave.map((x) => ({ uid: x.uid, id: x.id, name: x.name || '' })) });
+  }
+  return got;
+}
+
+const mailboxes = new WeakMap();
+
+/**
+ * Pet trades for this device's player arrive as mail in the shared game state (player.petMail, written by
+ * Game.trade on the host or offline): each mail is applied to the profile once (even if it shows up again
+ * after a lost tick or a host change) and acked so the host forgets it. Call update() once a frame.
+ */
+export function attachPetMail(app) {
+  let box = mailboxes.get(app);
+  if (box) return box;
+  const ackedAt = new Map(); // tid -> game time of our last ack
+  box = {
+    update() {
+      const p = app.human;
+      const list = p?.petMail;
+      if (!list?.length || !app.game) return;
+      const pid = profileIdFor(app, p);
+      const t = app.game.time;
+      for (const mail of list) {
+        if (!mail?.tid) continue;
+        if (!getProfile(pid)?.pets.mailDone?.includes(mail.tid)) applyPetMail(pid, mail, slotsNow(app));
+        // ack (again, if the host still lists it a while later: the ack or the host itself got lost)
+        if (t - (ackedAt.get(mail.tid) ?? -Infinity) > 2 || t < (ackedAt.get(mail.tid) ?? 0)) {
+          ackedAt.set(mail.tid, t);
+          app.act('petMailAck', mail.tid);
+        }
+      }
+      if (ackedAt.size > 40) for (const k of [...ackedAt.keys()].slice(0, 20)) ackedAt.delete(k);
+    },
+  };
+  mailboxes.set(app, box);
+  return box;
 }
 
 // ------------------------------------------------------------------ thumbnails (time-sliced, cached)
@@ -353,12 +463,7 @@ export function openPets(app) {
   }
 
   function release(uid) {
-    fresh.delete(uid);
-    updateProfile(pid, (p) => {
-      p.pets.owned = p.pets.owned.filter((x) => x.uid !== uid);
-      writeTeam(p, teamOf(p).filter((u) => u !== uid));
-    });
-    uiSound(app, 'click');
+    if (releasePet(pid, uid)) uiSound(app, 'click');
   }
 
   function teamRow(prof) {
@@ -480,8 +585,9 @@ export function openPets(app) {
       const cur = list.find((x) => x.uid === sel);
       const pet = PET[cur.id];
       const isEq = team.includes(cur.uid);
+      const trading = socialUi.tradePets.has(cur.uid);
       const acts = h('div', { class: 'pi-acts' });
-      if (confirming) {
+      if (confirming && !trading) {
         acts.append(h('div', { class: 'pi-confirm' },
           h('span', { text: `Release ${petLabel(cur)}? ${cur.name ? 'They hop' : 'It hops'} back to the wild.` }),
           h('button', { class: 'btn btn-grey btn-sm', type: 'button', text: 'Keep', onclick: () => { confirming = false; uiSound(app, 'click'); render(); } }),
@@ -491,7 +597,8 @@ export function openPets(app) {
           isEq
             ? h('button', { class: 'btn btn-grey', type: 'button', onclick: () => unequip(cur.uid) }, h('span', { text: 'Unequip' }))
             : h('button', { class: 'btn btn-green', type: 'button', 'data-autofocus': '', onclick: () => equip(cur.uid) }, h('span', { class: 'bi', html: ICON.check }), h('span', { text: team.length >= MAX_TEAM ? 'Swap in' : 'Equip' })),
-          h('button', { class: 'btn btn-red btn-sm', type: 'button', onclick: () => { confirming = true; renaming = null; uiSound(app, 'click'); render(); } }, h('span', { text: 'Release' })));
+          trading ? h('span', { class: 'pi-trading', text: 'In a trade' })
+            : h('button', { class: 'btn btn-red btn-sm', type: 'button', onclick: () => { confirming = true; renaming = null; uiSound(app, 'click'); render(); } }, h('span', { text: 'Release' })));
       }
       const editing = renaming === cur.uid;
       const nameRow = editing ? renameBox(cur, pet) : h('div', { class: 'pi-name' },
@@ -571,6 +678,7 @@ function injectTeamCSS() {
 .pt-empty{width:46px;height:46px;display:grid;place-items:center;border-radius:50%;border:2.5px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.4);padding:10px;flex:none}
 .pt-n{font:800 13px/1.15 var(--fb);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pt-slot.locked{opacity:.75}
+.pi-trading{align-self:center;padding:5px 10px 6px;border-radius:10px;background:#ffb627;color:var(--ink);border:2px solid var(--ink);font:900 12px/1 var(--fb)}
 .pt-slot.locked .pthumb{filter:grayscale(.7) brightness(.8)}
 .pt-lock{position:absolute;top:-8px;right:-6px;width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:var(--ink);color:#ffcf6b;padding:4px}
 .egg-card.drop-only{background:linear-gradient(135deg,rgba(255,92,138,.25),rgba(92,200,255,.25)),var(--panel)}

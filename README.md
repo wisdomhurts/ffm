@@ -23,6 +23,11 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
   for walkers, loops, barrel rolls and dives for flyers. Everyone in the room sees it.
 * **Sell has its own button** (V, the gold Sell button on touch, D-pad down), so grabbing or stealing with E never
   sells a plant by accident.
+* **Trade plants, pets and seeds**: walk up to a friend online or a family bot (in solo games too) and press Trade.
+  Offer up to 4 plants (seedlings too), up to 3 pets, the seed in your hands and cash; with a bot, tap its plants and
+  pets to ask for them. Esther is generous, Dorian likes a fair deal, Mati wants a little extra and Micah drives a
+  hard bargain (if he trades at all). Both press Ready and everything swaps at once; a pet you give a bot stays
+  with it ("Bye bye, Fluffy!"). Say "Trade?" in chat and a bot nearby may ask you first.
 * **Base levels 1-10**: every level pays more and unlocks the **Base Studio** (floors, fences, gate-laser colours and
   decorations like trampolines and fountains), a Guard Gnome that bonks thieves, a home treadmill, sprinklers and
   a golden base.
@@ -61,6 +66,7 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 | Speed gear | X | gear chip | LT |
 | Items | 1–5 | tap hotbar | Y / bumpers |
 | Chat | Enter to type (Esc closes), T quick chat, G emotes | chat button, smiley button | |
+| Trade / Gift (near someone) | Y trade, U gift, N no thanks; in the trade window Y = Ready | Trade / Gift buttons | D-pad up trade, right gift, left no thanks; in the window D-pad + A, Y Ready, LB/RB tabs, B cancel |
 | Pause | Esc | pause button | Start |
 | Sound | M = music on/off | tap the speaker (hold: mute all) | pause menu: D-pad, left/right, A |
 
@@ -89,5 +95,7 @@ node build.mjs            # dist/index.html (public), dist/family.html + dist/ar
 node tests/smoke.mjs      # headless Playwright smoke test of the core loop
 node tests/fullscreen.test.mjs   # full screen on Android, iPhone and computers
 node --test tests/gameplay/*.test.mjs   # garden lots, Speed, far biomes, bases, pets, pet names, egg drops, Boost, Sell button, pet tricks (no browser)
+node --test tests/social/*.test.mjs     # chat, bots' replies, trading (pets, seeds, family bots, pet mail online)
+node tests/social/tradeBots.mjs         # a trade with Esther in the real game, desktop + phone screenshots
 ```
 Read `docs/DESIGN.md` for the game design and `docs/ARCHITECTURE.md` for how the code fits together.

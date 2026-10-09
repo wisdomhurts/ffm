@@ -561,6 +561,8 @@ export class HostRole {
         const to = g.players[int(args[0], 0, 3, -1)];
         return to ? g.giftPlant(p, to, int(args[1], 0, WORLD.planterCount - 1, -1)) : false;
       }
+      case 'petMailAck': // their device applied a pet trade (ui/pets.js): stop sending it
+        return isId(args[0]) ? g.petMailAck(p, args[0]) : false;
       case 'petTrick': // ownerSlot, pet index, the trick their device already started (kept if that pet knows it)
         return !!g.petTrick(p, int(args[0], 0, 3, -1), int(args[1], 0, 2, -1), isId(args[2]) ? args[2] : null);
       case 'addCash':

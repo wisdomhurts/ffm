@@ -79,16 +79,21 @@ Game additions:
 * Quick chat: intent `say: phraseId` -> `chat {player, text, quick: true, phrase}` (rate limited 1/1.2 s).
 * Typed chat: `app.act('chat', text)` -> `chat {player, text, typed: true}` (see "Typed chat").
 * `game.giftPlant(from, to, planterIndex)` -> `gift {from, to, plant}` (needs a free unlocked planter on `to`).
-* `game.trade(a, b, offerA, offerB)` with `offer = {planters: [index...], cash}` -> `trade:done {a, b, offerA, offerB}`.
-  Validation is atomic (both sides still own what they offer, room for incoming plants).
+* `game.trade(a, b, offerA, offerB)` with `offer = {planters: [index...], cash, pets: [{uid, id, name, k?}], seed, petRoom}`
+  -> `trade:done {a, b, offerA, offerB, plantsA, plantsB, seedA, seedB, petsA, petsB, tid}` (X = what X gave).
+  Validation is atomic (both sides still own what they offer, room for incoming plants and seeds, pet-bag room).
+  `seed` (true or `seedSig(carrying)`) = the seed in their hands: planted straight into a free planter of the other
+  garden (new uid, full grow time). Pets: a bot's team changes right away (`k` = index in `p.pets`; nicknames move
+  with the pet); a person gets **pet mail** (see Social > Trading).
+* `game.petMailAck(p, tid)`: `p`'s device applied that mail; the host forgets it.
 
 ## Actions gateway (`app.act`, integrator)
 Anything the UI changes in the game goes through `app.act(name, ...args)` so it also works as a
 client in an online room (the host applies it for the right player):
 `buyItem(id, qty)`, `buySpeed(n)`, `buyBoost()`, `buyTreadmill()`, `upgradeBase()`, `setBaseStyle(style)`, `rebirth()`,
 `buyEgg(eggId)`, `setPet(petId)`, `setPets(ids, names)`, `setLook(look)`,
-`gift(toSlot, planterIndex)`, `tradeRequest(toSlot)`, `tradeOffer(offer)`, `tradeReady(bool)`,
-`tradeCancel()`, `emote(id)`, `say(phraseId)`, `chat(text)`, `petTrick(ownerSlot, k)` (click a pet: `game.petTrick(by, ownerSlot, k)`
+`gift(toSlot, planterIndex)`, `tradeRequest(toSlot)`, `tradeOffer(offer)`, `tradeAsk(ask)`, `tradeReady(bool, petRoom)`,
+`tradeCancel()`, `petMailAck(tid)`, `emote(id)`, `say(phraseId)`, `chat(text)`, `petTrick(ownerSlot, k)` (click a pet: `game.petTrick(by, ownerSlot, k)`
 emits `pet:trick {player, owner, k, trick, pet}`; a client starts it at once, sends the trick it picked as a third
 argument and skips the host's echo; the host checks slot, pet, cooldown and trick id, with its own rate limit).
 Returns `true/false` offline, `undefined` (async) online (`petTrick`: true/false, it plays locally).
@@ -168,6 +173,8 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
   shown to everyone online: in `who` cards (`pets` + `petNames`), in the player state and as name tags over pets.
   Named on the hatch card (`playHatch(..., {onName})`) or in My Pets (`setPetName(profileId, uid, name)`).
   A full bag sends home an unnamed spare first.
+* Trades: `attachPetMail(app)` applies pet mail (`player.petMail`) to the profile once per mail (`profile.pets.mailDone`),
+  `petBag(app)` -> `{pid, owned, team, room}`, `releasePet(pid, uid)` (refused for pets on offer: `socialUi.tradePets`).
 
 ## Progress: quests, badges, stars (`src/progress/**` + `src/ui/progress.js`, progress agent)
 * `attachProgress(app)`: listens to bus events for the LOCAL player (`player === app.human`), updates
@@ -219,14 +226,49 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
   `TEXT_CHAT.history` lines, quick-chat chips, mute chips for room members), Enter / chat button to open.
 * Bots: typed lines are matched to a topic (`TYPED_INTENTS` in `replies.js`, first match wins) and answered from
   `TYPED_REPLIES` / `REPLIES` with the usual cooldowns and spam guard; a bot called by name (`BOT_CALLS`) answers first.
-* `mountSocial(app, hudRoot)`: near another human player (online) a "Gift / Trade" prompt; gift picker; trade
-  window (both offer planters + cash, both Ready, 3 s countdown, Accept) using `app.act` + `trade:*` events.
+* `mountSocial(app, hudRoot)`: near another player or a family bot a "Gift / Trade" prompt; gift picker; trade
+  window (both offer plants, pets, the seed in hand and cash, both Ready, 3 s countdown) using `app.act` +
+  `trade:*` events.
+
+### Trading (`src/social/trades.js`, `src/social/botTrade.js`, `src/ui/trade.js`, pet mail in `src/ui/pets.js`)
+* Who: people with people (online) and with the family bots (solo, and in private rooms where the host runs them;
+  public rooms have no bots). `App.act` routes `trade*` to `app.trades.handle(human, ...)` when there is no room;
+  in a room the host does (`HostRole.act` default case). `app.trades.update()` runs on the host / solo only.
+* Offer (what a device sends): `tradeOffer({planters: [idx <= 4], uids, cash, pets: [{uid, id, name}] (<= 3), seed,
+  petRoom})`. The host keeps only its own planted plants (grown or growing: "Seedling" in the UI), pets with
+  `own(PET, id)`, an id-like `uid` (`isId`), no repeats, at most 3, nicknames through `sanitizePetName`, the seed
+  only while `seedSig(p.carrying)` still matches, cash clamped. `petRoom` = free spots in the device's pet bag
+  (`PET_CAPACITY - owned`; the host can't see bags): Ready is refused unless both gardens have planters for the
+  plants + seeds coming in and both bags room for the pets (a bot holds 3 pets). The existing per-member action rate
+  limit applies (6/s, burst 16). `trade:update` carries both offers (pets nested, never a nickname at the top level:
+  `EventCodec.vet` would drop the event) and `petRoomA/B`.
+* With a bot: `tradeAsk({planters, uids, pets: [{uid: botPetUid(k, id)}], petRoom})` sets the bot's side to what you
+  ask for. `social/botTrade.js` answers invites (busy bots and usually Micah say no), and once per change weighs
+  `value(what it gets) >= want x value(what it gives)` (`BOT_TRADE.want`: Esther 0.8, Dorian 1.0, Mati 1.2, Micah
+  1.5; plants = `plantIncome x SELL_SECONDS`, a little less while growing, pets = average hatch cost, cash) ->
+  Ready + a line, or "a bit more?". Offered something with nothing asked yet, it proposes one of its own things
+  (never the same one again for 30 s). It stands still facing you while trading and says bye after 45 s of nothing.
+  A person saying "Trade?" (quick chat, or typed) gets an invite back from the closest willing bot. Lines live in
+  `REPLIES.trade*` (`replies.js`), so `isBotLine` passes them online.
+* **Pet mail** (pets cross devices through replicated state, not one-shot events): `Game.trade` appends
+  `{tid, give: [uid], get: [{id, name}]}` to each person's `player.petMail` (max 8; `tid` unique across pages and
+  hosts). It rides in `serializeFull` / the `p<slot>` sections (`vetPlayer` -> `vetPetMail`), so a lost tick, a
+  lost `trade:done` or a host change can't lose it. Each device's `attachPetMail(app).update()` (main.js, every
+  frame) applies new mail once (`profile.pets.mailDone`, last 60 ids): given uids leave the bag and team, received
+  pets arrive with new uids and their nicknames (joining the team if a slot is free; a full bag sends home its
+  weakest unnamed spare, never a pet on offer), then `act('petMailAck', tid)` over the reliable action queue
+  (re-sent every 2 s while the host still lists it). `profile:changed` then re-sends `setPets`.
+* Locks: pets on offer are in `socialUi.tradePets` (My Pets can't release them, a full bag skips them); if one
+  leaves the bag anyway, the trade window re-sends the offer without it.
+* Known gaps (fine for a family game): a modified client could keep a pet it traded away (bags live on devices), and
+  a cloud restore (`replaceProfile`) can bring one back. Pets given to a bot stay with it for that match.
 
 ## Shared rules
 * No new runtime network except the Supabase project (and only through `src/net/transport.js` and
   `src/online/**`). No external images/fonts.
 * Performance budget unchanged (phone 30+ fps): pets are cheap meshes, shared geometry/materials.
-* Every feature must work offline/solo except multiplayer, trading/gifting and global scores.
+* Every feature must work offline/solo except multiplayer and global scores (trading and gifting work solo with the
+  family bots).
 * Kid-safe copy everywhere. Never show another player's photo in a public room.
 
 ## Shared UI building blocks (integrator)

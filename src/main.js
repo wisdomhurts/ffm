@@ -33,7 +33,7 @@ import { createOnline } from './net/session.js';
 import { reactToSocial } from './social/botReact.js';
 import { postTyped } from './social/chat.js';
 import { attachCloudSync } from './online/sync.js';
-import { attachPets } from './ui/pets.js';
+import { attachPets, attachPetMail } from './ui/pets.js';
 import { attachPetTricks } from './pets/tricks.js';
 import { sameLook } from './characters/cosmetics.js';
 import { createTradeManager } from './social/trades.js';
@@ -83,6 +83,7 @@ class App {
     this.cam = null;
     this.menus = createMenus(this);
     attachPets(this); // hatching (solo and online) adds pets to the profile
+    this.petMailbox = attachPetMail(this); // pets traded to / from this player land in (or leave) the profile
     this.touch = createTouchControls(this);
     attachPetTricks(this); // click / tap a pet: it does a trick (instead of a bonk)
     this.profileId = activeProfileId() || CHARACTERS[0].id;
@@ -305,8 +306,12 @@ class App {
         // quest/badge rewards (host-authoritative online)
         if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);
         return true;
+      case 'petMailAck':
+        // this device applied a pet trade (ui/pets.js attachPetMail)
+        return this.online?.room ? this.online.act(name, args) : g.petMailAck(p, args[0]);
       default:
-        // trades etc. only exist between people online
+        // trades: a room's host runs them for everyone; solo, the family bots trade with you right here
+        if (String(name).startsWith('trade') && !this.online?.room) return this.trades?.handle(p, name, args) ?? false;
         return this.online?.act?.(name, args);
     }
   }
@@ -503,6 +508,7 @@ class App {
     if (this.online?.room) this.online.update(dt);
     else if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
     if (!this.online?.isClient) this.trades?.update?.();
+    this.petMailbox?.update(); // cheap when there's no mail
     if (this.state === 'title' && this._warmup > 0) {
       for (let i = 0; i < 6 && this._warmup > 0; i++, this._warmup--) g.update(1 / 40);
     }

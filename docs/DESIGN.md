@@ -128,6 +128,17 @@ full-screen celebration (it waits until you are not carrying anything).
   or the Seed Road (deeper = rarer eggs; 5% Rainbow Eggs). First to touch it after it lands hatches it for free.
 * **Name a pet**: a "Name your pet!" box on the hatch card (dice button for ideas), or Rename in My Pets. Up to
   14 letters, same kid-safe filter as player names; the name floats over the pet and shows in every pet list.
+* **Trade** (Y / Trade button near another player or a family bot): both sides offer up to 4 planted plants (grown
+  or still growing), up to 3 pets, the seed in their hands and cash; both press Ready, a 3 s countdown, then
+  everything swaps at once. Any change un-readies both and locks Ready for 1 s. Both gardens need free planters for
+  the plants and seeds coming in (a traded seed is planted at once, with full grow time) and both pet bags need room
+  (bots hold 3 pets). Walking apart (40 studs), a bonk or leaving ends the trade. Family bots (solo and in private
+  rooms): they answer an invite after a moment (busy ones and usually Micah say no), you tap their plants and pets
+  to ask for them, and they say yes when what they get is worth at least Esther 0.8x / Dorian 1x / Mati 1.2x /
+  Micah 1.5x what they give (plants: 90 s of income, a little less while growing; pets: their average hatch cost;
+  cash). Offered something and asked for nothing, a bot proposes a thing of its own (never the same one twice in a
+  row). A pet given to a bot stays with it for the match; giving one asks twice. Saying "Trade?" near a bot may get
+  you an invite.
 * **Expand** (walk into your next FOR SALE lot): +5 planters.
 * **Items** (Gear Shop, hotbar 1–5): Banana Peel, Water Balloon, Speed Coil, Invisibility Cloak,
   Water Bucket (halves remaining growth time of the plant you stand next to).

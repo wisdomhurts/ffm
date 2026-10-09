@@ -109,7 +109,10 @@ export class StubApp {
       case 'addCash':
         if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);
         return true;
+      case 'petMailAck':
+        return this.online?.room ? this.online.act(name, args) : g.petMailAck(p, args[0]);
       default:
+        if (String(name).startsWith('trade') && !this.online?.room) return this.trades?.handle(p, name, args) ?? false;
         return this.online?.act?.(name, args);
     }
   }
