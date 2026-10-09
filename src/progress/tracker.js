@@ -659,6 +659,16 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     if (plant.size === 'titan') add('titans');
     checkBadges();
   });
+  // Welcome-Back Garden: plants that finished while you were away grew quietly (Game.applyAway, no plant:giant);
+  // their GIANT and TITAN ones count from the report, which is always about the local player's own garden
+  on('away:report', (r) => {
+    if (!app.human) return;
+    const giant = Math.max(0, r?.sizes?.giant | 0), titan = Math.max(0, r?.sizes?.titan | 0);
+    if (!(giant + titan > 0)) return;
+    add('giants', giant + titan);
+    add('titans', titan);
+    checkBadges();
+  });
   on('plant:sold', ({ player }) => {
     if (!isMe(player)) return;
     add('sold');

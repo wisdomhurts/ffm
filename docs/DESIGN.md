@@ -199,10 +199,10 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
 ## 7. Modes
 * **Endless** (auto-saves locally). **Welcome-Back Garden** (`AWAY` in config.js, solo Endless only): when you come
   back to a save, every garden (the bots' too) has kept growing at half speed for the time you were away, capped at
-  2 hours (4 at Base Lv 6, 8 at Lv 10); breaks under 5 minutes don't count. Plants that finish roll their size; the
-  cash waits on the COLLECT pad. A "While you were away..." card (never during the tutorial) shows what grew, the
-  cash and a few made-up family stories (nothing is ever lost while you're away), then "Run to COLLECT!" points at
-  your pad.
+  2 hours (4 at Base Lv 6, 8 at Lv 10); breaks under 5 minutes don't count. Plants that finish roll their size (your
+  GIANT and TITAN ones count for the Gigantic badge); the cash waits on the COLLECT pad. A "While you were away..."
+  card (never during the tutorial) shows what grew, the cash and a few made-up family stories (nothing is ever lost
+  while you're away), then "Run to COLLECT!" points at your pad.
 * **Family Showdown** — 8 minutes, highest net worth wins, 3D podium finale.
 * Difficulty: Chill / Normal / Chaos (bot aggression and speed).
 * Online: public rooms (Quick Play, the room list) are people only; private rooms may have 0-3 computer players.

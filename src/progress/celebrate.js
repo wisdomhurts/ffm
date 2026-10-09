@@ -4,7 +4,8 @@
 // Tap or press a key to hurry it along; reduced motion shows the end straight away.
 //   celebrateCollection(app, {collection, stars, cash, banked}) -> void
 // Celebrations queue, and wait for a calm moment in a game: not while you carry a seed or plant (you may be
-// running from a monster), not over a shop or menu, not over a pet hatch. A solo game pauses underneath.
+// running from a monster), not over a shop, menu or gift/trade window, not over a pet hatch. A solo game pauses
+// underneath.
 import { h, esc, reducedMotion } from '../ui/dom.js';
 import { avatarEl } from '../ui/avatars.js';
 import { plantIcon } from '../social/plantIcon.js';
@@ -12,6 +13,7 @@ import { getProfile, updateProfile } from '../core/profiles.js';
 import { sanitizeLook, HAT_BY_ID } from '../characters/cosmetics.js';
 import { openWardrobe } from '../ui/wardrobe.js';
 import { CHARACTER } from '../config.js';
+import { socialUi } from '../social/uiState.js';
 import { glyph } from './art.js';
 import { cashText } from './catalog.js';
 
@@ -43,7 +45,7 @@ export const isCelebrating = () => !!current;
 function busy(app) {
   if (document.querySelector('.pet-hatch')) return true;
   if (app.state !== 'playing') return false;
-  return !!app.human?.carrying || !!app.menus?.isBlocking?.();
+  return !!app.human?.carrying || socialUi.sheet || !!app.menus?.isBlocking?.();
 }
 
 function pump(app) {
@@ -133,7 +135,6 @@ function run(app, info, done) {
 
   // the player stands still (a solo game waits) while this is up
   const inGame = app.state === 'playing';
-  const hadInput = app.input?.enabled;
   let pausedGame = false;
   if (inGame) {
     if (app.input) {
@@ -185,9 +186,10 @@ function run(app, info, done) {
     wrap.classList.add('pgc-out');
     host.classList.remove('pg-celebrating');
     if (inGame) {
-      if (app.input) app.input.enabled = hadInput !== false;
-      if (app.state === 'playing') app.touch?.setVisible?.(true);
-      if (pausedGame && app.game) app.game.paused = false;
+      // back to whatever holds the player now (a pause menu or a gift/trade window opened meanwhile keeps them still)
+      if (app.input) app.input.enabled = app.state === 'playing' && !socialUi.sheet;
+      if (app.state === 'playing' && !socialUi.sheet) app.touch?.setVisible?.(true);
+      if (pausedGame && app.game && app.state === 'playing') app.game.paused = false; // (resume() unpauses a menu)
     }
     setTimeout(() => {
       wrap.remove();

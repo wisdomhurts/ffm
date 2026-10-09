@@ -498,6 +498,24 @@ section('seed almanac');
   check(JSON.stringify(p3.almanac.s) === JSON.stringify({ daisy: 9, sunflower: 1 }), 'normalize drops bad entries and masks bits: ' + JSON.stringify(p3.almanac.s));
 }
 
+// ------------------------------------------------------------------ 8d. Welcome-Back Garden: giants grown while away
+section('welcome back');
+{
+  // Game.applyAway finishes plants quietly (no plant:giant); main.js reports them in one 'away:report'
+  const c = P().counters;
+  c.giants = 8;
+  c.titans = 0;
+  delete P().badges.gigantic2;
+  const s0 = P().stars;
+  bus.emit('away:report', { seconds: 3600, credit: 1800, cash: 500, grown: 4, sizes: { big: 2, giant: 1, titan: 1 }, giants: [], bots: [], lines: [] });
+  check(c.giants === 10 && c.titans === 1, `a GIANT and a TITAN grown while away count (giants ${c.giants}, titans ${c.titans})`);
+  check(!!P().badges.gigantic2 && P().stars > s0, 'and earn Gigantic II');
+  bus.emit('away:report', { seconds: 3600, credit: 1800, cash: 0, grown: 1, sizes: { big: 1, giant: 0, titan: 0 }, giants: [], bots: [], lines: [] });
+  bus.emit('away:report', { seconds: 3600, sizes: { giant: -5, titan: 'x' } });
+  bus.emit('away:report', null);
+  check(c.giants === 10 && c.titans === 1, 'big ones and broken reports add nothing');
+}
+
 // ------------------------------------------------------------------ 9. showdown results
 section('showdown');
 {
@@ -565,6 +583,89 @@ section('refit');
   g.human.speedLevel = 16;
   bus.emit('game:start', { game: g, human: g.human });
   check(P().quests.list.every((q) => q.s === 5), 'untouched quests are re-fitted to the real progress: ' + before + ' -> ' + P().quests.list.map((q) => q.s));
+  endGame();
+}
+
+// ------------------------------------------------------------------ 12. the Family Four finale and a trade window
+section('celebration vs trade window');
+{
+  // just enough DOM for progress/celebrate.js (reduced motion: no animation timeline to wait for)
+  class El {
+    constructor(tag) {
+      this.tag = tag;
+      this.children = [];
+      this.parent = null;
+      this.className = '';
+      this.style = {};
+      this.dataset = {};
+      this.attrs = {};
+      this.on = {};
+      const el = this;
+      this.classList = {
+        add: (...c) => c.forEach((x) => !this.classList.contains(x) && (el.className = (el.className + ' ' + x).trim())),
+        remove: (...c) => (el.className = el.className.split(' ').filter((x) => !c.includes(x)).join(' ')),
+        toggle: (c, on) => ((on ?? !el.classList.contains(c)) ? el.classList.add(c) : el.classList.remove(c)),
+        contains: (c) => el.className.split(' ').includes(c),
+      };
+    }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    appendChild(c) { c.parent = this; this.children.push(c); return c; }
+    remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; }
+    addEventListener(t, fn) { (this.on[t] ||= []).push(fn); }
+    focus() { globalThis.document.activeElement = this; }
+    click() { for (const fn of this.on.click || []) fn({ target: this }); }
+    closest(sel) { for (let e = this; e; e = e.parent) if (e.classList.contains(sel.slice(1))) return e; return null; }
+    set innerHTML(v) { this.html = v; }
+    set textContent(v) { this.text = v; this.children = []; }
+    find(cls) { return this.classList.contains(cls) ? this : this.children.reduce((f, c) => f || c.find?.(cls), null); }
+  }
+  const body = new El('body');
+  const keys = new Set();
+  globalThis.document = {
+    body, activeElement: null, hidden: false, addEventListener() {}, removeEventListener() {},
+    createElement: (t) => new El(t),
+    createTextNode: (t) => ({ text: t }),
+    createDocumentFragment: () => new El('#frag'),
+    querySelector: (sel) => body.find(sel.slice(1)),
+    querySelectorAll: () => [],
+  };
+  globalThis.window.addEventListener = (t, fn) => t === 'keydown' && keys.add(fn);
+  globalThis.window.removeEventListener = (t, fn) => keys.delete(fn);
+  globalThis.matchMedia = () => ({ matches: true });
+  globalThis.requestAnimationFrame = (fn) => setTimeout(fn, 0);
+  globalThis.Image = class { };
+  const key = (k) => [...keys].forEach((fn) => fn({ key: k, preventDefault() {}, stopPropagation() {} }));
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const { celebrateCollection, isCelebrating } = await import('../../src/progress/celebrate.js');
+  const { socialUi } = await import('../../src/social/uiState.js');
+  const game = startGame('endless', 'normal', 17);
+  const fake = { root: body, state: 'playing', game, human: game.human, profile: app.profile, input: { enabled: true, reset() {} }, touch: { setVisible() {} }, menus: { isBlocking: () => false } };
+  const info = { collection: cat.COLLECTIONS[0], stars: 200, cash: 50000, banked: false };
+  // a trade with a family bot brings the last Secret plant: the trade window is still up (holding the player)
+  socialUi.sheet = true;
+  fake.input.enabled = false;
+  celebrateCollection(fake, info);
+  await wait(30);
+  check(!isCelebrating() && !body.find('pg-cel'), 'the finale waits while the trade window is open');
+  // Esc closes the trade window (ui/trade.js endTrade -> holdInput(false))
+  socialUi.sheet = false;
+  fake.input.enabled = true;
+  await wait(450);
+  check(isCelebrating() && !!body.find('pg-cel') && fake.input.enabled === false, 'then it plays, holding the player');
+  key('Escape'); // skip to the card (already there with reduced motion)
+  key('Escape');
+  await wait(20);
+  check(!isCelebrating() && fake.input.enabled === true && !game.paused, 'closed: the player can move again (input ' + fake.input.enabled + ')');
+  // a trade window that opens over the finale keeps holding the player after it closes
+  celebrateCollection(fake, info);
+  await wait(30);
+  check(isCelebrating(), 'a second finale plays');
+  socialUi.sheet = true;
+  fake.input.enabled = false;
+  key('Escape');
+  await wait(20);
+  check(!isCelebrating() && fake.input.enabled === false, 'closing it leaves the open trade window holding the player');
+  socialUi.sheet = false;
   endGame();
 }
 
