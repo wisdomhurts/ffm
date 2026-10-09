@@ -310,7 +310,7 @@ export const BADGES = [
   { id: 'chaos', name: 'Chaos Conqueror', icon: 'fire', stat: (c) => c.chaosWins, tiers: [1], stars: [60], how: () => 'Win a Showdown on Chaos' },
   { id: 'social', name: 'Social Butterfly', icon: 'butterfly', stat: (c) => c.onlineGames, tiers: [1], stars: [20], how: () => 'Play an online game' },
   { id: 'generous', name: 'Generous', icon: 'gift', stat: (c) => c.gifts, tiers: [1], stars: [15], how: () => 'Gift a plant to a friend' },
-  { id: 'dealmaker', name: 'Deal Maker', icon: 'handshake', stat: (c) => c.trades, tiers: [1], stars: [20], how: () => 'Finish a trade with a friend' },
+  { id: 'dealmaker', name: 'Deal Maker', icon: 'handshake', stat: (c) => c.trades, tiers: [1], stars: [20], how: () => 'Finish a trade (with a friend or the family)' },
   { id: 'petlover', name: 'Pet Lover', icon: 'paw', stat: (c) => c.hatches, tiers: [1, 10], stars: [10, 40], how: (n) => (n === 1 ? 'Hatch a pet egg' : `Hatch ${n} pet eggs`) },
   { id: 'legendary', name: 'Legendary Luck', icon: 'egg', stat: (c) => c.legendaryPets, tiers: [1], stars: [50], how: () => 'Hatch a Legendary pet (or rarer)' },
   { id: 'divinepet', name: 'Divine Friend', icon: 'star', stat: (c) => c.divinePets, tiers: [1], stars: [100], how: () => 'Hatch a Divine pet' },
