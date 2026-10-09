@@ -22,6 +22,7 @@ import { hatGeometry, accGeometry } from './gear.js';
 import { EMOTE_ANIM } from './emotes.js';
 import { createTrail } from './trails.js';
 import { sanitizeLook, sameLook, HAIR_BY_ID, HAT_BY_ID } from './cosmetics.js';
+import { rimLit } from '../core/shaderfx.js';
 
 const NOODLE_SEG = 1.5; // the noodle is 3 segments = 4.5 studs
 const NOODLE_CURVE = [0.07, -0.07, -0.07]; // gentle permanent bend per segment
@@ -301,7 +302,7 @@ function cosmeticMaterial() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += vColor.rgb * ${GLOW.toFixed(2)};`);
   };
   m.customProgramCacheKey = () => 'avatar-cosmetic';
-  return m;
+  return rimLit(m, 0.75);
 }
 
 // Which emote poses need the hands (the noodle goes onto the back and is tucked away)
@@ -382,7 +383,8 @@ export function createAvatar(char, faceImage, skinHex, lookArg) {
     // ---- materials (owned by this avatar so opacity can change per player)
     const mats = [];
     const std = (o) => {
-      const m = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, ...o });
+      // sun-side rim light (core/shaderfx.js) so the family stands out from busy ground and dark zones
+      const m = rimLit(new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, ...o }), 0.75);
       mats.push(m);
       return m;
     };

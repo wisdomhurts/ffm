@@ -64,6 +64,11 @@ export function prim(name) {
 
 // ------------------------------------------------------------------ merger
 
+// Wind sway (switched on by world.js on medium/high): parts added with o.sway get a per-vertex aSway weight,
+// and a merge that has any is drawn with SWAY.material (the flat material plus a vertex wobble) instead of
+// SWAY.from, so static meshes never pay for it. Shadow casters get the matching swaying depth material.
+export const SWAY = { from: null, material: null, depth: null };
+
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
 const _n3 = new THREE.Matrix3();
@@ -93,6 +98,7 @@ export class Merger {
     this.uvMode = uv;
     this.uvScale = uvScale;
     this.flatUV = flatUV;
+    this.sway = false;
   }
 
   /**
@@ -100,10 +106,12 @@ export class Merger {
    * @param {THREE.Matrix4} matrix
    * @param {*} color hex/Color: base colour
    * @param {object} [o] {ao: 0..1 darken towards the bottom, top: colour at the top (gradient),
-   *   topFace: colour for upward faces, uv: override uv mode, uvScale, emissive (for glow meshes)}
+   *   topFace: colour for upward faces, uv: override uv mode, uvScale, emissive (for glow meshes),
+   *   sway: wind weight 0..1, or [bottom, top] to bend along the part's height (see SWAY)}
    */
   add(geo, matrix, color, o = {}) {
     if (typeof geo === 'string') geo = prim(geo);
+    if (o.sway) this.sway = true;
     if (!geo.boundingBox) geo.computeBoundingBox();
     this.parts.push({ geo, matrix: matrix.clone(), color: new THREE.Color(color), o });
     this.count += geo.attributes.position.count;
@@ -146,7 +154,9 @@ export class Merger {
   build(material, { castShadow = false, receiveShadow = true, name = '' } = {}) {
     if (!this.count) return null;
     const geo = this.buildGeometry();
-    const mesh = new THREE.Mesh(geo, material);
+    const sway = geo.attributes.aSway && material === SWAY.from && SWAY.material;
+    const mesh = new THREE.Mesh(geo, sway || material);
+    if (sway && castShadow) mesh.customDepthMaterial = SWAY.depth;
     mesh.castShadow = castShadow;
     mesh.receiveShadow = receiveShadow;
     mesh.name = name;
@@ -162,6 +172,7 @@ export class Merger {
     const uv = new Float32Array(N * 2);
     const colr = new Float32Array(N * 3);
     const index = N > 65535 ? new Uint32Array(this.icount) : new Uint16Array(this.icount);
+    const swayW = this.sway && SWAY.material ? new Uint8Array(N) : null;
     let k = 0;
     let ii = 0;
     for (const part of this.parts) {
@@ -237,6 +248,10 @@ export class Merger {
         }
         uv[k * 2] = u;
         uv[k * 2 + 1] = w;
+        if (swayW && o.sway) {
+          const sw = typeof o.sway === 'number' ? o.sway : o.sway[0] + (o.sway[1] - o.sway[0]) * ty;
+          swayW[k] = Math.round(Math.min(1, Math.max(0, sw)) * 255);
+        }
         k++;
       }
     }
@@ -245,6 +260,7 @@ export class Merger {
     g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     g.setAttribute('color', new THREE.BufferAttribute(colr, 3));
+    if (swayW) g.setAttribute('aSway', new THREE.BufferAttribute(swayW, 1, true));
     g.setIndex(new THREE.BufferAttribute(index, 1));
     g.computeBoundingSphere();
     g.computeBoundingBox();

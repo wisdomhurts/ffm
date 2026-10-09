@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { settings } from './settings.js';
 import { bus } from './events.js';
+import { installHeightFog, skyEnvironment, setSkyEnvironment } from './shaderfx.js';
 
 export function detectQuality() {
   const touch = matchMedia('(pointer: coarse)').matches;
@@ -12,17 +13,30 @@ export function detectQuality() {
   return 'high';
 }
 
+// Look flags (phones always run 'low', so everything there must stay close to free):
+//   env: generated sky reflections on the rim-lit characters, fill: a no-shadow bounce light opposite the sun,
+//   shadowRadius: PCF softness in shadow-map texels, swayAmp: wind sway of baked foliage (0 = not compiled),
+//   oceanHQ: Fresnel + sun glint on the ocean, heightFog: haze that settles low, groundVar: large-scale tint
+//   variation on grass and sand, bloom: reserved (off: a post pass would re-tone-map the unlit sky, neon and
+//   particles and needs a stencil-carrying target for the x-ray silhouette).
 export const QUALITY = {
-  low: { pixelRatio: 1.25, shadows: false, shadowSize: 0, antialias: false, drawDistance: 260, decorDensity: 0.4 },
-  medium: { pixelRatio: 1.5, shadows: true, shadowSize: 1024, antialias: true, drawDistance: 360, decorDensity: 0.7 },
-  high: { pixelRatio: 2, shadows: true, shadowSize: 2048, antialias: true, drawDistance: 480, decorDensity: 1 },
+  low: { pixelRatio: 1.25, shadows: false, shadowSize: 0, antialias: false, drawDistance: 260, decorDensity: 0.4, env: false, fill: false, shadowRadius: 0, swayAmp: 0, oceanHQ: false, heightFog: false, groundVar: false, bloom: false },
+  medium: { pixelRatio: 1.5, shadows: true, shadowSize: 1024, antialias: true, drawDistance: 360, decorDensity: 0.7, env: true, fill: true, shadowRadius: 1.6, swayAmp: 1, oceanHQ: true, heightFog: true, groundVar: true, bloom: false },
+  high: { pixelRatio: 2, shadows: true, shadowSize: 2048, antialias: true, drawDistance: 480, decorDensity: 1, env: true, fill: true, shadowRadius: 2.2, swayAmp: 1, oceanHQ: true, heightFog: true, groundVar: true, bloom: false },
 };
+
+const _m = new THREE.Matrix4();
+const _r = new THREE.Vector3();
+const _u = new THREE.Vector3();
+const ORIGIN = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
 
 export class Engine {
   constructor(container) {
     this.container = container;
     this.qualityId = settings.quality === 'auto' || !QUALITY[settings.quality] ? detectQuality() : settings.quality;
     this.quality = QUALITY[this.qualityId] || QUALITY[(this.qualityId = 'medium')];
+    if (this.quality.heightFog) installHeightFog(); // patches three's fog chunks before anything compiles
     const renderer = new THREE.WebGLRenderer({ antialias: this.quality.antialias, powerPreference: 'high-performance', preserveDrawingBuffer: false, stencil: true }); // stencil: the player's x-ray silhouette
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.quality.pixelRatio));
     renderer.setSize(container.clientWidth, container.clientHeight);
@@ -36,7 +50,12 @@ export class Engine {
       e.preventDefault();
       bus.emit('engine:contextlost');
     });
-    renderer.domElement.addEventListener('webglcontextrestored', () => bus.emit('engine:contextrestored'));
+    renderer.domElement.addEventListener('webglcontextrestored', () => {
+      // a render target's pixels don't survive a context loss: prefilter the sky reflections again (the old
+      // texture's GL objects went with the old context, so it is just dropped)
+      if (this.envMap) setSkyEnvironment((this.envMap = skyEnvironment(renderer)));
+      bus.emit('engine:contextrestored');
+    });
     container.appendChild(renderer.domElement);
     this.renderer = renderer;
 
@@ -56,9 +75,28 @@ export class Engine {
       Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 260 });
       this.sun.shadow.bias = -0.0006;
       this.sun.shadow.normalBias = 0.04;
+      // soft edges (PCF disk radius in texels; a uniform, no extra taps) and shade a little lighter than black
+      this.sun.shadow.radius = this.quality.shadowRadius || 1;
+      this.sun.shadow.intensity = 0.95;
     }
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
+    // bounce light from the ground opposite the sun (no shadows); world/sky.js tints and aims it per zone
+    this.fill = null;
+    if (this.quality.fill) {
+      this.fill = new THREE.DirectionalLight(0xc8d8b0, 0.35);
+      this.fill.position.set(-40, 30, 30);
+      this.scene.add(this.fill);
+    }
+    // soft sky reflections for the rim-lit characters, monsters and pets (core/shaderfx.js rimLit)
+    this.envMap = null;
+    if (this.quality.env) {
+      try {
+        setSkyEnvironment((this.envMap = skyEnvironment(renderer)));
+      } catch (e) {
+        console.warn('[engine] no sky environment', e);
+      }
+    }
     this.sunOffset = new THREE.Vector3(40, 80, -30);
     this.focus = new THREE.Vector3();
 
@@ -119,8 +157,19 @@ export class Engine {
 
   setFocus(x, y, z) {
     this.focus.set(x, y, z);
-    this.sun.target.position.copy(this.focus);
-    this.sun.position.copy(this.focus).add(this.sunOffset);
+    const t = this.sun.target.position.copy(this.focus);
+    if (this.sun.castShadow) {
+      // move the shadow box in whole shadow-map texels (across the light) so edges don't shimmer as we walk
+      const cam = this.sun.shadow.camera;
+      const texel = (cam.right - cam.left) / this.sun.shadow.mapSize.x;
+      _m.lookAt(this.sunOffset, ORIGIN, UP);
+      _r.setFromMatrixColumn(_m, 0);
+      _u.setFromMatrixColumn(_m, 1);
+      const a = t.dot(_r);
+      const b = t.dot(_u);
+      t.addScaledVector(_r, Math.round(a / texel) * texel - a).addScaledVector(_u, Math.round(b / texel) * texel - b);
+    }
+    this.sun.position.copy(t).add(this.sunOffset);
   }
 
   add(fn) {

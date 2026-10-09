@@ -258,7 +258,7 @@ export function buildPlaza(ctx) {
   }
 
   // ---------------------------------------------------------------- ocean
-  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200, 1, 1).rotateX(-Math.PI / 2), oceanMaterial({ cx: (I.minX + I.maxX) / 2, cz: (I.minZ + I.maxZ) / 2, hx: (I.maxX - I.minX) / 2, hz: (I.maxZ - I.minZ) / 2, shoreD: SHORE_D, mainlandZ: 60 }));
+  const ocean = new THREE.Mesh(new THREE.PlaneGeometry(3200, 3200, 1, 1).rotateX(-Math.PI / 2), oceanMaterial({ cx: (I.minX + I.maxX) / 2, cz: (I.minZ + I.maxZ) / 2, hx: (I.maxX - I.minX) / 2, hz: (I.maxZ - I.minZ) / 2, shoreD: SHORE_D, mainlandZ: 60, hq: !!quality.oceanHQ }));
   ocean.position.set(0, WATER_Y, -400);
   ocean.name = 'ocean';
   ocean.renderOrder = 8; // after everything opaque that covers it

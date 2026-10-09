@@ -140,7 +140,14 @@ pause(), resume(), quitToTitle(), saveNow()`.
   `window.__FAMILY_FACES__`. Never commit them and never print their base64.
 * Performance budget: 60 fps on a mid laptop, 30+ on a phone. Share geometries/materials, use
   `InstancedMesh`/merged geometry for repeated props, no per-frame allocations in hot paths,
-  respect `engine.quality` (`low|medium|high`, `decorDensity`, `shadows`).
+  respect `engine.quality` (`low|medium|high`, `decorDensity`, `shadows`, and the look flags `env`, `fill`,
+  `shadowRadius`, `swayAmp`, `oceanHQ`, `heightFog`, `groundVar`, `bloom`; every phone runs `low`, where all of
+  them are off).
+* Look helpers (`core/shaderfx.js`): `LOOK` holds the shared sun/rim/sky uniforms that `world/sky.js` feeds every
+  frame; `rimLit(material, k)` / `rimLitTree(root, k)` add the rim light (and, on medium/high, the generated sky
+  reflections) to lit materials with one program per kind. Merger parts take `o.sway` (a weight, or `[bottom, top]`)
+  for wind sway on medium/high (`world/kit.js` `SWAY`). New material variants that can first appear mid-game go
+  into `buildWarmupGroup` in `main.js`.
 * Build: `node build.mjs --out <your-dir>`; dev galleries: `node build.mjs --entry src/<module>/dev/gallery.js --out <dir>`.
 * Test: `DIST_DIR=<dir> OUT_DIR=<dir> node tests/smoke.mjs` and your own Playwright scripts using
   `tests/harness.mjs` (headless Chromium with SwiftShader WebGL; slow but accurate). Look at your screenshots.

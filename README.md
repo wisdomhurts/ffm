@@ -66,6 +66,11 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * **The Seed Gazette**: a family newspaper that writes itself as you play ("MICAH PINCHES DAD'S RAINBOW CACTUS
   CUTIE!"). Read today's headlines on the billboard by the spawn, or the full front page from the pause menu and
   after a Showdown, then **Save front page** as a picture for the fridge. Faces are coloured initials, never photos.
+* **Shinier graphics**: soft shadows that stay steady as you run, a bounce light and sky reflections on the family,
+  pets and monsters, a rim light that outlines everyone (even the Gem Golem in the dark caverns), soft contact
+  shadows under every character, palms and trees swaying in the wind, a rippling ocean with sun sparkles, lit clouds,
+  glinting Gold / Diamond / Rainbow plants and starry sparkles. Phones (Low quality) get the cheap parts for free;
+  Medium and High add the rest (Settings > Quality).
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.

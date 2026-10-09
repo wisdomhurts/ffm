@@ -5,6 +5,7 @@
 // geometry (shared per type) so each monster is only a handful of draw calls.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { rimLitTree } from '../core/shaderfx.js';
 
 const TAU = Math.PI * 2;
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
@@ -1979,6 +1980,8 @@ export function createMonster(type) {
   const eyeMat = eyeMaterial();
   const build = BUILDERS[type] || buildStump;
   const M = build(body, eyeMat);
+  // every lit part gets the shared rim light: dark monsters (Gem Golem on the purple cavern road) keep a bright outline
+  rimLitTree(root, 0.7);
   const angry = new THREE.Color(ANGRY_EYES[type] || '#ff3b1f');
   const halo = new THREE.Mesh(S.halo, S.starMat);
   halo.visible = false;

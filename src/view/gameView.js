@@ -16,6 +16,7 @@ import { beltRect } from '../gameplay/layout.js';
 import { sizeOf, shownSize, sizeChip, heroRibbon, addTitanBeam } from './sizes.js';
 import { SIZES } from '../config.js';
 import { createBossBinding } from './bossView.js';
+import { createBlobShadows } from '../fx/blobShadows.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -71,8 +72,11 @@ export class GameView {
       const v = createMonster(m.type);
       this.root.add(v.object3d);
       this.monsterViews.push(v);
+      v.blobR = blobRadius(v.object3d);
     });
     this.bossView = createBossBinding(this); // Big Chomp, the world boss
+    // soft contact shadows under players and monsters (one draw call; pets have their own)
+    this.blobs = createBlobShadows(this.root, { strong: !this.engine.quality?.shadows });
     this.unsub.push(bus.on('face:changed', ({ id }) => {
       for (const p of this.game.players) if (p.faceKey === id) this._loadFace(p.slot);
     }));
@@ -178,6 +182,7 @@ export class GameView {
     const human = g.human;
     // labels are sized by distance to the player (or the camera in attract mode)
     const focus = human ? human.pos : camera.position;
+    this.blobs?.begin();
 
     // players
     g.players.forEach((p, i) => {
@@ -225,6 +230,7 @@ export class GameView {
         emoteT: p.emote ? now - (p.emote.since ?? now) : 0,
       });
       if (p === human && this.xray) this.xray.setVisible(invisible >= 1);
+      this._blobUnder(p.pos.x, p.pos.y, p.pos.z, (p.look || p.char.look)?.build === 'kid' ? 1.45 : 1.7, invisible, camera, p.onGround);
       this._updatePet(i, p, dt, time, now, invisible);
       if (invisible > 0.05) {
         const tag = heroRibbon(p, now) + (p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`);
@@ -413,9 +419,21 @@ export class GameView {
       v.object3d.position.set(m.x, m.y, m.z);
       v.object3d.rotation.y = m.yaw;
       v.update(dt, { time, speed: Math.hypot(m.vx, m.vz), state: now < m.stunUntil ? 'stunned' : m.state, attackAge: now - m.attackAt });
+      this._blobUnder(m.x, m.y, m.z, v.blobR || 1.4, 1, camera, true);
       if (m.state === 'chase') L.set('mo' + i, { x: m.x, y: 7, z: m.z }, '<div class="mo-alert">!</div>', { cls: 'monlbl', maxDist: 80 });
     });
     this.bossView.update(dt, time, camera);
+    this.blobs?.end();
+  }
+
+  /** Contact shadow on the ground under a character (shrinks and fades as it jumps). */
+  _blobUnder(x, y, z, r, alpha, camera, onGround) {
+    if (!this.blobs || alpha <= 0.05) return;
+    const dx = x - camera.position.x, dz = z - camera.position.z;
+    if (dx * dx + dz * dz > 140 * 140) return;
+    const gy = onGround ? y : this.game.physics?.groundHeight?.(x, z, 0.5, y + 0.1) ?? 0;
+    const h = Math.max(0, y - gy);
+    this.blobs.add(x, gy, z, r * Math.max(0.55, 1 - h * 0.07), alpha * Math.max(0.2, 1 - h * 0.12));
   }
 
   _updatePet(i, p, dt, time, now, invisible) {
@@ -532,6 +550,7 @@ export class GameView {
       if (o.geometry && !o.geometry.userData?.shared && !o.userData.xray) o.geometry.dispose();
     });
     this.xray?.dispose();
+    this.blobs?.dispose();
     this.avatars.forEach((a) => a.dispose?.());
     this.monsterViews.forEach((m) => m.dispose?.());
     this.bossView.dispose();
@@ -595,6 +614,13 @@ function addXray(root, color) {
       mat.dispose();
     },
   };
+}
+
+// Ground footprint of a monster model (for its contact shadow).
+function blobRadius(obj) {
+  const b = new THREE.Box3().setFromObject(obj);
+  if (b.isEmpty()) return 1.4;
+  return Math.max(1.2, Math.min(3.6, Math.max(b.max.x - b.min.x, b.max.z - b.min.z) * 0.55));
 }
 
 export function rarityColor(id) {

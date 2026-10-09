@@ -44,6 +44,9 @@ import { bossWarmup } from './characters/boss.js';
 import { gnomeWarmup } from './world/gnomes.js';
 import { createGnomeHunt } from './progress/gnomes.js';
 import { createGazette } from './social/gazette.js';
+import { createDropView } from './pets/dropView.js';
+import { createPetView } from './pets/view.js';
+import { PETS } from './pets/catalog.js';
 
 const SAVE_EVERY = 12;
 
@@ -57,6 +60,8 @@ function buildWarmupGroup() {
   g.add(createGlowBeam().object3d); // egg drop beams and the TITAN plant beam (Giant Harvests)
   g.add(bossWarmup()); // Big Chomp's instanced body (it crawls in mid-game)
   g.add(gnomeWarmup()); // the Golden Gnomes' gold (found or far-away gnomes are hidden when the scene compiles)
+  // egg drops and pets turn up mid-game; sky reflections and the rim light are part of their shaders
+  g.add(createDropView('garden').object3d, createPetView(PETS[0].id).object3d);
   // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
     for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);
