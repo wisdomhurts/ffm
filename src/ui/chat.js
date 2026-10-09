@@ -313,9 +313,45 @@ export function mountChat(app, hudRoot, parts = {}) {
     bus.on('net:host', () => open && paintMode()),
   ];
 
+  // Portrait phones: the round button hangs in the right column, level with the bottom stack's pills. When one
+  // of them ("STOP MICAH!", the carry pill, a prompt) reaches under it, the button steps up above the pill.
+  let liftAt = 0;
+  let lift = 0;
+  const shown = (el) => {
+    if (!el.offsetParent) return false;
+    const s = getComputedStyle(el);
+    return s.visibility !== 'hidden' && +s.opacity > 0.05;
+  };
+  const clearPills = () => {
+    const now = performance.now();
+    if (now - liftAt < 200) return;
+    liftAt = now;
+    let want = 0;
+    const host = tbtn.offsetParent;
+    if (host) {
+      // where it sits without the lift (offset* ignore the translate)
+      const o = host.getBoundingClientRect();
+      const left = o.left + tbtn.offsetLeft;
+      const right = left + tbtn.offsetWidth;
+      const top = o.top + tbtn.offsetTop;
+      const bottom = top + tbtn.offsetHeight;
+      for (const el of hudRoot.querySelectorAll('.hud-bottom > :not(.hb-row)')) {
+        if (!shown(el)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.height < 2 || r.right <= left || r.left >= right) continue;
+        if (r.top < bottom && r.bottom > top) want = Math.max(want, Math.ceil(bottom - r.top + 8));
+      }
+    }
+    if (want !== lift) {
+      lift = want;
+      tbtn.style.translate = want ? `0 ${-want}px` : '';
+    }
+  };
+
   let lastCool = null;
   return {
     update() {
+      clearPills();
       if (open && (app.state !== 'playing' || app.game !== game)) closePanel(true);
       if (!open) return;
       const cool = performance.now() - lastSayAt < SAY_COOLDOWN * 1000;

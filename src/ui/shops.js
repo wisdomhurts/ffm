@@ -5,6 +5,12 @@ import { h, money, setText } from './dom.js';
 import { ICON, ITEM_ICONS } from './icons.js';
 import { monsterSpeed, levelToOutrun, outruns, fmtSpeed } from './goal.js';
 
+/** Relative luminance of a '#rrggbb' colour, 0 (black) .. 1 (white). */
+const lum = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+};
+
 const TITLES = { gear: 'Gear Shop', speed: 'Speed Shop', rebirth: 'Rebirth Altar' };
 const SUBS = {
   gear: 'Tricks and tools for sneaky gardeners.',
@@ -120,12 +126,14 @@ function speedShop(app, game, me) {
   // monster speeds as they really are in this match (difficulty scales them)
   const monsters = BIOMES.map((b, i) => ({ b, i, ms: monsterSpeed(game, b) })).filter((x) => x.b.monster);
   const maxScale = Math.max(...monsters.map((m) => m.ms)) + 8;
+  // a world's colour dot: its ground, or its walls where the ground is snow-white (Frostfall, Cloud Kingdom...)
+  const dot = (b) => (lum(b.ground) > 0.82 ? b.wall : b.ground);
   const you = h('span', { class: 'sr-you' }, h('span', { text: 'YOU' }));
   const track = h('div', { class: 'sr-track' },
-    monsters.map(({ b, ms }) => h('span', { class: 'sr-tick', style: `left:${(ms / maxScale) * 100}%;--c:${b.ground}` })), you);
+    monsters.map(({ b, ms }) => h('span', { class: 'sr-tick', style: `left:${(ms / maxScale) * 100}%;--c:${dot(b)}` })), you);
   const rows = monsters.map(({ b, ms }) => {
     const status = h('span', { class: 'sr-st' });
-    const row = h('div', { class: 'sr-row', style: `--c:${b.ground}` },
+    const row = h('div', { class: 'sr-row', style: `--c:${dot(b)}` },
       h('span', { class: 'sr-dot' }), h('span', { class: 'sr-biome', text: b.name }), h('span', { class: 'sr-mon', text: b.monster.name }),
       h('span', { class: 'sr-spd', text: fmtSpeed(ms) }), status);
     return { b, ms, row, status };

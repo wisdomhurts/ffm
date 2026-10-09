@@ -398,15 +398,17 @@ class App {
     const mySlot = Math.max(0, CHARACTERS.findIndex((c) => c.id === prof.base));
     const slots = CHARACTERS.map((c, i) => (i === mySlot ? { kind: 'local', profile: prof } : { kind: 'bot' }));
     let game;
+    let restored = !!saved;
     try {
       game = this._newGame({ mode, difficulty, save: saved, slots });
     } catch (e) {
       console.warn('[save] unreadable save, starting fresh', e);
       game = this._newGame({ mode, difficulty, save: null, slots });
+      restored = false;
     }
     game.saveKey = mode === 'endless' ? saveKey : null;
     // Welcome-Back Garden: the gardens kept growing while you were away (reported once the HUD is up)
-    const away = saved ? game.applyAway((Date.now() - saved.savedAt) / 1000) : null;
+    const away = restored ? game.applyAway((Date.now() - saved.savedAt) / 1000) : null;
     this.hud = createHUD(this);
     this.menus.hideAll();
     this.cam.snapBehind(this.human.yaw);

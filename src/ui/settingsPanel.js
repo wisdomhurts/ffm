@@ -2,7 +2,6 @@
 import { DIFFICULTY } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings, setSetting } from '../core/settings.js';
-import { save } from '../core/save.js';
 import { h, uiSound } from './dom.js';
 import { ICON } from './icons.js';
 import { resetTutorial } from './tutorial.js';
