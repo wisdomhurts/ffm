@@ -199,6 +199,8 @@ export const BADGES = [
   { id: 'explorer', name: 'Explorer', icon: 'compass', stat: (c) => c.deepest, tiers: [6], stars: [15], how: () => `Reach ${BIOMES[5].name}` },
   { id: 'skywalker', name: 'Sky Walker', icon: 'compass', stat: (c) => c.deepest, tiers: [9], stars: [50], how: () => `Reach ${BIOMES[8].name}, the ninth world` },
   { id: 'divine', name: 'Divine Touch', icon: 'star', stat: (c) => c.seed_divine, tiers: [1], stars: [60], how: () => 'Grab a Divine seed' },
+  { id: 'rainbowend', name: 'Rainbow Rider', icon: 'rainbow', stat: (c) => c.deepest, tiers: [12], stars: [80], how: () => `Reach ${BIOMES[11].name}, the twelfth world` },
+  { id: 'infinity', name: 'To Infinity!', icon: 'star', stat: (c) => c.seed_infinity, tiers: [1], stars: [90], how: () => 'Grab an Infinity seed' },
   { id: 'starcatcher', name: 'Star Catcher', icon: 'star', stat: (c) => c.seed_mythic, tiers: [1], stars: [30], how: () => 'Grab a Mythic seed' },
   { id: 'rainbow', name: 'Rainbow Hunter', icon: 'rainbow', stat: (c) => c.rainbowOwned, tiers: [1], stars: [30], how: () => 'Own a Rainbow plant' },
   { id: 'secret', name: 'Secret Keeper', icon: 'keyhole', stat: (c) => c.secretOwned, tiers: [1], stars: [50], how: () => 'Own a Secret family plant' },

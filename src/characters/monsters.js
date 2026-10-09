@@ -1,4 +1,4 @@
-// Road monsters: eight characterful low-poly critters that guard the biomes.
+// Road monsters: eleven characterful low-poly critters that guard the biomes.
 // Contract: createMonster(typeId) -> { object3d, update(dt, s) }
 //   s = {time, speed, state:'patrol'|'chase'|'stunned', attackAge (seconds since last catch)}
 // Built facing +Z with the origin on the ground. Static details are merged into vertex-coloured
@@ -1424,8 +1424,549 @@ function buildStorm(body, eyeMat) {
   };
 }
 
-const BUILDERS = { stump: buildStump, crab: buildCrab, snapper: buildSnapper, lavasprout: buildLava, lurker: buildLurker, yeti: buildYeti, gummy: buildGummy, storm: buildStorm };
-const ANGRY_EYES = { stump: '#ff3b1f', crab: '#ff3b1f', snapper: '#ff2d55', yeti: '#ff3b1f', gummy: '#ffd23f' };
+// ---------------------------------------------------------------- shared by the gem-lit monsters below
+
+/** Bake facet shading into vertex colours (for unlit glowing parts): every triangle a little brighter or darker. */
+function glint(g) {
+  const p = g.attributes.position;
+  const c = g.attributes.color;
+  const L = new THREE.Vector3(0.45, 0.75, 0.5).normalize();
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3();
+  for (let i = 0; i < p.count; i += 3) {
+    a.fromBufferAttribute(p, i);
+    b.fromBufferAttribute(p, i + 1).sub(a);
+    d.fromBufferAttribute(p, i + 2).sub(a);
+    const n = b.cross(d).normalize();
+    const k = 0.62 + 0.5 * Math.abs(n.dot(L)) + 0.12 * n.y;
+    for (let j = i; j < i + 3; j++) c.setXYZ(j, c.getX(j) * k, c.getY(j) * k, c.getZ(j) * k);
+  }
+  return g;
+}
+
+/** A hexagonal crystal from a to b (radius r), its tip paler: two vertex-coloured, faceted parts. */
+function crystalSpike(a, b, r, color, tip = '#ffffff') {
+  const mid = new THREE.Vector3(...a).lerp(new THREE.Vector3(...b), 0.68).toArray();
+  return [faceted(limb(a, mid, r, r * 0.9, color)), faceted(limb(mid, b, r * 0.9, 0.001, '#' + new THREE.Color(color).lerp(new THREE.Color(tip), 0.5).getHexString()))];
+}
+
+// ---------------------------------------------------------------- Gem Golem
+function golemGeo() {
+  if (TYPE_CACHE.golem) return TYPE_CACHE.golem;
+  const STONE = '#8a80ab';
+  const DARK = '#5f5582';
+  const MINT = '#3dffb4';
+  const VIOLET = '#b48cff';
+  const PINK = '#ff8ae6';
+  const r = rng(77);
+  // mottled boulders: faceted, every facet a slightly different shade of stone
+  const boulder = (pos, scl, color = STONE, detail = 1) => {
+    const g = faceted(vc(new THREE.IcosahedronGeometry(1, detail), color, pos, [r() * 3, r() * 3, r() * 3], scl));
+    const c = g.attributes.color;
+    for (let i = 0; i < c.count; i += 3) {
+      const k = 0.84 + r() * 0.28;
+      for (let j = i; j < i + 3; j++) c.setXYZ(j, c.getX(j) * k, c.getY(j) * k, c.getZ(j) * k);
+    }
+    return g;
+  };
+  const statics = [];
+  // a hulking boulder body with broad shoulders, a small head sunk between them and a pale belly stone
+  statics.push(boulder([0, 3.2, 0], [1.7, 1.6, 1.35]));
+  statics.push(boulder([0, 2.05, 0.05], [1.2, 0.8, 1.0], DARK));
+  for (const s of [-1, 1]) statics.push(boulder([s * 1.45, 4.05, -0.05], [0.95, 0.85, 0.9]));
+  statics.push(boulder([0, 4.65, 0.55], [0.85, 0.72, 0.78], '#9a90bd'));
+  statics.push(boulder([0, 3.0, 0.95], [0.95, 0.85, 0.45], '#b1a8cc', 0));
+  // two square teeth under the lip
+  for (const x of [-0.16, 0.16]) statics.push(faceted(vc(new THREE.BoxGeometry(0.15, 0.17, 0.12), '#ece6ff', [x, 4.3, 1.3])));
+  const eyes = eyePair(0.32, 4.78, 1.2, 0.22, 0.6);
+  statics.push(...eyes.pupils);
+  // glowing gems: a crystal ridge down the back, clusters on the shoulders, one on the head, and gem freckles
+  const gems = [];
+  const spike = (a, b, rr, col) => gems.push(...crystalSpike(a, b, rr, col));
+  spike([0, 4.3, -0.9], [0, 6.0, -1.65], 0.28, MINT);
+  spike([-0.55, 4.0, -1.0], [-1.05, 5.35, -1.85], 0.21, VIOLET);
+  spike([0.55, 3.9, -1.05], [1.05, 5.2, -1.85], 0.21, MINT);
+  spike([0.05, 3.15, -1.25], [0.15, 4.2, -2.3], 0.19, PINK);
+  spike([-0.4, 2.65, -1.15], [-0.8, 3.3, -2.0], 0.15, MINT);
+  for (const s of [-1, 1]) {
+    spike([s * 1.6, 4.55, -0.1], [s * 2.1, 5.75, -0.3], 0.22, VIOLET);
+    spike([s * 1.25, 4.7, 0.1], [s * 1.45, 5.5, 0.25], 0.14, MINT);
+    spike([s * 1.95, 4.3, 0.2], [s * 2.55, 4.95, 0.45], 0.13, PINK);
+  }
+  spike([0.22, 5.2, 0.4], [0.42, 5.85, 0.3], 0.11, MINT);
+  [[-0.55, 3.62, 1.22, MINT], [0.62, 2.9, 1.24, VIOLET], [-0.25, 2.55, 1.28, PINK], [1.62, 3.7, 0.72, MINT], [-1.68, 3.85, 0.68, VIOLET]].forEach(([x, y, z, col], i) =>
+    gems.push(vc(new THREE.OctahedronGeometry(1, 0), col, [x, y, z], [0.3, i, 0.5], 0.13)));
+  // boulder arm (right; the left mirrors it), pivot at the shoulder, ending in a huge knuckly fist
+  const arm = merge([
+    boulder([0.15, -0.55, 0], [0.5, 0.6, 0.5], STONE, 0),
+    boulder([0.25, -1.45, 0.05], [0.55, 0.6, 0.55], STONE, 0),
+    boulder([0.3, -2.4, 0.2], [0.8, 0.72, 0.78]),
+    ...[-0.28, 0, 0.28].map((x) => boulder([0.3 + x, -2.3, 0.92], [0.19, 0.17, 0.17], '#a79ec6', 0)),
+  ]);
+  // stumpy pillar legs on flat stone feet
+  const leg = merge([
+    boulder([0, -0.4, 0], [0.62, 0.6, 0.62], STONE, 0),
+    boulder([0, -0.95, 0.18], [0.72, 0.32, 0.88], DARK, 0),
+  ]);
+  TYPE_CACHE.golem = {
+    statics: merge(statics),
+    whites: merge(eyes.whites),
+    brows: merge([-1, 1].map((s) => faceted(vc(new THREE.BoxGeometry(0.62, 0.2, 0.32), DARK, [s * 0.34, 0, 0], [0, 0, s * 0.3])))),
+    mouth: vc(sph(12, 6), '#1c1530', [0, -1, 0], [0, 0, 0], [0.42, 1, 0.22]),
+    gems: glint(merge(gems)),
+    arm, leg,
+  };
+  return markShared(TYPE_CACHE.golem);
+}
+
+function buildGolem(body, eyeMat) {
+  const G = golemGeo();
+  const S = shared();
+  // per instance: the gems are unlit (they glow) and pulse brighter as it gets angry
+  const gemMat = new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false });
+  const add = (geo, mat, parent, cast = true) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = cast;
+    m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  };
+  const torso = new THREE.Group();
+  body.add(torso);
+  add(G.statics, S.vcMat, torso);
+  add(G.gems, gemMat, torso);
+  add(G.whites, eyeMat, torso, false);
+  const brows = add(G.brows, S.vcMat, torso, false);
+  brows.position.set(0, 5.02, 1.24);
+  const mouth = add(G.mouth, S.vcMat, torso, false);
+  mouth.position.set(0, 4.4, 1.27);
+  const arms = [-1, 1].map((s) => {
+    const p = new THREE.Group();
+    p.position.set(s * 1.75, 4.15, 0.05);
+    torso.add(p);
+    const a = add(G.arm, S.vcMat, p);
+    a.scale.x = s;
+    return p;
+  });
+  const legs = [-1, 1].map((s) => {
+    const p = new THREE.Group();
+    p.position.set(s * 0.8, 1.3, 0.05);
+    body.add(p);
+    add(G.leg, S.vcMat, p);
+    return p;
+  });
+  // shimmer phase, accumulated so the gems pulse faster smoothly as it gets angry
+  let glowPh = Math.random() * TAU;
+  return {
+    headY: 6.0,
+    materials: [gemMat],
+    animate(W, t, ph, dt) {
+      const wk = W.move;
+      const sw = Math.sin(ph);
+      // heavy, rumbling stomp: a bounce on every step and a sway, leaning in when it chases
+      torso.position.y = Math.abs(Math.cos(ph)) * 0.2 * wk - W.stun * 0.15;
+      torso.rotation.z = sw * 0.07 * wk;
+      torso.rotation.x = 0.05 * wk + 0.18 * W.chase + W.bite * 0.3;
+      legs[0].rotation.x = sw * 0.55 * wk;
+      legs[1].rotation.x = -sw * 0.55 * wk;
+      legs[0].position.y = 1.3 + Math.max(0, sw) * 0.28 * wk;
+      legs[1].position.y = 1.3 + Math.max(0, -sw) * 0.28 * wk;
+      // fists swing against the legs; chasing, they come up and pound the air
+      const swing = -sw * 0.45 * wk;
+      const pump = Math.sin(t * 9) * 0.3 * W.chase;
+      arms[0].rotation.x = lerp(swing, -1.3 + pump, W.chase);
+      arms[1].rotation.x = lerp(-swing, -1.3 - pump, W.chase);
+      arms[0].rotation.z = -0.12 - W.chase * 0.25 - W.stun * 0.4;
+      arms[1].rotation.z = 0.12 + W.chase * 0.25 + W.stun * 0.4;
+      // catch: both fists up high... then SMASH
+      const br = W.biteRaw;
+      if (br > 0) {
+        const up = br < 0.3 ? lerp(-0.4, -2.9, br / 0.3) : br < 0.42 ? lerp(-2.9, -0.3, (br - 0.3) / 0.12) : -0.3;
+        const k = clamp01(br / 0.08) * clamp01((1 - br) / 0.35);
+        arms[0].rotation.x = lerp(arms[0].rotation.x, up, k);
+        arms[1].rotation.x = lerp(arms[1].rotation.x, up, k);
+      }
+      // stony brows crunch down, the jaw grinds open
+      brows.position.y = 5.02 - W.chase * 0.13;
+      brows.scale.set(1 - W.chase * 0.1, 1 + W.chase * 0.35, 1);
+      mouth.scale.y = 0.12 + W.chase * 0.1 + W.bite * 0.45 + W.stun * 0.1 + Math.sin(t * 1.7) * 0.01;
+      // gems: a slow shimmer, brighter and quicker when angry, flaring on a catch, dim when dizzy
+      glowPh = (glowPh + dt * lerp(1.5, 6, W.chase)) % TAU;
+      gemMat.color.setScalar((0.85 + Math.sin(glowPh) * lerp(0.06, 0.16, W.chase) + W.chase * 0.2 + W.bite * 0.45) * (1 - W.stun * 0.4));
+    },
+  };
+}
+
+// ---------------------------------------------------------------- Puffer Pop
+function pufferGeo() {
+  if (TYPE_CACHE.puffer) return TYPE_CACHE.puffer;
+  const CORAL = '#ff7a59';
+  const BELLY = '#ffe7c4';
+  const FIN = '#ffb08a';
+  const R = [1.25, 1.2, 1.31];
+  // a round body: coral back fading into a cream belly, with darker spots on top
+  const ball = vc(sph(18, 12), CORAL, [0, 0, 0], [0, 0, 0], R);
+  {
+    const p = ball.attributes.position;
+    const c = ball.attributes.color;
+    const A = new THREE.Color(CORAL), B = new THREE.Color(BELLY), T = new THREE.Color();
+    for (let i = 0; i < p.count; i++) {
+      const k = clamp01((-p.getY(i) / R[1]) * 1.6 + 0.35);
+      T.copy(A).lerp(B, k * k * (3 - 2 * k));
+      c.setXYZ(i, T.r, T.g, T.b);
+    }
+  }
+  const statics = [ball];
+  const rr = rng(12);
+  for (let i = 0; i < 14; i++) {
+    const d = [rr() * 2 - 1, 0.3 + rr() * 0.7, rr() * 1.6 - 1.1];
+    if (d[2] > 0.25 && Math.abs(d[0]) < 0.7) continue; // keep the face clean
+    const h = onShell([0, 0, 0], R, d, 0, [0, 1, 0]);
+    const s = 0.15 + rr() * 0.08;
+    statics.push(vc(sph(8, 5), '#e0502f', h.pos, h.rot, [s, 0.04, s]));
+  }
+  // a little dorsal fin
+  statics.push(vc(sph(8, 5), FIN, [0, 1.12, -0.45], [0.5, 0, 0], [0.05, 0.38, 0.5]));
+  const eyes = eyePair(0.55, 0.32, 0.95, 0.38, 0.5);
+  statics.push(...eyes.pupils);
+  // spikes all over (not on the face): cream with coral tips; they pop out as it inflates
+  const spikes = [];
+  const N = 46;
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (2 * (i + 0.5)) / N;
+    const rad = Math.sqrt(1 - y * y);
+    const a = i * 2.39996;
+    const d = [Math.cos(a) * rad, y, Math.sin(a) * rad];
+    if (d[2] > 0.4 && Math.abs(d[0]) < 0.75 && y > -0.6) continue;
+    const h = onShell([0, 0, 0], R, d, 0);
+    spikes.push(vc(cone(0.1, 0.5, 4), '#fff1dc', [h.pos[0] + h.n.x * 0.2, h.pos[1] + h.n.y * 0.2, h.pos[2] + h.n.z * 0.2], aim(new THREE.Vector3(0, 1, 0), h.n)));
+  }
+  const spikeGeo = merge(spikes);
+  {
+    const p = spikeGeo.attributes.position;
+    const c = spikeGeo.attributes.color;
+    const tip = new THREE.Color('#ff5c3a');
+    for (let i = 0; i < p.count; i++) {
+      const k = clamp01((Math.hypot(p.getX(i) / R[0], p.getY(i) / R[1], p.getZ(i) / R[2]) - 1.12) / 0.25);
+      c.setXYZ(i, lerp(c.getX(i), tip.r, k), lerp(c.getY(i), tip.g, k), lerp(c.getZ(i), tip.b, k));
+    }
+  }
+  // puckered lips around a dark little "o"
+  const lips = merge([
+    vc(new THREE.TorusGeometry(0.2, 0.1, 6, 14), '#ff5c7a'),
+    vc(new THREE.CircleGeometry(0.2, 12), '#3a0d1a', [0, 0, -0.03]),
+  ]);
+  // a pectoral fin (right; mirrored for the left): a fan of soft rays, pivot at its root
+  const fin = merge([-0.45, 0, 0.45].map((a) => vc(sph(8, 5), FIN, [0.32 * Math.cos(a), 0.32 * Math.sin(a), 0], [0, 0, a], [0.38, 0.13, 0.05])));
+  // tail: a stubby stalk and two lobes, pivot where it joins the body
+  const tail = merge([
+    vc(sph(10, 6), CORAL, [0, 0, -0.1], [0, 0, 0], [0.24, 0.26, 0.3]),
+    ...[-1, 1].map((s) => vc(sph(8, 5), FIN, [0, s * 0.26, -0.42], [s * 0.65, 0, 0], [0.05, 0.42, 0.3])),
+  ]);
+  TYPE_CACHE.puffer = {
+    statics: merge(statics),
+    spikes: spikeGeo,
+    whites: merge(eyes.whites),
+    brows: merge([-1, 1].map((s) => vc(new THREE.BoxGeometry(0.46, 0.13, 0.2), '#a32a12', [s * 0.5, 0, 0], [0, 0, s * 0.42]))),
+    lips, fin, tail,
+    bubbles: blobGeo(vc(sph(8, 6), '#d8f6ff', [0, 0, 0], [0, 0, 0], 0.16), 5),
+  };
+  return markShared(TYPE_CACHE.puffer);
+}
+
+function buildPuffer(body, eyeMat) {
+  const G = pufferGeo();
+  const S = shared();
+  const add = (geo, mat, parent, cast = true) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = cast;
+    m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  };
+  // swims through the air: swim = bob and tilt, puff = the inflating ball (everything on it scales with it)
+  const swim = new THREE.Group();
+  body.add(swim);
+  const puff = new THREE.Group();
+  puff.position.y = 2.75;
+  swim.add(puff);
+  add(G.statics, S.vcMat, puff);
+  const spikes = add(G.spikes, S.vcMat, puff);
+  add(G.whites, eyeMat, puff, false);
+  const brows = add(G.brows, S.vcMat, puff, false);
+  brows.position.set(0, 0.86, 1.02);
+  const lips = add(G.lips, S.vcMat, puff, false);
+  lips.position.set(0, -0.28, 1.28);
+  const fins = [-1, 1].map((s) => {
+    const p = new THREE.Group();
+    p.position.set(s * 1.12, -0.15, 0.2);
+    puff.add(p);
+    const f = add(G.fin, S.vcMat, p, false);
+    f.scale.x = s;
+    return p;
+  });
+  const tail = new THREE.Group();
+  tail.position.set(0, 0.05, -1.25);
+  puff.add(tail);
+  add(G.tail, S.vcMat, tail);
+  const bubbles = blobMesh(G.bubbles, S.vcMat, [0, 3.6, 1.8], 3);
+  swim.add(bubbles.mesh);
+  // inflation spring (overshoots for a springy POP), fin stroke and bubble phases
+  let infl = 0;
+  let inflV = 0;
+  let finPh = Math.random() * 10;
+  let bub = Math.random();
+  return {
+    headY: 4.75,
+    geometries: [bubbles.geo],
+    animate(W, t, ph, dt) {
+      // bob and swish, pitching into the chase
+      swim.position.y = Math.sin(t * 2.1) * 0.22 + Math.sin(ph * 0.5) * 0.06 * W.move;
+      swim.rotation.x = W.move * 0.08 + W.chase * 0.1 + W.bite * 0.2;
+      swim.rotation.z = Math.sin(t * 1.4) * 0.06;
+      // PUFF! it blows up when it spots you, and goes flat when dizzy
+      const target = clamp01(W.chase * 1.1 + W.bite * 0.35) * (1 - W.stun);
+      for (let left = dt; left > 1e-5; left -= 1 / 90) {
+        const h = Math.min(left, 1 / 90);
+        inflV += (-260 * (infl - target) - 11 * inflV) * h;
+        infl += inflV * h;
+      }
+      const s = 1.12 * (1 + 0.4 * infl);
+      puff.scale.set(s * (1 + Math.sin(t * 3) * 0.015), s * (1 - W.stun * 0.12), s);
+      spikes.scale.setScalar(0.82 + 0.18 * clamp01(infl));
+      // fins paddle and the tail beats, faster when it chases
+      finPh += dt * lerp(5, 14, Math.max(W.move, W.chase));
+      const f = 0.45 + Math.sin(finPh) * 0.5;
+      fins[0].rotation.y = -f;
+      fins[1].rotation.y = f;
+      tail.rotation.y = Math.sin(finPh * 0.8 + 1) * lerp(0.35, 0.6, W.chase);
+      // angry brows show up when it puffs; the lips pucker... and gape on a catch
+      brows.scale.set(1, 0.15 + W.chase * 1.1, 1);
+      brows.position.y = 0.86 - W.chase * 0.06;
+      lips.scale.setScalar(lerp(1, 0.75, W.chase) + W.bite * 1.0 + W.stun * 0.3);
+      // bubbles blub out of the mouth and float up (more of them when it is angry)
+      bub = (bub + dt * lerp(0.35, 0.9, W.chase)) % 1;
+      if (bubbles.live()) {
+        const z = 1.35 * s;
+        for (let k = 0; k < 5; k++) {
+          const L = (bub + k / 5) % 1;
+          const g = (0.4 + L * 0.9) * Math.sqrt(1 - L) * clamp01(L * 8) * (1 - W.stun);
+          bubbles.place(k, Math.sin(k * 2.3 + L * 4) * 0.3 * L, 2.75 - 0.25 * s + L * 2.2, z + L * 0.6, g);
+        }
+        bubbles.commit();
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------- Comet Dragon
+const COMET_LEN = 4.4; // the noodle body trails this far behind the neck (before the 1.5x scale)
+function cometGeo() {
+  if (TYPE_CACHE.comet) return TYPE_CACHE.comet;
+  const BODY = '#8a7dff';
+  const BELLY = '#e2dcff';
+  const GOLD = '#ffd23f';
+  const RAINBOW = ['#ff4d6d', '#ff9f1a', '#ffe94d', '#4cd964', '#3dc9ff', '#6b7bff', '#c86bff'];
+  // the head (origin = where it meets the neck), looking along +Z
+  const head = [];
+  head.push(vc(sph(16, 12), BODY, [0, 0.15, 0.25], [0, 0, 0], [0.82, 0.74, 0.9]));
+  head.push(vc(sph(14, 10), '#a89eff', [0, -0.06, 0.95], [0, 0, 0], [0.56, 0.42, 0.55]));
+  head.push(vc(sph(12, 8), BELLY, [0, -0.3, 0.7], [0, 0, 0], [0.6, 0.24, 0.62]));
+  for (const s of [-1, 1]) {
+    head.push(vc(sph(6, 4), '#3a2a7a', [s * 0.17, 0.08, 1.45], [0, 0, 0], [0.06, 0.05, 0.04]));
+    // golden horns sweeping back, ear fins and long whiskers
+    head.push(limb([s * 0.3, 0.72, 0.1], [s * 0.42, 1.1, -0.2], 0.13, 0.09, GOLD), limb([s * 0.42, 1.1, -0.2], [s * 0.36, 1.32, -0.62], 0.09, 0.02, '#fff1a0'));
+    head.push(vc(sph(8, 5), '#c8bfff', [s * 0.74, 0.38, -0.05], [0, s * 0.6, s * 0.5], [0.07, 0.3, 0.42]));
+    head.push(limb([s * 0.38, -0.08, 1.25], [s * 0.85, 0.02, 1.15], 0.045, 0.035, GOLD), limb([s * 0.85, 0.02, 1.15], [s * 1.2, 0.28, 0.65], 0.035, 0.025, GOLD), limb([s * 1.2, 0.28, 0.65], [s * 1.3, 0.55, 0.15], 0.025, 0.012, GOLD));
+    head.push(vc(cone(0.06, 0.2, 4), '#ffffff', [s * 0.2, -0.24, 1.32], [Math.PI, 0, 0]));
+  }
+  const eyes = eyePair(0.36, 0.42, 0.75, 0.25, 0.55);
+  head.push(...eyes.pupils);
+  // the mane: rainbow comet flames streaming back from the head (unlit, they glow)
+  const mane = [];
+  for (let i = 0; i < 7; i++) {
+    const a = -1.25 + (i / 6) * 2.5;
+    const base = [Math.sin(a) * 0.45, 0.5 + Math.cos(a) * 0.25, -0.3];
+    const tip = [Math.sin(a) * 1.0, 0.75 + Math.cos(a) * 0.55, -1.35 - Math.cos(a) * 0.3];
+    mane.push(faceted(limb(base, tip, 0.2, 0.001, RAINBOW[i])));
+  }
+  // the noodle body: a tapering tube along -Z, periwinkle above and pale below, built ring by ring so each
+  // vertex knows how far down the body it is (bodyU: 0 at the neck .. 1 at the tail) for the wave
+  const NS = 26, NR = 8;
+  const radius = (u) => lerp(0.56, 0.1, Math.pow(u, 1.1)) * (1 + 0.12 * Math.sin(u * Math.PI));
+  const tube = new THREE.BufferGeometry();
+  {
+    const pos = [], col = [], idx = [];
+    const A = new THREE.Color(BODY), B = new THREE.Color(BELLY), T = new THREE.Color();
+    for (let i = 0; i <= NS; i++) {
+      const u = i / NS;
+      const z = -0.2 - u * COMET_LEN;
+      const rr = radius(u);
+      for (let j = 0; j <= NR; j++) {
+        const a = (j / NR) * TAU;
+        const y = Math.sin(a);
+        pos.push(Math.cos(a) * rr, y * rr * 0.9, z);
+        T.copy(A).lerp(B, clamp01(-y * 1.4 - 0.1));
+        col.push(T.r, T.g, T.b);
+      }
+    }
+    for (let i = 0; i < NS; i++) {
+      for (let j = 0; j < NR; j++) {
+        const a = i * (NR + 1) + j, c = a + NR + 1;
+        idx.push(a, c, a + 1, a + 1, c, c + 1);
+      }
+    }
+    tube.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    tube.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    tube.setIndex(idx);
+    tube.computeVertexNormals();
+  }
+  const bodyParts = [tube.toNonIndexed()];
+  tube.dispose();
+  // rainbow spines along the back, little legs with golden claws, and a tail fin
+  for (let j = 0; j < 9; j++) {
+    const u = 0.06 + j * 0.1;
+    const z = -0.2 - u * COMET_LEN, rr = radius(u);
+    bodyParts.push(faceted(limb([0, rr * 0.8, z], [0, rr * 0.8 + 0.42 * (1 - u * 0.6), z - 0.28], 0.12 * (1 - u * 0.5), 0.001, RAINBOW[j % 7])));
+  }
+  for (const u of [0.1, 0.48]) {
+    const z = -0.2 - u * COMET_LEN, rr = radius(u);
+    for (const s of [-1, 1]) {
+      const hip = [s * rr * 0.75, -rr * 0.4, z];
+      const foot = [s * (rr * 0.75 + 0.22), -rr - 0.42, z + 0.18];
+      bodyParts.push(limb(hip, foot, 0.14, 0.11, BODY), vc(sph(6, 4), '#a89eff', foot, [0, 0, 0], [0.15, 0.11, 0.19]));
+      for (const x of [-0.07, 0.07]) bodyParts.push(vc(cone(0.04, 0.14, 4), GOLD, [foot[0] + x, foot[1] - 0.02, foot[2] + 0.17], [Math.PI / 2, 0, 0]));
+    }
+  }
+  bodyParts.push(vc(sph(8, 5), '#c8bfff', [0, 0.15, -0.2 - COMET_LEN - 0.1], [0.5, 0, 0], [0.05, 0.4, 0.35]));
+  const bodyGeo = merge(bodyParts);
+  const bp = bodyGeo.attributes.position;
+  const bodyU = new Float32Array(bp.count);
+  for (let i = 0; i < bp.count; i++) bodyU[i] = clamp01((-bp.getZ(i) - 0.2) / COMET_LEN);
+  // a glowing star at the tip of the tail, and its trail of sparks
+  const sh = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * TAU + Math.PI / 2;
+    const r = i % 2 ? 0.24 : 0.55;
+    if (i === 0) sh.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else sh.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  const starShape = new THREE.ExtrudeGeometry(sh, { depth: 0.16, bevelEnabled: false }).translate(0, 0, -0.08);
+  const star = glint(vc(starShape, '#fff3a0'));
+  starShape.dispose();
+  TYPE_CACHE.comet = {
+    head: merge(head),
+    whites: merge(eyes.whites),
+    brows: merge([-1, 1].map((s) => vc(new THREE.BoxGeometry(0.42, 0.12, 0.2), '#3a2a7a', [s * 0.36, 0, 0], [0, 0, s * 0.4]))),
+    mouth: vc(sph(12, 6), '#2a1a5a', [0, -1, 0], [0, 0, 0], [0.3, 1, 0.14]),
+    mane: glint(merge(mane)),
+    body: bodyGeo,
+    bodyU,
+    star,
+    trail: blobGeo(glint(vc(new THREE.OctahedronGeometry(1, 0), '#fff3a0', [0, 0, 0], [0, 0, 0], 0.15)), 10),
+    glowMat: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
+  };
+  return markShared(TYPE_CACHE.comet);
+}
+
+function buildComet(body, eyeMat) {
+  const G = cometGeo();
+  const S = shared();
+  const add = (geo, mat, parent, cast = true) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.castShadow = cast;
+    m.receiveShadow = true;
+    parent.add(m);
+    return m;
+  };
+  // built small and scaled up: it glides above the road, its long body trailing behind
+  const fly = new THREE.Group();
+  fly.position.y = 2.3;
+  fly.scale.setScalar(1.5);
+  body.add(fly);
+  const head = new THREE.Group();
+  head.position.set(0, 0.25, 0.5);
+  fly.add(head);
+  add(G.head, S.vcMat, head);
+  add(G.whites, eyeMat, head, false);
+  const brows = add(G.brows, S.vcMat, head, false);
+  brows.position.set(0, 0.74, 0.92);
+  const mouth = add(G.mouth, S.vcMat, head, false);
+  mouth.position.set(0, -0.2, 1.4);
+  const mane = add(G.mane, G.glowMat, head, false);
+  // the noodle body waves on the CPU (per-instance copy of the geometry), only while it is drawn
+  const geo = G.body.clone();
+  geo.userData = {}; // per-instance: not shared
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, -0.2 - COMET_LEN / 2), COMET_LEN / 2 + 1.6);
+  const pos = geo.attributes.position;
+  const rest = G.body.attributes.position.array;
+  const U = G.bodyU;
+  const noodle = add(geo, S.vcMat, fly);
+  let drawn = 2;
+  noodle.onBeforeRender = () => {
+    drawn = 2;
+  };
+  const star = add(G.star, G.glowMat, fly, false);
+  const trail = blobMesh(G.trail, G.glowMat, [0, 0, -COMET_LEN - 1.5], 3);
+  fly.add(trail.mesh);
+  // wave phase, accumulated so the body swims faster smoothly when it chases
+  let wave = Math.random() * TAU;
+  let amp = 0.4;
+  const wx = (u) => amp * (0.12 + u) * Math.sin(u * 5.5 - wave);
+  const wy = (u) => amp * 0.5 * (0.1 + u) * Math.sin(u * 4.2 - wave * 0.8 + 1);
+  return {
+    headY: 4.9,
+    geometries: [geo, trail.geo],
+    animate(W, t, ph, dt) {
+      wave = (wave + dt * lerp(2.2, 6, Math.max(W.move * 0.6, W.chase))) % (TAU * 10);
+      amp = lerp(0.35, 0.6, W.chase) * (1 - W.stun * 0.6);
+      // glide, swooping a little lower and leaning in when it chases
+      fly.position.y = 2.3 + Math.sin(t * 1.7) * 0.3 - W.chase * 0.25;
+      fly.rotation.x = W.chase * 0.08 + W.bite * 0.15;
+      // the body ripples like a ribbon in the wind
+      if (drawn > 0) drawn--;
+      if (drawn > 0) {
+        const arr = pos.array;
+        for (let i = 0, n = pos.count; i < n; i++) {
+          const u = U[i];
+          arr[i * 3] = rest[i * 3] + wx(u);
+          arr[i * 3 + 1] = rest[i * 3 + 1] + wy(u);
+        }
+        pos.needsUpdate = true;
+      }
+      // the head rides the front of the wave and looks where it is going
+      head.position.x = wx(0);
+      head.position.y = 0.25 + wy(0);
+      head.rotation.y = -amp * (Math.sin(-wave) + 0.66 * Math.cos(-wave)) * 0.35;
+      head.rotation.x = -W.chase * 0.1 + W.bite * 0.2;
+      head.rotation.z = Math.sin(t * 1.3) * 0.06;
+      // the tail star spins; sparks stream off behind it
+      const tz = -0.2 - COMET_LEN - 0.25;
+      star.position.set(wx(1), 0.15 + wy(1), tz);
+      star.rotation.z = t * 3;
+      star.rotation.y = Math.sin(t * 1.1) * 0.5;
+      star.scale.setScalar(1 + W.chase * 0.2 + W.bite * 0.4);
+      if (trail.live()) {
+        for (let k = 0; k < 10; k++) {
+          const L = (t * lerp(0.8, 1.6, W.chase) + k / 10) % 1;
+          const u = 1 + L * 0.45;
+          trail.place(k, wx(u) * (1 - L * 0.5) + Math.sin(k * 3.1) * 0.25 * L, 0.15 + wy(u) + Math.cos(k * 2.3) * 0.2 * L, tz - L * 2.4, (1 - L) * (0.6 + 0.4 * W.chase) * (1 - W.stun * 0.7));
+        }
+        trail.commit();
+      }
+      // mane flickers like comet fire
+      mane.scale.set(1 + Math.sin(t * 11) * 0.06, 1 + Math.sin(t * 13) * 0.08, 1 + Math.sin(t * 9) * 0.1 + W.chase * 0.25);
+      // face: brows pinch, the jaw drops for a roar
+      brows.position.y = 0.74 - W.chase * 0.08;
+      brows.scale.set(1, 1 + W.chase * 0.4, 1);
+      mouth.scale.y = 0.08 + W.chase * 0.08 + W.bite * 0.3 + W.stun * 0.06;
+    },
+  };
+}
+
+// Every road monster type with art (tests check every biome's monster is here).
+const BUILDERS = { stump: buildStump, crab: buildCrab, snapper: buildSnapper, lavasprout: buildLava, lurker: buildLurker, yeti: buildYeti, gummy: buildGummy, storm: buildStorm, golem: buildGolem, puffer: buildPuffer, comet: buildComet };
+const ANGRY_EYES = { stump: '#ff3b1f', crab: '#ff3b1f', snapper: '#ff2d55', yeti: '#ff3b1f', gummy: '#ffd23f', golem: '#3dffb4', puffer: '#ff3b1f', comet: '#ffd23f' };
+export const MONSTER_TYPES = Object.freeze(Object.keys(BUILDERS));
 
 // ------------------------------------------------------------------ public
 

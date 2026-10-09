@@ -2,7 +2,7 @@
 // every biome's pod with a seed, and carried pots. Build:
 //   node build.mjs --entry src/plants/dev/gallery.js --out <dir>
 // window.__gallery.view(name) jumps the camera to a section: all | grid | grid2 | grid3 | stages | mut | seeds | pods | carry | secret |
-// rainbow | tiers | top (the Celestial / Cosmic / Divine species: every stage + mutations; topN, topNa, topNb, topN_c close-ups),
+// rainbow | tiers | top (the Celestial .. Infinity species: every stage + mutations; topN, topNa, topNb, topN_c close-ups),
 // plus close-ups: spN / spNxM (species N of the grid), rowN(L|R), seedsL|M|R|2, podsL|M|R, podN, carryL|R, tiersA-D.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -114,7 +114,7 @@ if (want('mut')) {
   ['normal', 'gold', 'diamond', 'rainbow'].forEach((m, i) => addPlant('glowcap', m, 1, -26 - i * SP, -28, m));
 }
 
-// 4) seeds per rarity + mutations (z = -40), and every Celestial / Cosmic / Divine seed (z = -34)
+// 4) seeds per rarity + mutations (z = -40), and every Celestial .. Infinity seed (z = -34)
 const seedViews = [];
 function addSeed(sid, m, x, z, text, color) {
   const v = createSeedView(sid, m);
@@ -123,19 +123,21 @@ function addSeed(sid, m, x, z, text, color) {
   seedViews.push(v);
   if (text) label(text, [x, 3.9, z], color);
 }
-// the first species of each rarity, in rarity order (common .. divine, secret)
+// the first species of each rarity, in rarity order (common .. infinity, secret)
 const seedSpecies = RARITIES.map((r) => PLANTS.find((p) => p.rarity === r.id).id);
 const TOP_SPECIES = PLANTS.filter((p) => RARITY[p.rarity].tier >= 6 && p.rarity !== 'secret').map((p) => p.id);
 if (want('seeds')) {
   seedSpecies.forEach((sid, i) => addSeed(sid, 'normal', 24 - i * 5, -40, RARITIES[i].name, rcol(RARITIES[i].id)));
-  ['gold', 'diamond', 'rainbow'].forEach((m, i) => addSeed('sunflower', m, -30 - i * 5, -40, m));
-  ['estherlotus', 'maddiemarigold', 'micahmelon'].forEach((sid, i) => addSeed(sid, 'normal', -48 - i * 5, -40));
+  // mutations and the other family seeds carry on to the left of the rarity row
+  const mx = 24 - RARITIES.length * 5 - 1;
+  ['gold', 'diamond', 'rainbow'].forEach((m, i) => addSeed('sunflower', m, mx - i * 5, -40, m));
+  ['estherlotus', 'maddiemarigold', 'micahmelon'].forEach((sid, i) => addSeed(sid, 'normal', mx - 18 - i * 5, -40));
   TOP_SPECIES.forEach((sid, i) => addSeed(sid, 'normal', 18 - i * 4.5, -34, PLANT[sid].name, rcol(PLANT[sid].rarity)));
 }
 
 // 5) pods, one per biome (z = -56)
 const podSeeds = [['tulip', 'normal'], ['clover', 'normal'], ['desertrose', 'gold'], ['bogberry', 'normal'], ['emberpepper', 'normal'], ['galaxyorchid', 'rainbow'],
-  ['snowflake', 'normal'], ['gumdrop', 'diamond'], ['halolily', 'normal']];
+  ['snowflake', 'normal'], ['gumdrop', 'diamond'], ['halolily', 'normal'], ['prismpetal', 'normal'], ['pearlbloom', 'normal'], ['starfruit', 'rainbow']];
 const podX = (i) => 32 - i * 8;
 if (want('pods')) BIOMES.forEach((bm, i) => {
   const pod = createPodView(i);
@@ -189,7 +191,8 @@ if (want('rainbow')) ['daisy', 'cactus', 'mushroom'].forEach((sid, i) => {
 
 // Size by rarity (z = 72): one row, commons on the left, secrets on the right; labels show the grown height.
 const TIER_ROW = ['daisy', 'sunflower', 'clover', 'tater', 'aloe', 'flytrap', 'glowcap', 'phoenixfern', 'lavalily', 'moonmelon', 'starlotus',
-  'snowflake', 'frostbell', 'lollibloom', 'candycane', 'cloudberry', 'thunderbloom', 'micahmelon', 'dorianfruit'];
+  'snowflake', 'frostbell', 'lollibloom', 'candycane', 'cloudberry', 'thunderbloom', 'prismpetal', 'glimmergrapes', 'coralcrown', 'jellybell',
+  'infinityrose', 'starfruit', 'micahmelon', 'dorianfruit'];
 const tierX = (i) => ((TIER_ROW.length - 1) / 2 - i) * 5.6;
 if (want('tiers')) TIER_ROW.forEach((sid, i) => {
   const sp = PLANT[sid];
@@ -197,7 +200,7 @@ if (want('tiers')) TIER_ROW.forEach((sid, i) => {
   label(`${sp.name}<br><span style="color:${rcol(sp.rarity)}">${RARITY[sp.rarity].name}</span><br>${v.topY.toFixed(2)}`, [tierX(i), 1.2 + v.topY + 1.2, 72]);
 });
 
-// Celestial / Cosmic / Divine showcase (z = 92, one row per species every 14 studs): seed mound, sprout, bud,
+// Celestial .. Infinity showcase (z = 92, one row per species every 14 studs): seed mound, sprout, bud,
 // grown, then grown gold / diamond / rainbow.
 const TOP_Z = 92, TOP_DZ = 14, TOP_DX = 6;
 const TOP_COLS = [[0.1, 'normal', 'seed'], [0.45, 'normal', 'sprout'], [0.8, 'normal', 'bud'], [1, 'normal', null], [1, 'gold', 'gold'], [1, 'diamond', 'diamond'], [1, 'rainbow', 'rainbow']];
@@ -272,7 +275,7 @@ function view(name) {
     else if (t[2]) p = t[2] === 'a' ? [[topX(1.5), 10, z - 13], [topX(1.5), 2.8, z]] : [[topX(4.5), 10.5, z - 13], [topX(4.5), 3.4, z]];
     else p = [[0, 16, z - 13.5], [0, 2.5, z + 6]];
   }
-  const pm = /^pod(\d)$/.exec(name);
+  const pm = /^pod(\d+)$/.exec(name);
   if (pm) p = [[podX(+pm[1]), 5, -65], [podX(+pm[1]), 2.3, -56]];
   const m = /^sp(\d+)(?:x(\d+))?$/.exec(name);
   if (m) {

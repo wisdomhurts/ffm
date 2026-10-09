@@ -64,6 +64,7 @@ light hair is drawn with cool strands and a softer glow so white reads as white 
 
 Rarity colours: Common `#b8c0cc`, Uncommon `#4cd964`, Rare `#3d9bff`, Epic `#b36bff`,
 Legendary `#ffb627`, Mythic `#ff4d6d`, Celestial `#6ff3ff`, Cosmic `#ff5ce1`, Divine `#ffe75e`,
+Prismatic `#3dffb4`, Eternal `#ff7a59`, Infinity `#8a7dff` (its label shimmers with a soft rainbow),
 Secret (black with rainbow text).
 
 Biomes in road order: Sunny Field (Common), Greenhollow (Uncommon), Dustbowl (Rare), Tanglemire (Epic),
@@ -121,6 +122,8 @@ Income accumulates into the garden's cash pile; step on the COLLECT pad to bank 
 ## 5. Dangers
 Road monsters guard biomes 2–9 (the far worlds' Snowball Yeti, Gummy Bear and Storm Puff are the fastest). They only chase players **carrying a seed**, never leave their
 biome, and knock the seed out of your hands if they catch you. Out-run them (Speed!) or bonk them.
+The three farthest worlds have the Gem Golem (its crystals glow brighter when it is angry), the Puffer Pop (it puffs
+up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a dragon with a comet-star tail).
 
 ## 6. Weather events (every 3–5 min, 60 s)
 * **Golden Hour** — warm sunset light; 45% of new seeds are Gold.

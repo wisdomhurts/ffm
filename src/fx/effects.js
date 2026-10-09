@@ -38,7 +38,7 @@ const EVENT_COLORS = {
   eggrain: ['#ffb3d9', '#5cc8ff', '#ffe36b', '#b98cff'],
 };
 // Dizzy-star ring height over a stunned monster (default 4.6: head height of the smaller critters).
-const STUN_STARS_Y = { yeti: 6.4, storm: 5.9 };
+const STUN_STARS_Y = { yeti: 6.4, storm: 5.9, golem: 6.5, puffer: 5.0, comet: 5.4 };
 const HIT_TEXT = { bonk: 'BONK!', balloon: 'SPLAT!', banana: 'SLIP!' };
 const HIT_BURST = { bonk: '#ff3d2e', balloon: '#2f8bff', banana: '#ff9f1a' };
 

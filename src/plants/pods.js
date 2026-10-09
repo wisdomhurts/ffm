@@ -1,9 +1,10 @@
-// Road seed stands (one style per biome, indexed like BIOMES) and the terracotta pot used for carried plants.
+// Road seed stands (one style per biome, indexed like BIOMES: STANDS needs an entry for every biome) and the
+// terracotta pot used for carried plants.
 // Built once per biome with the same Builder as the plants (one merged, vertex-coloured mesh each).
 import * as THREE from 'three';
-import { Builder, P, latheGeo, tubeGeo, leafGeo, shapeGeo, starShape, cachedGeo, TAU } from './geometry.js';
+import { Builder, P, latheGeo, tubeGeo, leafGeo, shapeGeo, starShape, cachedGeo, aim, TAU } from './geometry.js';
 import { shade } from './materials.js';
-import { hash, fm } from './species.js';
+import { hash, fm, crystalGeo, scallopGeo } from './species.js';
 
 const PI = Math.PI;
 const cache = new Map();
@@ -24,7 +25,7 @@ function flower(b, p, s, petal, center = '#ffd23f', tilt = 0.5, yaw = 0) {
 }
 
 // Each builder returns {seedY, topY}: where the seed floats and the stand's top surface.
-const STANDS = [
+export const STANDS = [
   // 0 Sunny Field: wooden crate with a straw nest and daisies
   (b) => {
     const W = 1.9, H = 1.05;
@@ -234,6 +235,92 @@ const STANDS = [
     }
     b.use('body');
     return { seedY: 2.3, topY: 1.42, halo: '#fff2a8' };
+  },
+  // 9 Crystal Caverns: a geode cracked open on a cave rock, lined with glowing crystals
+  (b) => {
+    const stone = '#6c6386', mint = '#3dffb4', violet = '#b48cff';
+    const crystal = (p, d, len, r, c) => b.add(crystalGeo(), { p, q: aim(d), s: [r, len, r], c: shade(c, -0.3), c2: shade(c, 0.2), gy: [0.2, 1], glow: 0.25, glow2: 0.6 });
+    rock(b, [0, 0.22, 0], 1.35, '#4b3d72', 14, { cf: (x, y, z, i) => (hash(i * 2.3) > 0.85 ? '#6a5a96' : null) });
+    const shell = [[0, 0.62], [0.72, 0.66], [1.02, 0.86], [1.12, 1.12], [1.02, 1.32]];
+    b.add(latheGeo('podGeode', shell, 12), { c: shade(stone, -0.12), c2: shade(stone, 0.12), gy: [0.6, 1.3], cf: (x, y, z, i) => (hash(i * 1.7) > 0.85 ? shade(stone, 0.35) : null) });
+    b.add(P.torus(0.12, 3, 14), { p: [0, 1.32, 0], r: [PI / 2, 0, 0], s: 1.0, c: '#efe6ff', glow: 0.35 });
+    b.add(P.disc(12), { p: [0, 1.18, 0], s: 0.98, c: '#2a1a4a', glow: 0.2 });
+    // crystals lining the bowl, leaning in
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * TAU + 0.2;
+      crystal([Math.sin(a) * 0.82, 1.08, Math.cos(a) * 0.82], [-Math.sin(a) * 0.5, 1, -Math.cos(a) * 0.5], 0.42 + hash(i + 2) * 0.22, 0.13, i % 2 ? violet : mint);
+    }
+    // clusters on the cave floor
+    [[1.2, 0.6, mint], [-1.15, -0.65, violet], [-0.95, 0.9, mint]].forEach(([x, z, c], i) => {
+      crystal([x, 0.1, z], [x * 0.5, 1, z * 0.5], 0.75, 0.17, c);
+      crystal([x + 0.18, 0.08, z - 0.1], [x + 0.6, 1, z * 0.3], 0.45, 0.11, i % 2 ? mint : violet);
+    });
+    b.use('crystals', [0, 2.0, 0]);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU;
+      b.add(crystalGeo(), { p: [Math.sin(a) * 1.15, 1.82 + (i % 2) * 0.35, Math.cos(a) * 1.15], s: [0.12, 0.45, 0.12], c: i % 2 ? violet : mint, c2: shade(i % 2 ? violet : mint, 0.4), gy: [0, 1], glow: 0.6 });
+    }
+    b.use('body');
+    return { seedY: 2.3, topY: 1.34, halo: '#3dffb4' };
+  },
+  // 10 Bubble Reef: an open scallop on a coral rock, with kelp, a starfish and bubbles
+  (b) => {
+    const sand = '#f2dcb0', coral = '#ff8a7a', pink = '#ff9ec4';
+    b.add(P.blob(15, 0.1, 1), { p: [0, 0.05, 0], s: [1.45, 0.36, 1.35], c: shade(sand, -0.1), c2: sand, gy: [-1, 1], cf: (x, y, z, i) => (hash(i * 4.3) > 0.82 ? shade(sand, -0.25) : null) });
+    b.add(P.cyl(0.62, 0.8, 9), { p: [0, 0.15, 0], s: [1, 0.62, 1], c: shade(coral, -0.15), c2: coral, gy: [0, 1], cf: (x, y, z, i) => (hash(i * 3.1) > 0.75 ? '#ffd1c4' : null) });
+    // the scallop: bottom shell as a dish, top shell propped open (hinged at +Z: it opens toward players coming up the road)
+    const ribs = (x, y, z) => (Math.floor((Math.atan2(x, z) / 1.25 + 1) * 7 + 0.5) % 2 ? pink : null);
+    const hinge = [0, 1.12, 0.82];
+    b.add(scallopGeo(), { p: hinge, r: [0, PI, 0], s: [1.15, 0.9, 1.15], c: '#ffd2e2', c2: shade(pink, 0.3), gy: [-0.36, 0], cf: ribs });
+    b.add(scallopGeo(), { p: hinge, r: [-1.15, PI, 0], s: [1.15, -0.9, 1.15], c: '#ffd2e2', c2: shade(pink, 0.3), gy: [-0.36, 0], cf: ribs });
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * TAU;
+      b.add(P.sphere(5, 3), { p: [Math.sin(a) * 0.32, 1.06, 0.25 + Math.cos(a) * 0.32], s: [0.2, 0.08, 0.2], c: pink, c2: '#ffd8ec', gy: [-1, 1] });
+    }
+    // kelp ribbons at the sides, a starfish on the sand
+    const kelp = leafGeo({ shape: 'blade', segL: 6, segW: 1, bend: -0.2, cup: 0.1, twist: 1.6 });
+    for (const [x, z, h, yaw] of [[-1.15, 0.45, 2.0, 0.4], [1.2, 0.35, 1.6, -0.5], [-0.9, -0.85, 1.3, 2.4]]) {
+      b.add(kelp, { p: [x, 0, z], r: [0.1, yaw, 0], s: [0.34, h, 0.5], c: '#2f8f6a', c2: '#8fe0b0' });
+    }
+    b.add(shapeGeo('starfish', () => starShape(5, 0.42), 0.3), { p: [0.9, 0.3, -0.85], r: [-PI / 2 + 0.3, 0.5, 0], s: 0.32, c: '#ff8a3d', c2: '#ffc08a', gy: [-1, 1] });
+    b.use('crystals', [0, 2.0, 0]);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU;
+      const p = [Math.sin(a) * 1.15, 1.85 + (i % 2) * 0.4, Math.cos(a) * 1.15];
+      b.add(P.sphere(7, 5), { p, s: 0.16 + i * 0.03, ch: 'trans', c: '#dff8ff', c2: '#ffffff', gy: [-1, 1], glow: 0.2 });
+      b.add(P.oct(), { p: [p[0] - 0.05, p[1] + 0.07, p[2] + 0.1], s: [0.04, 0.025, 0.015], c: '#ffffff', glow: 1 });
+    }
+    b.use('body');
+    return { seedY: 2.3, topY: 1.15, halo: '#7fe8ff' };
+  },
+  // 11 Rainbow's End: a pot of gold under a little rainbow
+  (b) => {
+    const gold = '#ffd23f';
+    [[0, 0.15, 0, 1.05], [0.95, 0.12, 0.4, 0.6], [-0.9, 0.12, 0.45, 0.62], [0.1, 0.1, -0.95, 0.66]].forEach(([x, y, z, s], i) =>
+      b.add(P.blob(i + 24, 0.08, i ? 0 : 1), { p: [x, y, z], s: [s, s * 0.45, s], c: '#e8defa', c2: '#ffffff', gy: [-1, 1], glow: 0.15 }));
+    // the rainbow arches behind the pot (as seen by players coming up the road, toward +Z)
+    const arch = cachedGeo('podArch', () => new THREE.RingGeometry(0.62, 1, 12, 7, 0, PI));
+    const bands = ['#ff3d5e', '#ff8f1f', '#ffd91f', '#3ae36a', '#1fb8ff', '#4f63ff', '#a640ff'];
+    b.add(arch, { p: [0, 0.15, 0.75], s: [1.7, 1.55, 1], c: bands[0], glow: 0.35, cf: (x, y) => bands[Math.max(0, Math.min(6, Math.floor((1 - Math.hypot(x, y)) / 0.38 * 7)))] });
+    // the cauldron on three stubby feet, heaped with coins
+    const pot = [[0, 0.2], [0.62, 0.22], [0.92, 0.45], [1.0, 0.78], [0.86, 1.05], [0.95, 1.12], [0.88, 1.18]];
+    b.add(latheGeo('podPot', pot, 14), { c: '#1f1a33', c2: '#3a3260', gy: [0.2, 1.2] });
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU + 0.5;
+      b.add(P.sphere(5, 3), { p: [Math.sin(a) * 0.6, 0.14, Math.cos(a) * 0.6], s: [0.16, 0.14, 0.16], c: '#2a2444' });
+    }
+    b.add(P.dome(12, 3), { p: [0, 1.05, 0], s: [0.86, 0.36, 0.86], c: shade(gold, -0.3), c2: gold, gy: [0, 1], glow: 0.12, cf: (x, y, z, i) => (hash(i * 2.9) > 0.75 ? '#fff1a0' : null) });
+    const coin = (p, r, s = 0.17) => b.add(P.cyl(1, 1, 8), { p, r, s: [s, 0.05, s], c: '#e8a810', c2: gold, gy: [0, 1], glow: 0.15 });
+    [[0.3, 1.32, 0.15, 0.5], [-0.32, 1.28, 0.25, -0.6], [0.05, 1.4, -0.25, 0.3], [-0.12, 1.36, 0.42, 0.9]].forEach(([x, y, z, t]) => coin([x, y, z], [t, 0, t * 0.7]));
+    [[0.95, 0.1, 0.75, 0.2], [-0.85, 0.1, 0.85, -0.3]].forEach(([x, y, z, t]) => coin([x, y, z], [t, 0, 0.2]));
+    b.use('crystals', [0, 2.0, 0]);
+    const star = shapeGeo('podStar', () => starShape(5, 0.45), 0.12);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU;
+      b.add(star, { p: [Math.sin(a) * 1.15, 2.0 + (i % 2) * 0.35, Math.cos(a) * 1.15], r: [0, a, 0], s: 0.2, c: bands[i * 2 + 1], c2: '#ffffff', gy: [-1, 1], glow: 0.7 });
+    }
+    b.use('body');
+    return { seedY: 2.35, topY: 1.42, halo: '#c4bcff' };
   },
 ];
 

@@ -74,6 +74,10 @@ html.menu-screen .labels-layer{visibility:hidden}
 .rar-celestial{color:#8ff7ff;text-shadow:0 0 7px rgba(111,243,255,.75),0 1px 0 rgba(0,0,0,.45)}
 .rar-cosmic{color:#ff86ec;text-shadow:0 0 7px rgba(255,92,225,.75),0 1px 0 rgba(0,0,0,.45)}
 .rar-divine{color:#fff29a;text-shadow:0 0 9px rgba(255,231,94,.95),0 1px 0 rgba(0,0,0,.45)}
+.rar-prismatic{color:#8dffd6;text-shadow:0 0 8px rgba(61,255,180,.85),0 0 2px rgba(180,140,255,.9),0 1px 0 rgba(0,0,0,.45)}
+.rar-eternal{color:#ffa486;text-shadow:0 0 9px rgba(255,122,89,.9),0 1px 0 rgba(0,0,0,.45)}
+.rar-infinity{color:transparent;text-shadow:none;background-image:linear-gradient(90deg,#b6adff,#ffb0ea,#9ff2ff,#c9ffb8,#b6adff);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
+  filter:drop-shadow(0 0 4px rgba(138,125,255,.95)) drop-shadow(0 1px 0 rgba(0,0,0,.5));animation:rainbowPan 3.2s linear infinite}
 .rar-secret{color:transparent;text-shadow:none;padding:3px 7px 3px;border-radius:6px;border:1.5px solid rgba(255,255,255,.35);
   background-image:var(--rainbow),linear-gradient(#050507,#050507);background-size:200% 100%,100% 100%;
   -webkit-background-clip:text,padding-box;background-clip:text,padding-box;animation:rainbowPan 2s linear infinite}

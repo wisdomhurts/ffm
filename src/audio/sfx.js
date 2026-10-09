@@ -31,6 +31,12 @@ export const GROWLS = {
   gummy: { gain: 0.6, f0: 185, rough: 58, formant: 1350, q: 9, noise: 0.1, dur: 0.5, contour: [0.7, 1.6, 1.15] },
   // slow thunder rumble with electric crackle
   storm: { gain: 1.3, f0: 44, rough: 9, formant: 400, q: 3, noise: 0.9, dur: 1.3, contour: [1, 1.12, 0.55], clicks: true },
+  // gravelly rock grind with clattering pebbles
+  golem: { gain: 1.35, f0: 48, rough: 31, formant: 470, q: 4, noise: 0.55, dur: 1.05, contour: [0.8, 1.15, 0.62], clicks: true },
+  // bubbly blub that swells up as it puffs
+  puffer: { gain: 0.6, f0: 160, rough: 70, formant: 900, q: 10, noise: 0.15, dur: 0.6, contour: [0.6, 1.45, 1.7] },
+  // whooshing roar with a twinkly starry shimmer
+  comet: { gain: 1.0, f0: 70, rough: 14, formant: 820, q: 4, noise: 0.85, dur: 1.15, contour: [1.2, 1.35, 0.6], ethereal: true },
 };
 
 function oof(ac, out, t, o) {
