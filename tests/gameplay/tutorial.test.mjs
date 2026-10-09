@@ -291,3 +291,133 @@ test('online: a client\'s tutorial ticks on the host\'s forwarded events', async
     await step(0.2);
   }
 });
+
+// ------------------------------------------------------------------ the in-game offer card (ui/tutorial.js)
+// Just enough DOM to mount the tutorial's HUD part in node: elements, classes, listeners and boxes.
+class El {
+  constructor(tag) {
+    this.tagName = String(tag).toUpperCase();
+    this.children = [];
+    this.parentNode = null;
+    this.className = '';
+    this.style = { setProperty() {} };
+    this.dataset = {};
+    this.listeners = {};
+    this.offsetWidth = 100;
+    const cls = () => this.className.split(' ').filter(Boolean);
+    this.classList = {
+      contains: (c) => cls().includes(c),
+      add: (...c) => (this.className = [...new Set([...cls(), ...c])].join(' ')),
+      remove: (...c) => (this.className = cls().filter((x) => !c.includes(x)).join(' ')),
+      toggle: (c, on = !cls().includes(c)) => (on ? this.classList.add(c) : this.classList.remove(c), on),
+    };
+  }
+  setAttribute(k, v) { this[k] = v; }
+  appendChild(c) { if (c instanceof El) { c.parentNode = this; this.children.push(c); } return c; }
+  remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this); this.parentNode = null; }
+  addEventListener(t, fn) { (this.listeners[t] ||= []).push(fn); }
+  removeEventListener() {}
+  dispatch(t, e = {}) { for (const fn of this.listeners[t] || []) fn({ type: t, target: this, preventDefault() {}, ...e }); }
+  setPointerCapture() {}
+  getBoundingClientRect() { return { left: 10, top: 10, right: 110, bottom: 60, width: 100, height: 50 }; }
+  matches(sel) { return sel.startsWith('.') && this.classList.contains(sel.slice(1)); }
+  closest(sel) { for (let e = this; e; e = e.parentNode) if (e.matches(sel)) return e; return null; }
+  querySelector(sel) { for (const c of this.children) { const f = c.matches(sel) ? c : c.querySelector(sel); if (f) return f; } return null; }
+  set innerHTML(v) { this._html = v; }
+  get innerHTML() { return this._html || ''; }
+  set textContent(v) { this._text = v; }
+}
+
+async function mountOffer(id) {
+  if (!globalThis.document) {
+    const head = new El('head');
+    globalThis.document = {
+      head, body: new El('body'), documentElement: new El('html'), hidden: false,
+      createElement: (t) => new El(t), createTextNode: (t) => ({ t }), getElementById: () => null,
+      querySelector: () => null, querySelectorAll: () => [], addEventListener() {}, removeEventListener() {},
+    };
+    globalThis.window = Object.assign(globalThis.window || {}, { innerWidth: 1280, innerHeight: 720, addEventListener() {}, removeEventListener() {} });
+    globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
+    globalThis.requestAnimationFrame = () => 0;
+    globalThis.cancelAnimationFrame = () => {};
+  }
+  const THREE = await import('three');
+  const { createTutorial } = await import('../../src/ui/tutorial.js');
+  bus.clear();
+  fresh(id);
+  const game = new Game({ humanId: id, seed: 3 });
+  const buttons = Array.from({ length: 17 }, () => ({ pressed: false }));
+  const app = {
+    game, human: game.human, profileId: id, state: 'playing', online: { room: { code: 'TESTS' } },
+    input: { lastDevice: 'gamepad', gamepad: () => ({ buttons }) },
+    engine: { scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera() }, cam: { introT: 1, yaw: 0 },
+    menus: { isBlocking: () => false },
+  };
+  const hud = new El('div');
+  hud.className = 'hud';
+  const tut = createTutorial(app, hud);
+  tut.update(0.7); // the camera has landed: the card comes up
+  const card = hud.querySelector('.tof-game');
+  assert.ok(card, 'online: the offer is a card in the game');
+  assert.equal(getProfile(id).tutorial.state, 'offered');
+  // one frame with these buttons held (the rest let go)
+  const frame = (...held) => {
+    buttons.forEach((b, i) => (b.pressed = held.includes(i)));
+    tut.update(1 / 30);
+  };
+  return { app, hud, card, tut, frame, state: () => getProfile(id).tutorial.state };
+}
+
+test('the in-game offer card ignores jump, grab and the press that closes a menu; D-pad up / left answer it', async () => {
+  const { app, hud, card, tut, frame, state } = await mountOffer('micah');
+  assert.match(card.querySelector('.tof-hint').innerHTML, /↑.*yes.*←.*no/, 'the gamepad hint shows the D-pad');
+  frame();
+  frame(0); // A: jump
+  frame();
+  frame(1); // B: grab
+  frame();
+  assert.equal(state(), 'offered', 'jumping and grabbing never answer it');
+  // the pause menu: the card hides and the D-pad picks sound rows there; B goes back to the game
+  app.state = 'paused';
+  frame(14);
+  frame(12);
+  frame(1);
+  app.state = 'playing'; // resume() runs in the same frame as the B press
+  frame(1, 14);
+  frame();
+  assert.equal(state(), 'offered', 'presses in the pause menu and the one that closed it never answer it');
+  // the Trade / Gift chip owns the D-pad while it shows (ui/trade.js)
+  const dock = new El('div');
+  dock.className = 'soc-dock';
+  hud.appendChild(dock);
+  frame(12);
+  frame();
+  assert.equal(state(), 'offered', 'not while a trade chip or invite has the D-pad');
+  dock.remove();
+  frame(12);
+  assert.equal(state(), 'active', 'D-pad up: yes');
+  assert.equal(hud.querySelector('.tof-game'), null, 'the card goes');
+  tut.dispose();
+  const b = await mountOffer('micah');
+  b.frame();
+  b.frame(14);
+  assert.equal(b.state(), 'declined', 'D-pad left: no thanks');
+  b.tut.dispose();
+});
+
+test('the offer card\'s buttons answer a second finger\'s tap (pointer events, no click)', async () => {
+  const { hud, card, tut, state } = await mountOffer('micah');
+  const no = card.querySelector('.tof-no');
+  // the thumb is on the joystick: the browser sends pointer events for the second finger, never a click
+  no.dispatch('pointerdown', { pointerId: 7, pointerType: 'touch', button: 0 });
+  no.dispatch('pointerup', { pointerId: 7, pointerType: 'touch', clientX: 50, clientY: 30 });
+  assert.equal(state(), 'declined', 'No thanks');
+  no.dispatch('click', { detail: 1 }); // (a single finger's tap also gets a click: no second answer)
+  assert.equal(hud.querySelector('.tof-game'), null);
+  tut.dispose();
+  // keyboard activation (Enter on the focused button: a click with detail 0) still works
+  const b = await mountOffer('micah');
+  b.card.querySelector('.tof-yes').dispatch('click', { detail: 0 });
+  assert.equal(b.state(), 'active');
+  b.tut.dispose();
+});

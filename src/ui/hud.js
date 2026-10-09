@@ -33,7 +33,7 @@ import { createBossBar } from './bossBar.js';
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
 // `when` 'down' fires on press (hotbar), 'up' on release over the button (pause/mute). Keyboard
 // activation (Enter/Space, a click with detail 0) still works.
-function onPress(el, fn, when = 'down') {
+export function onPress(el, fn, when = 'down') {
   let armed = null;
   let firedAt = -1e9; // the click that trails a press can also report detail 0: it must not fire again
   const fire = (e) => {

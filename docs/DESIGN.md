@@ -260,7 +260,9 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
 ## 9. Tutorial (optional)
 * A new player is asked once, "Want a quick tutorial?": when they press Start before their first solo game, or by
   a card in the game when their first game is online. **Yes, show me!** turns it on; **No thanks** never asks
-  again. Anyone who has already played (lifetime counters, stars, badges, a saved garden) is never asked.
+  again. Keys Y / N; gamepad A / B in the menu, D-pad up / left on the in-game card (A and B jump and grab there, and
+  a press that closes the pause menu never answers it). Anyone who has already played (lifetime counters, stars,
+  badges, a saved garden) is never asked.
 * Eight steps, one short card each (with the key / button for the keyboard, touch screen or gamepad in use):
   walk out of the gate → grab a seed on the Seed Road → carry it home (it plants itself) → watch it grow →
   collect the cash → train at the Speed Shop → lock your garden → steal a family plant and run it home.

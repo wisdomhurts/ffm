@@ -16,6 +16,8 @@ import { isTouch } from './device.js';
 import { guidePoint } from './route.js';
 import { createGuide } from '../fx/guide.js';
 import { injectTutorialStyles } from './tutorialStyle.js';
+import { onPress } from './hud.js';
+import { socialUi } from '../social/uiState.js';
 import {
   STEPS, createStepMachine, tutorialOf, tutorialRecord, wantsOffer, markOffered, answerOffer, replayTutorial, skipTutorial, finishStep,
 } from './tutorialFlow.js';
@@ -72,8 +74,12 @@ const deviceOf = (app) => {
 
 // ------------------------------------------------------------------ the offer
 
-/** "Want a quick tutorial?" with big Yes / No thanks buttons. Keys: Y / N, gamepad A / B. */
-function offerCard(app, onAnswer, cls = '') {
+/**
+ * "Want a quick tutorial?" with big Yes / No thanks buttons. Keys: Y / N. Gamepad: A / B in the menu; in a game
+ * (game: true) A and B jump and grab, so it takes D-pad up / left there, like a trade invite. blocked(): the
+ * game's card is out of sight or something else has those keys (a menu, a trade window...): presses are ignored.
+ */
+function offerCard(app, onAnswer, { cls = '', game = false, blocked = null } = {}) {
   injectTutorialStyles();
   const d = deviceOf(app);
   let answered = false; // a key, a button and a click in the same moment answer once
@@ -83,34 +89,43 @@ function offerCard(app, onAnswer, cls = '') {
     uiSound(app, 'click');
     onAnswer(yes);
   };
-  const yes = h('button', { class: 'btn btn-green btn-lg tof-yes', type: 'button', 'data-autofocus': '', onclick: () => answer(true) },
+  // the buttons act on the pointer itself: a second finger gets no click while a thumb is on the joystick
+  const yes = h('button', { class: 'btn btn-green btn-lg tof-yes', type: 'button', 'data-autofocus': '' },
     h('span', { class: 'bi', html: ICON.play }), h('span', { text: 'Yes, show me!' }));
-  const no = h('button', { class: 'btn btn-grey tof-no', type: 'button', text: 'No thanks', onclick: () => answer(false) });
-  const hint = d === 'pad' ? `${PAD('A')} yes &nbsp; ${PAD('B')} no` : d === 'kb' ? `${K('Y')} yes &nbsp; ${K('N')} no` : '';
+  const no = h('button', { class: 'btn btn-grey tof-no', type: 'button', text: 'No thanks' });
+  onPress(yes, () => answer(true), 'up');
+  onPress(no, () => answer(false), 'up');
+  const [YES, NO] = game ? [12, 14] : [0, 1];
+  const padHint = game ? `${K('\u2191')} yes &nbsp; ${K('\u2190')} no` : `${PAD('A')} yes &nbsp; ${PAD('B')} no`;
+  const hint = d === 'pad' ? padHint : d === 'kb' ? `${K('Y')} yes &nbsp; ${K('N')} no` : '';
   const el = h('div', { class: 'tof ' + cls, role: 'group', 'aria-label': 'Quick tutorial?' },
     h('div', { class: 'tof-ic', html: ICON.sprout }),
     h('h2', { class: 'tof-title', text: 'Want a quick tutorial?' }),
     h('p', { class: 'tof-sub', text: 'Learn to grab, grow and steal in a few easy steps.' }),
     h('div', { class: 'tof-btns' }, yes, no),
     hint ? h('p', { class: 'tof-hint', html: hint }) : null);
-  // keyboard: Y / N (no game key uses them); gamepad: A / B (edges only, so a held button never answers)
+  // keyboard: Y / N (no game key uses them)
   const onKey = (e) => {
     const tg = e.target;
-    if (e.repeat || tg?.tagName === 'INPUT' || tg?.tagName === 'TEXTAREA' || tg?.isContentEditable) return;
+    if (e.repeat || tg?.tagName === 'INPUT' || tg?.tagName === 'TEXTAREA' || tg?.isContentEditable || blocked?.()) return;
     if (e.code === 'KeyY') answer(true);
     else if (e.code === 'KeyN') answer(false);
   };
   window.addEventListener('keydown', onKey);
-  let prev = null;
+  // gamepad: a fresh press only. A button already down when polling (re)starts (the B or A that closed the pause
+  // menu, a held jump) is only recorded; resetPad() while the card is out of sight. No allocation per frame.
+  let seen = false, wasY = false, wasN = false;
   const pollPad = () => {
     const gp = app.input?.gamepad?.();
-    if (!gp) return;
-    const a = !!gp.buttons[0]?.pressed, b = !!gp.buttons[1]?.pressed;
-    if (prev && a && !prev.a) answer(true);
-    else if (prev && b && !prev.b) answer(false);
-    prev = { a, b };
+    const y = !!gp?.buttons[YES]?.pressed, n = !!gp?.buttons[NO]?.pressed;
+    const yesNow = seen && y && !wasY, noNow = seen && n && !wasN;
+    seen = !!gp;
+    wasY = y;
+    wasN = n;
+    if ((yesNow || noNow) && !blocked?.()) answer(yesNow);
   };
-  return { el, pollPad, dispose: () => window.removeEventListener('keydown', onKey) };
+  const resetPad = () => (seen = false);
+  return { el, pollPad, resetPad, dispose: () => window.removeEventListener('keydown', onKey) };
 }
 
 /**
@@ -283,10 +298,13 @@ export function createTutorial(app, parent) {
       closeOffer();
       answerOffer(pid, yes); // profile:changed starts it (below)
       if (!yes) app.hud?.alerts?.toast?.('No problem! The tutorial is in Settings if you want it.', 'info');
-    }, 'tof-game');
+    }, { cls: 'tof-game', game: true, blocked: offerBlocked });
     hud.appendChild(offer.el);
     markOffered(pid);
   }
+  // the card hides under menus (tutorialStyle.js); a trade window, the emote wheel or the Trade / Gift chip and
+  // invite (ui/trade.js: they own Y / N and the D-pad while up) have those keys first
+  const offerBlocked = () => app.state !== 'playing' || socialUi.sheet || socialUi.wheel || !!app.menus?.isBlocking?.() || !!hud.querySelector('.soc-dock');
   function closeOffer() {
     if (!offer) return;
     offer.dispose();
@@ -355,7 +373,10 @@ export function createTutorial(app, parent) {
         offerIn -= dt;
         if (offerIn < 0) showOffer();
       }
-      if (offer) offer.pollPad();
+      if (offer) {
+        if (app.state === 'playing') offer.pollPad();
+        else offer.resetPad(); // the press that closes the menu is no answer
+      }
       if (!machine || gone) return;
       // stay out of the way while the intro camera swoops in, then slide in a beat after the HUD
       if (revealIn > 0) {
