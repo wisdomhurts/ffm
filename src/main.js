@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Engine } from './core/engine.js';
 import { createBanana, createBalloon } from './fx/props.js';
+import { guideWarmup } from './fx/guide.js';
 import { createPlantView, createSeedView, createCarriedPlantView, setPlantQuality } from './plants/plantMeshes.js';
 import { Input } from './core/input.js';
 import { FollowCamera, reducedMotion } from './core/camera.js';
@@ -45,6 +46,7 @@ function buildWarmupGroup() {
   g.name = 'shader-warmup';
   g.add(createBanana(), createBalloon());
   g.add(roadWarmup()); // the Seed Road's own shader variants (light shafts, glowing cliffs)
+  g.add(guideWarmup()); // the tutorial beacon (it can switch on mid-game)
   // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
     for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);

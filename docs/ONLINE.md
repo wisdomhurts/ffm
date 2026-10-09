@@ -34,6 +34,7 @@ profile = {
   quests: { day: 'YYYY-MM-DD', list: [{ id, target, progress, claimed }] },
   counters: { [key]: number },   // lifetime totals (steals, bonks, planted, sold, gifts, trades, hatches, onlineGames, ...)
   best: { netWorth: 0, showdownWins: 0, showdownBest: 0 },
+  tutorial: { state, step },   // 'new' | 'offered' | 'declined' | 'active' | 'done'; step = 0-7 while active (ui/tutorialFlow.js)
   online: null | { player: PlayerSave, garden: GardenSave },   // your online garden (travels between rooms)
   cloud: null | { id, code },    // cloud save link (see Online API)
   updatedAt,

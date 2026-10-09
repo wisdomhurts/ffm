@@ -18,6 +18,7 @@ import { buildSettings } from './settingsPanel.js';
 import { buildSoundControls } from './soundControls.js';
 import { buildPhotoBooth } from './photobooth.js';
 import { buildHowTo } from './howto.js';
+import { offerTutorial, tutorialButton } from './tutorial.js';
 import { buildPetShop, openPets } from './pets.js';
 import { buildWardrobe, openWardrobe } from './wardrobe.js';
 import { buildBase } from './base.js';
@@ -226,6 +227,8 @@ export function createMenus(app) {
 
   function startGame(o) {
     document.activeElement?.blur?.();
+    // a brand-new player is asked once if they'd like the quick tutorial first (ui/tutorial.js)
+    if (offerTutorial(app, o.charId, () => app.startGame(o))) return;
     app.startGame(o);
   }
 
@@ -676,7 +679,8 @@ export function createMenus(app) {
         h('button', { class: 'link', type: 'button', text: 'Change', onclick: () => { click(); showSelect(() => showMode(back)); } })),
       h('div', { class: 'mode-grid', role: 'radiogroup', 'aria-label': 'Game mode' }, modeCards),
       h('div', { class: 'diff' }, h('div', { class: 'diff-label', text: 'Difficulty' }), h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Difficulty' }, segs), diffDesc),
-      startRow, confirm);
+      startRow, confirm,
+      tutorialButton(app, () => startGame({ charId: p.id, mode: 'endless', difficulty: sel.difficulty, fresh: !app.hasSave(p.id) })));
     paint();
     const s = setScreen('mode', body);
     s.back = back;

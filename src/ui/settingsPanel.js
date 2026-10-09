@@ -135,15 +135,16 @@ export function buildSettings(app) {
   row('Auto-rotate camera', toggleCtl('autoRotate', 'Auto-rotate camera'), 'Swings behind you as you run');
   row('Tips and tutorial', toggleCtl('tips', 'Tips'));
 
-  const resetBtn = h('button', { class: 'btn btn-grey btn-sm', type: 'button', html: `<span class="bi">${ICON.reset}</span><span>Replay tutorial</span>` });
+  // the guided tutorial, from the first step (ui/tutorial.js): in a game it starts as you go back to it
+  const resetBtn = h('button', { class: 'btn btn-green btn-sm set-tut', type: 'button', html: `<span class="bi">${ICON.play}</span><span>Play tutorial</span>` });
   resetBtn.addEventListener('click', () => {
-    resetTutorial();
-    save('ui:hints-off', false);
+    uiSound(app, 'click');
+    resetTutorial(app);
     if (!settings.tips) setSetting('tips', true);
-    resetBtn.innerHTML = `<span class="bi">${ICON.check}</span><span>Starts next game</span>`;
+    resetBtn.innerHTML = `<span class="bi">${ICON.check}</span><span>${app.game && app.human ? 'Starts when you play' : 'Starts next game'}</span>`;
     resetBtn.disabled = true;
   });
-  row('Tutorial', resetBtn, 'Shows the checklist and key hints again');
+  row('Tutorial', resetBtn, 'A quick guided tour: grab, grow, cash in, steal');
 
   // Chat (social/chat.js): typed chat on this device, and a parents' switch for typed chat in public rooms
   rows.push(h('div', { class: 'set-sec', role: 'heading', 'aria-level': '3', text: 'Chat' }));

@@ -88,10 +88,17 @@ const rect = (page, sel) => page.evaluate((s) => {
 }, sel);
 const overlap = (a, b) => !!a && !!b && a.l < b.r && a.r > b.l && a.t < b.b && a.b > b.t;
 
+// a brand-new player is asked "Want a quick tutorial?" when they press Start: No thanks (the way a player would)
+async function noTutorial(page, tap) {
+  const no = await page.waitForSelector('.tut-offer .tof-no', { timeout: 3000 }).catch(() => null);
+  if (no) await (tap ? page.tap('.tut-offer .tof-no') : page.click('.tut-offer .tof-no'));
+}
+
 async function startByTapping(page) {
   await page.tap('.btn-play');
   await page.waitForTimeout(500);
   await page.tap('.start-row .btn-green');
+  await noTutorial(page, true);
   await page.waitForFunction(() => window.__app.state === 'playing', null, { timeout: 60000 });
 }
 
@@ -226,6 +233,7 @@ try {
     await page.click('.btn-play');
     await page.waitForTimeout(500);
     await page.click('.start-row .btn-green');
+    await noTutorial(page, false);
     await page.waitForFunction(() => window.__app.state === 'playing', null, { timeout: 60000 });
     await page.waitForTimeout(500);
     check(!(await isFs(page)), 'computer: starting a game never goes full screen by itself');

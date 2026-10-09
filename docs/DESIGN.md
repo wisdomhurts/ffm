@@ -167,3 +167,16 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
   D-pad picks a row, left/right volume, A on/off), and the in-game speaker (tap: a pop-up with both rows;
   hold: mute all). M turns the music on/off. Music switched off stops scheduling and picks the song up at
   the next bar; effects switched off cost nothing (audio/levels.js).
+
+## 9. Tutorial (optional)
+* A new player is asked once, "Want a quick tutorial?": when they press Start before their first solo game, or by
+  a card in the game when their first game is online. **Yes, show me!** turns it on; **No thanks** never asks
+  again. Anyone who has already played (lifetime counters, stars, badges, a saved garden) is never asked.
+* Eight steps, one short card each (with the key / button for the keyboard, touch screen or gamepad in use):
+  walk out of the gate → grab a seed on the Seed Road → carry it home (it plants itself) → watch it grow →
+  collect the cash → train at the Speed Shop → lock your garden → steal a family plant and run it home.
+* A bouncing arrow hangs over the next spot in the world (an arrow on the screen edge while it is off screen).
+  Steps tick off on the gameplay events, so they work online too; a step done early is not asked for again.
+* Skip is always on the card. The finish is confetti and a "Tutorial complete!" moment. Progress is saved per
+  profile (`profile.tutorial`) and resumes after a reload; Settings and the mode screen replay it from step 1.
+* The bots' gentle practice steal waits until the tutorial is done or declined.

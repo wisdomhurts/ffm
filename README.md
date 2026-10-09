@@ -26,6 +26,9 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * **Base levels 1-10**: every level pays more and unlocks the **Base Studio** (floors, fences, gate-laser colours and
   decorations like trampolines and fountains), a Guard Gnome that bonks thieves, a home treadmill, sprinklers and
   a golden base.
+* **A quick tutorial, if you want one**: new players are asked once ("Yes, show me!" / "No thanks"). Eight short
+  steps with a bouncing arrow in the world show you how to grab, plant, cash in, get faster, lock up and steal.
+  Skip it any time; replay it from Settings or "Play the tutorial" on the mode screen.
 * **Speed Shop 2.0**: buy Speed x10 or MAX, a Boost burst (Shift) with 10 upgrade levels, treadmill tiers, moving
   belts, the Warm-Up treadmill that makes you Pumped, and speed gears for fine control at super speed.
 * **Sound your way**: music and sound effects each get their own on/off switch and volume (Settings, the pause
