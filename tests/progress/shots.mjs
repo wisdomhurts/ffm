@@ -105,6 +105,7 @@ for (const s of sizes) {
   await page.evaluate(() => {
     const app = window.__app;
     app.profile.counters.steals = 99;
+    app.progress.stamp('daisy', 'normal'); // already in the Seed Almanac, so no sticker toast goes first
     app.progress.toasts.clear();
     const me = app.human;
     const victim = app.game.players.find((p) => p !== me);

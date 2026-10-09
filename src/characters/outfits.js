@@ -6,7 +6,7 @@
 // In every side region the canvas top is the top of the part. On the front, canvas-left is the
 // character's right hand side (-x). Characters face +Z; their right is -X.
 import { familyFaceData, loadImage } from './faces.js';
-import { SHIRT_BY_ID, legsOf } from './cosmetics.js';
+import { SHIRT_BY_ID, NOODLE_BY_ID, legsOf } from './cosmetics.js';
 
 export const PPU = 112; // canvas pixels per stud
 
@@ -1027,6 +1027,8 @@ function drawSkirt(look) {
 // Noodle atlas: left half = foam side (ridges run along the tube; v goes around it),
 // right half = the end cap with the hole.
 function drawNoodle(color) {
+  const special = NOODLE_BY_ID[color];
+  if (special) return drawSpecialNoodle(special);
   const c = canvas(128, 64);
   const g = c.getContext('2d');
   g.fillStyle = color;
@@ -1049,6 +1051,52 @@ function drawNoodle(color) {
     g.fill();
   }
   g.fillStyle = shade(color, -0.5);
+  g.beginPath();
+  g.arc(96, 32, 11, 0, Math.PI * 2);
+  g.fill();
+  return c;
+}
+
+// A special noodle (cosmetics NOODLES): a shiny gradient foam with a handle band, a twinkle and bright caps.
+// Same atlas as drawNoodle (side on the left half, the end caps on the right).
+function drawSpecialNoodle(def) {
+  const c = canvas(128, 64);
+  const g = c.getContext('2d');
+  const shine = def.shine || [def.color, def.color];
+  const grd = g.createLinearGradient(0, 0, 0, 64);
+  shine.forEach((col, i) => grd.addColorStop(i / Math.max(1, shine.length - 1), col));
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 64, 64);
+  // a glint runs along the top of the foam
+  g.fillStyle = 'rgba(255,255,255,0.45)';
+  g.fillRect(0, 6, 64, 5);
+  if (def.grip) {
+    g.fillStyle = def.grip;
+    g.fillRect(4, 0, 9, 64);
+    g.fillStyle = shade(def.grip, -0.35);
+    for (let y = 2; y < 64; y += 8) g.fillRect(4, y, 9, 2);
+  }
+  // little diamond twinkles
+  g.fillStyle = '#ffffff';
+  for (const [x, y, r] of [[30, 20, 4], [48, 42, 3], [22, 50, 2.5]]) {
+    g.beginPath();
+    g.moveTo(x, y - r);
+    g.lineTo(x + r * 0.4, y);
+    g.lineTo(x, y + r);
+    g.lineTo(x - r * 0.4, y);
+    g.closePath();
+    g.fill();
+  }
+  g.fillStyle = shine[Math.floor(shine.length / 2)];
+  g.fillRect(64, 0, 64, 64);
+  g.fillStyle = 'rgba(255,255,255,0.25)';
+  for (let i = 0; i < 8; i += 2) {
+    g.beginPath();
+    g.moveTo(96, 32);
+    g.arc(96, 32, 32, (i / 8) * Math.PI * 2, (i / 8) * Math.PI * 2 + 0.4);
+    g.fill();
+  }
+  g.fillStyle = def.grip || shade(def.color, -0.5);
   g.beginPath();
   g.arc(96, 32, 11, 0, Math.PI * 2);
   g.fill();

@@ -34,6 +34,12 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * **Sound your way**: music and sound effects each get their own on/off switch and volume (Settings, the pause
   menu, or tap the speaker in the game; hold the speaker to mute everything, M turns the music on/off).
 * **White and silver hair** in the Wardrobe, for every hairstyle.
+* **Family Four**: collect all four family Secret plants (Dorian's Dragonfruit, Esther's Eternal Lotus, Mati's Magic
+  Marigold, Micah's Mega Melon: grab, plant, steal or get them as gifts) for 200 stars, a big cash prize and the
+  exclusive **Family Crown** hat. Track them on the Family Four card in Quests & Badges.
+* **Seed Almanac**: a sticker book of every plant in every finish (Normal, Gold, Diamond, Rainbow), one page per
+  world plus the Secret page. A new plant's first sticker gives a star, all four finishes ("Mastered") five more,
+  a full page a badge; fill 3 pages for the Leaf Hat and every page for the Golden Trowel noodle.
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.

@@ -11,7 +11,7 @@ import { h, uiSound } from './dom.js';
 import { ICON } from './icons.js';
 import { EMOTES } from '../social/catalog.js';
 import {
-  COLORS, HAIR_NAMES, BUILDS, HAIR, SHIRTS, LEGS, HATS, ACCS, FACES, TRAILS, HAT_BY_ID, ACC_BY_ID,
+  COLORS, HAIR_NAMES, BUILDS, HAIR, SHIRTS, LEGS, HATS, ACCS, FACES, TRAILS, NOODLES, HAT_BY_ID, ACC_BY_ID, NOODLE_BY_ID,
   sanitizeLook, sameLook, isOwned, unownedParts, unlockKey, randomLook, baseLook, legsOf,
 } from '../characters/cosmetics.js';
 import { composeFaceCanvas, getFace, familyFaceData } from '../characters/faces.js';
@@ -27,6 +27,9 @@ const BADGE_TEXT = {
   secret: 'Grow a Secret plant',
   chaos: 'Win a game on Chaos',
   rainbow: 'Grow a Rainbow plant',
+  familyfour: 'Collect the Family Four',
+  almanac1: 'Fill 3 Seed Almanac pages',
+  almanac2: 'Fill every Seed Almanac page',
 };
 
 // ------------------------------------------------------------------ tab icons (sticker style)
@@ -268,17 +271,44 @@ function noodleIcon(color) {
   return cached('noodle:' + color, () => {
     const c = canvasOf(96);
     const g = c.getContext('2d');
+    const special = NOODLE_BY_ID[color];
+    if (special) color = special.color;
     g.translate(48, 48);
     g.rotate(-0.55);
     g.lineWidth = 4;
     g.strokeStyle = INK;
     g.fillStyle = color;
+    if (special?.shine) {
+      const gr = g.createLinearGradient(0, -12, 0, 12);
+      special.shine.forEach((c2, i) => gr.addColorStop(i / (special.shine.length - 1), c2));
+      g.fillStyle = gr;
+    }
     g.beginPath();
     g.roundRect ? g.roundRect(-40, -12, 80, 24, 12) : g.rect(-40, -12, 80, 24);
     g.fill();
     g.stroke();
     g.fillStyle = 'rgba(255,255,255,0.28)';
     for (let i = 0; i < 5; i++) g.fillRect(-32 + i * 15, -10, 5, 20);
+    if (special?.grip) {
+      // the handle band and a twinkle (the same marks as its 3D texture, outfits.js drawSpecialNoodle)
+      g.fillStyle = special.grip;
+      g.fillRect(-34, -11, 12, 22);
+      g.lineWidth = 2.5;
+      g.strokeRect(-34, -11, 12, 22);
+      g.lineWidth = 4;
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.moveTo(8, -9);
+      g.lineTo(10.5, -2);
+      g.lineTo(17, 0);
+      g.lineTo(10.5, 2);
+      g.lineTo(8, 9);
+      g.lineTo(5.5, 2);
+      g.lineTo(-1, 0);
+      g.lineTo(5.5, -2);
+      g.closePath();
+      g.fill();
+    }
     g.fillStyle = color;
     g.beginPath();
     g.ellipse(40, 0, 6, 12, 0, 0, Math.PI * 2);
@@ -771,9 +801,16 @@ function createWardrobe(app, close, opts = {}) {
         break;
       }
       case 'noodle': {
+        out.push(info());
         const fam = charOf(prof).color;
-        const tiles = [tile({ name: 'Family', vis: copyCanvas(noodleIcon(fam)), on: !d.noodle, onPick: () => setDraft({ noodle: null }) })];
-        for (const c of COLORS.noodle) tiles.push(tile({ name: 'Noodle', vis: copyCanvas(noodleIcon(c)), on: d.noodle === c, onPick: () => setDraft({ noodle: c }) }));
+        const plain = (noodle) => () => {
+          lastPick = null;
+          setDraft({ noodle });
+        };
+        const tiles = [tile({ name: 'Family', vis: copyCanvas(noodleIcon(fam)), on: !d.noodle, onPick: plain(null) })];
+        for (const c of COLORS.noodle) tiles.push(tile({ name: 'Noodle', vis: copyCanvas(noodleIcon(c)), on: d.noodle === c, onPick: plain(c) }));
+        // special noodles (badge rewards) are items with their own look
+        for (const it of NOODLES) tiles.push(tile({ name: it.name, vis: copyCanvas(noodleIcon(it.id)), on: d.noodle === it.id, cat: 'noodle', item: it, onPick: pick('noodle', 'noodle', it) }));
         out.push(section('Pool noodle', 'Your bonking noodle', h('div', { class: 'wd-grid' }, tiles)));
         break;
       }
@@ -804,7 +841,7 @@ function createWardrobe(app, close, opts = {}) {
 
   who.paint?.();
   paintStars(false);
-  setTab('hair');
+  setTab(TABS.some((t) => t.id === opts.tab) ? opts.tab : 'hair');
   paintBar();
   const onResize = () => preview.resize();
   window.addEventListener('resize', onResize);
@@ -824,8 +861,8 @@ function createWardrobe(app, close, opts = {}) {
 }
 
 /** The Wardrobe as a modal (title screen, pause menu, new player): edits the active profile. */
-export function openWardrobe(app) {
-  const w = createWardrobe(app, null, { switcher: true });
+export function openWardrobe(app, { tab } = {}) {
+  const w = createWardrobe(app, null, { switcher: true, tab });
   const m = app.menus.openModal(w.el, { cls: 'wardrobe', label: 'Wardrobe' });
   m.dispose = w.dispose;
   return m;

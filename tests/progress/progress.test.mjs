@@ -364,6 +364,138 @@ section('badges');
   check(P().stars === s, 'no double badge stars');
 }
 
+// ------------------------------------------------------------------ 8b. Family Four: all four Secret plants in the garden
+section('family four');
+const cos = await import('../../src/characters/cosmetics.js');
+const colEvents = [];
+for (const n of ['collection:progress', 'collection:complete', 'almanac:sticker']) bus.on(n, (e) => colEvents.push([n, e]));
+{
+  const g = game.gardens[me.slot];
+  const secrets = PLANTS.filter((x) => x.rarity === 'secret');
+  const col = cat.COLLECTION.familyfour;
+  check(col && col.items.length === 4 && secrets.every((s) => col.items.some((it) => it.id === s.id)), 'Family Four is the four Secret plants');
+  check(cat.BADGE.familyfour?.tiers.join() === '4' && cat.BADGE_BY_ID.familyfour.cash?.min === 50000, 'familyfour badge: one tier at 4, pays cash (at least $50K)');
+  check(!cos.isOwned(P(), 'hat', 'familycrown'), 'the Family Crown is locked before');
+  const hat = cos.HAT_BY_ID.familycrown;
+  check(hat && hat.price === 0 && hat.unlock === 'familyfour', 'Family Crown: badge-only hat');
+  // a player who has only ever had their own family plant (the garden scan logged it from planter 1)
+  for (const s of secrets) if (s.family !== me.id) delete P().almanac.s[s.id];
+  tr.tick();
+  check(tr.collections()[0].count === 1 && tr.collections()[0].items.find((it) => it.family === me.id).has, 'own family plant logged from the garden: 1/4');
+  const cash0 = me.cash;
+  const stars0 = P().stars;
+  const ev0 = colEvents.length;
+  secrets.filter((s) => s.family !== me.id).forEach((s, i) => {
+    g.planters[2 + i].plant = { uid: 9100 + i, speciesId: s.id, mutation: 'normal', growTotal: 1, growLeft: 1, owner: me.slot };
+  });
+  tr.tick();
+  const prog = colEvents.slice(ev0).filter((e) => e[0] === 'collection:progress').map((e) => e[1].count);
+  check(prog.join() === '2,3,4', 'collection:progress 2/4, 3/4, 4/4: ' + prog);
+  const done = colEvents.slice(ev0).filter((e) => e[0] === 'collection:complete');
+  check(done.length === 1 && done[0][1].collection.id === 'familyfour', 'collection:complete once');
+  check(!!P().badges.familyfour, 'Family Four badge earned at 4/4');
+  check(cos.isOwned(P(), 'hat', 'familycrown'), 'the Family Crown is owned');
+  const paid = done[0]?.[1].cash || 0;
+  check(paid >= 50000 && done[0][1].banked === false && me.cash - cash0 === paid, `cash paid into the Endless garden: +${me.cash - cash0} (${paid})`);
+  check(P().stars - stars0 === 200 + 3 * cat.ALMANAC.firstStars, `200 stars + a star per new sticker: +${P().stars - stars0}`);
+  const view = tr.collections()[0];
+  check(view.count === 4 && view.done && view.earnedAt > 0, 'collections() view: 4/4, done');
+  // no double reward
+  const s1 = P().stars;
+  tr.tick();
+  tr.checkBadges();
+  check(P().stars === s1 && colEvents.filter((e) => e[0] === 'collection:complete').length === 1, 'no second reward');
+  for (let i = 2; i < 5; i++) g.planters[i].plant = null;
+  // counts stay consistent: the Badges tab and the online summary count the same badges
+  const st = tr.bests();
+  const { profileSummary } = await import('../../src/online/boards.js');
+  check(st.totalBadges === cat.ALL_BADGES.length && profileSummary(P()).badges === st.badges, `badge counts agree: ${st.badges}/${st.totalBadges}, summary ${profileSummary(P()).badges}`);
+}
+{
+  // completing it with no game running banks the cash for the next Endless game
+  const saved = app.profileId;
+  const savedGame = [app.game, app.human, app.state];
+  app.game = null;
+  app.human = null;
+  app.state = 'title';
+  app.profileId = 'dorian';
+  const bank0 = P().counters.bankCash || 0;
+  for (const s of PLANTS.filter((x) => x.rarity === 'secret')) tr.stamp(s.id, 'gold');
+  const done = colEvents.filter((e) => e[0] === 'collection:complete').pop()[1];
+  check(!!P().badges.familyfour && done.banked === true && done.cash >= 50000 && P().counters.bankCash === bank0 + done.cash, `no game: Family Four cash banked (${done.cash})`);
+  check(cos.isOwned(P(), 'hat', 'familycrown'), "Dorian's crown is owned too");
+  app.profileId = saved;
+  [app.game, app.human, app.state] = savedGame;
+}
+
+// ------------------------------------------------------------------ 8c. Seed Almanac
+section('seed almanac');
+{
+  const bitsOf = (id) => P().almanac.s[id] || 0;
+  const other2 = game.players.find((p) => p !== me);
+  // start from a blank Dustbowl page (the bot-driven game above may have grabbed some)
+  for (const pid of cat.ALMANAC_PAGE.dustbowl.plants) delete P().almanac.s[pid];
+  check(cat.ALMANAC_PAGES.length === BIOMES.length + 1 && cat.ALMANAC_PAGES.at(-1).id === 'secret', `a page per biome plus Secret (${cat.ALMANAC_PAGES.length})`);
+  check(cat.ALMANAC_PAGES.every((pg) => pg.plants.length > 0) && new Set(cat.ALMANAC_PAGES.flatMap((pg) => pg.plants)).size === PLANTS.length, 'every plant is on exactly one page');
+  const stars = cat.ALMANAC_PAGES.filter((pg) => pg.badge).map((pg) => pg.stars);
+  check(stars[0] === 20 && stars.at(-1) === 60 && stars.every((s, i) => !i || s >= stars[i - 1]), 'page badges pay 20..60 stars, deeper pays more: ' + stars);
+  const id = 'desertrose';
+  check(!bitsOf(id), 'no Desert Rose sticker yet');
+  const s0 = P().stars;
+  const n0 = colEvents.filter((e) => e[0] === 'almanac:sticker').length;
+  // other players' plants never stamp your book
+  bus.emit('seed:grabbed', { player: other2, speciesId: id, mutation: 'gold', rarity: 'rare' });
+  bus.emit('steal:success', { thief: other2, victim: me, plant: { speciesId: id, mutation: 'diamond' } });
+  check(!bitsOf(id), "other players' grabs and steals don't count");
+  bus.emit('seed:grabbed', { player: me, speciesId: id, mutation: 'gold', rarity: 'rare' });
+  check(bitsOf(id) === 2 && P().stars === s0 + 1, 'grab a Gold Desert Rose: gold bit, +1 star (first sticker)');
+  const last = colEvents.filter((e) => e[0] === 'almanac:sticker').pop()[1];
+  check(last.speciesId === id && last.mutation === 'gold' && last.first && cat.stickerName(id, 'gold') === 'Gold Desert Rose', 'almanac:sticker "NEW! Gold Desert Rose"');
+  bus.emit('seed:grabbed', { player: me, speciesId: id, mutation: 'gold', rarity: 'rare' });
+  check(P().stars === s0 + 1 && colEvents.filter((e) => e[0] === 'almanac:sticker').length === n0 + 1, 'the same sticker again: nothing new');
+  bus.emit('plant:planted', { player: me, plant: { speciesId: id, mutation: 'normal' } });
+  check(bitsOf(id) === 3, 'plant a normal one: normal bit');
+  bus.emit('steal:success', { thief: me, victim: other2, plant: { speciesId: id, mutation: 'diamond' }, planter: null, soldFor: 10 });
+  check(bitsOf(id) === 7, 'steal a Diamond one (sold on the spot): diamond bit');
+  bus.emit('gift', { from: other2, to: me, plant: { speciesId: id, mutation: 'rainbow' } });
+  check(bitsOf(id) === 15 && cat.isMastered(bitsOf(id)), 'gifted a Rainbow one: all four finishes');
+  check(P().stars === s0 + cat.ALMANAC.firstStars + cat.ALMANAC.masterStars, `Mastered pays 5 stars (+${P().stars - s0} in all)`);
+  check(colEvents.filter((e) => e[0] === 'almanac:sticker').pop()[1].mastered === true, 'almanac:sticker says mastered');
+  bus.emit('trade:done', { a: other2, b: me, plantsA: [{ speciesId: 'cactus', mutation: 'normal' }], plantsB: [{ speciesId: 'tater', mutation: 'gold' }] });
+  check(bitsOf('cactus') === 1 && !bitsOf('tater'), 'a trade stamps what you got, not what you gave');
+  bus.emit('plant:giant', { player: me, plant: { speciesId: 'cactus', mutation: 'normal', size: 'giant' } });
+  check(bitsOf('cactus') === (1 | 32), 'a Giant Harvest adds its size stamp (32)');
+  bus.emit('plant:giant', { player: other2, plant: { speciesId: 'cactus', mutation: 'normal', size: 'titan' } });
+  check(bitsOf('cactus') === 33, "someone else's titan: no stamp");
+  // fill the Dustbowl page: every plant in all four finishes -> page badge
+  const page = cat.ALMANAC_PAGE.dustbowl;
+  check(!P().badges[page.badge], 'Dustbowl page badge not yet');
+  const sb = P().stars;
+  for (const pid of page.plants) for (const f of cat.FINISHES) bus.emit('seed:grabbed', { player: me, speciesId: pid, mutation: f, rarity: 'rare' });
+  check(!!P().badges.alm_dustbowl, 'full page: badge alm_dustbowl');
+  const masteredNow = page.plants.filter((x) => x !== id).length; // Desert Rose was already mastered
+  const newPlants = page.plants.filter((x) => x !== id && x !== 'cactus').length;
+  check(P().stars - sb === page.stars + masteredNow * cat.ALMANAC.masterStars + newPlants * cat.ALMANAC.firstStars, `page stars ${page.stars} + mastered + first stickers (+${P().stars - sb})`);
+  const view = tr.almanac().find((pg) => pg.id === 'dustbowl');
+  check(view.full && view.stickers === view.total && view.mastered === page.plants.length && view.earnedAt > 0, 'almanac() view: page full, stickers ' + view.stickers + '/' + view.total);
+  check(view.plants.find((x) => x.id === 'cactus').sizes.join() === 'giant', 'the view lists size stamps');
+  // three full pages: Almanac Ace I -> the Leaf Hat; every page: the Golden Trowel noodle
+  check(!cos.isOwned(P(), 'hat', 'leafhat') && !cos.isOwned(P(), 'noodle', 'trowel'), 'Leaf Hat and Golden Trowel locked');
+  for (const pgId of ['field', 'greenhollow']) for (const pid of cat.ALMANAC_PAGE[pgId].plants) for (const f of cat.FINISHES) tr.stamp(pid, f);
+  check(!!P().badges.almanac1 && cos.isOwned(P(), 'hat', 'leafhat'), 'three full pages: Almanac Ace I, Leaf Hat owned');
+  check(!P().badges.almanac2 && !cos.isOwned(P(), 'noodle', 'trowel'), 'not every page yet');
+  for (const pg of cat.BADGE_PAGES) for (const pid of pg.plants) for (const f of cat.FINISHES) tr.stamp(pid, f);
+  check(!!P().badges.almanac2 && cos.isOwned(P(), 'noodle', 'trowel') && cat.BADGE_PAGES.every((pg) => P().badges[pg.badge]), 'every page: all page badges, Almanac Ace II, Golden Trowel owned');
+  check(cos.sanitizeLook({ noodle: 'trowel' }, 'maddie').noodle === 'trowel' && cos.sanitizeLook({ noodle: 'nope' }, 'maddie').noodle === null, 'looks keep the special noodle id, drop unknown ones');
+  // the shared log: bits are masked and unknown species dropped when a profile loads
+  tr.flush();
+  const fresh = await import('../../src/core/profiles.js?almanac=' + Date.now());
+  const p2 = fresh.getProfile('maddie');
+  check(p2.almanac.v === 1 && p2.almanac.s[id] === 15 && p2.almanac.s.cactus === (15 | 32) && JSON.stringify(p2.almanac.s) === JSON.stringify(P().almanac.s), 'normalize keeps the almanac across a reload');
+  const p3 = fresh.replaceProfile('micah', { almanac: { v: 1, s: { daisy: 9, bogus: 3, tulip: 'x', pea: -1, sunflower: 129 } } });
+  check(JSON.stringify(p3.almanac.s) === JSON.stringify({ daisy: 9, sunflower: 1 }), 'normalize drops bad entries and masks bits: ' + JSON.stringify(p3.almanac.s));
+}
+
 // ------------------------------------------------------------------ 9. showdown results
 section('showdown');
 {

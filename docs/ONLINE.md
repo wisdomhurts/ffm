@@ -175,7 +175,18 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 * 3 daily quests (seeded by date + profile id), claim for cash (applied via `app.act`) + ⭐ stars.
 * ~30 badges (first steal, 100 steals, rainbow plant, secret plant, rebirths, Showdown win, Chaos win,
   online game, gift, trade, legendary pet, ...), each gives ⭐.
-* `openProgress(app)` (Quests | Badges tabs); `mountQuestChip(app, hudRoot)` small HUD tracker; badge toast.
+* `openProgress(app, {tab})` (Quests | Badges | Almanac tabs); `mountQuestChip(app, hudRoot)` small HUD tracker; badge toast.
+* Plant log (Seed Almanac + collections): `profile.almanac = {v: 1, s: {[speciesId]: bits}}` (1 normal, 2 gold,
+  4 diamond, 8 rainbow, 16 big, 32 giant, 64 titan), stamped for the local player on `seed:grabbed`,
+  `plant:planted`, `steal:success` (thief), `gift` / `trade:done` (plants received), `plant:giant` and the garden
+  scan in `tick()`. Client-side only: the mirror game replays the host's events and carries the garden, so it works
+  solo, as host and as a client with no protocol change. Emits `almanac:sticker`, `collection:progress`,
+  `collection:complete`; `badge:earned` also carries `{cash, banked}`. Tracker API: `almanac()`, `collections()`,
+  `stamp(speciesId, mutation, size)`. Catalog: `ALMANAC_PAGES` (from BIOMES/PLANTS), `COLLECTIONS` (Family Four),
+  page badges `alm_<biome>`, `almanac1/2`, `familyfour` (pays cash through the same pay-or-bank path as quests).
+* Exclusive cosmetics travel as ids like every look: hats `familycrown` (badge `familyfour`) and `leafhat`
+  (`almanac1`); `look.noodle` may be a special noodle id from `NOODLES` (`trowel`, badge `almanac2`) as well as a
+  colour. A client on an older build shows no hat / the family noodle colour for them.
 
 ## Social: emotes, quick chat, gifting, trading (`src/ui/emotes.js`, `src/ui/trade.js`, social agent)
 * `QUICK_CHAT` phrases and `EMOTES` list live in `src/social/catalog.js`.

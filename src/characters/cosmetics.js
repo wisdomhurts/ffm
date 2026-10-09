@@ -1,7 +1,7 @@
 // Cosmetics catalog for the Wardrobe (docs/ONLINE.md "Customization").
 //
 // Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtColor2, pants, shoes,
-//          hat: null|id, face: 'photo'|expression, acc: null|id, noodle: null|'#hex', trail: null|id,
+//          hat: null|id, face: 'photo'|expression, acc: null|id, noodle: null|'#hex'|special id (NOODLES), trail: null|id,
 //          // optional extras (older looks without them keep working):
 //          legs: 'jeans'|'pants'|'shorts'|'skirt' (default: from the shirt, as the family wore it),
 //          hatColor, accColor: '#hex' (tintable hats/accessories), num: 0..99 (jersey number) }
@@ -101,6 +101,9 @@ export const HATS = [
   { id: 'viking', name: 'Viking Helmet', price: 40, unlock: 'thief2', covers: true, h: 1.1 },
   { id: 'crown', name: 'Royal Crown', price: 60, unlock: 'champ1', h: 0.85 },
   { id: 'halo', name: 'Halo', price: 50, unlock: 'generous', h: 0.9 },
+  // badge-only rewards (progress/catalog.js): the Family Four collection and the Seed Almanac
+  { id: 'familycrown', name: 'Family Crown', price: 0, unlock: 'familyfour', h: 1.05 },
+  { id: 'leafhat', name: 'Leaf Hat', price: 0, unlock: 'almanac1', covers: true, h: 0.75 },
 ];
 
 // at: where it attaches ('face' on the head front, 'neck', 'back'); back items push the slung noodle
@@ -144,8 +147,14 @@ export const TRAILS = [
   { id: 'rainbow', name: 'Rainbow', price: 50, unlock: 'rainbow' },
 ];
 
+// Special pool noodles: a look of their own instead of a plain colour (look.noodle = id). color: the base
+// colour (wardrobe swatch, bonk effects), shine: the gradient painted along the foam, grip: a handle band.
+export const NOODLES = [
+  { id: 'trowel', name: 'Golden Trowel', price: 0, unlock: 'almanac2', color: '#ffc21a', shine: ['#fff3a0', '#ffc21a', '#d98a00'], grip: '#2fb84f' },
+];
+
 /** The catalog, by category (contract shape plus the extras the Wardrobe uses). */
-export const COSMETICS = { builds: BUILDS, hair: HAIR, shirts: SHIRTS, legs: LEGS, hats: HATS, accs: ACCS, faces: FACES, trails: TRAILS, colors: COLORS };
+export const COSMETICS = { builds: BUILDS, hair: HAIR, shirts: SHIRTS, legs: LEGS, hats: HATS, accs: ACCS, faces: FACES, trails: TRAILS, noodles: NOODLES, colors: COLORS };
 
 const byId = (list) => Object.assign(Object.create(null), Object.fromEntries(list.map((x) => [x.id, x])));
 export const HAIR_BY_ID = byId(HAIR);
@@ -155,6 +164,7 @@ export const HAT_BY_ID = byId(HATS);
 export const ACC_BY_ID = byId(ACCS);
 export const FACE_BY_ID = byId(FACES);
 export const TRAIL_BY_ID = byId(TRAILS);
+export const NOODLE_BY_ID = byId(NOODLES);
 
 // Look field -> {cat (unlock prefix), items}
 export const SLOTS = {
@@ -166,6 +176,7 @@ export const SLOTS = {
   acc: { cat: 'acc', items: ACCS },
   face: { cat: 'face', items: FACES },
   trail: { cat: 'trail', items: TRAILS },
+  noodle: { cat: 'noodle', items: NOODLES }, // plain '#hex' noodles are free and not items
 };
 
 // ------------------------------------------------------------------ ownership
@@ -238,7 +249,7 @@ export function sanitizeLook(look, base = CHARACTERS[0].id) {
     hat: l.hat == null ? null : pick(l.hat, HAT_BY_ID, null),
     face: pick(l.face, FACE_BY_ID, 'photo'),
     acc: l.acc == null ? null : pick(l.acc, ACC_BY_ID, null),
-    noodle: l.noodle == null ? null : hex(l.noodle, null),
+    noodle: l.noodle == null ? null : NOODLE_BY_ID[l.noodle] ? l.noodle : hex(l.noodle, null),
     trail: l.trail == null ? null : pick(l.trail, TRAIL_BY_ID, null),
   };
   if (LEGS_BY_ID[l.legs]) out.legs = l.legs;

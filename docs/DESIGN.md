@@ -83,6 +83,16 @@ Normal ×1, **Gold** ×2, **Diamond** ×3, **Rainbow** ×5.
 Growth: seed → sprout → bud → **grown** (only grown plants pay and can be stolen).
 Income accumulates into the garden's cash pile; step on the COLLECT pad to bank it.
 
+Collections and the Seed Almanac (src/progress): a plant counts as yours the moment you grab its seed, plant it,
+steal it (even if a full garden sells it), get it as a gift or in a trade, or have it in your garden. Each plant has
+a sticker per finish (Normal, Gold, Diamond, Rainbow) plus Big / Giant / Titan size stamps, kept for good in the
+profile. First sticker of a plant: +1 ⭐; all four finishes ("Mastered", gold frame): +5 ⭐. A page per biome (its
+rarity's plants) and a Secret page; filling a biome page (every plant Mastered) is its page badge, 20 ⭐ (Sunny
+Field) up to 60 ⭐ (Rainbow's End). Almanac Ace: 3 full pages = Leaf Hat, every page = Golden Trowel noodle.
+**Family Four** = having had all four Secret plants (any finish): 200 ⭐, cash (900 s of income, at least $50K; paid
+into a solo Endless garden, otherwise saved for the next one, like quest cash) and the Family Crown hat, with a
+full-screen celebration (it waits until you are not carrying anything).
+
 ## 4. Verbs
 
 * **Grab** (E / tap): pick a seed from a pod. Carried above your head. Speed ×0.85.

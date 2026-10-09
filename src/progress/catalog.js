@@ -9,7 +9,7 @@
 // A template: {id, tier, group, icon, on, amount?(data,p), max?(data,p), when?(data,p), gate?(ctx), make(ctx,rng) -> {target,p?}, text(target,p)}
 // `money: true` marks quests whose numbers are cash (the UI formats them as $). Targets that depend on the
 // player's progress stage are re-fitted at game start while the quest is still untouched (tracker.js).
-import { BIOMES, RARITIES, CHARACTERS, CHARACTER, PLANTS, PLAYER, REBIRTH, LOTS, TOP_TIER, SPEED_MILESTONES, speedAt, BASE, BOOST, TREADMILL } from '../config.js';
+import { BIOMES, RARITIES, CHARACTERS, CHARACTER, PLANTS, PLANT, PLAYER, REBIRTH, LOTS, TOP_TIER, SPEED_MILESTONES, speedAt, BASE, BOOST, TREADMILL } from '../config.js';
 import { EGGS, PETS } from '../pets/catalog.js';
 import { EMOTE, QUICK_CHAT } from '../social/catalog.js';
 
@@ -176,11 +176,106 @@ export function bonusReward(ctx) {
   return { stars: BONUS.stars, cash: Math.max(BONUS.minCash, nice(ctx.inc * BONUS.secs)) };
 }
 
+// ------------------------------------------------------------------ the plant log: Seed Almanac + collections
+// profile.almanac.s[speciesId] = bits, one per finish you've had of that plant (1 normal, 2 gold, 4 diamond,
+// 8 rainbow) and per Giant Harvest size (16 big, 32 giant, 64 titan). The tracker sets them the moment a plant
+// is yours (grabbed, planted, stolen, gifted or traded to you, or seen in your garden); they never reset.
+// The Almanac is a sticker book of every plant in every finish; collections (Family Four) read the same log.
+
+export const FINISHES = ['normal', 'gold', 'diamond', 'rainbow'];
+export const FINISH_BIT = { normal: 1, gold: 2, diamond: 4, rainbow: 8 };
+export const SIZE_BIT = { big: 16, giant: 32, titan: 64 };
+export const MASTERED = 15; // all four finishes
+/** Stars for the first sticker of a plant, and for Mastering it (all four finishes). */
+export const ALMANAC = { firstStars: 1, masterStars: 5 };
+
+/** A plant's log bits in a profile (0 = never had it). */
+export const logBits = (p, id) => {
+  const v = p?.almanac?.s?.[id];
+  return Number.isInteger(v) && v > 0 ? v : 0;
+};
+export const isMastered = (bits) => (bits & MASTERED) === MASTERED;
+const finishCount = (bits) => FINISHES.reduce((n, f) => n + (bits & FINISH_BIT[f] ? 1 : 0), 0);
+
+// One page per biome (its rarity's road plants), 20-60 stars for filling it, deeper = more; plants no biome
+// grows (the family Secret plants) get a page per rarity without a page badge (Family Four is their reward).
+// Built from BIOMES/PLANTS at runtime, so new zones and rarities get pages by themselves.
+export const ALMANAC_PAGES = (() => {
+  const pages = [];
+  const placed = new Set();
+  const last = Math.max(1, BIOMES.length - 1);
+  BIOMES.forEach((b, i) => {
+    const plants = PLANTS.filter((p) => p.rarity === b.rarity && !p.family && !placed.has(p.id)).map((p) => p.id);
+    if (!plants.length) return;
+    plants.forEach((id) => placed.add(id));
+    pages.push({ id: b.id, name: b.name, rarity: b.rarity, depth: i, plants, badge: 'alm_' + b.id, stars: Math.round((20 + (40 * i) / last) / 5) * 5 });
+  });
+  for (const r of RARITIES) {
+    const plants = PLANTS.filter((p) => p.rarity === r.id && !placed.has(p.id)).map((p) => p.id);
+    if (plants.length) pages.push({ id: r.id, name: r.name, rarity: r.id, depth: BIOMES.length, plants, badge: null, stars: 0 });
+  }
+  return pages;
+})();
+export const ALMANAC_PAGE = Object.assign(Object.create(null), Object.fromEntries(ALMANAC_PAGES.map((pg) => [pg.id, pg])));
+/** Pages that have a page badge (the ones "Fill every page" counts). */
+export const BADGE_PAGES = ALMANAC_PAGES.filter((pg) => pg.badge);
+/** The page a plant's sticker lives on. */
+export const pageOf = (speciesId) => ALMANAC_PAGES.find((pg) => pg.plants.includes(speciesId)) || null;
+
+/** {stickers, total, mastered, plants, full} for one page of a profile's Almanac. */
+export function pageStats(p, page) {
+  let stickers = 0;
+  let mastered = 0;
+  for (const id of page.plants) {
+    const b = logBits(p, id);
+    stickers += finishCount(b);
+    if (isMastered(b)) mastered++;
+  }
+  return { stickers, total: page.plants.length * FINISHES.length, mastered, plants: page.plants.length, full: mastered === page.plants.length };
+}
+export const fullPages = (p) => BADGE_PAGES.filter((pg) => pageStats(p, pg).full).length;
+
+/** Display name of a sticker: "Gold Desert Rose", "Desert Rose". */
+export function stickerName(speciesId, mutation = 'normal', size = null) {
+  const sp = PLANT[speciesId];
+  const fin = mutation && mutation !== 'normal' ? mutation[0].toUpperCase() + mutation.slice(1) + ' ' : '';
+  const sz = size === 'giant' || size === 'titan' ? size.toUpperCase() + ' ' : size === 'big' ? 'Big ' : '';
+  return sz + fin + (sp?.name || 'Plant');
+}
+
+// Collections: a set of plants with a reward for having them all. One shape for every collection:
+// {id, name, icon, items: [{id, name, family}], has(profile, item), reward: {stars, cashSecs, minCash}, badge, hat, how}.
+// Each collection is also a badge family (id = `badge`, stat = items collected, one tier = all of them) whose
+// badge pays the reward and unlocks the exclusive Wardrobe item (cosmetics `unlock`).
+export const COLLECTIONS = [
+  {
+    id: 'familyfour', name: 'Family Four', icon: 'crown4', badge: 'familyfour', hat: 'familycrown',
+    items: PLANTS.filter((p) => p.rarity === 'secret').map((p) => ({ id: p.id, name: p.name, family: p.family || null })),
+    has: (p, item) => logBits(p, item.id) > 0,
+    reward: { stars: 200, cashSecs: 900, minCash: 50000 },
+    how: 'Collect all four family Secret plants',
+  },
+];
+export const COLLECTION = Object.assign(Object.create(null), Object.fromEntries(COLLECTIONS.map((c) => [c.id, c])));
+export const collectionCount = (p, col) => col.items.reduce((n, it) => n + (col.has(p, it) ? 1 : 0), 0);
+/** The collection a badge id belongs to (its celebration replaces the badge toast). */
+export const collectionOfBadge = (id) => COLLECTIONS.find((c) => c.badge === id) || null;
+
 // ------------------------------------------------------------------ badges
 // A badge family has one or more tiers; each tier is its own badge id (family id, or id + tier number).
-// stat(c, best, profile) reads the lifetime counters (see tracker.js COUNTERS).
+// stat(c, best, profile) reads the lifetime counters (see tracker.js COUNTERS). `cash: {secs, min}` = the badge
+// also pays cash (like quest cash: secs of the player's income, at least min), paid or banked by the tracker.
 
 const unlocks = (c, b, p) => (Array.isArray(p?.unlocks) ? p.unlocks.length : 0);
+
+const COLLECTION_BADGES = COLLECTIONS.map((col) => ({
+  id: col.badge, name: col.name, icon: col.icon, collection: col.id, stat: (c, b, p) => collectionCount(p, col), tiers: [col.items.length],
+  stars: [col.reward.stars], cash: { secs: col.reward.cashSecs, min: col.reward.minCash }, how: () => col.how,
+}));
+const PAGE_BADGES = BADGE_PAGES.map((pg) => ({
+  id: pg.badge, name: `${pg.name} Page`, icon: 'almanac', page: pg.id, stat: (c, b, p) => pageStats(p, pg).mastered, tiers: [pg.plants.length],
+  stars: [pg.stars], how: () => `Collect every ${pg.name} plant in all 4 finishes`,
+}));
 
 export const BADGES = [
   { id: 'firstseed', name: 'First Seed', icon: 'seed', stat: (c) => c.seeds, tiers: [1], stars: [5], how: () => 'Grab your first seed on the Seed Road' },
@@ -205,6 +300,7 @@ export const BADGES = [
   { id: 'rainbow', name: 'Rainbow Hunter', icon: 'rainbow', stat: (c) => c.rainbowOwned, tiers: [1], stars: [30], how: () => 'Own a Rainbow plant' },
   { id: 'secret', name: 'Secret Keeper', icon: 'keyhole', stat: (c) => c.secretOwned, tiers: [1], stars: [50], how: () => 'Own a Secret family plant' },
   { id: 'namesake', name: "That's Me!", icon: 'family', stat: (c) => c.namesakeOwned, tiers: [1], stars: [60], how: () => 'Own your own family Secret plant' },
+  ...COLLECTION_BADGES,
   { id: 'landlord', name: 'Full Garden', icon: 'planter', stat: (c) => c.plantersMax, tiers: [10], stars: [40], how: () => 'Unlock all 10 planters' },
   { id: 'landbaron', name: 'Land Baron', icon: 'planter', stat: (c) => c.lotsMax, tiers: [1, LOTS.count], stars: [40, 100], how: (n) => (n === 1 ? 'Buy a garden lot' : `Buy all ${n} garden lots`) },
   { id: 'locksmith', name: 'Locksmith', icon: 'lock', stat: (c) => c.locks, tiers: [25], stars: [15], how: (n) => `Lock your garden ${n} times` },
@@ -229,6 +325,10 @@ export const BADGES = [
   { id: 'fashion', name: 'Fashionista', icon: 'hat', stat: unlocks, tiers: [5], stars: [25], how: (n) => `Own ${n} Wardrobe items` },
   { id: 'streak', name: 'Daily Streak', icon: 'flame', stat: (c) => c.streakBest, tiers: [3, 7, 30], stars: [20, 50, 150], how: (n) => `Finish a quest ${n} days in a row` },
   { id: 'questmaster', name: 'Quest Master', icon: 'scroll', stat: (c) => c.questsDone, tiers: [10, 50, 200], stars: [20, 50, 150], how: (n) => `Finish ${n} daily quests` },
+  // Seed Almanac: 3 full pages unlock the Leaf Hat, every page the Golden Trowel noodle (cosmetics `unlock`)
+  { id: 'almanac', name: 'Almanac Ace', icon: 'almanac', stat: (c, b, p) => fullPages(p), tiers: [Math.min(3, BADGE_PAGES.length), BADGE_PAGES.length], stars: [40, 150],
+    how: (n) => (n === BADGE_PAGES.length ? 'Fill every Seed Almanac page' : `Fill ${n} Seed Almanac pages`) },
+  ...PAGE_BADGES,
 ];
 export const BADGE = Object.assign(Object.create(null), Object.fromEntries(BADGES.map((b) => [b.id, b])));
 
@@ -239,6 +339,9 @@ export const badgeName = (fam, i) => (fam.tiers.length === 1 ? fam.name : `${fam
 /** Every badge id with its family and tier. */
 export const ALL_BADGES = BADGES.flatMap((fam) => fam.tiers.map((goal, i) => ({
   id: badgeId(fam, i), family: fam.id, tier: i, tiers: fam.tiers.length, goal, name: badgeName(fam, i), icon: fam.icon,
-  stars: fam.stars[i] ?? fam.stars[fam.stars.length - 1], how: fam.how(goal),
+  stars: fam.stars[i] ?? fam.stars[fam.stars.length - 1], how: fam.how(goal), cash: fam.cash || null,
 })));
 export const BADGE_BY_ID = Object.assign(Object.create(null), Object.fromEntries(ALL_BADGES.map((b) => [b.id, b])));
+
+/** Cash a badge pays at this progress stage (0 for star-only badges). `b` = a badge family or ALL_BADGES entry. */
+export const badgeCash = (b, ctx) => (b?.cash ? Math.max(b.cash.min, nice(ctx.inc * b.cash.secs)) : 0);
