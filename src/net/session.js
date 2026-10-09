@@ -603,8 +603,9 @@ class Online {
       const name = sanitizeName(prof.name, 'Player');
       this.room = { code, private: !!priv, faceOk: !!priv, name: `${name}'s Garden`, hostPid: this.pid, hostName: name, createdAt: Date.now() };
       const mySlot = Math.max(0, CHARACTERS.findIndex((c) => c.id === prof.base));
-      // Settings > Computer players: how many of the other gardens get a bot (the rest wait for friends, empty)
-      const maxBots = clampBots(settings.onlineBots);
+      // Settings > Computer players: how many of the other gardens get a bot (the rest wait for friends, empty).
+      // Public rooms (Quick Play, the room list) are people only: no computer players there.
+      const maxBots = priv ? clampBots(settings.onlineBots) : 0;
       let bots = 0;
       const slots = CHARACTERS.map((c, i) => (i === mySlot ? { kind: 'local', profile: prof, pid: this.pid } : { kind: bots++ < maxBots ? 'bot' : 'empty' }));
       const game = this._enterWorld({ mode: 'endless', difficulty: settings.difficulty, slots });
@@ -1053,11 +1054,11 @@ class Online {
     return this.world ? this.world.maxBots : clampBots(settings.onlineBots);
   }
 
-  /** Host only: change the room's number of computer players (also remembered for the next room). */
+  /** Host of a private room only: change its number of computer players (also remembered for the next room). */
   setBots(n) {
     const v = clampBots(n);
     setSetting('onlineBots', v);
-    if (!this.isHost) return false;
+    if (!this.isHost || !this.room?.private) return false;
     const changed = this.role.setMaxBots(v);
     if (changed) this._announce();
     return changed;

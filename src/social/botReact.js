@@ -1,9 +1,11 @@
-// Family bots react to people's emotes and quick chat. OWNER: social agent (docs/ONLINE.md).
+// Family bots react to people's emotes, quick chat and typed chat. OWNER: social agent (docs/ONLINE.md).
 //
 // reactToSocial(game, bot, event) is called (by main.js, on the host / offline only) for every bot when
-// a person emotes ({type:'emote', player, id}) or says a quick-chat phrase ({type:'chat', player, text,
-// quick:true, phrase}). The first call for an event plans the reactions of all bots at once, so they
-// take turns instead of all answering together; each call then hands that bot its part.
+// a person emotes ({type:'emote', player, id}), says a quick-chat phrase ({type:'chat', player, text,
+// quick:true, phrase}) or types a line ({type:'chat', player, text, typed:true}: keywords pick what it is
+// about, see TYPED_INTENTS; a bot called by name answers first). The first call for an event plans the
+// reactions of all bots at once, so they take turns instead of all answering together; each call then
+// hands that bot its part.
 // Reactions play out over the next seconds through socialIntent(): a bot that waves back or dances
 // along stops for a moment and turns to face the person; replies are ordinary 'chat' events.
 // Cooldowns and a spam guard keep it charming rather than noisy. All randomness uses game.rng.
@@ -15,7 +17,7 @@ import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { getBoard } from '../ai/blackboard.js';
 import { EMOTE, DANCES } from './catalog.js';
-import { REPLIES, EMOTE_LINES, SIGNATURE_DANCE } from './replies.js';
+import { REPLIES, EMOTE_LINES, SIGNATURE_DANCE, TYPED_INTENTS, TYPED_REPLIES, BOT_CALLS } from './replies.js';
 
 export const REACT = {
   emoteRange: 25, // studs: bots this close notice an emote
@@ -36,6 +38,23 @@ const BUSY = new Set(['return', 'steal', 'practice', 'defend', 'mug', 'lurk']);
 const FAR_OK = new Set(['hi', 'bye', 'gg']);
 // phrases that only make sense as an answer to something: replied to less often
 const SHY = new Set(['yes', 'no']);
+const TYPED_CHANCE = 0.75; // how often a typed line gets an answer (greetings as often as quick chat; a bot called by name: always)
+// a gesture to go with some replies (quick-chat phrase / typed-line topic -> emote)
+const GESTURE = { hi: 'wave', bye: 'wave', gg: 'cheer', oops: 'laugh', nicesteal: 'laugh', wow: 'cheer', funny: 'laugh', joke: 'laugh', love: 'cheer' };
+
+const lower = (text) => String(text || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/** What a typed line is about (a TYPED_INTENTS id), or null. */
+export function typedIntent(text) {
+  const t = lower(text);
+  return TYPED_INTENTS.find((x) => x.re.test(t))?.id || null;
+}
+
+/** Does a typed line call this bot by name ("hi mom", "Micah, race me!")? */
+export function callsBot(text, bot) {
+  const words = new Set(lower(text).split(/[^a-z]+/));
+  return [lower(bot.name), ...(BOT_CALLS[bot.id] || [])].some((w) => w && words.has(w));
+}
 
 const states = new WeakMap(); // game -> social state
 
@@ -82,14 +101,14 @@ function pickLine(game, table, bot, who) {
 }
 
 /**
- * Called for each bot when a person emotes or uses quick chat. Safe to call with any event: bots,
- * free-typed chat and unknown ids are ignored.
+ * Called for each bot when a person emotes, uses quick chat or types a line. Safe to call with any event:
+ * bots, chat that is neither quick nor typed (the bots' own lines) and unknown ids are ignored.
  */
 export function reactToSocial(game, bot, e) {
   if (!game || !bot || bot.kind !== 'bot' || !e?.player || e.player.kind === 'bot' || e.player === bot) return;
-  if (e.type === 'chat' && !e.quick) return;
+  if (e.type === 'chat' && !e.quick && !e.typed) return;
   const s = stateOf(game);
-  const key = `${e.type}|${e.player.slot}|${e.id || e.phrase || ''}|${game.time}`;
+  const key = `${e.type}|${e.player.slot}|${e.id || e.phrase || e.text || ''}|${game.time}`;
   if (s.lastKey !== key) {
     s.lastKey = key;
     s.plan = plan(game, s, e);
@@ -198,21 +217,26 @@ function plan(game, s, e) {
     return out;
   }
 
-  // quick chat
-  const id = e.phrase;
-  const table = REPLIES[id];
+  // quick chat, or a typed line (its topic picks the table; a bot called by name answers first, from anywhere)
+  let id = e.phrase;
+  let called = null;
+  if (e.typed) {
+    called = bots.find((b) => b.controller.goal?.type !== 'practice' && callsBot(e.text, b)) || null;
+    id = typedIntent(e.text) || (called ? 'huh' : null);
+  }
+  const table = e.typed ? TYPED_REPLIES[id] || REPLIES[id] : REPLIES[id];
   if (!table) return out;
-  let order = talkers;
+  let order = called ? [called, ...talkers.filter((b) => b !== called)] : talkers;
   if (!order.length && FAR_OK.has(id)) {
     const any = bots.filter((b) => b.controller.goal?.type !== 'practice');
     if (any.length && rng.chance(0.6)) order = [rng.pick(any)];
   }
   const first = order[0];
   if (!first) return out;
-  const delay = rng.range(0.7, 1.3);
-  if (!say(first, table, delay, SHY.has(id) ? 0.4 : 0.92)) return out;
+  const delay = rng.range(0.7, 1.3) + (e.typed ? 0.5 : 0); // reading takes a moment
+  if (!say(first, table, delay, called ? 1 : SHY.has(id) ? 0.4 : e.typed && !FAR_OK.has(id) ? TYPED_CHANCE : 0.92)) return out;
   // a gesture to go with some replies, when the bot is close enough to be seen
-  const gesture = { hi: 'wave', bye: 'wave', gg: 'cheer', oops: 'laugh', nicesteal: 'laugh', wow: 'cheer' }[id];
+  const gesture = GESTURE[id];
   if (gesture && free.includes(first) && dist(first, who) <= REACT.emoteRange && rng.chance(0.6)) {
     emote(first, gesture, delay - 0.2, EMOTE[gesture].dur + 0.3);
   }

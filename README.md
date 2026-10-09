@@ -7,7 +7,12 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * Nine worlds up the Seed Road, from Sunny Field to Frostfall, Candy Canyon and the Cloud Kingdom.
 * Train Speed as high as you like (there is no top level), and buy the three FOR SALE lots at the back of
   your garden for up to 25 planters.
-* Online rooms with up to 4 players; the host picks how many computer players fill the empty gardens (None to All).
+* Online rooms with up to 4 players. In a **private room** the host picks how many computer players fill the empty
+  gardens (None to All); **public rooms** (Quick Play and the room list) are people only, no computer players.
+* **Chat**: type messages to the family in solo games and to friends in private rooms (Enter, or the chat button),
+  plus quick-chat phrases everywhere. Every message goes through a kid-safe filter (no bad words, links, emails or
+  phone numbers), and the family bots answer some of them. Public rooms stay on quick chat unless a parent allows
+  typing in Settings > Chat; you can mute anyone in a room.
 * 37 pets from 10 eggs (Farm, Ocean, Frost, Candy, Cloud...), with a team of up to 3 at once. Eggs also float
   down from the sky as free **egg drops** (the Rainbow Egg only comes that way), plus an Egg Rain weather event.
 * **Name your pets**: right when they hatch, or any time in My Pets. The name floats over your pet in the world
@@ -38,6 +43,7 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 | Boost | Shift | lightning button | RT |
 | Speed gear | X | gear chip | LT |
 | Items | 1–5 | tap hotbar | Y / bumpers |
+| Chat | Enter to type (Esc closes), T quick chat, G emotes | chat button, smiley button | |
 | Pause | Esc | pause button | Start |
 | Sound | M = music on/off | tap the speaker (hold: mute all) | pause menu: D-pad, left/right, A |
 

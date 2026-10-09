@@ -95,7 +95,8 @@ try {
   await step(0.5);
   hub.latency = 0.04;
   check(B.online.isClient && C.online.isClient && slotOf(B) === 1 && slotOf(C) === 2, `friends got their family slots (Bob ${slotOf(B)}, Cleo ${slotOf(C)})`);
-  check(A.game.players.map((p) => p.kind).join() === 'local,remote,remote,bot', 'host sees two remote players and a bot: ' + A.game.players.map((p) => p.kind));
+  // (public rooms are people only: the 4th garden waits empty instead of getting a computer player)
+  check(A.game.players.map((p) => p.kind).join() === 'local,remote,remote,empty' && A.game.maxBots === 0, 'host sees two remote players and an empty garden (no bots in public rooms): ' + A.game.players.map((p) => p.kind));
   check(B.game.players.map((p) => p.name).join() === 'Alice,Bob,Cleo,Micah', 'names reach everyone: ' + B.game.players.map((p) => p.name));
   check(B.game.players[0].faceKey === 'r_' + A.online.pid && faceInfo('r_' + A.online.pid).name === 'Alice', 'remote players use r_<pid> face keys');
   check(C.online.members.length === 3 && C.online.members.find((m) => m.isHost)?.name === 'Alice', 'member list has the host');
@@ -110,9 +111,8 @@ try {
   const monErr = Math.max(...A.game.monsters.map((m, i) => Math.hypot(m.x - B.game.monsters[i].x, m.z - B.game.monsters[i].z)));
   check(monErr < 8, `monsters follow the host (max ${monErr.toFixed(2)} studs apart, drawn 150 ms behind)`);
   check(Math.abs(B.game.time - A.game.time) < 0.3, `clocks agree (host ${A.game.time.toFixed(2)}, client ${B.game.time.toFixed(2)})`);
-  const bot = 3;
-  const botErr = Math.hypot(A.game.players[bot].pos.x - B.game.players[bot].pos.x, A.game.players[bot].pos.z - B.game.players[bot].pos.z);
-  check(botErr < 6, `bots glide on clients (${botErr.toFixed(2)} studs behind)`);
+  // (bots gliding on clients is checked in a private room, section 15: public rooms have none)
+  check(B.game.players[3].kind === 'empty' && !B.game.players[3].present && B.game.players[3].pos.z < -500, 'clients see the empty garden parked out of play too');
 
   // ---------------------------------------------------------------- 3. client movement is accepted
   const b0 = { ...me(B).pos };
@@ -246,13 +246,13 @@ try {
   await step(0.4);
   check(A.game.gardens[sC].planters.some((pl) => pl.plant?.uid === 99002) && gifts.length === 1, 'Bob gifted Cleo a plant');
 
-  // ---------------------------------------------------------------- 8. leaving: the slot goes back to a bot
+  // ---------------------------------------------------------------- 8. leaving: the slot is freed (empty: a public room has no bots)
   await step(0.5);
   C.quitToTitle();
   live.delete(C);
   await step(0.5);
-  check(A.game.players[sC].kind === 'bot' && B.game.players[sC].kind === 'bot', 'Cleo left: her garden is a bot again (host + Bob)');
-  check(A.game.gardens[sC].planters.every((pl) => !pl.plant), 'the bot starts with a fresh garden');
+  check(A.game.players[sC].kind === 'empty' && B.game.players[sC].kind === 'empty', 'Cleo left: her garden is empty again, no bot moves in (host + Bob)');
+  check(A.game.gardens[sC].planters.every((pl) => !pl.plant), 'the empty garden starts fresh');
   const saved = C.profile.online;
   check(saved?.garden?.planters?.some((pl) => pl?.plant?.speciesId === sp.id), 'Cleo\'s online garden (with the stolen plant) was saved to her profile');
   live.add(C);
@@ -268,7 +268,7 @@ try {
   hub.setDown(C.transport);
   await step(13);
   check(C.online.isHost, 'offline, Cleo\'s device carried on alone (it hosts its own copy)');
-  check(A.game.players[sC].kind === 'bot', 'the real host freed her garden after she vanished');
+  check(A.game.players[sC].kind === 'empty', 'the real host freed her garden after she vanished');
   hub.setDown(C.transport, false);
   await step(3);
   check(A.online.isHost && B.online.isClient && B.online.room.hostPid === A.online.pid, 'back online: the real host stays host, Bob never switched');
@@ -316,7 +316,7 @@ try {
   await step(1.5);
   H = A;
   check(A.online.isHost && B.online.room.hostPid === A.online.pid && C.online.room.hostPid === A.online.pid, 'Alice hosts again');
-  check(A.game.players.map((p) => p.kind).join() === 'local,remote,remote,bot', 'everyone kept their gardens: ' + A.game.players.map((p) => p.kind));
+  check(A.game.players.map((p) => p.kind).join() === 'local,remote,remote,empty', 'everyone kept their gardens (still no bots): ' + A.game.players.map((p) => p.kind));
   check(A.game.gardens[sC].planters.some((pl) => pl.plant?.speciesId === sp.id), 'Cleo still has the plant she stole');
   void aPlants;
 
@@ -335,7 +335,7 @@ try {
   check(B.online.isHost, `Bob took over as host after ${t.toFixed(2)} s`);
   await step(1);
   check(C.online.isClient && C.online.room.hostPid === B.online.pid, 'Cleo follows the new host');
-  check(B.game.players[aSlot].kind === 'bot', 'the old host\'s garden went to a bot');
+  check(B.game.players[aSlot].kind === 'empty' && B.game.maxBots === 0, 'the old host\'s garden is empty now (the new host adds no bots to a public room)');
   check(B.game.gardens[sB].planters.map((pl) => pl.plant?.speciesId || null).join() === bPlants, 'Bob\'s garden survived the host change');
   check(B.game.gardens[sC].planters.map((pl) => pl.plant?.speciesId || null).join() === cPlantsBefore, 'Cleo\'s garden survived the host change');
   const tBefore = B.game.time;
@@ -418,7 +418,7 @@ try {
   check(B.online.kick(E.online.pid), 'host kicks Eve');
   await step(0.5);
   check(!E.online.room && errors.some((e) => e.code === 'kicked'), 'Eve is out with a friendly note');
-  check(B.game.players.filter((p) => p.kind !== 'bot').length === 3, 'her slot is a bot again');
+  check(B.game.players.filter((p) => p.isPlayer).length === 3 && !B.game.players.some((p) => p.kind === 'bot'), 'her slot is free again (empty: no bots in a public room)');
   B.quitToTitle(); // polite goodbye names the next host
   live.delete(B);
   await step(1.5);
@@ -468,6 +468,11 @@ try {
     check(await R.online.joinRoom(codeQ, { typed: true }), 'Rosa joins for the base / pets / boost checks');
     await step(1);
     const rs = slotOf(R);
+    // a private room keeps its computer players (Settings: All), and they glide on the members' devices
+    const bot = Q.game.players.findIndex((p) => p.kind === 'bot');
+    check(bot >= 0 && R.game.players[bot].kind === 'bot', 'the private room has computer players: ' + Q.game.players.map((p) => p.kind));
+    const botErr = Math.hypot(Q.game.players[bot].pos.x - R.game.players[bot].pos.x, Q.game.players[bot].pos.z - R.game.players[bot].pos.z);
+    check(botErr < 6, `bots glide on clients (${botErr.toFixed(2)} studs behind)`);
     const onHost = () => Q.game.players[rs];
     const me = R.game.players[rs];
     // her garden: walk in and upgrade the base from her device (the host applies it)

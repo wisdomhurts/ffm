@@ -145,6 +145,12 @@ export function buildSettings(app) {
   });
   row('Tutorial', resetBtn, 'Shows the checklist and key hints again');
 
+  // Chat (social/chat.js): typed chat on this device, and a parents' switch for typed chat in public rooms
+  rows.push(h('div', { class: 'set-sec', role: 'heading', 'aria-level': '3', text: 'Chat' }));
+  row('Typed chat', toggleCtl('chatOn', 'Typed chat'), 'Type messages in solo games and private rooms. Quick chat always works.');
+  row('Typed chat in public rooms', toggleCtl('chatPublic', 'Typed chat in public rooms'),
+    'For parents: off = public rooms use quick chat only. On = your child can type there too (bad words, links and numbers are blocked).');
+
   const el = h('div', { class: 'set-body' },
     h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.gear }), h('h2', { text: 'Settings' })),
     // a feature that isn't switched on yet goes last

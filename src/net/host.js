@@ -7,6 +7,7 @@ import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { BotController } from '../ai/bot.js';
+import { postTyped } from '../social/chat.js';
 import {
   RATES, TIMEOUTS, MAX_HUMANS, EventCodec, forwarded, packPlayers, packMonsters, packProjectiles, sectionize, signature,
   stringifyR, num, int, isId, isObj, own, sanitizeLook, sanitizePet, sanitizePetTeam, vetSlotData, RateLimiter, upTopic, relay, isPid, predict,
@@ -224,6 +225,7 @@ export class HostRole {
         p.controller = new BotController(p.char.personality, g.difficultyId);
       }
     }
+    if (!this.s.room?.private) this.fillSlots(); // (public rooms never keep a computer player)
     this.order = this.order.filter((pid) => pid === this.s.pid || this.members.has(pid));
     this.order = [this.s.pid, ...this.order.filter((x) => x !== this.s.pid)];
     for (const pid of this.members.keys()) if (!this.order.includes(pid)) this.order.push(pid);
@@ -242,10 +244,12 @@ export class HostRole {
 
   /**
    * Gardens nobody plays get a computer player, up to game.maxBots (the room's "Computer players" setting);
-   * the rest stay empty. Bots that are over the limit leave (the last gardens first).
+   * the rest stay empty. Bots that are over the limit leave (the last gardens first). Public rooms (Quick
+   * Play, the room list) are people only: no computer players there, whatever was asked.
    */
   fillSlots() {
     const g = this.game;
+    if (!this.s.room?.private) g.maxBots = 0;
     const open = g.players.filter((p) => !p.isPlayer);
     const want = Math.max(0, Math.min(g.maxBots, open.length));
     let bots = open.filter((p) => p.kind === 'bot').length;
@@ -270,7 +274,7 @@ export class HostRole {
   setMaxBots(n) {
     const g = this.game;
     const v = Math.max(0, Math.min(CHARACTERS.length - 1, Math.round(Number(n) || 0)));
-    if (v === g.maxBots) return false;
+    if (v === g.maxBots || !this.s.room?.private) return false;
     g.maxBots = v;
     this.fillSlots();
     return true;
@@ -546,6 +550,7 @@ export class HostRole {
       }
       case 'addCash':
         return false; // quest cash is banked on the device for solo play; online nobody prints money
+      case 'chat': return postTyped(g, p, args[0], this.s.clock); // typed chat: filtered again, rate limited per player
       case 'emote':
       case 'say': {
         const id = args[0];

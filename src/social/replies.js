@@ -1,4 +1,4 @@
-// What the family bots say back to quick chat and emotes, in each family member's voice.
+// What the family bots say back to quick chat, typed chat and emotes, in each family member's voice.
 // Dorian = the dad (Tycoon), Esther = the mom (Guardian), Mati = the girl (Speedster),
 // Micah = the boy (Sneaky Thief). {name} = the person they're answering. Keep every line kid-safe.
 
@@ -145,3 +145,93 @@ export const EMOTE_LINES = {
 
 /** Each family member's favourite dance (the avatar animations: dance1 Dance, dance2 Robot, dance3 Floss). */
 export const SIGNATURE_DANCE = { dorian: 'dance2', esther: 'dance1', maddie: 'dance3', micah: 'dance1' };
+
+// Typed chat (social/chat.js): what a typed line is about, by keywords. First match wins; the bots answer
+// with that table (TYPED_REPLIES below, or the quick-chat table of the same name in REPLIES). Matched on
+// the line in lower case with accents dropped.
+export const TYPED_INTENTS = [
+  { id: 'hi', re: /\b(hi+|hey+|hel+o+|hiya|howdy|yo|sup|good (morning|afternoon|evening))\b/ },
+  { id: 'bye', re: /\b(bye+|goodbye|see (ya|you)|gtg|g2g|got to go|gotta go|good ?night)\b/ },
+  { id: 'gg', re: /\b(gg+|good game|well played|wp)\b/ },
+  { id: 'thanks', re: /\b(thanks?|thank (you|u)|thx|ty)\b/ },
+  { id: 'sorry', re: /\b(sorry|my bad|soz)\b/ },
+  { id: 'joke', re: /\b(jokes?|riddle)\b/ },
+  { id: 'funny', re: /\b(lo+l+|(ha){2,}h?|(he){2,}h?|lmao|funny|hilarious)\b|😂|🤣/u },
+  { id: 'love', re: /\b(love|luv|ily)\b|❤|💕|💖|😍|🥰/u },
+  { id: 'howto', re: /\b(how (do|can|to)|what do i|stuck|tips?)\b/ },
+  { id: 'help', re: /\b(help+|save me)\b/ },
+  { id: 'steal', re: /\b(steal|steals|stealing|stole|stolen|thief|thieves|rob|robbed|robbing|robber)\b/ },
+  { id: 'race', re: /\b(race|racing|fastest|faster)\b/ },
+  { id: 'trade', re: /\b(trade|trading|swap)\b/ },
+  { id: 'pet', re: /\b(pets?|eggs?|puppy|kitty|dragon|unicorn)\b/ },
+  { id: 'best', re: /\b(i win|i won|winning|the best|number one)\b/ },
+  { id: 'nice', re: /\b(nice|cool|awesome|great|amazing|good job|well done)\b/ },
+  { id: 'wow', re: /\b(wo+w+|whoa+|omg)\b/ },
+];
+
+// Replies to typed lines that quick chat has no phrase for. 'huh' = someone called a bot by name about
+// nothing it understood. Same rules as above: short, kid-safe, in each family member's voice.
+export const TYPED_REPLIES = {
+  sorry: {
+    dorian: ['No worries, champ!', 'All good, {name}!'],
+    esther: ["It's okay, sweetie!", 'Apology accepted!'],
+    maddie: ["It's fine! Let's play!", 'No biggie!'],
+    micah: ['Hehe, okay!', 'I forgive you... for now.'],
+  },
+  joke: {
+    dorian: ['Why did the seed go to school? To grow up!', 'What do you call a sad strawberry? A blueberry!', 'Plant jokes always grow on people!'],
+    esther: ['What did the big flower say to the little one? Hi, bud!', 'Why are gardeners good at math? Square roots!'],
+    maddie: ['What has ears but cannot hear? Corn! Hahaha!', 'Knock knock! Lettuce. Lettuce in, it is cold!'],
+    micah: ['Why did the tomato turn red? It saw the salad dressing!', 'What do you call a sneaky seed? A sprout spy! Hehe.'],
+  },
+  funny: {
+    dorian: ['Ha! Good one.', 'Hahaha! Dad approves.'],
+    esther: ['Hehe, you silly!', 'You crack me up!'],
+    maddie: ['LOL!', 'Hahaha! So funny!'],
+    micah: ['Hehehe!', 'LOL! Good one!'],
+  },
+  love: {
+    dorian: ['Love you too, champ!', 'Aww, you made my day!'],
+    esther: ['Love you too, sweetie!', 'Aww! Big hugs!'],
+    maddie: ['Aww! Love you too!', 'Yay! Hugs!'],
+    micah: ['Aww... love you too. Hehe.', 'Hugs! But I am still stealing.'],
+  },
+  howto: {
+    dorian: ['Grab seeds, plant them, collect the cash, champ!', 'Buy speed at the shop. Fast feet, big money!'],
+    esther: ['Plant seeds in your garden and lock it, sweetie!', 'Bonk thieves before they get away!'],
+    maddie: ['Run down the road and grab the shiny seeds!', 'Buy speed! Speed is everything!'],
+    micah: ['Sneak into gardens and grab plants! Hehe.', 'Steal when nobody is looking. Shh!'],
+  },
+  steal: {
+    dorian: ['Business is business, champ!', 'Lock your garden or I just might!'],
+    esther: ['Keep your lock on, sweetie!', 'Chase them and bonk them!'],
+    maddie: ['Catch me if you can!', "I'm too fast to catch!"],
+    micah: ['Who, me? I never steal. Hehe.', 'Sneaky Micah strikes again!'],
+  },
+  pet: {
+    dorian: ['Pets give great boosts, champ!', 'A good pet is a smart investment!'],
+    esther: ['Aww, pets are the cutest!', 'Take good care of your pet, sweetie!'],
+    maddie: ['I want ALL the pets!', 'Pets are so cute!'],
+    micah: ['My pet helps me sneak. Hehe.', 'Pets are the best sidekicks!'],
+  },
+  best: {
+    dorian: ["We'll see about that, champ!", 'The game is not over yet!'],
+    esther: ["You're all winners to me!", 'So proud of you, sweetie!'],
+    maddie: ['Nope, I am the best! Hehe!', 'Not if I catch up first!'],
+    micah: ['Not for long! Hehe.', 'Enjoy it while it lasts!'],
+  },
+  huh: {
+    dorian: ['Yes, {name}?', 'What is it, champ?'],
+    esther: ['Yes, sweetie?', "I'm listening, {name}!"],
+    maddie: ['What? What?!', 'Yeah, {name}?'],
+    micah: ['Huh? Who, me?', 'What did I do?'],
+  },
+};
+
+/** Words that call a family bot by name (their name, and what the kids call them). */
+export const BOT_CALLS = {
+  dorian: ['dorian', 'dad', 'daddy', 'papa'],
+  esther: ['esther', 'mom', 'mommy', 'mum', 'mummy', 'mama'],
+  maddie: ['mati', 'maddie'],
+  micah: ['micah'],
+};

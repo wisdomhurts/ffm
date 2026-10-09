@@ -25,7 +25,8 @@
 //   kicked  {to}                                host -> member: removed from the room
 import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL } from '../config.js';
 import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
-import { REPLIES, EMOTE_LINES } from '../social/replies.js';
+import { REPLIES, EMOTE_LINES, TYPED_REPLIES } from '../social/replies.js';
+import { isTypedLine } from '../social/chat.js';
 import { PRACTICE_LINES } from '../ai/personalities.js';
 import { PETS, PET, EGG } from '../pets/catalog.js';
 import { sanitizePetName } from '../pets/names.js';
@@ -223,6 +224,7 @@ function templates() {
   walk(CHAT);
   walk(REPLIES);
   walk(EMOTE_LINES);
+  walk(TYPED_REPLIES);
   walk(PRACTICE_LINES);
   // {name}, {plant}, {a_plant}... = a player name (sanitizeName charset) or a plant name
   const slot = "[\\p{L}\\p{N} _.'’-]{1,40}";
@@ -462,9 +464,11 @@ export class EventCodec {
 
   /**
    * Last line of defence for what an event may say. Free text only where the game itself writes it
-   * (quick-chat phrases are looked up locally, bot lines must look like clean game lines).
+   * (quick-chat phrases are looked up locally, bot lines must look like clean game lines), and a person's
+   * typed chat line ({typed: true}) only when `typed` says this device takes typed chat in this room
+   * (social/chat.js typedChatAllowed) and the chat filter leaves the line exactly as it is.
    */
-  static vet(name, e) {
+  static vet(name, e, { typed = false } = {}) {
     if (!isObj(e)) return null;
     for (const [k, v] of Object.entries(e)) {
       if (typeof v !== 'string' || v === '') continue;
@@ -481,7 +485,11 @@ export class EventCodec {
       if (e.quick) {
         if (!own(PHRASE, e.phrase)) return null;
         e.text = PHRASE[e.phrase].text;
+        delete e.typed;
+      } else if (e.typed === true) {
+        if (!typed || !p.isPlayer || !isTypedLine(e.text)) return null;
       } else if (p.kind !== 'bot' || !isBotLine(e.text)) return null;
+      else delete e.typed;
     }
     if (name === 'emote' && !own(EMOTE, e.id)) return null;
     return e;

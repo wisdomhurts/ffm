@@ -10,7 +10,10 @@ changes to files you don't own (describe them in your report under `sharedChange
   **private** room and share its 5-letter code.
 * Photo Booth faces are shared **only in private rooms** (opt-in per player). Public rooms always show
   cartoon faces. Real family photos never leave a device otherwise.
-* Chat is **quick-chat phrases + emotes only** (no free typing). Player names go through `sanitizeName`.
+* Chat: quick-chat phrases + emotes everywhere; **typed chat** in solo games and private rooms (filtered, see
+  "Typed chat" below). Public rooms stay on quick chat unless a parent allows typing there (Settings > Chat).
+  Player names go through `sanitizeName`.
+* **Public rooms are people only**: Quick Play and listed public rooms never get computer players.
 * Online backend: a Supabase project (Realtime for rooms, Postgres RPCs for cloud saves + high scores).
   The game must still work fully offline; online features show a friendly message when unavailable.
 
@@ -73,6 +76,7 @@ Game additions:
   `game.buyTreadmill(p)` -> `treadmill:up`; intent `boost` -> `boost:start {player, until}`; warm-up -> `pump:start`.
 * Emotes: intent `emote: id` -> `p.emote = {id, until}` + `emote {player, id}`. Moving cancels it.
 * Quick chat: intent `say: phraseId` -> `chat {player, text, quick: true, phrase}` (rate limited 1/1.2 s).
+* Typed chat: `app.act('chat', text)` -> `chat {player, text, typed: true}` (see "Typed chat").
 * `game.giftPlant(from, to, planterIndex)` -> `gift {from, to, plant}` (needs a free unlocked planter on `to`).
 * `game.trade(a, b, offerA, offerB)` with `offer = {planters: [index...], cash}` -> `trade:done {a, b, offerA, offerB}`.
   Validation is atomic (both sides still own what they offer, room for incoming plants).
@@ -83,13 +87,16 @@ client in an online room (the host applies it for the right player):
 `buyItem(id, qty)`, `buySpeed(n)`, `buyBoost()`, `buyTreadmill()`, `upgradeBase()`, `setBaseStyle(style)`, `rebirth()`,
 `buyEgg(eggId)`, `setPet(petId)`, `setPets(ids, names)`, `setLook(look)`,
 `gift(toSlot, planterIndex)`, `tradeRequest(toSlot)`, `tradeOffer(offer)`, `tradeReady(bool)`,
-`tradeCancel()`, `emote(id)`, `say(phraseId)`. Returns `true/false` offline, `undefined` (async) online.
+`tradeCancel()`, `emote(id)`, `say(phraseId)`, `chat(text)`. Returns `true/false` offline, `undefined` (async) online.
 
 ## Multiplayer (`src/net/**`, net agent)
 Host-authoritative rooms with **client-authoritative movement**:
 * The room host's browser runs the real `Game`. Up to 4 humans per room (4 gardens). Gardens nobody plays get a
   bot, up to the room's **Computer players** setting (`game.maxBots`, 0-3: None / 1 / 2 / All; chosen in Play Online,
-  changeable by the host from the room panel, synced in the full state so it survives a host change). The rest are
+  changeable by the host from the room panel, synced in the full state so it survives a host change). **Private
+  rooms only**: a public room (`room.private` false: Quick Play, the room list) is people only. `createRoom` starts
+  it with maxBots 0, `HostRole.fillSlots` forces `game.maxBots = 0` there (also after a host change), and
+  `setBots` / `setMaxBots` refuse; the picker shows only for the host of a private room. The rest are
   `'empty'` slots: parked out at sea, hidden, off the board and out of the rules (`Player.present`); a joiner takes
   their own character's garden or an empty one before a bot's (`HostRole.fillSlots`).
 * Remote players have `p.remoteMotion = true` on the host: `_movePlayer` skips physics for them (emits their
@@ -168,7 +175,34 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 ## Social: emotes, quick chat, gifting, trading (`src/ui/emotes.js`, `src/ui/trade.js`, social agent)
 * `QUICK_CHAT` phrases and `EMOTES` list live in `src/social/catalog.js`.
 * `mountEmotes(app, hudRoot)`: emote/chat wheel (G = emotes, T = quick chat, touch button), sends `app.act`.
-* Bots react to emotes/quick chat (`src/social/botReact.js`: `reactToSocial(game, bot, event)`), called by the integrator.
+* Bots react to emotes/quick chat/typed chat (`src/social/botReact.js`: `reactToSocial(game, bot, event)`), called by the integrator.
+
+## Typed chat (`src/social/chat.js`, `src/ui/chat.js`)
+* Settings: `chatOn` (default true; off = no typed chat on this device, quick chat stays) and `chatPublic`
+  (default false; a parent allows typed chat in public rooms on this device). Settings > Chat.
+* Where: `typedChatAllowed(app.online)` = `chatOn` and (solo, or a room this device knows is private, or `chatPublic`).
+  "Knows is private" = `room.private && room.faceOk` (made here, or joined by typing a code that isn't in the public
+  list: the same rule as Photo Booth faces), so a public room whose host claims "private" still counts as public.
+* Filter: `checkChat(raw)` -> `{ok, text, why}`. `text` is the cleaned line (NFKC, odd/invisible characters and
+  extra accent marks dropped, spaces tidied, at most `TEXT_CHAT.maxLen` = 80). Refused (never half-censored), with
+  a friendly note `CHAT_NOTES[why]`: `words` (the `core/names.js` word filter on the words, and on each word with
+  the symbols inside squeezed out, plus a few unkind words), `link`, `email` (also @names), `number` (phone numbers,
+  spelled-out digits, runs of more than `TEXT_CHAT.maxDigits` digits). `isTypedLine(text)` = passes and unchanged.
+* Path: the chat panel calls `sendTyped(app, raw)` (settings, filter, the sender's rate limit) -> `app.act('chat',
+  text)`. Solo: `postTyped(game, player, text)` emits `chat {player, text, typed: true}`. Online, a member's act
+  rides the reliable action queue (`in.e` edge `'a'`, `['chat', [text]]`) to the host; the host (and the host's own
+  player) goes through `HostRole.act('chat')` -> `postTyped`, which re-runs the filter, drops anything that isn't
+  exactly what the filter would send, and rate limits per player (`TEXT_CHAT.burst + hostSlack` back to back,
+  then one per `gap`). The event is forwarded like any `chat`.
+* Receivers: `EventCodec.vet('chat', e, {typed})` takes `typed: true` lines only from a person (`p.isPlayer`), only
+  when `typed` (the client passes `typedChatAllowed(session)`), and only if `isTypedLine(text)`; everything else
+  is as strict as before (quick phrases looked up locally, bot lines vetted, any other free text dropped). Muted
+  players' chat is dropped (`client._events`). The host's own HUD/panel skip typed lines its settings don't allow
+  (it still passes them on: each device decides for itself).
+* UI: HUD chat log + speech bubble over the speaker (`TEXT_CHAT.bubble` s, `bb-t`), the chat panel (last
+  `TEXT_CHAT.history` lines, quick-chat chips, mute chips for room members), Enter / chat button to open.
+* Bots: typed lines are matched to a topic (`TYPED_INTENTS` in `replies.js`, first match wins) and answered from
+  `TYPED_REPLIES` / `REPLIES` with the usual cooldowns and spam guard; a bot called by name (`BOT_CALLS`) answers first.
 * `mountSocial(app, hudRoot)`: near another human player (online) a "Gift / Trade" prompt; gift picker; trade
   window (both offer planters + cash, both Ready, 3 s countdown, Accept) using `app.act` + `trade:*` events.
 

@@ -579,6 +579,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .set-name{font:var(--fdw) 18px/1 var(--fd);letter-spacing:.02em}
 .set-note{font:700 12px/1.2 var(--fb);color:var(--txt3)}
 .set-note.warn{color:#ffe066}
+.set-sec{margin:10px 2px 0;font:900 12px/1 var(--fb);letter-spacing:.14em;text-transform:uppercase;color:var(--txt3)}
 .set-slider{display:flex;align-items:center;gap:10px;margin-left:auto}
 .set-v{min-width:46px;text-align:right;font:900 14px/1 var(--fb)}
 #ui input[type=range]{-webkit-appearance:none;appearance:none;width:210px;height:32px;margin:0;background:transparent;cursor:pointer;pointer-events:auto;touch-action:none;--f:50%}

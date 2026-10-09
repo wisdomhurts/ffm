@@ -29,6 +29,7 @@ import { getProfile, activeProfileId, setActiveProfile, updateProfile } from './
 import { attachProgress } from './progress/index.js';
 import { createOnline } from './net/session.js';
 import { reactToSocial } from './social/botReact.js';
+import { postTyped } from './social/chat.js';
 import { attachCloudSync } from './online/sync.js';
 import { attachPets } from './ui/pets.js';
 import { sameLook } from './characters/cosmetics.js';
@@ -112,11 +113,11 @@ class App {
       if (target === this.human && this.state === 'shop') this.resume();
     });
     bus.on('camera:shake', ({ amount = 0.5 } = {}) => this.cam?.addShake(amount));
-    // family bots wave back, dance along and answer quick chat
+    // family bots wave back, dance along and answer quick chat and typed chat
     for (const ev of ['emote', 'chat']) {
       bus.on(ev, (e) => {
         const g = this.game;
-        if (!g || !e?.player || e.player.kind === 'bot' || (ev === 'chat' && !e.quick)) return;
+        if (!g || !e?.player || e.player.kind === 'bot' || (ev === 'chat' && !e.quick && !e.typed)) return;
         if (this.online?.isClient) return; // the host's bots react; clients just see it
         for (const b of g.players) if (b.kind === 'bot') reactToSocial(g, b, { type: ev, ...e });
       });
@@ -290,6 +291,9 @@ class App {
       case 'say':
         this.humanCtrl?.queue(name, args[0]);
         return true;
+      case 'chat':
+        // typed chat (social/chat.js): a room's host filters, rate limits and shares it; solo it's said here
+        return this.online?.room ? this.online.act(name, args) : postTyped(g, p, args[0]);
       case 'addCash':
         // quest/badge rewards (host-authoritative online)
         if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);

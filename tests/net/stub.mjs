@@ -6,6 +6,7 @@ import { BotController } from '../../src/ai/bot.js';
 import { getProfile, createProfile, updateProfile } from '../../src/core/profiles.js';
 import { createOnline } from '../../src/net/session.js';
 import { createTransport, MemoryHub } from '../../src/net/transport.js';
+import { postTyped } from '../../src/social/chat.js';
 
 export { MemoryHub };
 
@@ -100,6 +101,8 @@ export class StubApp {
       case 'say':
         this.humanCtrl?.queue(name, args[0]);
         return true;
+      case 'chat':
+        return this.online?.room ? this.online.act(name, args) : postTyped(g, p, args[0]);
       case 'addCash':
         if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);
         return true;

@@ -5,6 +5,7 @@ import { WORLD, ITEMS, PLAYER, ROAD_END_Z } from '../config.js';
 import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
+import { typedChatAllowed } from '../social/chat.js';
 import {
   EventCodec, forwarded, mergeSections, vetPlayer, vetGarden, vetPod, vetGround, vetDrops, predict, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
 } from './protocol.js';
@@ -243,12 +244,13 @@ export class ClientRole {
 
   _events(E) {
     const me = this.me;
+    const opts = { typed: typedChatAllowed(this.s) }; // typed chat only where this device takes it (social/chat.js)
     for (const ev of E.slice(0, 120)) {
       if (!Array.isArray(ev) || typeof ev[0] !== 'string' || !forwarded(ev[0])) continue;
       const name = ev[0];
       let e = this.codec.decode(ev[1]);
       if (!e || typeof e !== 'object' || Array.isArray(e)) continue;
-      e = EventCodec.vet(name, e);
+      e = EventCodec.vet(name, e, opts);
       if (!e) continue;
       // already played on this device the moment it happened
       if ((name === 'player:jump' || name === 'bonk:swing' || name === 'boost:start' || name === 'base:bounce') && e.player === me) continue;

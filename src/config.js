@@ -428,6 +428,8 @@ export const TEXT_CHAT = {
   burst: 3, // messages allowed back to back before the gap applies
   history: 40,
   bubble: 5, // seconds a chat bubble stays over the speaker
+  maxDigits: 6, // a longer run of digits (spaces and dashes don't break it) looks like a phone number: refused
+  hostSlack: 1, // the host allows this many extra back to back (network jitter bunches messages up)
 };
 
 // Pet tricks (click / tap a pet). Ids travel in 'pet:trick' events.

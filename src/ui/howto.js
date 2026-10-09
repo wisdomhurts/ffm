@@ -17,8 +17,8 @@ const LOOP = () => [
 ];
 
 const CONTROLS = [
-  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['Shift', 'Boost'], ['X', 'Speed gear'], ['E', 'Grab (hold to Steal / Sell)'], ['Click / F', 'Bonk with the noodle'], ['1-5', 'Use items'], ['G', 'Emotes'], ['T', 'Quick chat'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['Esc', 'Menu']]],
-  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Bonk', 'Swing the noodle'], ['Jump', 'Jump'], ['Lightning', 'Boost'], ['Gear chip', 'Speed gear'], ['Hotbar', 'Tap to use items'], ['Smiley', 'Emotes + quick chat']]],
+  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['Shift', 'Boost'], ['X', 'Speed gear'], ['E', 'Grab (hold to Steal / Sell)'], ['Click / F', 'Bonk with the noodle'], ['1-5', 'Use items'], ['G', 'Emotes'], ['T', 'Quick chat'], ['Enter', 'Type a message'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['Esc', 'Menu']]],
+  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Bonk', 'Swing the noodle'], ['Jump', 'Jump'], ['Lightning', 'Boost'], ['Gear chip', 'Speed gear'], ['Hotbar', 'Tap to use items'], ['Smiley', 'Emotes + quick chat'], ['Chat button', 'Type a message']]],
   [ICON.gamepad, 'Gamepad', [['Left stick', 'Move'], ['Right stick', 'Camera'], ['A', 'Jump'], ['B', 'Grab / hold to Steal'], ['X', 'Bonk'], ['RT', 'Boost'], ['LT', 'Speed gear'], ['Y', 'Use item'], ['LB / RB', 'Pick item'], ['Start', 'Menu']]],
 ];
 
@@ -30,7 +30,7 @@ const FEATURES = () => [
   ['speed', ICON.boost, 'Boost & Treadmills', `Boost gives a burst of speed (upgrade it at the Boost Lab). Run on the Warm-Up treadmill without falling off to get Pumped: up to +${Math.round(TREADMILL.tiers[TREADMILL.tiers.length - 1].bonus * 100)}% speed with the best treadmill. Super fast? Switch gears to go slow and steady.`, isTouch() ? [] : [['Shift', 'Boost'], ['X', 'Gear']]],
   ['emotes', ICON.smile, 'Emotes & Quick Chat', isTouch() ? 'Tap the smiley button to wave, cheer or dance, or to send a quick message. The family might answer back!' : 'Wave, cheer or dance, or send a quick message. The family might answer back!', isTouch() ? [] : [['G', 'Emotes'], ['T', 'Quick chat']]],
   ['quests', TILE_ICONS.quests, 'Quests & Badges', 'Three new quests every day. Finish them for cash and stars, then spend your stars in the Wardrobe. Badges are for big moments, like your first steal.', []],
-  ['online', ICON.globe, 'Playing Online', 'Tap PLAY ONLINE to hop into a room with up to 4 players. Make a private room and share its 5-letter code with friends. Family bots fill empty gardens, and online games never pause!', []],
+  ['online', ICON.globe, 'Playing Online', 'Tap PLAY ONLINE to hop into a room with up to 4 players. Make a private room and share its 5-letter code with friends (family bots can fill its empty gardens; public rooms are people only). Online games never pause!', []],
   ['trade', ICON.swap, 'Trading & Gifts', 'Online, walk up to another player to give them a plant or offer a trade. You both pick what to swap, press Ready, then Accept. No take-backs!', []],
 ];
 

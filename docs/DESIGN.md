@@ -126,11 +126,25 @@ biome, and knock the seed out of your hands if they catch you. Out-run them (Spe
 * **Endless** (auto-saves locally).
 * **Family Showdown** — 8 minutes, highest net worth wins, 3D podium finale.
 * Difficulty: Chill / Normal / Chaos (bot aggression and speed).
+* Online: public rooms (Quick Play, the room list) are people only; private rooms may have 0-3 computer players.
+
+## 7b. Chat
+* Quick chat (16 phrases) and emotes work everywhere. Typed chat (max 80 characters) works in solo games and private
+  rooms; in public rooms only on devices where a parent turned on Settings > Chat > "Typed chat in public rooms".
+  "Typed chat" off = quick chat only on that device.
+* Every typed line is cleaned (odd characters dropped) and then sent as it is or refused with a friendly note: bad
+  or unkind words (the player-name filter plus a few insults), links, emails / @names, phone numbers and runs of
+  more than 6 digits. The sender, the room host and every receiver run the same filter.
+* Rate limit: 3 lines back to back, then one per 1.2 s (the host allows one extra for network bunching).
+* The family bots answer some typed lines by topic (hi, bye, gg, thanks, sorry, jokes, lol, love, how-to, help,
+  steal, race, trade, pets, bragging, nice, wow) in their own voices; a bot called by name ("hi mom") answers first.
 
 ## 8. Controls
 * Desktop: WASD/arrows move · Space jump · E interact (hold) · Click or F bonk ·
-  1–5 items · right-drag or Q/Z… orbit camera · wheel zoom · Esc pause.
-* Touch: left joystick · drag right side to orbit · Jump / Bonk / Action buttons · tap hotbar.
+  1–5 items · right-drag or Q/Z… orbit camera · wheel zoom · Esc pause · G emotes · T quick chat ·
+  Enter typed chat (Enter sends, Esc closes; game keys are ignored while typing).
+* Touch: left joystick · drag right side to orbit · Jump / Bonk / Action buttons · tap hotbar · chat button
+  (the panel opens at the top of the screen, input first, so the keyboard never covers it).
 * Gamepad: left stick, right stick camera, A jump, X bonk, B interact, LB/RB cycle items, Y use item.
 * Sound: music and sound effects each have an on/off switch and a volume, fully independent; off keeps
   the volume for next time, and turning a volume up switches it on. "Mute all" = both switches off (the
