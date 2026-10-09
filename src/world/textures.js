@@ -236,6 +236,107 @@ export function fluffDetail() {
   }));
 }
 
+/**
+ * Crystal Caverns cliffs: {map, glow}. map = grey faceted crystal (flat-shaded tileable cells with dark seams,
+ * tinted by vertex colour); glow = an emissive map where some seams run as glowing teal and violet veins.
+ */
+export function geodeMaps() {
+  return once('geode', () => {
+    const W = 256, N = 7; // jittered N x N grid of cell seeds, wrapping
+    const r = makeRand(91);
+    const seeds = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) seeds.push([(i + 0.15 + r() * 0.7) * (W / N), (j + 0.15 + r() * 0.7) * (W / N), 0.72 + r() * 0.3, r() * TAU, r()]);
+    const n = tileNoise(92, 6);
+    const near = new Int32Array(W * W * 2);
+    const edge = new Float32Array(W * W);
+    // nearest and second-nearest seed per pixel (3x3 neighbour cells, wrapped)
+    for (let y = 0; y < W; y++) {
+      for (let x = 0; x < W; x++) {
+        const ci = Math.floor((x / W) * N), cj = Math.floor((y / W) * N);
+        let d1 = 1e9, d2 = 1e9, a = 0, b = 0;
+        for (let dj = -1; dj <= 1; dj++) {
+          for (let di = -1; di <= 1; di++) {
+            const ii = (ci + di + N) % N, jj = (cj + dj + N) % N;
+            const s = seeds[jj * N + ii];
+            const sx = s[0] + (ci + di - ii) * (W / N), sy = s[1] + (cj + dj - jj) * (W / N);
+            const d = Math.hypot(x - sx, y - sy);
+            if (d < d1) (d2 = d1), (b = a), (d1 = d), (a = jj * N + ii);
+            else if (d < d2) (d2 = d), (b = jj * N + ii);
+          }
+        }
+        const i = y * W + x;
+        near[i * 2] = a;
+        near[i * 2 + 1] = b;
+        edge[i] = d2 - d1;
+      }
+    }
+    const map = drawTexture(W, W, (g) => {
+      pixels(g, W, W, (x, y) => {
+        const i = y * W + x, s = seeds[near[i * 2]];
+        // each cell is one flat facet, lit by its own angle; seams darken, a fine sheen runs over the top
+        const facet = 0.12 + s[2] + Math.cos(s[3] + (x - s[0]) * 0.012 - (y - s[1]) * 0.01) * 0.05;
+        const seam = clamp01(edge[i] / 2.6);
+        const v = Math.min(255, (214 + (n(x, y, W, W, 2) - 0.5) * 24) * facet * (0.7 + 0.3 * seam));
+        return [v, v, v];
+      });
+    });
+    const glow = drawTexture(W, W, (g) => {
+      pixels(g, W, W, (x, y) => {
+        const i = y * W + x;
+        const a = seeds[near[i * 2]], b = seeds[near[i * 2 + 1]];
+        // a seam is a vein when the pair of cells it splits says so (so veins run along whole seams)
+        const k = (a[4] + b[4]) % 1;
+        if (k > 0.3) return [0, 0, 0];
+        const v = Math.pow(1 - clamp01(edge[i] / 3.6), 2.4);
+        const c = k < 0.15 ? [80, 230, 255] : [200, 120, 255];
+        return [c[0] * v, c[1] * v, c[2] * v];
+      });
+    });
+    return { map, glow };
+  });
+}
+
+/** Bubble Reef cliffs: knobbly coral rock peppered with polyp pits and cups. Grey (tinted by vertex colour), mean ~0.9. */
+export function coralDetail() {
+  return once('coral', () => drawTexture(256, 256, (g, w, h) => {
+    const n = tileNoise(101, 5);
+    const n2 = tileNoise(102, 12);
+    pixels(g, w, h, (x, y) => {
+      const v = 228 + (n(x, y, w, h) - 0.5) * 34 + (n2(x, y, w, h, 2) - 0.5) * 30;
+      return [v, v, v];
+    });
+    const r = makeRand(103);
+    // polyp cups: pale rings with a dark centre
+    for (let i = 0; i < 46; i++) {
+      const x = r() * w, y = r() * h, rad = 4 + r() * 4;
+      wrapped(w, h, x, y, rad + 2, (px, py) => {
+        g.fillStyle = 'rgba(255,255,255,0.4)';
+        g.beginPath();
+        g.arc(px, py, rad, 0, TAU);
+        g.fill();
+        g.fillStyle = 'rgba(90,30,40,0.3)';
+        g.beginPath();
+        g.arc(px + 0.4, py - 0.4, rad * 0.55, 0, TAU);
+        g.fill();
+      });
+    }
+    // polyp pits: dark dot with a lit lower rim
+    for (let i = 0; i < 520; i++) {
+      const x = r() * w, y = r() * h, rad = 1.2 + r() * 2.4;
+      wrapped(w, h, x, y, rad + 2, (px, py) => {
+        g.fillStyle = 'rgba(255,255,255,0.28)';
+        g.beginPath();
+        g.arc(px + 0.6, py + 0.9, rad + 0.8, 0, TAU);
+        g.fill();
+        g.fillStyle = 'rgba(60,20,20,0.32)';
+        g.beginPath();
+        g.arc(px, py, rad, 0, TAU);
+        g.fill();
+      });
+    }
+  }));
+}
+
 /** Soil for planters. Coloured. */
 export function soilTexture() {
   return once('soil', () => drawTexture(128, 128, (g, w, h) => {
@@ -295,7 +396,11 @@ const ROAD_STYLE = {
   frostfall: { side: ['#e8f2fc', '#d3e3f4', '#f9fcff'], path: 'ice', pathCol: ['#b8e4fa', '#a2d8f4', '#cdeefd'], glow: '#ffffff' },
   candy: { side: ['#ffc6e2', '#ffb2d7', '#ffdcee'], path: 'candy', pathCol: ['#ff8cc6', '#7fe0cc', '#ffe97a', '#c4a4ff', '#86d0ff', '#ffb27a'], sprinkles: ['#ff3b6b', '#ffd23f', '#3fd0ff', '#7ee36b', '#b36bff', '#ffffff'] },
   cloud: { side: ['#f2f6ff', '#e4ebfa', '#ffffff'], path: 'marble', pathCol: ['#fffcf4', '#f5efe2', '#fbf7ee'], glow: '#ffd23f' },
+  caverns: { side: ['#4e3e8c', '#42347c', '#5e4ea0'], path: 'geode', pathCol: ['#8a5ad8', '#7a4cc8', '#9b6ee6', '#6f44b8', '#a77ff0'], glow: '#6fe8ff' },
+  reef: { side: ['#ecd29e', '#dfc08a', '#f6e2b6'], path: 'shells', pathCol: ['#fbefd6', '#f6e6c8', '#fff6e4'], shells: ['#ff9a8a', '#ffc2a8', '#ffffff', '#ffb8d0', '#ffd27a'], glow: '#9ff8ff' },
+  rainbowend: { side: ['#fff4fb', '#f6e8ff', '#ffffff'], path: 'glass', pathCol: ['#ff8fa8', '#ffc078', '#ffe97a', '#8ff0a8', '#8fd0ff', '#c4a0ff'], glow: '#ffffff' },
 };
+export { ROAD_STYLE };
 
 /** Returns {map, emissiveMap?} for a biome road: 512px = 40 studs wide, 40 studs long. */
 export function roadTexture(biomeId) {
@@ -453,6 +558,89 @@ export function roadTexture(biomeId) {
         gg.globalAlpha = 0.3 + r() * 0.4;
         gg.fillRect(x - s * 0.5, y - s * 0.5, s * 2, s * 2);
         gg.globalAlpha = 1;
+      }
+    }
+    if (biomeId === 'caverns') {
+      // dark cave floor with crystal grit: shards that catch the light (and glow faintly)
+      blobs(g, W, H, 60, r, { rMin: 6, rMax: 18, colors: ['rgba(30,16,70,0.16)', 'rgba(150,120,230,0.16)'] });
+      for (let i = 0; i < 200; i++) {
+        const x = r() * W, y = r() * H, s = 1.5 + r() * 2.5, a = r() * Math.PI;
+        const colr = r() < 0.5 ? '#9fefff' : r() < 0.6 ? '#d6a8ff' : '#ff9ae8';
+        for (const [ctx, k] of [[g, 1], [gg, 0.4 + r() * 0.4]]) {
+          ctx.save();
+          ctx.globalAlpha = k;
+          ctx.translate(x, y);
+          ctx.rotate(a);
+          ctx.fillStyle = colr;
+          ctx.beginPath();
+          ctx.moveTo(0, -s * 1.6);
+          ctx.lineTo(s * 0.6, 0);
+          ctx.lineTo(0, s * 1.6);
+          ctx.lineTo(-s * 0.6, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+    if (biomeId === 'reef') {
+      // rippled sea sand, sea grass tufts and pebbles, under a net of shimmering caustics (glow map)
+      for (let i = 0; i < 46; i++) {
+        const y = r() * H;
+        g.strokeStyle = r() < 0.5 ? 'rgba(170,120,60,0.16)' : 'rgba(255,250,235,0.35)';
+        g.lineWidth = 2;
+        g.beginPath();
+        for (let x = 0; x <= W; x += 16) g.lineTo(x, y + Math.sin(x * 0.04 + i) * 5);
+        g.stroke();
+      }
+      for (let i = 0; i < 70; i++) {
+        const x = r() * W, y = r() * H;
+        g.strokeStyle = r() < 0.5 ? 'rgba(70,150,90,0.75)' : 'rgba(110,180,80,0.7)';
+        g.lineWidth = 2;
+        for (let k = 0; k < 5; k++) {
+          g.beginPath();
+          g.moveTo(x + (k - 2) * 2, y);
+          g.quadraticCurveTo(x + (k - 2) * 3 + (r() - 0.5) * 6, y - 6, x + (k - 2) * 4 + (r() - 0.5) * 8, y - 10 - r() * 6);
+          g.stroke();
+        }
+      }
+      blobs(g, W, H, 80, r, { rMin: 1.5, rMax: 3.5, colors: ['rgba(120,90,60,0.4)', 'rgba(255,255,255,0.6)', 'rgba(255,170,150,0.5)'] });
+      const img2 = gg.getImageData(0, 0, W, H);
+      const d2 = img2.data;
+      const gc = hexRgb(S.glow);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const u = (x / W) * TAU, v = (y / H) * TAU;
+          // zero lines of two warped wave sums (integer frequencies, so the net wraps with the tile)
+          const a = Math.sin(u * 5 + Math.sin(v * 3) * 1.6) + Math.sin(v * 6 + Math.sin(u * 4 + 1) * 1.5);
+          const b = Math.sin(u * 4 - v * 3 + Math.sin(u * 2) * 1.2) + Math.sin(v * 5 + u * 2 + 2.1);
+          const c = (Math.exp(-a * a * 7) + Math.exp(-b * b * 7)) * 0.2;
+          const i = (y * W + x) * 4;
+          d2[i] = gc[0] * c;
+          d2[i + 1] = gc[1] * c;
+          d2[i + 2] = gc[2] * c;
+        }
+      }
+      gg.putImageData(img2, 0, 0);
+    }
+    if (biomeId === 'rainbowend') {
+      // cloud fluff strewn with pastel sparkles and tiny glowing stars
+      blobs(g, W, H, 90, r, { rMin: 8, rMax: 22, colors: ['rgba(255,255,255,0.7)', 'rgba(255,200,236,0.2)', 'rgba(200,220,255,0.2)'] });
+      for (let i = 0; i < 120; i++) {
+        const x = r() * W, y = r() * H, s = 2 + r() * 3;
+        const colr = S.pathCol[Math.floor(r() * S.pathCol.length)];
+        for (const [ctx, k] of [[g, 1], [gg, 0.35 + r() * 0.3]]) {
+          ctx.globalAlpha = k;
+          ctx.fillStyle = colr;
+          ctx.beginPath();
+          for (let q = 0; q < 8; q++) {
+            const aa = (q / 8) * TAU, rr = q % 2 ? s * 0.35 : s;
+            ctx.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
       }
     }
     // the path
@@ -738,6 +926,131 @@ export function roadTexture(biomeId) {
           ctx.fill();
         }
         ctx.globalAlpha = 1;
+      }
+      gg.restore();
+    } else if (S.path === 'geode') {
+      // amethyst geode tiles: bevelled gem facets (14 rows per tile) over seams that glow, some as bright veins
+      const T = H / 14;
+      g.fillStyle = '#2a1c52';
+      g.fillRect(0, 0, W, H);
+      gg.save();
+      gg.beginPath();
+      gg.moveTo(cx - edge(0), 0);
+      for (let y = 0; y <= H; y += 8) gg.lineTo(cx - edge(y), y);
+      for (let y = H; y >= 0; y -= 8) gg.lineTo(cx + edge(y + 50), y);
+      gg.closePath();
+      gg.clip();
+      gg.globalAlpha = 0.3;
+      gg.fillStyle = '#7a5cff';
+      gg.fillRect(0, 0, W, H);
+      gg.globalAlpha = 1;
+      for (let j = 0; j < 14; j++) {
+        for (let x = cx - pathHalf - 40 + (j % 2) * T * 0.5; x < cx + pathHalf + 40; x += T) {
+          const x0 = x + 2, y0 = j * T + 2, sw = T - 4, sh = T - 4;
+          const fill = pc[Math.floor(r() * pc.length)];
+          bevelTile(g, x0, y0, sw, sh, sw * 0.22, fill, 'rgba(255,255,255,0.32)', 'rgba(30,10,70,0.35)');
+          // a sparkle on the facet
+          if (r() < 0.35) {
+            g.fillStyle = 'rgba(255,255,255,0.85)';
+            g.fillRect(x0 + sw * 0.3 + r() * sw * 0.3, y0 + sh * 0.3 + r() * sh * 0.3, 2.5, 2.5);
+          }
+          // the tile itself glows faintly; one in five of the seams runs as a bright vein
+          gg.fillStyle = fill;
+          gg.globalAlpha = 0.18;
+          gg.fillRect(x0 + sw * 0.22, y0 + sh * 0.22, sw * 0.56, sh * 0.56);
+          gg.globalAlpha = 1;
+          if (r() < 0.2) {
+            gg.strokeStyle = r() < 0.5 ? '#6fe8ff' : '#d38bff';
+            gg.lineWidth = 3;
+            gg.beginPath();
+            if (r() < 0.5) {
+              gg.moveTo(x0 - 2, y0 + sh + 2);
+              gg.lineTo(x0 + sw + 2, y0 + sh + 2);
+            } else {
+              gg.moveTo(x0 + sw + 2, y0 - 2);
+              gg.lineTo(x0 + sw + 2, y0 + sh + 2);
+            }
+            gg.stroke();
+          }
+        }
+      }
+      gg.restore();
+    } else if (S.path === 'shells') {
+      // pale beach sand with shells, starfish and sand dollars, a pebble-and-shell border along both edges
+      for (let i = 0; i < 30; i++) {
+        const y = r() * H;
+        g.strokeStyle = 'rgba(200,160,100,0.18)';
+        g.lineWidth = 2;
+        g.beginPath();
+        for (let x = cx - pathHalf - 20; x <= cx + pathHalf + 20; x += 12) g.lineTo(x, y + Math.sin(x * 0.05 + i) * 4);
+        g.stroke();
+      }
+      const sh = S.shells;
+      for (let y = 4; y < H; y += 9) {
+        for (const x of [cx - edge(y) + 5, cx + edge(y + 50) - 5]) {
+          const k = r();
+          if (k < 0.55) {
+            g.fillStyle = k < 0.3 ? 'rgba(150,130,120,0.9)' : 'rgba(210,200,190,0.95)';
+            g.beginPath();
+            g.ellipse(x + (r() - 0.5) * 4, y, 4 + r() * 2, 3 + r() * 1.5, r() * Math.PI, 0, TAU);
+            g.fill();
+          } else scallop(g, x + (r() - 0.5) * 3, y, 5 + r() * 2, r() * TAU, sh[Math.floor(r() * sh.length)], 'rgba(170,90,70,0.5)');
+        }
+      }
+      for (let i = 0; i < 22; i++) {
+        const x = cx + (r() - 0.5) * pathHalf * 1.5, y = r() * H, k = r();
+        if (k < 0.35) starfish(g, x, y, 7 + r() * 4, r() * TAU, r() < 0.5 ? '#ff8a5a' : '#ff6f8a');
+        else if (k < 0.75) scallop(g, x, y, 6 + r() * 3, r() * TAU, sh[Math.floor(r() * sh.length)], 'rgba(170,90,70,0.5)');
+        else {
+          // sand dollar
+          g.fillStyle = '#f2e2c4';
+          g.beginPath();
+          g.arc(x, y, 6, 0, TAU);
+          g.fill();
+          g.strokeStyle = 'rgba(160,120,80,0.6)';
+          g.lineWidth = 1.2;
+          for (let q = 0; q < 5; q++) {
+            const aa = (q / 5) * TAU - Math.PI / 2;
+            g.beginPath();
+            g.ellipse(x + Math.cos(aa) * 3, y + Math.sin(aa) * 3, 1.8, 0.8, aa, 0, TAU);
+            g.stroke();
+          }
+        }
+      }
+    } else if (S.path === 'glass') {
+      // rainbow glass: glossy tiles in diagonal rainbow bands (12 rows per tile), each glowing in its own colour
+      const T = H / 12;
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, W, H);
+      gg.save();
+      gg.beginPath();
+      gg.moveTo(cx - edge(0), 0);
+      for (let y = 0; y <= H; y += 8) gg.lineTo(cx - edge(y), y);
+      for (let y = H; y >= 0; y -= 8) gg.lineTo(cx + edge(y + 50), y);
+      gg.closePath();
+      gg.clip();
+      for (let j = 0; j < 12; j++) {
+        for (let i = -7; i <= 7; i++) {
+          const x = cx + i * T - T / 2, y = j * T;
+          const fill = pc[(((i + j) % pc.length) + pc.length) % pc.length];
+          g.fillStyle = fill;
+          roundRect(g, x + 2, y + 2, T - 4, T - 4, 7);
+          g.fill();
+          const gr = g.createLinearGradient(x, y, x + T, y + T);
+          gr.addColorStop(0, 'rgba(255,255,255,0.65)');
+          gr.addColorStop(0.3, 'rgba(255,255,255,0.05)');
+          gr.addColorStop(0.55, 'rgba(255,255,255,0.25)');
+          gr.addColorStop(0.7, 'rgba(255,255,255,0)');
+          g.fillStyle = gr;
+          g.fill();
+          g.strokeStyle = 'rgba(255,255,255,0.9)';
+          g.lineWidth = 2;
+          g.stroke();
+          gg.fillStyle = fill;
+          gg.globalAlpha = 0.32;
+          gg.fillRect(x + 2, y + 2, T - 4, T - 4);
+          gg.globalAlpha = 1;
+        }
       }
       gg.restore();
     }

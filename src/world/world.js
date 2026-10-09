@@ -1,5 +1,5 @@
 // The whole map's art: tropical island plaza (studded baseplate, beach, ocean), the four family
-// gardens, the shops, the Seed Road's nine biomes, sky, ambience and weather.
+// gardens, the shops, the Seed Road's twelve biomes, sky, ambience and weather.
 // Contract: buildWorld(engine, layout, quality) -> {
 //   extraColliders: Box[]            // decorative solid props (trees, rocks) in physics box format
 //   update(dt, ctx)                  // ctx = {time, camera, focus:{x,y,z}, event: game.event}

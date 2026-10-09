@@ -40,9 +40,10 @@ Top-down, **+Z is north** (towards the road). Y is up.
   a LOCK pad, a sign with the owner's photo + name, and at the far end three **FOR SALE lots**
   (one column of 5 planters each: $500K, $3M, $15M, bought in order; their planters are built and
   become solid only once bought; rebirth sells them back). The home island is 192 studs wide.
-* **The Seed Road**: 40 studs wide, from z=60 to z=1410 — nine biomes of 150 studs each,
+* **The Seed Road**: 40 studs wide, from z=60 to z=1860 — twelve biomes of 150 studs each,
   walled by biome-themed cliffs. Seed pods sit against both walls (never in the centre
-  lane). Distance is difficulty: rarer seeds are visibly further away.
+  lane). Distance is difficulty: rarer seeds are visibly further away. The road ends in Rainbow's End at a
+  pot of gold (a solid prop in the west corner) and an Infinity portal over the END OF THE SEED ROAD sign.
 
 ## 2. Characters
 
@@ -66,9 +67,14 @@ Legendary `#ffb627`, Mythic `#ff4d6d`, Celestial `#6ff3ff`, Cosmic `#ff5ce1`, Di
 Secret (black with rainbow text).
 
 Biomes in road order: Sunny Field (Common), Greenhollow (Uncommon), Dustbowl (Rare), Tanglemire (Epic),
-Emberroot (Legendary), Starbloom (Mythic), Frostfall (Celestial), Candy Canyon (Cosmic), Cloud Kingdom (Divine).
-Each biome's pods drop that biome's rarity (small chance of a "lucky" +1 tier, never past Divine).
-Starbloom and the three biomes beyond it have a 3–5% chance of a **Secret** family seed (best odds at the end).
+Emberroot (Legendary), Starbloom (Mythic), Frostfall (Celestial), Candy Canyon (Cosmic), Cloud Kingdom (Divine),
+Crystal Caverns (Prismatic), Bubble Reef (Eternal), Rainbow's End (Infinity).
+Each biome's pods drop that biome's rarity (small chance of a "lucky" +1 tier, never past Infinity).
+Starbloom and every biome beyond it have a 3–6.5% chance of a **Secret** family seed (best odds at the end).
+The last three: Crystal Caverns (geode cliffs with glowing veins, stone arches hung with crystal stalactites, a
+glowing stream, violet-teal twilight with cavern glints), Bubble Reef (coral cliffs, kelp, a sunken ship, circling
+fish, sun shafts and rising bubbles) and Rainbow's End (rainbow-glass road, rainbows over the road, rainbow falls,
+floating prisms, an aurora sunset).
 
 Mutations (rolled when a seed spawns; much more likely during weather events):
 Normal ×1, **Gold** ×2, **Diamond** ×3, **Rainbow** ×5.

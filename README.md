@@ -4,7 +4,8 @@ A Roblox-style 3D browser game starring **Dorian, Esther, Mati and Micah**, insp
 hit *Steal A Seed!*. Run up the Seed Road, grab seeds, grow them into money-making plants, train your
 speed to reach rarer biomes, and steal your family's best plants (while stopping them from stealing yours).
 
-* Nine worlds up the Seed Road, from Sunny Field to Frostfall, Candy Canyon and the Cloud Kingdom.
+* Twelve worlds up the Seed Road, from Sunny Field to Frostfall, Candy Canyon, the Cloud Kingdom, Crystal Caverns,
+  Bubble Reef and Rainbow's End, where the road ends at a pot of gold and a shimmering Infinity portal.
 * Train Speed as high as you like (there is no top level), and buy the three FOR SALE lots at the back of
   your garden for up to 25 planters.
 * Online rooms with up to 4 players. In a **private room** the host picks how many computer players fill the empty

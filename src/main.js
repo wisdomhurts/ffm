@@ -15,6 +15,7 @@ import { sanitizeBaseStyle, sameBaseStyle } from './gameplay/basestyle.js';
 import { HumanController } from './gameplay/humanController.js';
 import { BotController } from './ai/bot.js';
 import { buildWorld } from './world/world.js';
+import { roadWarmup } from './world/road.js';
 import { GameView } from './view/gameView.js';
 import { Labels } from './view/labels.js';
 import { createEffects } from './fx/effects.js';
@@ -42,6 +43,7 @@ function buildWarmupGroup() {
   const g = new THREE.Group();
   g.name = 'shader-warmup';
   g.add(createBanana(), createBalloon());
+  g.add(roadWarmup()); // the Seed Road's own shader variants (light shafts, glowing cliffs)
   // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
     for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);
