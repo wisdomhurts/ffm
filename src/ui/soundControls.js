@@ -106,7 +106,7 @@ function padNav(app, el, rows) {
       rows[row].el.scrollIntoView?.({ block: 'nearest' });
     } else if (row >= 0) {
       const kind = rows[row].kind;
-      if (edge(14) || edge(15)) {
+      if ((edge(14) || edge(15)) && rows[row].input.offsetParent) { // (small phones: no slider, just the switch)
         setVolume(kind, Math.round((settings[kind] + (edge(15) ? 0.1 : -0.1)) * 100) / 100);
         if (kind === 'sfx') uiSound(app, 'click');
       } else if (edge(0)) {
@@ -337,6 +337,17 @@ const css = `
   .pause-btns .snd.compact{grid-template-columns:1fr 1fr}
   .pause-btns .snd.compact .snd-v{display:none}
 }
+/* short portrait phones: the pause menu keeps just the two switches, side by side, so it fits down to Save & Quit
+   (the volumes are in Settings and the speaker pop-up) */
+@media (max-width:640px) and (max-height:760px) and (orientation:portrait){
+  .pause-btns .snd.compact{grid-template-columns:1fr 1fr}
+  .pause-btns .snd.compact .snd-row{grid-template-columns:40px minmax(0,1fr) auto;gap:0 4px;padding:4px 8px 4px 4px}
+  .pause-btns .snd.compact .snd-sl{display:none}
+  .pause-btns .snd.compact .snd-ic{width:32px;height:32px;border-radius:10px}
+  .pause-btns .snd.compact .snd-ic svg{width:18px;height:18px}
+}
+/* a vertical swipe over a volume slider scrolls the menu; a sideways drag still sets the volume */
+#ui .snd input[type=range]{touch-action:pan-y}
 
 /* HUD speaker: the pop-up, its arrow, and a little status toast */
 .snd-btn{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:manipulation}

@@ -253,8 +253,8 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
 * Sound: music and sound effects each have an on/off switch and a volume, fully independent; off keeps
   the volume for next time, and turning a volume up switches it on. "Mute all" = both switches off (the
   volumes stay); un-muting brings back the switches that were on. Where: Settings, the pause menu (gamepad:
-  D-pad picks a row, left/right volume, A on/off), and the in-game speaker (tap: a pop-up with both rows;
-  hold: mute all). M turns the music on/off. Music switched off stops scheduling and picks the song up at
+  D-pad picks a row, left/right volume, A on/off; small phones held upright show just the two switches there),
+  and the in-game speaker (tap: a pop-up with both rows; hold: mute all). M turns the music on/off. Music switched off stops scheduling and picks the song up at
   the next bar; effects switched off cost nothing (audio/levels.js).
 
 ## 9. Tutorial (optional)

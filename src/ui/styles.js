@@ -1373,6 +1373,9 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .pq:hover .pq-ic{animation:wiggle .5s ease-in-out}
 .pause-util .btn{flex-direction:column;gap:3px;min-height:0;padding:7px 4px 9px;font-size:14px;border-radius:15px;white-space:nowrap}
 .pause-util .btn .bi{width:20px;height:20px}
+/* short portrait phones: the pause menu fits down to Save & Quit (ui/soundControls.js packs the sound switches) */
+@media (max-width:640px) and (max-height:760px) and (orientation:portrait){.pause-me{display:none}}
+@media (max-width:640px) and (max-height:620px) and (orientation:portrait){.pause-panel{gap:10px}.pause-btns{gap:8px}.pq{flex-direction:row;gap:7px;padding:4px 4px 6px;font-size:14px}.pq-ic{width:30px;height:30px}}
 
 /* shop stands built by feature modules (pets / wardrobe) reuse the shop header classes */
 .shop-pets .sh-ic{background:linear-gradient(180deg,#ffc56b,#ff8a1c)}
