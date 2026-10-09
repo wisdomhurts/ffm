@@ -3,7 +3,7 @@
 // the rest are recipe-specific options. Works on any BaseAudioContext.
 import {
   tone, noise, bell, steelPan, marimba, harp, brass, pad, kick, tom, cymbal,
-  formantVoice, growl, finish, kit, mtof, clamp,
+  formantVoice, growl, finish, kit, mtof, clamp, snare,
 } from './synth.js';
 import { RARITY } from '../config.js';
 
@@ -476,6 +476,36 @@ export const SFX = {
     }
     [88, 93].forEach((m, i) => bell(ac, out, t + 0.1 + i * 0.07, mtof(m), { ratio: 2, index: 0.7, vol: V(o, 0.06), decay: 0.45, send: o.send }));
   },
+  /** Giant Harvests: a snare drumroll that speeds up for o.reveal seconds, then the reveal sting.
+   *  o.size: 'big' (a happy pan run) | 'giant' (brass + crash) | 'titan' (the works). */
+  drumroll(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    const T = t + (o.reveal ?? 1.2);
+    for (let tt = t, gap = 0.1, i = 0; tt < T - 0.03; tt += gap, gap = Math.max(0.045, gap * 0.92), i++) {
+      snare(ac, out, tt, (0.18 + 0.4 * ((tt - t) / (T - t))) * v);
+      if (i % 3 === 0) tom(ac, out, tt, 110, 0.12 * v);
+    }
+    if (o.size === 'big') {
+      [77, 81, 84, 89].forEach((m, i) => steelPan(ac, out, T + i * 0.06, m, 0.8 * v, { send: o.send }));
+      return;
+    }
+    kick(ac, out, T, 0.6 * v);
+    cymbal(ac, out, T, (o.size === 'titan' ? 0.6 : 0.45) * v, o.size === 'titan' ? 2.2 : 1.4);
+    const chord = o.size === 'titan' ? [53, 57, 60, 65, 69] : [60, 64, 67, 72];
+    chord.forEach((m) => brass(ac, out, T, m, 0.75 * v, o.size === 'titan' ? 1.1 : 0.6, { send: o.send }));
+    [84, 88, 91, 96].forEach((m, i) => bell(ac, out, T + 0.12 + i * 0.07, mtof(m), { ratio: 2, index: 0.9, vol: V(o, 0.1), decay: 1.1, send: o.send }));
+    if (o.size === 'titan') {
+      pad(ac, out, T, [65, 69, 72, 77], 1.2 * v, 2.4);
+      for (let i = 0; i < 10; i++) harp(ac, out, T + 0.3 + i * 0.06, 77 + [0, 2, 4, 7, 9][i % 5] + 12 * Math.floor(i / 5), 0.45 * v, { decay: 0.9, send: o.send });
+    }
+  },
+  /** Family Hero: you saved someone else's plant. A bright brass fanfare with a sparkle. */
+  hero(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    [[67, 0], [72, 0.12], [76, 0.24]].forEach(([m, d]) => brass(ac, out, t + d, m, 0.75 * v, d === 0.24 ? 0.7 : 0.14, { send: o.send }));
+    [79, 84, 88, 91].forEach((m, i) => steelPan(ac, out, t + 0.36 + i * 0.05, m, 0.7 * v, { send: o.send }));
+    cymbal(ac, out, t + 0.24, 0.35 * v, 1.2);
+  },
 };
 
 // ------------------------------------------------------------------ loops (start/stop handles)
@@ -584,4 +614,5 @@ export const SFX_GAP = {
   stolen: 0.5, yoink: 0.3, heist: 0.5, robbed: 0.5, saved: 0.4, dropped: 0.2, shopBell: 0.4, confetti: 0.3,
   boost: 0.2, pump: 0.5, egg: 0.1, baseUp: 1,
   petTrick: 0.12,
+  drumroll: 0.3, hero: 0.8,
 };

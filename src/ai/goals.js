@@ -1,10 +1,11 @@
 // Bot goals: small state machines the brain picks between. Each update() fills the Intent and
 // returns 'running' | 'done' | 'failed'. Movement goes through bot.motor; shared helpers live on the bot.
-import { PLAYER, ITEM, planterCost, BASE, BOOST, TREADMILL } from '../config.js';
+import { PLAYER, ITEM, planterCost, BASE, BOOST, TREADMILL, HERO } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { hyp, gardenInfo, planterSpot, podSpot, podGuards, yawTo, seedIncome, runSpeed, carrySeedSpeed, wrapAngle } from './util.js';
 import { getBoard, claimPod, releaseClaims } from './blackboard.js';
 import { practiceEvent } from './practice.js';
+import { isRobbing } from './family.js';
 
 export class Goal {
   constructor(type, u = 0) {
@@ -581,6 +582,38 @@ export class DefendGoal extends Goal {
     const qT = hyp(gate.x - q.pos.x, gate.z - q.pos.z) / Math.max(4, q.maxSpeed(game.time, game.difficulty.botSpeedMult));
     const pT = hyp(gate.x - p.pos.x, gate.z - p.pos.z) / Math.max(4, runSpeed(game, p));
     return pT + 0.4 < qT ? gate : null;
+  }
+
+  end(bot) {
+    bot.sepIgnore = null;
+  }
+}
+
+/** Help! Family Hero: a family member called for help (ai/family.js): run down their thief and bonk them. */
+export class HelpGoal extends Goal {
+  constructor(thief, victim, u) {
+    super('help', u);
+    this.q = thief;
+    this.victim = victim;
+    this.sig = 'help:' + thief.slot;
+  }
+
+  get interruptible() {
+    return false;
+  }
+
+  update(bot, game, p, it, dt) {
+    const q = this.q;
+    if (!isRobbing(game, q, this.victim)) return 'done';
+    if (q.invisible(game.time) || this.age(game) > HERO.helpFor) return 'failed';
+    const d = hyp(q.pos.x - p.pos.x, q.pos.z - p.pos.z);
+    if (bot.tryBalloon(game, p, q, it, d)) return 'running';
+    const lead = Math.min(0.7, d / Math.max(8, runSpeed(game, p)));
+    bot.sepIgnore = q;
+    bot.motor.goTo(q.pos.x + q.vel.x * lead, q.pos.z + q.vel.z * lead, this.opts || (this.opts = { chase: true, arrive: 0.3, key: 'help' + q.slot }));
+    bot.motor.update(game, p, dt, it);
+    bot.tryBonk(game, p, q, it);
+    return 'running';
   }
 
   end(bot) {

@@ -263,6 +263,24 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 * Known gaps (fine for a family game): a modified client could keep a pet it traded away (bags live on devices), and
   a cloud restore (`replaceProfile`) can bring one back. Pets given to a bot stay with it for that match.
 
+## Giant Harvests, Family Hero, Welcome-Back (round 4)
+* Plant sizes are host-rolled (`Game._finishGrowth`) and travel in plant data: `size` is in `serializeSlot`,
+  `serializeFull`/`applyFull`, the solo save and the `$pl` event codec; `vetPlantData` keeps only `own(SIZES, size)`
+  (anything else is 'normal'), and the garden section's `signature` includes it so a fresh GIANT goes out right away.
+  Events: `plant:grown` gains `size` (vetted against SIZES), `plant:giant {player, plant: {speciesId, mutation, size},
+  planter, garden}` is forwarded (vet: known species, mutation and size). Old clients would show the wrong income:
+  part of the PROTO 4 bump.
+* Hero tips are minted only by the host's `Game` (`_rescue` inside `dropCarried`); `addCash` stays refused online.
+  `players[i].heroUntil` (the HERO ribbon) is in the full state; `vetPlayer` makes it a finite number (junk = 0).
+  `steal:rescued {hero, victim, thief, plant, tip, sneaky}` is forwarded; vet drops it unless hero, victim and thief
+  are three different players and tip is a number >= 0. The caps (one tip per hero/thief pair per 90 s, 5 per hero
+  per 10 min) stop friends from farming tips (one steals, the other bonks). `stats.rescues` rides with the slot.
+* Calling for help is the existing "Help!" quick-chat phrase (`app.act('say', 'help')`): the host's bots answer
+  (`ai/family.js callForHelp`, from `social/botReact.js`); bot thank-you and WHOA lines are ordinary bot `chat`
+  lines (config `FAMILY_LINES`, merged into `CHAT`, so `isBotLine` knows them).
+* Welcome-Back Garden is solo Endless only (online gardens in `profile.online` and Showdown never get away credit):
+  no protocol change.
+
 ## Shared rules
 * No new runtime network except the Supabase project (and only through `src/net/transport.js` and
   `src/online/**`). No external images/fonts.

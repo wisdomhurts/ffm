@@ -26,6 +26,7 @@ import { typedChatAllowed } from '../social/chat.js';
 import { fullscreenButton } from './fullscreen.js';
 import { mountSoundButton } from './soundControls.js';
 import { createSellPrompt, sellHow } from './sell.js';
+import { mountHero } from './hero.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
@@ -117,7 +118,7 @@ export function createHUD(app) {
   parts.push(createKeyHints(app, root));
   parts.push(createMatchClock(app, alerts));
   // feature widgets (each owns its DOM + styles; see docs/ONLINE.md)
-  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel, mountSpeedo]) {
+  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel, mountSpeedo, mountHero]) {
     try {
       const w = mount(app, root, anchors);
       if (w) parts.push(w);

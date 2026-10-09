@@ -653,6 +653,12 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     add('grown');
     fact('grow');
   });
+  on('plant:giant', ({ player, plant }) => {
+    if (!isMe(player) || (plant?.size !== 'giant' && plant?.size !== 'titan')) return;
+    add('giants');
+    if (plant.size === 'titan') add('titans');
+    checkBadges();
+  });
   on('plant:sold', ({ player }) => {
     if (!isMe(player)) return;
     add('sold');
@@ -675,6 +681,11 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     if (!isMe(by) || thief === by) return;
     add('foils');
     fact('foil');
+    checkBadges();
+  });
+  on('steal:rescued', ({ hero }) => {
+    if (!isMe(hero)) return;
+    add('rescues');
     checkBadges();
   });
   on('player:hit', ({ target, by, cause }) => {

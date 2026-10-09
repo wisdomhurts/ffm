@@ -93,6 +93,14 @@ Field) up to 60 ⭐ (Rainbow's End). Almanac Ace: 3 full pages = Leaf Hat, every
 into a solo Endless garden, otherwise saved for the next one, like quest cash) and the Family Crown hat, with a
 full-screen celebration (it waits until you are not carrying anything).
 
+**Giant Harvests** (`SIZES`, `SIZE_ODDS` in config.js): the moment a plant finishes growing it rolls a size with the
+rules' dice (the host rolls online): **Big** 10% (x1.25 income, 1.25x as tall), **GIANT** 2% (x3, 1.5x), **TITAN**
+0.2% (x6, 1.8x, a light beam). A grow pet in the team makes the odds x1.25, a Water Bucket on the plant x1.5. The
+size stays with the plant for good (sell value, net worth, stealing, gifts, trades, saves) and multiplies on top of
+mutations. Economy guard: at the base odds sizes add under +8% to a garden's income (tests/gameplay/giant.test.mjs).
+On screen: a drumroll, the plant stays normal size for 1.2 s, then pops up with "BIG!" / "GIANT!" / "TITAN!!"; your
+own GIANT or TITAN nudges the camera, a nearby family bot shouts WHOA, and the plant label wears a size chip.
+
 ## 4. Verbs
 
 * **Grab** (E / tap): pick a seed from a pod. Carried above your head. Speed ×0.85.
@@ -144,6 +152,16 @@ full-screen celebration (it waits until you are not carrying anything).
   Water Bucket (halves remaining growth time of the plant you stand next to).
 * **Rebirth** (Rebirth Altar): at a net-worth threshold, reset for a permanent income
   multiplier, base speed and a crown.
+* **Help! Family Hero** (`HERO` in config.js): bonk (or water-balloon) a thief who is running off with *someone
+  else's* plant and the game tips you min(30 s of the plant's income, 90 s of what you could sell it for), doubled
+  when the thief is SNEAKY (3+ steal grabs in the last 2 minutes). You wear a gold HERO ribbon for 60 s. Caps: one
+  tip per hero/thief pair per 90 s and 5 per hero per 10 minutes (a capped rescue is just a good bonk). No hero for
+  the owner bonking their own thief, the Guard Gnome, monsters or a banana peel. A rescued family bot thanks you and
+  won't steal from you for 2 minutes.
+* **Call for help** (HELP! button while you're being robbed, or H; it is the "Help!" quick chat): the family bots
+  answer by personality: Esther (Guardian) always within 150 studs, Dorian (Tycoon) within 60, Mati (Speedster)
+  half the time, Micah (Sneaky Thief) a quarter of the time ("Not it!"). Helpers chase the thief for up to 20 s.
+  When a family member is robbed within 80 studs of you: "Esther needs help!" and an arrow to the thief.
 
 ## 5. Dangers
 Road monsters guard biomes 2–9 (the far worlds' Snowball Yeti, Gummy Bear and Storm Puff are the fastest). They only chase players **carrying a seed**, never leave their
@@ -158,7 +176,12 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
 * **Egg Rain** — a candy-pastel sky; 10 egg drops fall around the plaza and the start of the road (15% Rainbow).
 
 ## 7. Modes
-* **Endless** (auto-saves locally).
+* **Endless** (auto-saves locally). **Welcome-Back Garden** (`AWAY` in config.js, solo Endless only): when you come
+  back to a save, every garden (the bots' too) has kept growing at half speed for the time you were away, capped at
+  2 hours (4 at Base Lv 6, 8 at Lv 10); breaks under 5 minutes don't count. Plants that finish roll their size; the
+  cash waits on the COLLECT pad. A "While you were away..." card (never during the tutorial) shows what grew, the
+  cash and a few made-up family stories (nothing is ever lost while you're away), then "Run to COLLECT!" points at
+  your pad.
 * **Family Showdown** — 8 minutes, highest net worth wins, 3D podium finale.
 * Difficulty: Chill / Normal / Chaos (bot aggression and speed).
 * Online: public rooms (Quick Play, the room list) are people only; private rooms may have 0-3 computer players.

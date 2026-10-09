@@ -9,8 +9,9 @@ import {
 import { getBoard, podClaimedByOther, stealersOn } from './blackboard.js';
 import {
   FarmGoal, StealGoal, LurkGoal, DefendGoal, MugGoal, GroundGoal, ShopGoal, UnlockGoal, WaterGoal, CollectGoal,
-  LockGoal, PatrolGoal, BaseGoal, DropGoal,
+  LockGoal, PatrolGoal, BaseGoal, DropGoal, HelpGoal,
 } from './goals.js';
+import { helpTarget, owesHero } from './family.js';
 
 const MIN_REF = 0.02;
 const STEAL_SCALE = 0.6; // stealing is the spice, farming is the meal
@@ -114,6 +115,7 @@ function bestSteal(bot, game, p, info) {
     if (g.slot === p.slot) continue;
     if (game.isLocked(g) && g.lockedUntil > now + 2) continue;
     const victim = g.owner;
+    if (owesHero(game, p, victim)) continue; // they just saved our plant (Family Hero)
     if (victim.isHuman) {
       if (now < board.humanStealUntil || now < diff.humanGrace) continue;
       let grown = 0;
@@ -270,6 +272,9 @@ export function chooseGoal(bot, game, p) {
   if (blocked && bot.personality === 'thief' && now > (bot.lurkBlock.get(blocked.g.slot) || 0)) {
     cands.push([blocked.u * 0.25, () => new LurkGoal(blocked.g.slot, blocked.u * 0.25)]);
   }
+  // a family member called for help and we said we'd come (ai/family.js): chase their thief
+  const help = helpTarget(game, p);
+  if (help) cands.push([ref * 3 + 0.02, () => new HelpGoal(help.thief, help.victim, ref * 3)]);
 
   // 2. home economy
   const avail = p.cash + info.g.cashPile;

@@ -23,7 +23,7 @@
 //   welcome {to, hn, slot, ep, order, priv, st} host -> joiner (st = full world state)
 //   kick    {to, k, p, v, su, iu}               host -> member: the rules moved you (knockback, caught, respawn)
 //   kicked  {to}                                host -> member: removed from the room
-import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL, PET_TRICKS, RARITY } from '../config.js';
+import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL, PET_TRICKS, RARITY, SIZES } from '../config.js';
 import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
 import { REPLIES, EMOTE_LINES, TYPED_REPLIES } from '../social/replies.js';
 import { isTypedLine } from '../social/chat.js';
@@ -248,7 +248,8 @@ export function vetPlantData(d, owner = null) {
   if (!isObj(d) || !own(PLANT, d.speciesId)) return null;
   const sp = PLANT[d.speciesId];
   const growTotal = num(d.growTotal, sp.grow) > 0 ? Math.min(num(d.growTotal, sp.grow), 1e6) : sp.grow;
-  const out = { speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal', growTotal, growLeft: Math.max(0, Math.min(growTotal, num(d.growLeft))) };
+  const out = { speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal', growTotal, growLeft: Math.max(0, Math.min(growTotal, num(d.growLeft))),
+    size: own(SIZES, d.size) ? d.size : 'normal' };
   if ('uid' in d) out.uid = num(d.uid);
   if (owner != null) out.owner = int(d.owner, 0, CHARACTERS.length - 1, owner);
   return out;
@@ -263,7 +264,7 @@ export function vetSlotData(data) {
   const items = {};
   for (const it of ITEMS) items[it.id] = cap(isObj(p.items) ? p.items[it.id] : 0, 999);
   const stats = {};
-  if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds', 'eggs']) stats[k] = cap(p.stats[k], 1e12);
+  if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds', 'eggs', 'rescues']) stats[k] = cap(p.stats[k], 1e12);
   out.player = {
     cash: cap(p.cash, 1e18, PLAYER.startCash), speedLevel: cap(p.speedLevel, 999), rebirths: cap(p.rebirths, 50),
     upgradeSpend: cap(p.upgradeSpend, 1e18), items, stats,
@@ -386,7 +387,7 @@ export class EventCodec {
     if (ref) return ref;
     if (Array.isArray(v)) return v.slice(0, 16).map((x) => this.encode(x, depth + 1));
     if (typeof v.speciesId === 'string' && 'growTotal' in v) {
-      return { $pl: { uid: v.uid, speciesId: v.speciesId, mutation: v.mutation, growTotal: r3(v.growTotal), growLeft: r3(v.growLeft), owner: v.owner } };
+      return { $pl: { uid: v.uid, speciesId: v.speciesId, mutation: v.mutation, growTotal: r3(v.growTotal), growLeft: r3(v.growLeft), owner: v.owner, size: v.size } };
     }
     if ((v.kind === 'seed' || v.kind === 'banana') && 'expiresAt' in v) {
       const o = {};
@@ -458,7 +459,7 @@ export class EventCodec {
     for (const p of g.players) if (p.carrying?.kind === 'plant' && p.carrying.plant.uid === d.uid) return p.carrying.plant;
     return {
       uid: num(d.uid), speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal',
-      growTotal: num(d.growTotal, 1), growLeft: num(d.growLeft), owner: int(d.owner, 0, 3, 0),
+      growTotal: num(d.growTotal, 1), growLeft: num(d.growLeft), owner: int(d.owner, 0, 3, 0), size: own(SIZES, d.size) ? d.size : 'normal',
     };
   }
 
@@ -494,6 +495,12 @@ export class EventCodec {
     if (name === 'emote' && !own(EMOTE, e.id)) return null;
     if (name === 'pet:trick' && (int(e.owner, 0, 3, -1) < 0 || int(e.k, 0, 2, -1) < 0 ||
       (!PET_TRICKS.walk.includes(e.trick) && !PET_TRICKS.fly.includes(e.trick)))) return null;
+    // Giant Harvests: the size ids travel as plain ids (unknown ones mean the event is not about this build's rules)
+    if ((name === 'plant:grown' && e.size != null && !own(SIZES, e.size)) || (name === 'plant:giant' &&
+      (!isObj(e.plant) || !own(PLANT, e.plant.speciesId) || !own(MUTATIONS, e.plant.mutation) || !own(SIZES, e.plant.size)))) return null;
+    // Help! Family Hero: three players and a tip (a number); nobody can be their own hero
+    if (name === 'steal:rescued' && (!(e.hero instanceof Player) || !(e.thief instanceof Player) || !(e.victim instanceof Player) ||
+      e.hero === e.thief || e.hero === e.victim || !(num(e.tip, -1) >= 0))) return null;
     return e;
   }
 }
@@ -522,7 +529,7 @@ export function signature(key, v) {
     return stringifyR([rest, interact.key, interact.verb, interact.label, sell?.key, sell?.label, trainT > 0]);
   }
   if (key[0] === 'g' && key !== 'gr') {
-    return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.guardReadyAt, v.guardAlert, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0]])]);
+    return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.guardReadyAt, v.guardAlert, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0, pl.plant.size]])]);
   }
   if (key === 'mo') return stringifyR(v.map((m) => [m.stunUntil, m.attackAt]));
   if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match, v.maxBots]); // uid: only for promotion
@@ -600,7 +607,7 @@ export function vetPlayer(d, i) {
   d.baseLevel = int(d.baseLevel, 1, BASE.maxLevel, 1);
   d.boostLevel = int(d.boostLevel, 0, BOOST.maxLevel, 0);
   d.treadmillTier = int(d.treadmillTier, 0, TREADMILL.tiers.length - 1, 0);
-  for (const k of ['boostUntil', 'boostReadyAt', 'pumpUntil', 'trainT']) d[k] = num(d[k]);
+  for (const k of ['boostUntil', 'boostReadyAt', 'pumpUntil', 'trainT', 'heroUntil']) d[k] = num(d[k]);
   d.pumpMult = Math.max(1, Math.min(2, num(d.pumpMult, 1)));
   if (d.emote && (!isObj(d.emote) || !own(EMOTE, d.emote.id))) d.emote = null;
   const c = d.carrying;

@@ -45,6 +45,15 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * **Seed Almanac**: a sticker book of every plant in every finish (Normal, Gold, Diamond, Rainbow), one page per
   world plus the Secret page. A new plant's first sticker gives a star, all four finishes ("Mastered") five more,
   a full page a badge; fill 3 pages for the Leaf Hat and every page for the Golden Trowel noodle.
+* **Giant Harvests**: when a plant finishes growing there's a drumroll, and now and then it pops up **Big**,
+  **GIANT** (3x the cash) or, very rarely, **TITAN** (6x, with a light beam you can see from across the map).
+  Grow pets and the Water Bucket raise the odds. Guard them well: they are the best thing to steal, too!
+* **Help! Family Hero**: being robbed? Press the HELP! button (or H) and the family comes running (Esther always
+  does; Micah... sometimes). Bonk a thief running off with *someone else's* plant and you're the HERO: a tip, a gold
+  HERO ribbon over your head and a big thank-you. A sneaky thief who keeps stealing doubles the tip.
+* **Welcome-Back Garden**: come back to an Endless game and your garden kept growing while you were away (at half
+  speed, up to 2 hours; 4 at Base Lv 6, 8 at Lv 10). A "While you were away..." card tells you what the family got
+  up to, and your cash waits on the COLLECT pad.
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.
@@ -67,6 +76,7 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 | Items | 1–5 | tap hotbar | Y / bumpers |
 | Chat | Enter to type (Esc closes), T quick chat, G emotes | chat button, smiley button | |
 | Trade / Gift (near someone) | Y trade, U gift, N no thanks; in the trade window Y = Ready | Trade / Gift buttons | D-pad up trade, right gift, left no thanks; in the window D-pad + A, Y Ready, LB/RB tabs, B cancel |
+| Call for help (while robbed) | H | HELP! button | |
 | Pause | Esc | pause button | Start |
 | Sound | M = music on/off | tap the speaker (hold: mute all) | pause menu: D-pad, left/right, A |
 

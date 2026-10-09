@@ -71,7 +71,8 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `seed:dropped` | player, item (ground seed), by, cause |
 | `seed:expired`, `ground:expired` | item |
 | `plant:planted` | player, plant, planter, garden |
-| `plant:grown` | plant, planter, garden |
+| `plant:grown` | plant, planter, garden, size ('normal'/'big'/'giant'/'titan': Giant Harvests) |
+| `plant:giant` | player (the owner), plant: {speciesId, mutation, size} (ids only), planter, garden: a finish came out Big, GIANT or TITAN |
 | `plant:sold` | player, plant, value, planter |
 | `plant:returned` | plant, planter (or null), garden, refund? |
 | `plant:watered` | player, planter |
@@ -80,6 +81,7 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `steal:grabbed` | thief, victim, plant, garden |
 | `steal:success` | thief, victim, plant, planter, garden, soldFor? |
 | `steal:foiled` | thief, victim, plant, by (Player or null), cause: 'bonk'/'balloon'/'banana'/'monster' |
+| `steal:rescued` | hero, victim, thief, plant, tip, sneaky: a third player saved someone else's plant (Family Hero; after `steal:foiled`) |
 | `cash:collected` | player, amount, x, z |
 | `lock:on` / `lock:off` | player, garden, until |
 | `garden:full` | player |
@@ -101,7 +103,8 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `bonk:blocked` | player (pressed bonk while carrying) |
 | `shop:open` | player, shop: 'gear'/'speed'/'rebirth' |
 
-App: `game:start {game, human, resumed}`, `game:dispose {game}`, `app:state {state: 'title'|'playing'|'paused'|'shop'|'ended'}`,
+App: `game:start {game, human, resumed}`, `away:report {seconds, credit, cash, grown, sizes, giants, bots, lines}` (solo Endless, right
+after `game:start` when the save is 5+ minutes old: Welcome-Back Garden), `game:dispose {game}`, `app:state {state: 'title'|'playing'|'paused'|'shop'|'ended'}`,
 `settings:changed {key, value}`, `face:changed {id}`, `camera:shake {amount}` (emit it to shake the camera),
 `engine:resize {w,h}`.
 

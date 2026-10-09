@@ -13,6 +13,8 @@ import { createDropView } from '../pets/dropView.js';
 import { EGG } from '../pets/catalog.js';
 import { TREADMILL } from '../config.js';
 import { beltRect } from '../gameplay/layout.js';
+import { sizeOf, shownSize, sizeChip, heroRibbon, addTitanBeam } from './sizes.js';
+import { SIZES } from '../config.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -189,13 +191,13 @@ export class GameView {
       o.position.set(p.pos.x, p.pos.y, p.pos.z);
       o.rotation.y = p.yaw;
       const c = p.carrying;
-      const key = c ? (c.kind === 'seed' ? `s:${c.speciesId}:${c.mutation}` : `p:${c.plant.uid}:${c.plant.mutation}`) : null;
+      const key = c ? (c.kind === 'seed' ? `s:${c.speciesId}:${c.mutation}` : `p:${c.plant.uid}:${c.plant.mutation}:${sizeOf(c.plant)}`) : null;
       if (key !== this.carryKeys[i]) {
         this.carryKeys[i] = key;
         if (this.carryViews?.[i]) this.carryViews[i] = null;
         let view = null;
         if (c?.kind === 'seed') view = createSeedView(c.speciesId, c.mutation);
-        else if (c?.kind === 'plant') view = createCarriedPlantView(c.plant.speciesId, c.plant.mutation);
+        else if (c?.kind === 'plant') view = createCarriedPlantView(c.plant.speciesId, c.plant.mutation, { size: sizeOf(c.plant) });
         (this.carryViews ||= [])[i] = view;
         // the pot on the local player's head draws after the x-ray so the head's outline never shows through it
         if (view && p === human) view.object3d.traverse((o) => { if (o.isMesh && !o.material.transparent) o.renderOrder += 31; });
@@ -223,7 +225,7 @@ export class GameView {
       if (p === human && this.xray) this.xray.setVisible(invisible >= 1);
       this._updatePet(i, p, dt, time, now, invisible);
       if (invisible > 0.05) {
-        const tag = p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`;
+        const tag = heroRibbon(p, now) + (p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`);
         let carry = '';
         if (c && p !== human) {
           const sid = c.kind === 'seed' ? c.speciesId : c.plant.speciesId;
@@ -231,7 +233,8 @@ export class GameView {
           carry = `<div class="nt-carry">${c.kind === 'plant' ? 'STOLEN ' : ''}${mutationTag(mut)} <b style="color:${rarityColor(PLANT[sid].rarity)}">${esc(PLANT[sid].name)}</b></div>`;
         }
         const top = av.headTop.position.y * av.object3d.scale.y;
-        if (tag || carry) L.set('pl' + i, { x: p.pos.x, y: p.pos.y + top + (c ? 3.9 : 1.4), z: p.pos.z }, tag + carry, { cls: 'nametag' + (c?.kind === 'plant' ? ' thief' : ''), maxDist: 110 });
+        const lift = c?.kind === 'plant' ? (SIZES[sizeOf(c.plant)].scale - 1) * 1.6 : 0; // a giant pot is taller
+        if (tag || carry) L.set('pl' + i, { x: p.pos.x, y: p.pos.y + top + (c ? 3.9 + lift : 1.4), z: p.pos.z }, tag + carry, { cls: 'nametag' + (c?.kind === 'plant' ? ' thief' : ''), maxDist: 110 });
       }
     });
 
@@ -258,14 +261,16 @@ export class GameView {
         const k = gd.slot + ':' + pl.index;
         signs?.planters?.[pl.index]?.setUnlocked(pl.unlocked);
         const plant = pl.plant;
-        const key = plant ? plant.uid + ':' + plant.mutation : null;
+        const size = plant ? shownSize(plant, now) : 'normal'; // Giant Harvests (normal through the drumroll)
+        const key = plant ? plant.uid + ':' + plant.mutation + ':' + size : null;
         let rec = this.plantViews.get(k);
         if (!rec || rec.key !== key) {
           if (rec?.view) this.root.remove(rec.view.object3d);
           rec = { key, view: null };
           if (plant) {
-            rec.view = createPlantView(plant.speciesId, plant.mutation);
+            rec.view = createPlantView(plant.speciesId, plant.mutation, { size });
             rec.view.object3d.position.set(pl.x, 1.2, pl.z);
+            if (SIZES[size].beam) addTitanBeam(rec.view, plant.mutation);
             this.root.add(rec.view.object3d);
           }
           this.plantViews.set(k, rec);
@@ -291,11 +296,11 @@ export class GameView {
           const stealing = pl.stealer != null ? '<div class="pl-steal">BEING STOLEN!</div>' : '';
           if (k === nearKey || stealing) {
             L.set('pt' + k, { x: pl.x, y: labelY, z: pl.z },
-              `${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${stealing}`,
+              `${sizeChip(size)}${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${stealing}`,
               { cls: 'plantlbl' + (grown ? ' grown' : ''), maxDist: 70 });
           } else if (fd < 46) {
             const chip = grown
-              ? `<div class="pl-inc" style="--rc:${rarityColor(sp.rarity)}">$${fmt(inc)}/s</div>`
+              ? `${sizeChip(size)}<div class="pl-inc" style="--rc:${rarityColor(sp.rarity)}">$${fmt(inc)}/s</div>`
               : `<div class="pl-bar"><i style="width:${(p01 * 100).toFixed(0)}%"></i></div>`;
             L.set('pt' + k, { x: pl.x, y: labelY - 0.6, z: pl.z }, chip, { cls: 'plantlbl compact' + (grown ? ' grown' : ''), maxDist: 70 });
           }

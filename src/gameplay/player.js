@@ -61,6 +61,7 @@ export class Player {
     this.coilUntil = 0;
     this.cloakUntil = 0;
     this.celebrateUntil = 0;
+    this.heroUntil = 0; // Help! Family Hero: the gold HERO ribbon shows until this time
     this.interact = { key: null, t: 0, hold: 0, label: '' };
     this.prevInteract = false;
     this.sell = { key: null, t: 0, hold: 0, label: '' }; // the Sell prompt (its own button: V / Sell / D-pad down)
@@ -68,7 +69,7 @@ export class Player {
     this.intent = null;
     this.controller = null;
     this.lastHitBy = null;
-    this.stats = { steals: 0, robbed: 0, planted: 0, bonks: 0, collected: 0, best: null, seeds: 0, eggs: 0 };
+    this.stats = { steals: 0, robbed: 0, planted: 0, bonks: 0, collected: 0, best: null, seeds: 0, eggs: 0, rescues: 0 };
   }
 
   get stunned() {

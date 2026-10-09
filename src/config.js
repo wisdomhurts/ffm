@@ -373,11 +373,13 @@ export const MATCH = { showdownSeconds: 480 };
 // ------------------------------------------------------------------ round 4 features
 
 // Giant Harvests: a plant rolls a size the moment it finishes growing (host-rolled, travels in plant data).
+// Economy guard (tests/gameplay/giant.test.mjs): sum of p x (mult - 1) stays under 0.08, i.e. sizes add less than
+// +8% to a garden's income at the base odds (a Big every ~10 plants, a GIANT every ~50, a TITAN every ~500).
 export const SIZES = {
   normal: { id: 'normal', name: '', p: 0, mult: 1, scale: 1 },
-  big: { id: 'big', name: 'Big', p: 0.12, mult: 1.5, scale: 1.25 },
-  giant: { id: 'giant', name: 'GIANT', p: 0.03, mult: 3, scale: 1.5 },
-  titan: { id: 'titan', name: 'TITAN', p: 0.003, mult: 6, scale: 1.8, beam: true },
+  big: { id: 'big', name: 'Big', p: 0.1, mult: 1.25, scale: 1.25 },
+  giant: { id: 'giant', name: 'GIANT', p: 0.02, mult: 3, scale: 1.5 },
+  titan: { id: 'titan', name: 'TITAN', p: 0.002, mult: 6, scale: 1.8, beam: true },
 };
 export const SIZE_ODDS = { growPet: 1.25, watered: 1.5 }; // multipliers on the big/giant/titan chances
 
@@ -391,6 +393,36 @@ export const HERO = {
   sneakyWindow: 120,
   ribbon: 60, // seconds the gold HERO ribbon shows
   owes: 120, // seconds a rescued bot won't steal from its hero
+  // who answers a call for HELP (quick chat "Help!" while you're robbed): range in studs and how often, by personality
+  help: { guardian: [150, 1], tycoon: [60, 1], speedster: [999, 0.5], thief: [999, 0.25] },
+  helpFor: 20, // seconds a helper keeps chasing the thief
+  alertRange: 80, // a family bot robbed this close to you: "Esther needs help!"
+};
+
+// Family bot lines for Giant Harvests (giant: someone's plant came out GIANT or TITAN) and Family Hero (thanks: to
+// whoever saved their plant; helping: answering a call for help). {plant} {size} {hero} {name} are filled in.
+// Merged into CHAT below, so they are ordinary bot lines (net/protocol.js isBotLine knows them).
+export const FAMILY_LINES = {
+  dorian: {
+    giant: ['WHOA! Look at that {size} {plant}!', 'Now THAT is a {size} {plant}!', 'WHOA! That {plant} is HUGE!'],
+    thanks: ['Thanks, {hero}! You saved my {plant}!', 'My hero! Thanks, {hero}!', '{hero} to the rescue! Thank you!'],
+    helping: ['Hang on, {name}! Dad is coming!', 'On my way, champ!'],
+  },
+  esther: {
+    giant: ['WHOA! What a {size} {plant}!', 'Look how big that {plant} grew!', 'WHOA! So pretty AND so big!'],
+    thanks: ['Thank you, {hero}! You are my hero!', 'Aww, thanks {hero}! Big hug!', '{hero} saved the day!'],
+    helping: ['Mom is coming, {name}!', 'I got you, sweetie!'],
+  },
+  maddie: {
+    giant: ['WHOA!! A {size} {plant}!!', 'That {plant} is GINORMOUS!', 'WHOA! Can I touch it?!'],
+    thanks: ['THANK YOU {hero}!!', '{hero} is my HERO!', 'Yay! Thanks, {hero}!'],
+    helping: ['Zooming to help!', 'Coming, {name}! Zoom zoom!'],
+  },
+  micah: {
+    giant: ['WHOA... that {size} {plant} looks stealable. Hehe.', 'WHOA! That {plant} is enormous!', 'Ooh, a {size} {plant}. Nice.'],
+    thanks: ['Thanks, {hero}! I owe you one.', 'Whoa, thanks {hero}!', 'You saved my {plant}! Thanks, {hero}!'],
+    helping: ['Fine, I will help. Just this once!', 'Ninja rescue mode!'],
+  },
 };
 
 // Welcome-Back Garden (solo Endless only): time away keeps your garden growing, at half speed, capped.
@@ -526,6 +558,8 @@ export const CHAT = {
       'Watch your garden, {human}...', 'I have a plan. A sneaky plan.', 'Is it snack time yet?'],
   },
 };
+
+for (const [id, lines] of Object.entries(FAMILY_LINES)) Object.assign(CHAT[id], lines); // round 4: giant / thanks / helping
 
 // Keyed tables are looked up with ids from saves and the network: no inherited keys ('constructor', 'toString'...).
 for (const t of [MUTATIONS, DIFFICULTY, CHAT]) Object.setPrototypeOf(t, null);

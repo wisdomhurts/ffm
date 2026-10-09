@@ -37,6 +37,9 @@ import { attachPets, attachPetMail } from './ui/pets.js';
 import { attachPetTricks } from './pets/tricks.js';
 import { sameLook } from './characters/cosmetics.js';
 import { createTradeManager } from './social/trades.js';
+import { attachGiants } from './fx/giants.js';
+import { createGlowBeam } from './pets/dropView.js';
+import { attachAway, awayLines } from './ui/away.js';
 
 const SAVE_EVERY = 12;
 
@@ -47,6 +50,7 @@ function buildWarmupGroup() {
   g.add(createBanana(), createBalloon());
   g.add(roadWarmup()); // the Seed Road's own shader variants (light shafts, glowing cliffs)
   g.add(guideWarmup()); // the tutorial beacon (it can switch on mid-game)
+  g.add(createGlowBeam().object3d); // egg drop beams and the TITAN plant beam (Giant Harvests)
   // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
     for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);
@@ -86,6 +90,8 @@ class App {
     this.petMailbox = attachPetMail(this); // pets traded to / from this player land in (or leave) the profile
     this.touch = createTouchControls(this);
     attachPetTricks(this); // click / tap a pet: it does a trick (instead of a bonk)
+    attachGiants(this); // Giant Harvests reveals, Family Hero moments
+    attachAway(this); // the Welcome-Back Garden card
     this.profileId = activeProfileId() || CHARACTERS[0].id;
     this.progress = attachProgress(this);
     this.online = createOnline(this);
@@ -391,6 +397,8 @@ class App {
       game = this._newGame({ mode, difficulty, save: null, slots });
     }
     game.saveKey = mode === 'endless' ? saveKey : null;
+    // Welcome-Back Garden: the gardens kept growing while you were away (reported once the HUD is up)
+    const away = saved ? game.applyAway((Date.now() - saved.savedAt) / 1000) : null;
     this.hud = createHUD(this);
     this.menus.hideAll();
     this.cam.snapBehind(this.human.yaw);
@@ -404,6 +412,7 @@ class App {
     this.audio.setMusicMode('play');
     bus.emit('game:start', { game, human: this.human, resumed: !!saved });
     bus.emit('app:state', { state: 'playing' });
+    if (away) bus.emit('away:report', { ...away, lines: awayLines(game, away) });
   }
 
   /**

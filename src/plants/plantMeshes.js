@@ -19,7 +19,7 @@
 // FxRig whose items are drawn by a handful of scene-wide instanced batches (see fx.js), and all glow, rainbow and
 // sparkle animation runs in shaders from one shared time uniform, so update() is O(1).
 import * as THREE from 'three';
-import { PLANT, PLANTS, RARITY, MUTATIONS, BIOMES } from '../config.js';
+import { PLANT, PLANTS, RARITY, MUTATIONS, BIOMES, SIZES } from '../config.js';
 import { Builder, P } from './geometry.js';
 import { LOOKS, buildSeedling, seedBody } from './species.js';
 import { U, camPos } from './materials.js';
@@ -32,6 +32,8 @@ export { fxStats } from './fx.js';
 const TAU = Math.PI * 2;
 const speciesOf = (id) => PLANT[id] || PLANTS[0];
 const mutOf = (m) => (MUTATIONS[m] ? m : 'normal');
+// opts.size (Giant Harvests: 'big' | 'giant' | 'titan'): the whole view grows by SIZES[size].scale
+const sizeK = (size) => (Object.prototype.hasOwnProperty.call(SIZES, size) ? SIZES[size].scale : 1);
 const tierOf = (sp) => RARITY[sp.rarity]?.tier ?? 0;
 const lookOf = (sp) => LOOKS[sp.look] || LOOKS.daisy;
 const isSecret = (sp) => sp.rarity === 'secret';
@@ -241,6 +243,7 @@ function addPlantFx(rig, sp, mut, tpl, stage, groundNode, fxNode, ph) {
 /**
  * opts.facing: yaw for the plant's front (its face side). By default a plant in a garden faces the
  * central aisle (where visitors come from); anywhere else it faces the camera it first sees.
+ * opts.size: a Giant Harvests size id; scales the whole view (topY too, so labels lift).
  */
 export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
   const sp = speciesOf(speciesId);
@@ -249,6 +252,8 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
   const baseScale = plantScale(sp.id);
   const root = new THREE.Group();
   root.name = 'plant:' + sp.id;
+  const big = sizeK(opts.size);
+  root.scale.setScalar(big);
   const orient = new THREE.Group();
   const sway = new THREE.Group();
   const body = new THREE.Group();
@@ -295,7 +300,7 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
     mutation: mut,
     /** Current height of the plant top above the soil (studs), e.g. for placing its label. */
     get topY() {
-      return tpl ? tpl.height * baseScale * growScale : 1;
+      return tpl ? tpl.height * baseScale * growScale * big : 1;
     },
     setGrowth(p) {
       p = Math.max(0, Math.min(1, p || 0));
@@ -393,12 +398,13 @@ export function createSeedView(speciesId, mutation = 'normal') {
 
 // ------------------------------------------------------------------ carried potted plant
 
-export function createCarriedPlantView(speciesId, mutation = 'normal') {
+export function createCarriedPlantView(speciesId, mutation = 'normal', opts = {}) {
   const sp = speciesOf(speciesId);
   const mut = mutOf(mutation);
   const tier = tierOf(sp);
   const root = new THREE.Group();
   root.name = 'carried:' + sp.id;
+  root.scale.setScalar(1 + (sizeK(opts.size) - 1) * 0.5); // a giant pot overhead, but not a TITAN-sized one
   const wob = new THREE.Group();
   root.add(wob);
   const pot = potTemplate().instantiate();

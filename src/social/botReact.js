@@ -18,6 +18,8 @@ import { emptyIntent } from '../gameplay/player.js';
 import { getBoard } from '../ai/blackboard.js';
 import { EMOTE, DANCES } from './catalog.js';
 import { REPLIES, EMOTE_LINES, SIGNATURE_DANCE, TYPED_INTENTS, TYPED_REPLIES, BOT_CALLS } from './replies.js';
+import { FAMILY_LINES } from '../config.js';
+import { callForHelp } from '../ai/family.js';
 
 export const REACT = {
   emoteRange: 25, // studs: bots this close notice an emote
@@ -33,12 +35,14 @@ export const REACT = {
 
 const TURN = 0.3; // seconds a reacting bot spends stopping and turning before it emotes
 // goals a bot never interrupts to be social
-const BUSY = new Set(['return', 'steal', 'practice', 'defend', 'mug', 'lurk']);
+const BUSY = new Set(['return', 'steal', 'practice', 'defend', 'mug', 'lurk', 'help']);
 // phrases a bot may answer from anywhere on the map (everyone sees the chat log)
 const FAR_OK = new Set(['hi', 'bye', 'gg']);
 // phrases that only make sense as an answer to something: replied to less often
 const SHY = new Set(['yes', 'no']);
 const TYPED_CHANCE = 0.75; // how often a typed line gets an answer (greetings as often as quick chat; a bot called by name: always)
+// "On my way!" lines (config FAMILY_LINES.helping) for the bots that answer a call for help
+const HELPING = Object.fromEntries(Object.entries(FAMILY_LINES).map(([id, l]) => [id, l.helping]));
 // a gesture to go with some replies (quick-chat phrase / typed-line topic -> emote)
 const GESTURE = { hi: 'wave', bye: 'wave', gg: 'cheer', oops: 'laugh', nicesteal: 'laugh', wow: 'cheer', funny: 'laugh', joke: 'laugh', love: 'cheer' };
 
@@ -147,6 +151,10 @@ function plan(game, s, e) {
     add(b, { at: now + delay, kind: 'emote', id, face: who.slot, hold: Math.min(REACT.holdMax, hold) });
   };
 
+  // Help! Family Hero: "Help!" while being robbed sends the family after the thief (ai/family.js), spam or not
+  const asksHelp = e.type === 'chat' && (e.quick ? e.phrase === 'help' : typedIntent(e.text) === 'help');
+  const helpers = asksHelp ? callForHelp(game, who, rng).filter((a) => a.yes).map((a) => a.bot) : [];
+
   // spam guard: lots of the same from one person gets one "I heard you!" now and then, then silence
   const hist = (s.heard.get(who.slot) || []).filter((t) => now - t < REACT.spamWindow);
   hist.push(now);
@@ -223,6 +231,11 @@ function plan(game, s, e) {
   if (e.typed) {
     called = bots.find((b) => b.controller.goal?.type !== 'practice' && callsBot(e.text, b)) || null;
     id = typedIntent(e.text) || (called ? 'huh' : null);
+  }
+  // the ones on their way say so (the others answer as usual: "Not it!")
+  if (helpers.length) {
+    helpers.slice(0, 2).forEach((b, i) => say(b, HELPING, rng.range(0.4, 0.8) + i * 1.3));
+    return out;
   }
   if (id === 'trade') return out; // trade talk: a bot answers in social/botTrade.js (and may ask back)
   const table = e.typed ? TYPED_REPLIES[id] || REPLIES[id] : REPLIES[id];
