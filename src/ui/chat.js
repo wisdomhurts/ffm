@@ -14,8 +14,9 @@ import { avatarEl } from './avatars.js';
 import { isTouch } from './device.js';
 import { QUICK_CHAT, SAY_COOLDOWN } from '../social/catalog.js';
 import { socialUi } from '../social/uiState.js';
-import { CHAT_NOTES, sendTyped, typedChatAllowed, typedChatBlock, roomIsPrivate } from '../social/chat.js';
+import { CHAT_NOTES, sendTyped, typedChatAllowed, typedChatBlock, roomIsPrivate, grownUpQuestion } from '../social/chat.js';
 import { injectChatStyles } from '../social/chatStyles.js';
+import { isCelebrating } from '../progress/celebrate.js';
 
 const SEND = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 11.3L20.3 4l-6.6 16.4-2.4-6.6z" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M11.3 13.8L20.3 4" fill="none" stroke="#2a6fe6" stroke-width="1.6"/></svg>';
 const NOTE_MS = 3800;
@@ -24,6 +25,69 @@ const isTyping = (e) => {
   const t = e.target;
   return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
 };
+
+// The chat buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
+// finger while the thumb is on the joystick. Same pattern as ui/hud.js onPress(..., 'up'); keyboard activation
+// (a click with detail 0) still works.
+function onTap(el, fn) {
+  let armed = null;
+  let firedAt = -1e9; // the click that trails a tap can also report detail 0: it must not fire again
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    armed = e.pointerId;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic or already-released pointers can't be captured */
+    }
+  });
+  el.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== armed) return;
+    armed = null;
+    const r = el.getBoundingClientRect();
+    if (e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8) {
+      firedAt = performance.now();
+      fn(e);
+    }
+  });
+  el.addEventListener('pointercancel', () => (armed = null));
+  el.addEventListener('click', (e) => e.detail === 0 && performance.now() - firedAt > 600 && fn(e));
+}
+
+/**
+ * Grown-ups only: a quick sum before typed chat in public rooms is switched on (Settings > Chat). Opens a small
+ * modal over Settings; `onPass` runs only for the right answer. Cancel, Esc or a wrong answer change nothing.
+ */
+export function askGrownUp(app, onPass) {
+  if (typeof document === 'undefined' || !app?.menus?.openModal) return;
+  injectChatStyles();
+  const q = grownUpQuestion();
+  const input = h('input', {
+    class: 'gu-in', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: '4', autocomplete: 'off', 'aria-label': `What is ${q.text}?`,
+  });
+  const cancel = h('button', { class: 'btn btn-grey', type: 'button', text: 'Cancel' });
+  const ok = h('button', { class: 'btn btn-green', type: 'submit', text: 'OK' });
+  const form = h('form', { class: 'gu-form', autocomplete: 'off' },
+    h('div', { class: 'gu-q' }, h('span', { text: `${q.text} =` }), input), h('div', { class: 'gu-btns' }, cancel, ok));
+  const body = h('div', { class: 'gu-body' },
+    h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.lock }), h('h2', { text: 'Grown-ups only' })),
+    h('p', { class: 'gu-p', text: 'Typed chat in public rooms lets your child type to people they don\'t know. To switch it on, answer this:' }),
+    form);
+  const m = app.menus.openModal(body, { cls: 'grown-up', label: 'Grown-ups only' });
+  cancel.addEventListener('click', () => {
+    uiSound(app, 'click');
+    m.close();
+  });
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const right = input.value.trim() !== '' && Number(input.value.trim()) === q.answer;
+    uiSound(app, right ? 'click' : 'error');
+    m.close();
+    if (right) onPass();
+  });
+  if (!isTouch()) setTimeout(() => input.isConnected && input.focus({ preventScroll: true }), 60);
+}
 
 export function mountChat(app, hudRoot, parts = {}) {
   const me = app.human;
@@ -74,9 +138,11 @@ export function mountChat(app, hudRoot, parts = {}) {
   let noteTimer = 0;
   let closeTimer = 0;
   let lastSayAt = -1e9;
-  const log = []; // {slot, pid, name, color, text, q, me}
+  const log = []; // {slot, pid, name, color, text, q, me, typed}
 
-  const canOpen = () => app.state === 'playing' && app.game === game && !socialUi.sheet && !socialUi.wheel && !app.menus?.isBlocking?.() && (app.cam?.introT ?? 1) >= 1;
+  // not over a full-screen moment either (Family Four celebration, pet hatch): Enter belongs to its buttons
+  const canOpen = () => app.state === 'playing' && app.game === game && !socialUi.sheet && !socialUi.wheel && !app.menus?.isBlocking?.() && (app.cam?.introT ?? 1) >= 1 &&
+    !isCelebrating() && !document.querySelector('.pet-hatch');
 
   function setNote(text, warn = false) {
     clearTimeout(noteTimer);
@@ -131,8 +197,11 @@ export function mountChat(app, hudRoot, parts = {}) {
     return h('div', { class: 'cp-l' + (x.q ? ' q' : '') + (x.me ? ' me' : '') }, h('b', { style: `--c:${x.color}`, text: x.name }), ': ', h('span', { text: x.text }));
   }
 
+  // typed lines only while typed chat is allowed here (switching it off hides the ones already in the log)
+  const visible = (x) => !muted(x) && (!x.typed || typedChatAllowed(on()));
+
   function renderLog() {
-    const shown = log.filter((x) => !muted(x));
+    const shown = log.filter(visible);
     if (!shown.length) {
       logEl.replaceChildren(h('div', { class: 'cp-empty', text: typedChatAllowed(on()) ? 'No messages yet. Say hi!' : 'Tap a quick chat below to say hi!' }));
       return;
@@ -150,7 +219,7 @@ export function mountChat(app, hudRoot, parts = {}) {
   const offChat = bus.on('chat', ({ player, text, quick: q, typed } = {}) => {
     if (!player || !text || app.game !== game || game.players[player.slot] !== player) return;
     if (on()?.isMuted?.(player) || (typed && !typedChatAllowed(on()))) return;
-    const x = { slot: player.slot, pid: player.pid || null, name: player.name, color: player.char.color, text: String(text), q: !!q, me: player === me };
+    const x = { slot: player.slot, pid: player.pid || null, name: player.name, color: player.char.color, text: String(text), q: !!q, me: player === me, typed: !!typed };
     log.push(x);
     if (log.length > TEXT_CHAT.history) log.shift();
     if (open) {
@@ -257,7 +326,7 @@ export function mountChat(app, hudRoot, parts = {}) {
     uiSound(app, 'click');
     closePanel();
   });
-  for (const b of btns) b.addEventListener('click', () => (open ? closePanel() : openPanel(true)));
+  for (const b of btns) onTap(b, () => (open ? closePanel() : openPanel(true)));
   tbtn.addEventListener('contextmenu', (e) => e.preventDefault());
   panel.addEventListener('keydown', (e) => e.stopPropagation()); // typing never reaches the game's keys
   panel.addEventListener('contextmenu', (e) => e.stopPropagation());
@@ -314,7 +383,8 @@ export function mountChat(app, hudRoot, parts = {}) {
   ];
 
   // Portrait phones: the round button hangs in the right column, level with the bottom stack's pills. When one
-  // of them ("STOP MICAH!", the carry pill, a prompt) reaches under it, the button steps up above the pill.
+  // of them ("STOP MICAH!", the carry pill, a prompt) reaches under it, the button steps up above the pill. So it
+  // does over the gold Sell coin (ui/sell.js), which the Simple HUD puts right below it.
   let liftAt = 0;
   let lift = 0;
   const shown = (el) => {
@@ -322,22 +392,25 @@ export function mountChat(app, hudRoot, parts = {}) {
     const s = getComputedStyle(el);
     return s.visibility !== 'hidden' && +s.opacity > 0.05;
   };
+  // where an element sits without its transform (offset* ignore translate / scale: no jiggle while one animates)
+  const layoutRect = (el) => {
+    const o = el.offsetParent.getBoundingClientRect();
+    const left = o.left + el.offsetLeft;
+    const top = o.top + el.offsetTop;
+    return { left, top, right: left + el.offsetWidth, bottom: top + el.offsetHeight, height: el.offsetHeight };
+  };
   const clearPills = () => {
     const now = performance.now();
     if (now - liftAt < 200) return;
     liftAt = now;
     let want = 0;
-    const host = tbtn.offsetParent;
-    if (host) {
-      // where it sits without the lift (offset* ignore the translate)
-      const o = host.getBoundingClientRect();
-      const left = o.left + tbtn.offsetLeft;
-      const right = left + tbtn.offsetWidth;
-      const top = o.top + tbtn.offsetTop;
-      const bottom = top + tbtn.offsetHeight;
-      for (const el of hudRoot.querySelectorAll('.hud-bottom > :not(.hb-row)')) {
-        if (!shown(el)) continue;
-        const r = el.getBoundingClientRect();
+    if (tbtn.offsetParent) {
+      const { left, right, top, bottom } = layoutRect(tbtn);
+      const rects = [];
+      for (const el of hudRoot.querySelectorAll('.hud-bottom > :not(.hb-row)')) if (shown(el)) rects.push(el.getBoundingClientRect());
+      const coin = document.querySelector('.tb-sell.show');
+      if (coin?.offsetParent) rects.push(layoutRect(coin));
+      for (const r of rects) {
         if (r.height < 2 || r.right <= left || r.left >= right) continue;
         if (r.top < bottom && r.bottom > top) want = Math.max(want, Math.ceil(bottom - r.top + 8));
       }

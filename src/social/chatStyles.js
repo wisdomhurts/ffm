@@ -76,6 +76,17 @@ const css = `
 .cp-q.off{filter:grayscale(.6) brightness(.8)}
 .cp-q:focus-visible,.cp-pm:focus-visible,.cp-in:focus-visible{outline:3px solid #fff;outline-offset:2px}
 
+/* ------------------------------------------------------------ grown-up check (Settings > Chat > public rooms) */
+.modal-panel.grown-up{width:min(400px,100%);text-align:center}
+.gu-p{margin:4px 0 14px;font:700 15px/1.35 var(--fb);color:var(--txt2)}
+.gu-form{display:flex;flex-direction:column;align-items:center;gap:14px;margin:0}
+.gu-q{display:flex;align-items:center;justify-content:center;gap:12px;font:var(--fdw) 34px/1 var(--fd);letter-spacing:.02em;text-shadow:0 3px 0 rgba(0,0,0,.3)}
+.gu-in{width:3.6em;height:54px;padding:0 10px;border-radius:14px;border:3px solid var(--ink);background:#fff;color:#1b2452;text-align:center;
+  font:900 28px/1 var(--fb);outline:none;box-shadow:inset 0 2px 0 rgba(16,22,58,.12)}
+.gu-in:focus{box-shadow:0 0 0 3px #5cb8ff}
+.gu-btns{display:flex;gap:10px;justify-content:center}
+.gu-btns .btn{min-width:110px}
+
 /* typed speech bubbles hold more words */
 .bb.bb-t{max-width:190px;text-align:left}
 

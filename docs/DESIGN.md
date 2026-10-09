@@ -209,8 +209,9 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
 
 ## 7b. Chat
 * Quick chat (16 phrases) and emotes work everywhere. Typed chat (max 80 characters) works in solo games and private
-  rooms; in public rooms only on devices where a parent turned on Settings > Chat > "Typed chat in public rooms".
-  "Typed chat" off = quick chat only on that device.
+  rooms; in public rooms only on devices where a parent turned on Settings > Chat > "Typed chat in public rooms"
+  (switching it ON asks a grown-up question first: a times table from 6 to 9 or a two-digit sum that carries;
+  OFF is one tap). "Typed chat" off = quick chat only on that device, and typed lines already in the panel hide.
 * Every typed line is cleaned (odd characters dropped) and then sent as it is or refused with a friendly note: bad
   or unkind words (the player-name filter plus insults, slurs and threats, also split up or in look-alike
   letters), a few rude emoji, links (also spaced out), emails / @names / app usernames, phone numbers (also split

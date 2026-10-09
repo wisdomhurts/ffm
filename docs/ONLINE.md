@@ -220,7 +220,8 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 
 ## Typed chat (`src/social/chat.js`, `src/ui/chat.js`)
 * Settings: `chatOn` (default true; off = no typed chat on this device, quick chat stays) and `chatPublic`
-  (default false; a parent allows typed chat in public rooms on this device). Settings > Chat.
+  (default false; a parent allows typed chat in public rooms on this device). Settings > Chat; switching
+  `chatPublic` ON first asks `grownUpQuestion()` in a small modal (`askGrownUp` in ui/chat.js), OFF needs nothing.
 * Where: `typedChatAllowed(app.online)` = `chatOn` and (solo, or a room this device knows is private, or `chatPublic`).
   "Knows is private" = `room.private && room.faceOk` (made here, or joined by typing a code that isn't in the public
   list: the same rule as Photo Booth faces), so a public room whose host claims "private" still counts as public.

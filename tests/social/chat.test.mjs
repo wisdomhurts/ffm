@@ -12,7 +12,7 @@ import { EventCodec, isBotLine } from '../../src/net/protocol.js';
 import { reactToSocial, typedIntent, callsBot } from '../../src/social/botReact.js';
 import { REPLIES, TYPED_REPLIES } from '../../src/social/replies.js';
 import {
-  checkChat, cleanChat, isTypedLine, ChatLimiter, postTyped, sendTyped, typedChatAllowed, typedChatBlock, roomIsPrivate, CHAT_NOTES,
+  checkChat, cleanChat, isTypedLine, ChatLimiter, postTyped, sendTyped, typedChatAllowed, typedChatBlock, roomIsPrivate, CHAT_NOTES, grownUpQuestion,
 } from '../../src/social/chat.js';
 
 const why = (s) => checkChat(s).why;
@@ -107,6 +107,28 @@ test('phone numbers split up by words, with letter o, commas or other scripts\' 
     assert.equal(why(s), 'number', s);
   }
   assert.ok(TEXT_CHAT.maxDigitsAll >= TEXT_CHAT.maxDigits, 'a whole message may hold a few more digits than one run');
+});
+
+test('the grown-up question: a times table from 6 to 9 or a two-digit sum that carries', () => {
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  const kinds = new Set();
+  for (let i = 0; i < 400; i++) {
+    const q = grownUpQuestion(rand);
+    const m = q.text.match(/^(\d+) ([×+]) (\d+)$/);
+    assert.ok(m, q.text);
+    const [a, op, b] = [+m[1], m[2], +m[3]];
+    kinds.add(op);
+    if (op === '×') {
+      assert.ok(a >= 6 && a <= 9 && b >= 6 && b <= 9, q.text);
+      assert.equal(q.answer, a * b);
+    } else {
+      assert.ok(a >= 10 && a <= 99 && b >= 10 && b <= 99 && (a % 10) + (b % 10) >= 10 && a + b < 100, q.text);
+      assert.equal(q.answer, a + b);
+    }
+  }
+  assert.equal(kinds.size, 2, 'both kinds come up');
+  assert.ok(!/setting|grown-up|parent/i.test(CHAT_NOTES.public), 'the public-room note does not send a child to the switch');
 });
 
 test('rate limit: a burst, then one message per gap', () => {

@@ -9,6 +9,7 @@ import { fsMode, isFullscreen, toggleFullscreen, onFullscreenChange, autoFullscr
 import { openCloudSave } from './cloudsave.js';
 import { onlineConfigured } from '../online/config.js';
 import { buildSoundControls } from './soundControls.js';
+import { askGrownUp } from './chat.js';
 
 export function buildSettings(app) {
   const rows = [];
@@ -148,7 +149,21 @@ export function buildSettings(app) {
   // Chat (social/chat.js): typed chat on this device, and a parents' switch for typed chat in public rooms
   rows.push(h('div', { class: 'set-sec', role: 'heading', 'aria-level': '3', text: 'Chat' }));
   row('Typed chat', toggleCtl('chatOn', 'Typed chat'), 'Type messages in solo games and private rooms. Quick chat always works.');
-  row('Typed chat in public rooms', toggleCtl('chatPublic', 'Typed chat in public rooms'),
+  // the parents' switch: ON only after a grown-up question (ui/chat.js askGrownUp), OFF in one tap
+  const pub = h('button', { class: 'switch', type: 'button', role: 'switch', 'aria-label': 'Typed chat in public rooms' }, h('i'));
+  const paintPub = () => {
+    pub.classList.toggle('on', !!settings.chatPublic);
+    pub.setAttribute('aria-checked', String(!!settings.chatPublic));
+  };
+  toggles.push(paintPub);
+  paintPub();
+  pub.addEventListener('click', () => {
+    uiSound(app, 'click');
+    if (settings.chatPublic) setSetting('chatPublic', false);
+    else askGrownUp(app, () => setSetting('chatPublic', true));
+    paintPub();
+  });
+  row('Typed chat in public rooms', pub,
     'For parents: off = public rooms use quick chat only. On = your child can type there too (bad words, links and numbers are blocked).');
 
   const el = h('div', { class: 'set-body' },

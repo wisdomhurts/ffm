@@ -14,7 +14,7 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * **Chat**: type messages to the family in solo games and to friends in private rooms (Enter, or the chat button),
   plus quick-chat phrases everywhere. Every message goes through a kid-safe filter (no bad words, links, emails or
   phone numbers), and the family bots answer some of them. Public rooms stay on quick chat unless a parent allows
-  typing in Settings > Chat; you can mute anyone in a room.
+  typing in Settings > Chat (switching it on asks a quick grown-up sum first); you can mute anyone in a room.
 * 37 pets from 10 eggs (Farm, Ocean, Frost, Candy, Cloud...), with a team of up to 3 at once. Eggs also float
   down from the sky as free **egg drops** (the Rainbow Egg only comes that way), plus an Egg Rain weather event.
 * **Name your pets**: right when they hatch, or any time in My Pets. The name floats over your pet in the world

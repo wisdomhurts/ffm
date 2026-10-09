@@ -30,7 +30,7 @@ export const CHAT_NOTES = {
   number: 'No phone numbers or long numbers in chat!',
   slow: 'Whoa, slow down! Wait a moment.',
   off: 'Typing is off on this device. Quick chat still works!',
-  public: 'Public room: quick chat only. A grown-up can allow typing in Settings.',
+  public: 'Public room: quick chat only.',
 };
 
 // Unkind words and threats the name filter doesn't list (names rarely need them; chat does), plus a few
@@ -254,6 +254,23 @@ export function typedChatAllowed(online, s = settings) {
   if (!s.chatOn) return false;
   const room = online?.room;
   return !room || roomIsPrivate(room) || !!s.chatPublic;
+}
+
+/**
+ * The grown-up check before typed chat in public rooms is switched on (Settings > Chat, ui/chat.js askGrownUp):
+ * a times table from 6 to 9 or a two-digit sum that carries, which young players don't do in their heads.
+ * -> {text: '7 × 8', answer: 56}.
+ */
+export function grownUpQuestion(rand = Math.random) {
+  const int = (lo, hi) => lo + Math.floor(rand() * (hi - lo + 1));
+  if (rand() < 0.5) {
+    const a = int(6, 9);
+    const b = int(6, 9);
+    return { text: `${a} × ${b}`, answer: a * b };
+  }
+  const a = int(2, 7) * 10 + int(3, 9);
+  const b = int(1, 8 - Math.floor(a / 10)) * 10 + int(11 - (a % 10), 9); // the ones carry, the sum stays under 100
+  return { text: `${a} + ${b}`, answer: a + b };
 }
 
 /** Why typing is off here: null (it's on), 'off' (this device) or 'public' (a public room). */
