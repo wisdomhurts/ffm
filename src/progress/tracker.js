@@ -844,6 +844,17 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     fact('trade');
     checkBadges();
   });
+  // Big Chomp, the world boss: every bonk on it, and its crown
+  on('boss:hit', ({ by }) => {
+    if (!isMe(by)) return;
+    add('bossHits');
+    fact('boss');
+  });
+  on('boss:defeated', ({ top }) => {
+    if (!isMe(top)) return;
+    add('bossCrowns');
+    checkBadges();
+  });
   on('net:joined', () => {
     add('onlineGames');
     fact('online');

@@ -169,6 +169,24 @@ biome, and knock the seed out of your hands if they catch you. Out-run them (Spe
 The three farthest worlds have the Gem Golem (its crystals glow brighter when it is angry), the Puffer Pop (it puffs
 up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a dragon with a comet-star tail).
 
+### Big Chomp, the Garden Gobbler (world boss; `gameplay/boss.js`, numbers in config `BOSS`)
+* Comes at 5:00 in Endless, then every 9–12 min after the last one is gone; once per Showdown, between 2:30 and 5:00
+  (so it is always gone before the last 90 s). Debug: `__app.game.spawnBoss()`.
+* Crawls (6 studs/s, no collider) from just up the road to the richest garden with a player and lies down along
+  the fence outside its gate (clear of the laser), face to the plaza. There it slurps 2%/s of that garden's cash
+  pile, up to a quarter of it; never banked cash or plants, and nothing on Chill.
+* Hit points: 40 + 20 per player in the world. A noodle bonk within reach of its body (bonk range + 3 studs) is
+  1 hit, a water balloon splash on it 3. On Chill a bot's hit counts half (on its hit points and on the bot's share).
+  Teamwork: a swing that lands on it doesn't bonk empty-handed players standing by (someone carrying loot still
+  gets bonked, so a thief can't hide behind it).
+* Burst: the slurp goes back to the pile; 12–20 seeds from the deepest biome any player has reached, all Gold /
+  Diamond / Rainbow (60/30/10), lie around for 45 s (no pod to go back to); a pot of 60 s of everyone's income
+  is split by hits (the remainder to the top bonker); the top bonker wears a crown for 60 s (ties go to a person).
+* After 90 s it burps and crawls back up the road with what it slurped (it can't be hurt then).
+* Bots drop farming for it while it can be reached (more keenly when it is munching their own pile), each taking
+  its own spot along the body; defending their garden still comes first. Their difficulty "misses" are a moment's
+  hesitation there, never a wild swing at the family.
+
 ## 6. Weather events (every 3–5 min, 60 s)
 * **Golden Hour** — warm sunset light; 45% of new seeds are Gold.
 * **Diamond Night** — starry night; 35% Diamond.

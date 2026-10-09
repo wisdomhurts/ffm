@@ -9,6 +9,7 @@ import { typedChatAllowed } from '../social/chat.js';
 import {
   EventCodec, forwarded, mergeSections, vetPlayer, vetGarden, vetPod, vetGround, vetDrops, predict, PLAYER_STRIDE, MONSTER_STRIDE, PROJ_STRIDE, monsterState, isPid, num, r2, r3, relay,
 } from './protocol.js';
+import { vetBossSection } from './protocol.js';
 
 const RING = 24;
 const NO_PROJ = Object.freeze([]);
@@ -147,6 +148,7 @@ export class ClientRole {
       else if (k === 'pd') ok = Array.isArray(v) && !!(D.pd = v.map(vetPod));
       else if (k === 'gr') ok = Array.isArray(v) && !!(D.gr = vetGround(v));
       else if (k === 'dr') ok = Array.isArray(v) && !!(D.dr = vetDrops(v));
+      else if (k === 'bs') ok = !!(D.bs = vetBossSection(v)); // Big Chomp: hit points only ever come from here
       else if (k === 'mo') ok = Array.isArray(v) && v.every((m) => m && typeof m === 'object');
       else if (/^p[0-3]$/.test(k)) ok = +k.slice(1) < n && vetPlayer(v, +k.slice(1));
       else if (/^g[0-3]$/.test(k)) ok = +k.slice(1) < n && vetGarden(v, +k.slice(1));

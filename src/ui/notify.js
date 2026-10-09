@@ -9,6 +9,8 @@ import { who } from './alerts.js';
 import { ICON, EVENT_ICON, ITEM_ICONS, NOODLE } from './icons.js';
 import { isTouch } from './device.js';
 import { sellKeyName } from './sell.js';
+import { CHOMP_ICON } from './bossBar.js';
+import { BOSS } from '../config.js';
 
 export function wireNotifications(app, alerts) {
   const game = app.game;
@@ -282,6 +284,22 @@ export function wireNotifications(app, alerts) {
   on('pets:released', ({ pet, name }) => {
     const who = name ? `${esc(name)} the ${esc(PET[pet]?.name || 'pet')}` : `a spare ${esc(PET[pet]?.name || 'pet')}`;
     alerts.toast(`Your pet bag was full, so ${who} went home to make room.`, 'info', { icon: ICON.paw, duration: 4200 });
+  });
+  // ---- Big Chomp, the world boss
+  on('boss:spawn', ({ victim }) => {
+    const whose = victim === me ? 'YOUR' : victim ? `${who(victim)}'s` : 'the';
+    alerts.announce({ title: 'BIG CHOMP!', sub: `A giant caterpillar wants ${whose} cash! BONK it!`, icon: CHOMP_ICON, cls: 'an-boss', ms: 3800 });
+  });
+  on('boss:defeated', ({ top, shares, refund, victim }) => {
+    const got = shares?.[me.slot] || 0;
+    alerts.announce({ title: 'POP!', sub: got > 0 ? `Big Chomp burst! You got <b class="cash">${money(got)}</b>. Grab the seeds!` : 'Big Chomp burst into seeds! Grab them!', icon: CHOMP_ICON, cls: 'an-boss', ms: 3400 });
+    if (top === me) alerts.show({ key: 'crown', kind: 'gold', icon: ICON.crown, duration: 5200, html: `You're the CHOMP CHAMP!<small>Most bonks: wear the crown for ${BOSS.crown} seconds.</small>` });
+    else if (top) alerts.toast(`${who(top)} is the Chomp Champ!`, 'info', { icon: ICON.crown });
+    if (victim === me && refund >= 1) alerts.toast(`It spat your cash back out! <b class="cash">+${money(refund)}</b>`, 'good', { icon: ICON.coin });
+  });
+  on('boss:leave', ({ victim, slurped }) => {
+    alerts.show({ key: 'boss', kind: 'warn', icon: CHOMP_ICON, duration: 4200,
+      html: victim === me && slurped >= 1 ? `BUUURP! Big Chomp ate <b class="cash">${money(slurped)}</b> of your cash.<small>Bonk it faster next time!</small>` : 'BUUURP! Big Chomp crawled away.<small>Bonk it faster next time!</small>' });
   });
   on('event:start', ({ event }) => {
     alerts.announce({ title: event.def.name.toUpperCase() + '!', sub: esc(event.def.desc), icon: EVENT_ICON[event.type], cls: 'an-ev ev-' + event.type, ms: 3400 });

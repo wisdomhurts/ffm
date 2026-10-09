@@ -102,6 +102,8 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `practice:steal` | stage ('start'/'carry'/'caught'/'escaped'), thief, victim, plant (the friendly teaching steal on Chill) |
 | `bonk:blocked` | player (pressed bonk while carrying) |
 | `shop:open` | player, shop: 'gear'/'speed'/'rebirth' |
+| `boss:spawn` / `boss:hit` | x, z, hp, max, victim / by, n, hp, max, cause ('bonk'/'balloon'), x, z (Big Chomp, gameplay/boss.js) |
+| `boss:defeated` / `boss:leave` | x, z, by, top, pot, shares[slot], seeds, refund, victim / x, z, slurped, victim |
 
 App: `game:start {game, human, resumed}`, `away:report {seconds, credit, cash, grown, sizes, giants, bots, lines}` (solo Endless, right
 after `game:start` when the save is 5+ minutes old: Welcome-Back Garden), `game:dispose {game}`, `app:state {state: 'title'|'playing'|'paused'|'shop'|'ended'}`,

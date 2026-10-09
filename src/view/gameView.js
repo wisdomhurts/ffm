@@ -15,6 +15,7 @@ import { TREADMILL } from '../config.js';
 import { beltRect } from '../gameplay/layout.js';
 import { sizeOf, shownSize, sizeChip, heroRibbon, addTitanBeam } from './sizes.js';
 import { SIZES } from '../config.js';
+import { createBossBinding } from './bossView.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -71,6 +72,7 @@ export class GameView {
       this.root.add(v.object3d);
       this.monsterViews.push(v);
     });
+    this.bossView = createBossBinding(this); // Big Chomp, the world boss
     this.unsub.push(bus.on('face:changed', ({ id }) => {
       for (const p of this.game.players) if (p.faceKey === id) this._loadFace(p.slot);
     }));
@@ -413,6 +415,7 @@ export class GameView {
       v.update(dt, { time, speed: Math.hypot(m.vx, m.vz), state: now < m.stunUntil ? 'stunned' : m.state, attackAge: now - m.attackAt });
       if (m.state === 'chase') L.set('mo' + i, { x: m.x, y: 7, z: m.z }, '<div class="mo-alert">!</div>', { cls: 'monlbl', maxDist: 80 });
     });
+    this.bossView.update(dt, time, camera);
   }
 
   _updatePet(i, p, dt, time, now, invisible) {
@@ -531,6 +534,7 @@ export class GameView {
     this.xray?.dispose();
     this.avatars.forEach((a) => a.dispose?.());
     this.monsterViews.forEach((m) => m.dispose?.());
+    this.bossView.dispose();
     this.petViews.forEach((list) => list?.forEach((r) => r?.view.dispose()));
     this.dropViews.forEach((v) => v.dispose());
   }

@@ -424,6 +424,15 @@ class GameAudio {
       if (e.player === H) this.play('egg', { kind: 'catch', important: true });
       else if (e.drop) this.play('egg', { kind: 'catch', x: e.drop.x, z: e.drop.z, vol: 0.4 });
     });
+    // Big Chomp, the world boss
+    on('boss:spawn', () => this.play('bossSiren', { important: true }));
+    on('boss:hit', (e, H) => {
+      const low = e.max > 0 ? 1 - e.hp / e.max : 0;
+      if (e.by === H) this.play('bossHit', { low, important: true });
+      else this.play('bossHit', { low, x: e.x, z: e.z, vol: 0.7 });
+    });
+    on('boss:defeated', () => this.play('bossPop', { important: true }));
+    on('boss:leave', () => this.play('bossBurp', { important: true }));
     on('rebirth', (e, H) => {
       if (e.player === H) this.play('rebirth', { important: true });
       else this.play('rebirth', pos(e.player, { vol: 0.5 }));

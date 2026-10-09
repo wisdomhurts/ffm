@@ -34,6 +34,8 @@ import { sanitizeBaseStyle } from '../gameplay/basestyle.js';
 import { sanitizeLook as canonLook } from '../characters/cosmetics.js';
 import { sanitizeName, isNameAllowed } from '../core/names.js';
 import { Player } from '../gameplay/player.js';
+import { BOSS_STATES, BOSS_NEVER } from '../gameplay/boss.js';
+import { ROAD_END_Z } from '../config.js';
 
 /** Own keys only: catalog lookups must never match 'toString', '__proto__' and friends. */
 export const own = (obj, k) => typeof k === 'string' && !!obj && Object.prototype.hasOwnProperty.call(obj, k);
@@ -519,6 +521,7 @@ export function sectionize(full) {
   S.gr = full.ground;
   S.dr = full.drops || [];
   S.mo = full.monsters;
+  S.bs = { next: full.nextBossAt, boss: full.boss ?? null }; // Big Chomp (gameplay/boss.js)
   return S;
 }
 
@@ -533,6 +536,7 @@ export function signature(key, v) {
   }
   if (key === 'mo') return stringifyR(v.map((m) => [m.stunUntil, m.attackAt]));
   if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match, v.maxBots]); // uid: only for promotion
+  if (key === 'bs') return stringifyR(v.boss && [v.boss.uid, v.boss.hp, v.boss.state, v.boss.target]); // it crawls: position rides the periodic refresh
   return stringifyR(v);
 }
 
@@ -543,7 +547,10 @@ export function mergeSections(full, D) {
     else if (k === 'pd') full.pods = v;
     else if (k === 'gr') full.ground = v;
     else if (k === 'dr') full.drops = v;
-    else if (k === 'mo') {
+    else if (k === 'bs') {
+      full.boss = v.boss;
+      full.nextBossAt = v.next;
+    } else if (k === 'mo') {
       if (Array.isArray(v)) v.forEach((m, i) => full.monsters[i] && Object.assign(full.monsters[i], m));
     } else if (k[0] === 'p') {
       const i = +k.slice(1);
@@ -566,6 +573,8 @@ export function vetFull(s) {
   s.ground = vetGround(s.ground);
   s.drops = vetDrops(s.drops);
   if (s.nextDropAt != null && !Number.isFinite(s.nextDropAt)) s.nextDropAt = 0;
+  s.boss = vetBoss(s.boss);
+  s.nextBossAt = num(s.nextBossAt, BOSS_NEVER);
   if (!Number.isFinite(s.time)) return null;
   return s;
 }
@@ -595,6 +604,21 @@ export function vetDrops(list) {
   }));
 }
 
+/** Big Chomp from the network: a known state, numbers clamped to the world, target a garden slot (or null: none). */
+export function vetBoss(d) {
+  if (!isObj(d) || !BOSS_STATES.includes(d.state)) return null;
+  const cl = (v, lo, hi, def = lo) => Math.max(lo, Math.min(hi, num(v, def)));
+  const max = cl(d.max, 1, 10000, 1);
+  return {
+    uid: num(d.uid), x: cl(d.x, -WORLD.homeHalfW, WORLD.homeHalfW), z: cl(d.z, WORLD.homeMinZ, ROAD_END_Z), yaw: num(d.yaw),
+    hp: cl(d.hp, 0, max), max, target: int(d.target, 0, CHARACTERS.length - 1, 0), slurped: cl(d.slurped, 0, 1e18),
+    hits: CHARACTERS.map((_, i) => cl(Array.isArray(d.hits) ? d.hits[i] : 0, 0, 1e5)), state: d.state, born: num(d.born), until: num(d.until),
+  };
+}
+
+/** The 'bs' section of a host delta ({next, boss}), or null when it isn't one. */
+export const vetBossSection = (v) => (isObj(v) ? { next: num(v.next, BOSS_NEVER), boss: vetBoss(v.boss) } : null);
+
 export function vetPlayer(d, i) {
   if (!isObj(d) || !isObj(d.pos) || !isObj(d.vel) || !isObj(d.items) || !isObj(d.stats) || !isObj(d.interact)) return false;
   d.name = sanitizeName(d.name, CHARACTERS[i].name);
@@ -609,6 +633,7 @@ export function vetPlayer(d, i) {
   d.treadmillTier = int(d.treadmillTier, 0, TREADMILL.tiers.length - 1, 0);
   for (const k of ['boostUntil', 'boostReadyAt', 'pumpUntil', 'trainT', 'heroUntil']) d[k] = num(d[k]);
   d.pumpMult = Math.max(1, Math.min(2, num(d.pumpMult, 1)));
+  d.crownUntil = Math.max(0, num(d.crownUntil)); // Big Chomp's crown
   if (d.emote && (!isObj(d.emote) || !own(EMOTE, d.emote.id))) d.emote = null;
   const c = d.carrying;
   if (c) {
@@ -616,7 +641,7 @@ export function vetPlayer(d, i) {
       const plant = vetPlantData(c.plant, int(c.fromSlot, 0, 3, 0));
       d.carrying = plant ? { kind: 'plant', plant, fromSlot: int(c.fromSlot, 0, 3, 0), fromIndex: int(c.fromIndex, 0, WORLD.planterCount - 1, 0) } : null;
     } else if (c.kind === 'seed' && own(PLANT, c.speciesId)) {
-      d.carrying = { kind: 'seed', speciesId: c.speciesId, mutation: own(MUTATIONS, c.mutation) ? c.mutation : 'normal', podId: int(c.podId, 0, 999, 0), lucky: !!c.lucky };
+      d.carrying = { kind: 'seed', speciesId: c.speciesId, mutation: own(MUTATIONS, c.mutation) ? c.mutation : 'normal', podId: c.podId === null ? null : int(c.podId, 0, 999, 0), lucky: !!c.lucky };
     } else d.carrying = null;
   }
   const items = {};

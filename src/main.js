@@ -40,6 +40,7 @@ import { createTradeManager } from './social/trades.js';
 import { attachGiants } from './fx/giants.js';
 import { createGlowBeam } from './pets/dropView.js';
 import { attachAway, awayLines } from './ui/away.js';
+import { bossWarmup } from './characters/boss.js';
 
 const SAVE_EVERY = 12;
 
@@ -51,6 +52,7 @@ function buildWarmupGroup() {
   g.add(roadWarmup()); // the Seed Road's own shader variants (light shafts, glowing cliffs)
   g.add(guideWarmup()); // the tutorial beacon (it can switch on mid-game)
   g.add(createGlowBeam().object3d); // egg drop beams and the TITAN plant beam (Giant Harvests)
+  g.add(bossWarmup()); // Big Chomp's instanced body (it crawls in mid-game)
   // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
     for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);

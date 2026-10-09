@@ -16,6 +16,7 @@ import { sanitizePetName } from '../pets/names.js';
 import { sanitizeBaseStyle, sameBaseStyle, effectiveBaseStyle, DECOR, BOT_STYLES } from './basestyle.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { sanitizeLook, sameLook } from '../characters/cosmetics.js';
+import { initBoss, spawnBoss, updateBoss, bonkBoss, hitBoss, balloonOnBoss, splashBoss, bossSlot, bossState, applyBoss } from './boss.js';
 
 /** A profile's equipped pet team as [{id, name}] (name: the nickname, '' if none). profile.pets.team = [uid...],
  *  older saves: equipped uid; online profile summaries send `pets: [id...]` + `petNames: [...]` or `pet: id`. */
@@ -132,6 +133,7 @@ export class Game {
     this.event = null;
     this.nextEventAt = EVENTS.firstDelay;
     this.match = mode === 'showdown' ? { endsAt: MATCH.showdownSeconds } : null;
+    initBoss(this, seed); // Big Chomp, the world boss (gameplay/boss.js)
     this.netWorth = new Map();
     // online rooms: how many gardens nobody plays may get a computer player (the rest stay empty; see net/host.js)
     this.maxBots = CHARACTERS.length - 1;
@@ -410,6 +412,7 @@ export class Game {
     this._updateDrops();
     this._updateGuards();
     this._updateMonsters(dt);
+    this._updateBoss(dt);
     this._updatePods();
     this._updateGardens(dt);
     this._updateEvents();
@@ -988,8 +991,10 @@ export class Game {
     const cosHalf = Math.cos(((PLAYER.bonk.arcDeg / 2) * Math.PI) / 180);
     const R = PLAYER.bonk.range;
     let hitAny = false;
+    const chomp = this.boss && bonkBoss(this, p, fx, fz, cosHalf); // Big Chomp in reach (gameplay/boss.js)
     for (const q of this.players) {
       if (q === p || now < q.invulnUntil) continue;
+      if (chomp && !q.carrying) continue; // a swing at Big Chomp spares empty-handed teammates
       if (Math.abs(q.pos.y - p.pos.y) > 4.5) continue;
       const dx = q.pos.x - p.pos.x, dz = q.pos.z - p.pos.z;
       const d = Math.hypot(dx, dz);
@@ -1009,6 +1014,7 @@ export class Game {
       hitAny = true;
       bus.emit('monster:bonked', { monster: m, by: p });
     }
+    if (chomp && hitBoss(this, p, 1, 'bonk')) hitAny = true;
     if (!hitAny) bus.emit('bonk:miss', { player: p });
   }
 
@@ -1157,7 +1163,7 @@ export class Game {
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.z += b.vz * dt;
-      let pop = b.y <= 0.3 || this.time - b.born > 4;
+      let pop = b.y <= 0.3 || this.time - b.born > 4 || balloonOnBoss(this, b);
       if (!pop) {
         for (const q of this.players) {
           if (q.slot === b.owner) continue;
@@ -1177,6 +1183,7 @@ export class Game {
         const d = Math.hypot(dx, dz);
         if (d < R && Math.abs(q.pos.y - b.y) < 7) this.hitPlayer(q, owner, { x: dx / (d || 1), z: dz / (d || 1) }, ITEM.balloon.stun, 'balloon');
       }
+      splashBoss(this, b, owner);
       bus.emit('balloon:splash', { x: b.x, y: Math.max(0, b.y), z: b.z, owner });
     }
   }
@@ -1294,6 +1301,22 @@ export class Game {
         bus.emit('monster:caught', { monster: m, target, lost: c });
       }
     }
+  }
+
+  // ------------------------------------------------------------------ Big Chomp (world boss: gameplay/boss.js)
+
+  /** Bring Big Chomp in right now (debug: __app.game.spawnBoss()). opts {target: slot, x, z}. Returns it, or null. */
+  spawnBoss(opts) {
+    return spawnBoss(this, opts);
+  }
+
+  _updateBoss(dt) {
+    updateBoss(this, dt);
+  }
+
+  /** A fresh id for something new in this world (ground items, the boss). */
+  newUid() {
+    return uid();
   }
 
   // ------------------------------------------------------------------ pods, gardens, events
@@ -1944,6 +1967,7 @@ export class Game {
       if (thief?.interact?.stealPl === pl) this._clearStealer(pl, thief);
     }
     for (const m of this.monsters) if (m.target === slot) m.target = null;
+    bossSlot(this, slot);
     const fresh = new Player(slot, p.char, false);
     for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'items', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt',
       'swingStart', 'coilUntil', 'cloakUntil', 'celebrateUntil', 'interact', 'prevInteract', 'intent', 'lastHitBy', 'stats',
@@ -1990,6 +2014,7 @@ export class Game {
       if (spot) spot.plant = plantData(c.plant);
       else garden.cashPile += Math.round(this.plantIncome(c.plant, p) * SELL_SECONDS); // no room: keep its value
     }
+    if (this.boss?.target === slot && this.boss.state !== 'leave') garden.cashPile += this.boss.slurped; // Big Chomp's tummy too
     return { v: 1, player: p.serialize(), garden };
   }
 
@@ -2031,6 +2056,7 @@ export class Game {
           sell: { key: p.sell.key, t: p.sell.t, hold: p.sell.hold, label: p.sell.label, verb: p.sell.verb, rarity: p.sell.rarity, value: p.sell.value || 0 },
           emote: p.emote, stats: { ...p.stats },
           petMail: copyMail(p.petMail),
+          crownUntil: p.crownUntil, // Big Chomp's top bonker
         };
       }),
       gardens: this.gardens.map((g) => ({
@@ -2047,6 +2073,8 @@ export class Game {
         uid: m.uid, x: m.x, y: m.y, z: m.z, yaw: m.yaw, vx: m.vx, vz: m.vz, state: m.state, target: m.target,
         stunUntil: m.stunUntil, attackAt: m.attackAt, wander: { ...m.wander }, wanderAt: m.wanderAt, ignore: { ...m.ignore },
       })),
+      boss: bossState(this.boss),
+      nextBossAt: this.nextBossAt,
     };
   }
 
@@ -2119,6 +2147,7 @@ export class Game {
       p.emote = d.emote;
       // pet trades waiting for their device (a promoted host keeps sending them until they're acked)
       p.petMail = copyMail(d.petMail);
+      if (Number.isFinite(d.crownUntil)) p.crownUntil = d.crownUntil;
     });
     s.gardens.forEach((d, i) => {
       const g = this.gardens[i];
@@ -2162,6 +2191,7 @@ export class Game {
       if (!m || !d) return;
       Object.assign(m, d, { wander: { ...d.wander }, ignore: { ...d.ignore } });
     });
+    applyBoss(this, s);
     this.human = this.players.find((p) => p.isHuman) || null;
     this._recomputeNetWorth();
   }
@@ -2207,6 +2237,8 @@ export class Game {
       if (spot) spot.plant = plantData(c.plant);
       else gs.cashPile += Math.round(this.plantIncome(c.plant, this.players[c.fromSlot]) * SELL_SECONDS);
     }
+    // what Big Chomp slurped so far stays in the garden (only a burp up the road takes it for good)
+    if (this.boss && this.boss.state !== 'leave') gardens[this.boss.target].cashPile += this.boss.slurped;
     // savedAt: wall clock, for the Welcome-Back Garden (applyAway) when this save is picked up again
     return { v: 1, humanId: this.human?.id ?? null, difficulty: this.difficultyId, players: this.players.map((p) => p.serialize()), gardens, savedAt: Date.now() };
   }

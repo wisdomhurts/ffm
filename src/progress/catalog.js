@@ -5,7 +5,7 @@
 //   seed {tier, mutation} · plant {tier, mutation} · grow · sell · cash {amount} · steal {victim} · foil
 //   bonk {target} · monster · item {item} · water · speed {level} · rebirth · planter · lock · hatch {rarity}
 //   emote {id} · chat · gift · trade · online · showdown {rank, win, difficulty} · slip · splash
-//   biome {index} (max) · networth {value} (max)
+//   biome {index} (max) · networth {value} (max) · boss (a hit on Big Chomp)
 // A template: {id, tier, group, icon, on, amount?(data,p), max?(data,p), when?(data,p), gate?(ctx), make(ctx,rng) -> {target,p?}, text(target,p)}
 // `money: true` marks quests whose numbers are cash (the UI formats them as $). Targets that depend on the
 // player's progress stage are re-fitted at game start while the quest is still untouched (tracker.js).
@@ -137,6 +137,7 @@ export const QUESTS = [
     make: () => ({ target: 1 }), text: () => 'Play online with a friend' },
   { id: 'podium', tier: 'medium', group: 'showdown', icon: 'trophy', on: 'showdown', when: (d) => d.rank <= 2,
     make: () => ({ target: 1 }), text: () => 'Finish a Family Showdown in the top 2' },
+  { id: 'chomp', tier: 'medium', group: 'boss', icon: 'monster', on: 'boss', make: () => ({ target: 10 }), text: (n) => `Bonk Big Chomp ${n} times` },
 
   // ---------------- hard
   { id: 'steal5', tier: 'hard', group: 'steal', icon: 'mask', on: 'steal', make: () => ({ target: 5 }), text: (n) => `Steal ${plural(n, 'plant')}` },
@@ -332,6 +333,7 @@ export const BADGES = [
   { id: 'almanac', name: 'Almanac Ace', icon: 'almanac', stat: (c, b, p) => fullPages(p), tiers: [Math.min(3, BADGE_PAGES.length), BADGE_PAGES.length], stars: [40, 150],
     how: (n) => (n === BADGE_PAGES.length ? 'Fill every Seed Almanac page' : `Fill ${n} Seed Almanac pages`) },
   ...PAGE_BADGES,
+  { id: 'chompchamp', name: 'Chomp Champ', icon: 'crown', stat: (c) => c.bossCrowns, tiers: [1], stars: [40], how: () => 'Bonk Big Chomp the most when it bursts' },
 ];
 export const BADGE = Object.assign(Object.create(null), Object.fromEntries(BADGES.map((b) => [b.id, b])));
 

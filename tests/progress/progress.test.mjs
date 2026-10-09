@@ -154,6 +154,7 @@ let me = app.human;
       tr.tick();
     }
   }
+  tr.tick(); // the snapshots below are taken once a second: one more so a buy in the last second is in them too
   const c = app.profile.counters;
   const s = me.stats;
   console.log('   human stats', JSON.stringify(s), 'counters', JSON.stringify({ seeds: c.seeds, planted: c.planted, steals: c.steals, bonks: c.bonks, cash: c.cash }));
@@ -203,6 +204,7 @@ const DRIVE = {
   base: () => bus.emit('base:upgraded', { player: me, level: 2, cost: 5000 }),
   boost: () => bus.emit('boost:start', { player: me }),
   pump: () => bus.emit('pump:start', { player: me, tier: 0, bonus: 0.1, until: 60 }),
+  boss: () => bus.emit('boss:hit', { by: me, n: 1, hp: 10, max: 20, cause: 'bonk', x: 0, z: 0 }),
   biome: () => {
     me.pos.z = BIOMES.length * 150 + 50; // Starbloom
     tr.tick();

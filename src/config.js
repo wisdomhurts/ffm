@@ -451,6 +451,12 @@ export const BOSS = {
   crown: 60,
   splashHits: 3,
   botHitChill: 0.5,
+  seedLife: 45, // seconds its burst seeds wait on the ground (they have no pod to go back to)
+  reach: 3, // a bonk lands within PLAYER.bonk.range + reach of its body's middle line (it's BIG)
+  body: { front: 5, back: 12, radius: 3.3 }, // middle line: head `front` ahead of its centre, tail `back` behind it
+  park: 6, // munches lying along the fence this far outside the target garden's gate (clear of the laser)
+  leaveSpeed: 1.6, // x speed when it crawls back up the road
+  lastSecs: 90, // Showdown: it must be gone this long before the buzzer
 };
 
 // Text chat (kid-safe). Private rooms and solo: on. Public rooms: only when a parent allows it in Settings.

@@ -506,6 +506,49 @@ export const SFX = {
     [79, 84, 88, 91].forEach((m, i) => steelPan(ac, out, t + 0.36 + i * 0.05, m, 0.7 * v, { send: o.send }));
     cymbal(ac, out, t + 0.24, 0.35 * v, 1.2);
   },
+
+  // ---------------------------------------------------------------- Big Chomp (the world boss)
+  /** Here it comes: a goofy wee-woo siren, a slide whistle and a hungry rumble. */
+  bossSiren(ac, out, t, o) {
+    o = { ...o, vol: (o.vol ?? 1) * 0.8 };
+    for (let i = 0; i < 2; i++) {
+      const s = t + i * 0.62;
+      const env = { attack: 0.02, hold: 0.45, dur: 0.6 };
+      tone(ac, out, s, { ...env, type: 'triangle', f0: 640, pts: [[0.26, 900], [0.3, 900], [0.58, 620]], vol: V(o, 0.17), vib: { rate: 7, depth: 0.02 } });
+      tone(ac, out, s, { ...env, type: 'square', f0: 320, pts: [[0.26, 450], [0.58, 310]], vol: V(o, 0.03) });
+    }
+    tone(ac, out, t + 1.3, { f0: 300, f1: 1400, sweep: 0.42, dur: 0.5, attack: 0.03, hold: 0.3, vol: V(o, 0.14), vib: { rate: 6, depth: 0.03 } });
+    growl(ac, out, t + 1.78, { ...GROWLS.gummy, f0: 92, dur: 0.75, vol: V(o, 0.3) });
+  },
+  /** A bonk on its squishy body: a rubbery boing and a pop (pitch climbs as it weakens: o.low 0..1). */
+  bossHit(ac, out, t, o) {
+    const up = 1 + (o.low ?? 0) * 0.5;
+    bonkKnock(ac, out, t, { ...o, vol: (o.vol ?? 1) * 0.8 }, 0.62 * up);
+    tone(ac, out, t + 0.03, { type: 'triangle', f0: 140 * up, pts: [[0.1, 330 * up], [0.3, 180 * up]], dur: 0.34, vol: V(o, 0.22), vib: { rate: 18, depth: 0.1, fade: 0.12 } });
+    noise(ac, out, t + 0.02, { filter: 'bandpass', f0: 2600, q: 3, dur: 0.05, attack: 0.001, vol: V(o, 0.3) });
+  },
+  /** POP! A giant balloon pop, a shower of confetti pops and a happy fanfare. */
+  bossPop(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    noise(ac, out, t, { filter: 'lowpass', f0: 3200, f1: 400, sweep: 0.25, dur: 0.35, attack: 0.001, vol: V(o, 0.9) });
+    kick(ac, out, t, 0.9 * v);
+    cymbal(ac, out, t + 0.02, 0.5 * v, 1.6);
+    for (let i = 0; i < 8; i++) {
+      const tt = t + 0.12 + i * rnd(0.05, 0.11);
+      noise(ac, out, tt, { filter: 'bandpass', f0: rnd(1200, 2800), q: 1.5, dur: 0.05, attack: 0.001, vol: V(o, 0.22) });
+    }
+    [72, 76, 79, 84].forEach((m, i) => brass(ac, out, t + 0.25 + i * 0.12, m, 0.7 * v, i === 3 ? 0.8 : 0.2, { send: o.send }));
+    [84, 88, 91, 96].forEach((m, i) => bell(ac, out, t + 0.7 + i * 0.06, mtof(m), { ratio: 2, index: 0.9, vol: V(o, 0.1), decay: 1.2, send: o.send }));
+  },
+  /** BUUUURP (time's up: it crawls away). */
+  bossBurp(ac, out, t, o) {
+    formantVoice(ac, out, t, {
+      f0: 70, rise: 1.15, drop: 0.6, dur: 0.95, vol: V(o, 0.75),
+      formants: [[420, 5, 2.4], [760, 7, 1.4], [2300, 10, 0.3]],
+      fric: { f: 900, dur: 0.3, vol: V(o, 0.05) },
+    });
+    noise(ac, out, t, { filter: 'lowpass', f0: 500, dur: 0.9, attack: 0.05, vol: V(o, 0.2), lfo: { rate: 23, depth: 260 } });
+  },
 };
 
 // ------------------------------------------------------------------ loops (start/stop handles)
@@ -614,5 +657,5 @@ export const SFX_GAP = {
   stolen: 0.5, yoink: 0.3, heist: 0.5, robbed: 0.5, saved: 0.4, dropped: 0.2, shopBell: 0.4, confetti: 0.3,
   boost: 0.2, pump: 0.5, egg: 0.1, baseUp: 1,
   petTrick: 0.12,
-  drumroll: 0.3, hero: 0.8,
+  drumroll: 0.3, hero: 0.8, bossSiren: 2, bossHit: 0.05, bossPop: 1, bossBurp: 1,
 };

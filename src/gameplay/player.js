@@ -62,6 +62,7 @@ export class Player {
     this.cloakUntil = 0;
     this.celebrateUntil = 0;
     this.heroUntil = 0; // Help! Family Hero: the gold HERO ribbon shows until this time
+    this.crownUntil = 0; // wears Big Chomp's crown (top bonker) until then
     this.interact = { key: null, t: 0, hold: 0, label: '' };
     this.prevInteract = false;
     this.sell = { key: null, t: 0, hold: 0, label: '' }; // the Sell prompt (its own button: V / Sell / D-pad down)

@@ -54,6 +54,11 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
 * **Welcome-Back Garden**: come back to an Endless game and your garden kept growing while you were away (at half
   speed, up to 2 hours; 4 at Base Lv 6, 8 at Lv 10). A "While you were away..." card tells you what the family got
   up to, and your cash waits on the COLLECT pad.
+* **Big Chomp, the Garden Gobbler**: every 9-12 minutes (once per Showdown) a giant goofy caterpillar crawls out
+  of the road gate to the richest garden and starts munching its cash pile. Everyone, bots too, bonks it (noodle or
+  water balloons) until it bursts like a piñata: a shower of Gold, Diamond and Rainbow seeds, a pot of cash split
+  by bonks, and a gold crown for the top bonker (the **Chomp Champ** badge). Wait too long and it burps and crawls
+  off with what it ate (on Chill it never eats anything).
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.

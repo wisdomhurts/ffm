@@ -27,6 +27,7 @@ import { fullscreenButton } from './fullscreen.js';
 import { mountSoundButton } from './soundControls.js';
 import { createSellPrompt, sellHow } from './sell.js';
 import { mountHero } from './hero.js';
+import { createBossBar } from './bossBar.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
@@ -104,6 +105,7 @@ export function createHUD(app) {
   }
   tr.appendChild(anchors.room);
   parts.push(createEventChip(app, top));
+  parts.push(createBossBar(app, top)); // Big Chomp's hit points, beside the weather chip
   const alerts = createAlerts(top, root);
   const unwire = me ? wireNotifications(app, alerts) : () => {};
   if (me) {

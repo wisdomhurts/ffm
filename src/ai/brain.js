@@ -12,6 +12,7 @@ import {
   LockGoal, PatrolGoal, BaseGoal, DropGoal, HelpGoal,
 } from './goals.js';
 import { helpTarget, owesHero } from './family.js';
+import { BossGoal } from './goals.js';
 
 const MIN_REF = 0.02;
 const STEAL_SCALE = 0.6; // stealing is the spice, farming is the meal
@@ -199,6 +200,15 @@ function bestDrop(bot, game, p, ref) {
   return best;
 }
 
+/** Big Chomp is here: worth the trip while it can still be reached (more so when it's munching our own cash). */
+function bestBoss(bot, game, p, ref) {
+  const b = game.boss;
+  if (!b || b.state === 'leave' || p.carrying) return null;
+  const T = hyp(b.x - p.pos.x, b.z - p.pos.z) / runSpeed(game, p);
+  if (T > b.until - game.time - 3) return null;
+  return { u: (ref * 2.4 * (b.target === p.slot ? 1.5 : 1)) / (1 + T / 15) + 0.012 };
+}
+
 function bestMug(bot, game, p, info, farm) {
   const now = game.time;
   if (now < p.bonkReadyAt - 0.3 || now < bot.mugReadyAt || now < 45) return null;
@@ -288,6 +298,8 @@ export function chooseGoal(bot, game, p) {
   }
   const drop = bestDrop(bot, game, p, ref);
   if (drop) cands.push([drop.u, () => new DropGoal(drop.d, drop.u)]);
+  const boss = bestBoss(bot, game, p, ref);
+  if (boss) cands.push([boss.u, () => new BossGoal(boss.u)]);
   const plan = shopPlan(bot, game, p, info);
   if (plan) {
     const big = plan.speed || plan.rebirth;

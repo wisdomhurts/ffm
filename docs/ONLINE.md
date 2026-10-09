@@ -135,6 +135,17 @@ Host-authoritative rooms with **client-authoritative movement**:
   `net:left`, `net:members`, `net:host`, `net:error`).
 * UI: `src/ui/lobby.js` -> `openLobby(app)` (Quick Play, room list, create public/private, join by code,
   share-my-face toggle for private rooms) and an in-game room panel (members, mute, host kick, code).
+* **Big Chomp** (world boss, `gameplay/boss.js`): only the host's `Game` spawns, moves and hurts it. Its state
+  travels in the `bs` section `{next, boss}` (`boss` = `{uid, x, z, yaw, hp, max, target, slurped, hits[4], state,
+  born, until}` or null): `signature` = uid, hp, state and target (a hit goes out on the next tick), its crawl
+  rides the periodic refresh (clients smooth it). `vetBoss` / `vetBossSection` clamp every number to the world,
+  `target` to a slot and `state` to crawl / munch / leave; an older state without `boss` loads as none. Clients
+  never change its hit points themselves (no prediction), so a hit shows exactly once. Events (FORWARD;
+  `boss:hit` is CALM) carry numbers and players only: `boss:spawn {x, z, hp, max, victim}`, `boss:hit {by, n, hp,
+  max, cause, x, z}`, `boss:defeated {x, z, by, top, pot, shares[4], seeds, refund, victim}`, `boss:leave {x, z,
+  slurped, victim}`. The crown is `player.crownUntil` (vetPlayer: a number >= 0). Burst seeds are ground items with
+  `podId: null` (also kept by vetPlayer for a carried one). A garden that changes hands loses its hits and crown;
+  `serializeSlot` gives a leaver back what it slurped from them.
 
 ## Online API (`src/online/**`, backend agent)
 Supabase Postgres, all access through `security definer` RPCs (tables have RLS on and no policies).
