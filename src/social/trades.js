@@ -14,8 +14,9 @@
 // the seed in your hands, cash) -> both Ready -> 3 s countdown -> game.trade(a, b, offerA, offerB) swaps
 // everything atomically -> 'trade:done'. Any change to either offer un-readies both sides and locks Ready for
 // a second (anti-scam), and the countdown restarts. Walking apart (> 40 studs), leaving, getting hit or
-// cancelling ends the trade. Both gardens need room for the plants and seeds coming in, both pet bags for the
-// pets (a bot holds 3). Bots answer invites, weigh offers and say yes or ask for more (social/botTrade.js).
+// cancelling ends the trade; so does a friend's device going quiet during the countdown (reason 'left'). Both
+// gardens need room for the plants and seeds coming in, both pet bags for the pets (a bot holds 3). Bots answer
+// invites, weigh offers and say yes or ask for more (social/botTrade.js).
 //
 // Bus events (payloads hold Players + plain data only, so the net layer can map players to slots):
 //   'trade:invite' {from, to, expiresAt}
@@ -46,6 +47,7 @@ export const TRADE = {
   readyLock: 1, // seconds Ready stays locked after any change
   requestGap: 1.5, // seconds between two requests from one player
   declineCooldown: 8, // seconds before you may ask the same person again after a "no"
+  quiet: 1.5, // seconds a friend's device may go unheard (it sends 1/s) before a countdown is called off
 };
 
 const isPerson = (p) => !!p && (p.kind === 'local' || p.kind === 'remote');
@@ -92,6 +94,9 @@ export function createTradeManager(app, opts = {}) {
     return g;
   }
   const now = () => game?.time ?? 0;
+  // a friend online whose device went quiet (a locked phone, out of Wi-Fi): the host still holds their garden for a
+  // while, but a swap now would hand them pet mail they may never get while the other side's pets move at once
+  const quiet = (p) => p.kind === 'remote' && !!app.online?.isHost && (app.online.role?.silentFor?.(p) ?? 0) > C.quiet;
   const sessionOf = (p) => sessions.find((s) => s.a === p || s.b === p) || null;
   const sideOf = (s, p) => (s.a === p ? 0 : 1);
   const emitCancel = (a, b, reason, by = null) => bus.emit('trade:cancel', { a, b, reason, by });
@@ -391,7 +396,10 @@ export function createTradeManager(app, opts = {}) {
         changed(s, 'changed', who.length === 1 ? (who[0] ? s.b : s.a) : null);
         continue;
       }
-      if (s.countdownEndsAt && t >= s.countdownEndsAt) execute(s);
+      if (!s.countdownEndsAt) continue;
+      const gone = quiet(s.a) ? s.a : quiet(s.b) ? s.b : null;
+      if (gone) close(s, 'left', gone);
+      else if (t >= s.countdownEndsAt) execute(s);
     }
     bots.update(t);
   }

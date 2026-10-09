@@ -68,6 +68,7 @@ export class HostRole {
     this.epoch = epoch;
     this.order = order ? order.slice() : [s.pid];
     this.members = new Map(); // pid -> member (remote humans only)
+    this.mailKept = new Map(); // pid -> pet mail their device never acked before their garden went (given back on rejoin)
     this.banned = new Set(banned || []); // removed by a host of this room: never seated again
     this.bannedDirty = this.banned.size > 0;
     this.seq = 0;
@@ -173,6 +174,12 @@ export class HostRole {
       console.warn('[net] could not load a joiner\'s garden; starting them fresh', e);
       p = g.setSlot(slot, { kind: 'remote', profile, pid });
     }
+    // pet trades they never got to apply (they dropped out): their device's mailDone list skips any it already did
+    const mail = this.mailKept.get(pid);
+    if (mail) {
+      this.mailKept.delete(pid);
+      p.petMail = [...mail, ...p.petMail].slice(-8);
+    }
     const ctrl = new RemoteController();
     p.controller = ctrl;
     p.remoteMotion = true;
@@ -223,6 +230,7 @@ export class HostRole {
           m.up.subscribe().catch(() => {});
         } else {
           this.s.forgetWho(p.pid);
+          this._keepMail(p);
           this._toBot(p.slot);
           this.fillSlots();
         }
@@ -237,6 +245,23 @@ export class HostRole {
     this.orderDirty = true;
     g.paused = false;
     this.forceKey = true;
+  }
+
+  // A person loses their garden (left, dropped, not there after a host change): the pet mail their device hasn't
+  // acked would go with it (setSlot), and with it half of a trade. Keep it for when that device comes back.
+  _keepMail(p) {
+    if (!p?.pid || !p.petMail.length) return;
+    this.mailKept.delete(p.pid);
+    this.mailKept.set(p.pid, p.petMail.map((m) => ({ tid: m.tid, give: [...m.give], get: m.get.map((x) => ({ ...x })) })));
+    if (this.mailKept.size > 16) this.mailKept.delete(this.mailKept.keys().next().value);
+  }
+
+  /** Seconds since a remote player's device was last heard from (Infinity once it left the room's presence; 0
+   *  for everyone else). A trade doesn't finish with a device that isn't listening (social/trades.js). */
+  silentFor(p) {
+    const m = p?.kind === 'remote' ? this.members.get(p.pid) : null;
+    if (!m || m.slot !== p.slot) return 0;
+    return m.goneAt != null ? Infinity : this.s.clock - m.lastIn;
   }
 
   _toBot(slot) {
@@ -293,6 +318,8 @@ export class HostRole {
     this.limitIn.forget(pid);
     this.order = this.order.filter((x) => x !== pid);
     this.orderDirty = true;
+    const p = this.game.players[m.slot];
+    if (p?.pid === pid) this._keepMail(p);
     this._toBot(m.slot);
     this.fillSlots();
     this.s.forgetWho(pid);

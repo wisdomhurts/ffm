@@ -1,6 +1,7 @@
 // A family member in the match: state only (no rendering). Driven by an Intent each tick.
 import { PLAYER, speedAt, ITEMS, BASE, BOOST, TREADMILL } from '../config.js';
 import { sanitizeBaseStyle, BOT_STYLES } from './basestyle.js';
+import { sanitizePetName } from '../pets/names.js';
 
 /**
  * Intent: what a controller (human input or bot brain) wants this tick.
@@ -121,8 +122,10 @@ export class Player {
       baseLevel: this.baseLevel,
       boostLevel: this.boostLevel,
       treadmillTier: this.treadmillTier,
-      // a bot's team comes from egg drops; a person's team lives on their profile
+      // a bot's team comes from egg drops (and trades: a pet given to a bot keeps its nickname); a person's team
+      // lives on their profile
       pets: this.kind === 'bot' ? this.pets : undefined,
+      petNames: this.kind === 'bot' ? this.petNames : undefined,
     };
   }
 
@@ -138,6 +141,11 @@ export class Player {
     this.baseLevel = Math.max(1, Math.min(BASE.maxLevel, Math.floor(num(s.baseLevel, 1))));
     this.boostLevel = Math.min(BOOST.maxLevel, Math.floor(num(s.boostLevel, 0)));
     this.treadmillTier = Math.min(TREADMILL.tiers.length - 1, Math.floor(num(s.treadmillTier, 0)));
-    if (this.kind === 'bot' && Array.isArray(s.pets)) this.pets = s.pets.filter((id) => typeof id === 'string').slice(0, 3);
+    if (this.kind === 'bot' && Array.isArray(s.pets)) {
+      const names = Array.isArray(s.petNames) ? s.petNames : [];
+      const team = s.pets.map((id, k) => [id, names[k]]).filter(([id]) => typeof id === 'string').slice(0, 3);
+      this.pets = team.map(([id]) => id);
+      this.petNames = team.map(([, name]) => sanitizePetName(name));
+    }
   }
 }

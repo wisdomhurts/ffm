@@ -5,7 +5,9 @@ import { Game, SELL_SECONDS, seedSig } from '../../src/gameplay/game.js';
 import { PLANT } from '../../src/config.js';
 import { bus } from '../../src/core/events.js';
 import { createTradeManager, TRADE } from '../../src/social/trades.js';
-import { BOT_TRADE, tradePartner } from '../../src/social/botTrade.js';
+import { BOT_TRADE, tradePartner, botBusy } from '../../src/social/botTrade.js';
+import { BotController } from '../../src/ai/bot.js';
+import { emptyIntent } from '../../src/gameplay/player.js';
 import { REPLIES } from '../../src/social/replies.js';
 import { EventCodec, isBotLine } from '../../src/net/protocol.js';
 import { StubApp, MemoryHub } from '../net/stub.mjs';
@@ -392,6 +394,38 @@ test('pets between people: bags are checked, both devices get mail, names never 
   assert.equal(game.players[0].petMail.length, 0);
 });
 
+test('pets nested in trade events are vetted on clients: known pets, id-like uids, nicknames through the filter', () => {
+  const t = setup();
+  const { game, A, B } = t;
+  // what a modified host could forward (a normal host already cleans all of this: petsOf, Game.trade)
+  const pets = () => [
+    { uid: 'p1', id: 'bunny', name: 'shit head stupid idiot' },
+    { uid: 'b1:dragon', id: 'dragon', name: 'Smokey', k: 1, extra: 'junk words here' },
+    { uid: 'p3', id: 'toString', name: 'Ghost' },
+    { uid: 'bad uid!', id: 'owl', name: 'Hoot' },
+    { uid: 'p5', id: 'kitty', name: 'f u c k' },
+  ];
+  const offer = () => ({ planters: [], cash: 0, plants: [], pets: pets(), seed: null });
+  const other = new Game({ seed: 3, slots: [{ kind: 'remote', profile: profile('p_ann', 'Ann', 'dorian'), pid: 'a' }, { kind: 'local', profile: profile('p_ben', 'Ben', 'esther') }, { kind: 'bot' }, { kind: 'bot' }] });
+  const wire = (name, e) => EventCodec.vet(name, new EventCodec(other).decode(JSON.parse(JSON.stringify(new EventCodec(game).encode(e)))));
+  const clean = [
+    { id: 'bunny', name: '', uid: 'p1' },
+    { id: 'dragon', name: 'Smokey', uid: 'b1:dragon', k: 1 },
+    { id: 'kitty', name: '', uid: 'p5' },
+  ];
+  const u = wire('trade:update', { a: A, b: B, offerA: offer(), offerB: offer(), readyA: false, readyB: false, countdownEndsAt: 0, lockUntil: 0, rev: 2, reason: 'offer', changedBy: A, petRoomA: 3, petRoomB: 3 });
+  assert.ok(u, 'the update still gets through');
+  assert.deepEqual(u.offerA.pets, clean, 'unknown pets and odd uids dropped, unkind nicknames emptied');
+  assert.deepEqual(u.offerB.pets, clean);
+  const d = wire('trade:done', { a: A, b: B, offerA: { planters: [], cash: 0, pets: pets(), seed: false }, offerB: { planters: [], cash: 5, pets: [], seed: false },
+    plantsA: [], plantsB: [], seedA: null, seedB: null, petsA: pets(), petsB: [{ id: 'owl', name: 'shithead' }], tid: 'm1' });
+  assert.ok(d);
+  assert.deepEqual(d.petsA, clean);
+  assert.deepEqual(d.petsB, [{ id: 'owl', name: '' }]);
+  assert.deepEqual(d.offerA.pets.map((x) => x.name), ['', 'Smokey', '']);
+  assert.deepEqual(d.offerB.pets, []);
+});
+
 test('the seed in your hands: planted straight into their garden; dropped from the offer when it changes', () => {
   const t = setup();
   const { game, A, B } = t;
@@ -609,6 +643,124 @@ test('pets with bots: a bot keeps a pet you give it (and its name); a pet you as
   t.act(t.H, 'tradeAsk', { planters: [], pets: [{ uid: 'b2:frog' }], petRoom: 10 });
   t.run(TRADE.readyLock + 0.1);
   assert.equal(t.act(t.H, 'tradeReady', true, 10), true, 'a pet for a pet fits');
+});
+
+test('a trading bot drops the trade when its garden needs it (a deal counting down finishes first)', () => {
+  const t = botSetup(0);
+  const E = t.bot('esther');
+  const M = t.game.players.find((p) => p.id === 'micah');
+  const g = t.game.gardens[E.slot].planters;
+  g[0].unlocked = g[1].unlocked = true;
+  g[0].plant = { uid: uid++, speciesId: 'sunflower', mutation: 'normal', growTotal: 20, growLeft: 0, owner: E.slot };
+  g[1].plant = { uid: uid++, speciesId: 'sunflower', mutation: 'gold', growTotal: 20, growLeft: 0, owner: E.slot };
+  t.act(t.H, 'tradeRequest', E.slot);
+  t.run(2);
+  assert.ok(t.trades.sessionOf(t.H) && tradePartner(t.game, E) === t.H, 'Esther trades');
+  // someone starts stealing from her garden: she says bye and stops standing still
+  g[0].stealer = M.slot;
+  t.run(0.3);
+  assert.equal(t.trades.sessionOf(t.H), null, 'the trade is off');
+  const c = t.last('trade:cancel');
+  assert.deepEqual([c.reason, c.by], ['cancelled', E]);
+  assert.ok(line(REPLIES.tradeBye, 'esther', t.said(E).at(-1)), 'bye: ' + t.said(E).at(-1));
+  assert.equal(tradePartner(t.game, E), null, 'free to run');
+  g[0].stealer = null;
+  // a deal already counting down goes through first (it's a moment away)
+  t.run(TRADE.declineCooldown);
+  t.act(t.H, 'tradeRequest', E.slot);
+  t.run(2);
+  t.act(t.H, 'tradeAsk', { planters: [], pets: [], petRoom: 10 }); // a present: no need for anything back
+  t.act(t.H, 'tradeOffer', { planters: [], cash: 1, petRoom: 10 });
+  t.run(4);
+  t.act(t.H, 'tradeReady', true, 10);
+  const s = t.trades.sessionOf(t.H);
+  assert.ok(s.readyA && s.readyB && s.countdownEndsAt, 'counting down');
+  g[1].stealer = M.slot;
+  t.run(TRADE.countdown + 0.2);
+  assert.ok(t.last('trade:done'), 'swapped');
+  assert.equal(t.trades.sessionOf(t.H), null);
+  // and a bot running to a Help! call or at Big Chomp is busy too
+  g[1].stealer = null;
+  for (const type of ['help', 'boss']) {
+    E.controller = { goal: { type }, getIntent: () => null };
+    assert.equal(botBusy(t.game, E), true, type);
+  }
+});
+
+test('a trading bot still defends its garden from a thief (online a second kid could steal while you trade)', () => {
+  for (const seed of [1, 2, 3]) {
+    bus.clear();
+    const game = new Game({ humanId: 'dorian', seed });
+    const trades = createTradeManager({ game });
+    const [D, E, , M] = game.players;
+    for (const p of game.players) p.controller = null;
+    E.controller = new BotController(E.char.personality, 'normal', { seed: seed * 7 + 1 });
+    const pl = game.gardens[E.slot].planters[0];
+    pl.unlocked = true;
+    pl.plant = { uid: uid++, speciesId: 'sunflower', mutation: 'normal', growTotal: 10, growLeft: 0, owner: E.slot };
+    place(E, pl.x + 3, pl.z);
+    place(D, pl.x + 6, pl.z + 2);
+    let swings = 0;
+    const off = bus.on('bonk:swing', ({ player }) => player === E && swings++);
+    const frame = () => {
+      game.update(1 / 60);
+      trades.update();
+    };
+    trades.handle(D, 'tradeRequest', [E.slot]);
+    for (let i = 0; i < 120; i++) frame();
+    assert.ok(trades.sessionOf(E), 'Esther said yes');
+    // Micah walks up and holds E on her plant, then runs home with it
+    place(M, pl.x, pl.z + 1);
+    const home = game.gardens[M.slot].planters[0];
+    M.controller = {
+      getIntent(g, p) {
+        const it = emptyIntent();
+        if (!p.carrying) it.interact = true;
+        else {
+          const dx = home.x - p.pos.x, dz = home.z - p.pos.z, d = Math.hypot(dx, dz) || 1;
+          it.moveX = dx / d;
+          it.moveZ = dz / d;
+        }
+        return it;
+      },
+    };
+    const mine = pl.plant.uid;
+    let got = false;
+    for (let i = 0; i < 60 * 20; i++) {
+      frame();
+      if (M.carrying) got = true;
+      else if (got) break; // grabbed and lost again
+    }
+    off();
+    assert.equal(trades.sessionOf(E), null, `seed ${seed}: the trade is off`);
+    assert.ok(pl.plant?.uid === mine && !M.carrying, `seed ${seed}: her plant stays home (swings: ${swings}, goal: ${E.controller.goal?.type})`);
+  }
+});
+
+test('a pet traded to a bot keeps its nickname through a save and Continue (and back to you in a later trade)', () => {
+  const t = setup();
+  const { game, A } = t;
+  const E = game.players[2];
+  E.pets = ['dragon', 'bunny'];
+  E.petNames = ['', ''];
+  assert.ok(game.trade(A, E, { pets: [{ uid: 'ptFluffy', id: 'phoenix', name: 'Fluffy' }], petRoom: 10 }, { pets: [{ k: 1, id: 'bunny' }] }));
+  const names = (p) => p.pets.map((id, k) => `${id}:${p.petNames[k]}`).sort();
+  assert.deepEqual(names(E), ['dragon:', 'phoenix:Fluffy']);
+  // quit and Continue (a solo Endless save): a fresh game from the save
+  const save = JSON.parse(JSON.stringify(game.serialize()));
+  const again = new Game({ seed: 3, save, slots: [{ kind: 'local', profile: profile('p_ann', 'Ann', 'dorian') }, { kind: 'bot' }, { kind: 'bot' }, { kind: 'bot' }] });
+  const E2 = again.players[2];
+  assert.deepEqual(names(E2), ['dragon:', 'phoenix:Fluffy'], 'Esther still calls her phoenix Fluffy');
+  // trading Fluffy back: the nickname comes with her
+  const k = E2.pets.indexOf('phoenix');
+  assert.ok(again.trade(E2, again.players[0], { pets: [{ k, id: 'phoenix' }] }, { petRoom: 10 }));
+  assert.deepEqual(again.players[0].petMail[0].get, [{ id: 'phoenix', name: 'Fluffy' }]);
+  // an older save (pets, no nicknames) or junk in it: names line up with the team, unkind ones dropped
+  const p = again.players[3];
+  p.restore({ pets: ['owl', 7, 'kitty'], petNames: ['Hoot', 'x', 'shithead'] });
+  assert.deepEqual([p.pets, p.petNames], [['owl', 'kitty'], ['Hoot', '']]);
+  p.restore({ pets: ['owl'] });
+  assert.deepEqual([p.pets, p.petNames], [['owl'], ['']]);
 });
 
 test('"Trade?" in chat: a bot nearby asks you back; a trading bot walks on if nothing happens', () => {

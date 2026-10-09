@@ -259,7 +259,13 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
   (`PET_CAPACITY - owned`; the host can't see bags): Ready is refused unless both gardens have planters for the
   plants + seeds coming in and both bags room for the pets (a bot holds 3 pets). The existing per-member action rate
   limit applies (6/s, burst 16). `trade:update` carries both offers (pets nested, never a nickname at the top level:
-  `EventCodec.vet` would drop the event) and `petRoomA/B`.
+  `EventCodec.vet` would drop the event) and `petRoomA/B`. On clients `EventCodec.vet` cleans the nested pets of
+  every `trade:*` event (`offerA/B.pets`, `petsA/B`): known pets only, `isId` uids, nicknames through
+  `sanitizePetName`.
+* Dropouts: a countdown doesn't finish while a remote side's device has been quiet for more than `TRADE.quiet`
+  (1.5 s; devices send at least 1/s) or has left presence (`HostRole.silentFor(p)`): the trade ends with reason
+  'left'. A family bot drops its trade (bye line, `cancelled`) when `botBusy` (a thief at its planters, its plant
+  carried off...) unless the countdown already runs; `help` and `boss` goals count as busy for invites.
 * With a bot: `tradeAsk({planters, uids, pets: [{uid: botPetUid(k, id)}], petRoom})` sets the bot's side to what you
   ask for. `social/botTrade.js` answers invites (busy bots and usually Micah say no), and once per change weighs
   `value(what it gets) >= want x value(what it gives)` (`BOT_TRADE.want`: Esther 0.8, Dorian 1.0, Mati 1.2, Micah
@@ -271,15 +277,22 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 * **Pet mail** (pets cross devices through replicated state, not one-shot events): `Game.trade` appends
   `{tid, give: [uid], get: [{id, name}]}` to each person's `player.petMail` (max 8; `tid` unique across pages and
   hosts). It rides in `serializeFull` / the `p<slot>` sections (`vetPlayer` -> `vetPetMail`), so a lost tick, a
-  lost `trade:done` or a host change can't lose it. Each device's `attachPetMail(app).update()` (main.js, every
-  frame) applies new mail once (`profile.pets.mailDone`, last 60 ids): given uids leave the bag and team, received
+  lost `trade:done` or a host change can't lose it. When a person's garden goes before their device acked (`bye`,
+  dropped after `memberGrace`, not present at a host change: `removeMember` / `adoptMirror` -> `setSlot` clears
+  `petMail`), the host keeps their mail by pid (`HostRole.mailKept`, 16 pids) and puts it back in `_addMember` when
+  the same device rejoins; `mailDone` on the device makes a re-sent mail harmless. Each device's
+  `attachPetMail(app).update()` (main.js, every frame) applies new mail once (`profile.pets.mailDone`, last 60
+  ids): given uids leave the bag and team, received
   pets arrive with new uids and their nicknames (joining the team if a slot is free; a full bag sends home its
   weakest unnamed spare, never a pet on offer), then `act('petMailAck', tid)` over the reliable action queue
   (re-sent every 2 s while the host still lists it). `profile:changed` then re-sends `setPets`.
 * Locks: pets on offer are in `socialUi.tradePets` (My Pets can't release them, a full bag skips them); if one
   leaves the bag anyway, the trade window re-sends the offer without it.
 * Known gaps (fine for a family game): a modified client could keep a pet it traded away (bags live on devices), and
-  a cloud restore (`replaceProfile`) can bring one back. Pets given to a bot stay with it for that match.
+  a cloud restore (`replaceProfile`) can bring one back. Pets given to a bot stay with it for that match (and in a
+  solo save: `Player.serialize` keeps a bot's `petNames`). Kept mail lives only on the host that dropped the device
+  (a device that comes back with a new pid, after a reload, or whose own split-off room wins the merge, misses it),
+  and a device that drops in the last moment before the swap (inside `TRADE.quiet`) is only covered by that.
 
 ## Giant Harvests, Family Hero, Welcome-Back (round 4)
 * Plant sizes are host-rolled (`Game._finishGrowth`) and travel in plant data: `size` is in `serializeSlot`,

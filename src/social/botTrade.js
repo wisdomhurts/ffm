@@ -4,14 +4,15 @@
 //
 // What a bot does:
 // * Asked to trade: after a moment it says yes or no. Busy bots (carrying something, stunned, defending,
-//   stealing) say no; Micah usually does (he'd rather steal).
+//   stealing, answering a Help! call, fighting Big Chomp) say no; Micah usually does (he'd rather steal).
 // * Hears "Trade?" (quick chat, or a typed line about trading): the closest free bot asks back (an invite),
 //   or one further away says to come closer. It won't ask the same person again for a while.
 // * In a trade it stands still facing you and weighs both sides, once per change:
 //   value(what it gets) >= want x value(what it gives) -> Ready (Esther 0.8, Dorian 1.0, Mati 1.2, Micah 1.5),
 //   otherwise it asks for a little more. You offer something and haven't asked for anything yet: it proposes
 //   one of its own things (or some cash) worth about as much, never the same thing again soon after.
-// * Nothing happens for a while: it says bye and walks on.
+// * Nothing happens for a while: it says bye and walks on. Its garden needs it (someone at one of its planters, one
+//   of its plants being carried off): it says bye and runs to defend it (a deal counting down finishes first).
 // Values: a plant is worth what selling it pays (plantIncome x SELL_SECONDS; seedlings and seeds a little
 // less), a pet what it costs on average to hatch (egg price / its odds), cash is cash.
 // Bots only ever hold their egg-drop team (player.pets, 3 at most); a pet given to a bot stays with it.
@@ -41,7 +42,7 @@ export const BOT_TRADE = {
 };
 
 // goals a bot doesn't drop for a trade (ai/goals.js)
-const BUSY = new Set(['return', 'steal', 'practice', 'defend', 'mug', 'lurk']);
+const BUSY = new Set(['return', 'steal', 'practice', 'defend', 'mug', 'lurk', 'help', 'boss']);
 const isPerson = (p) => !!p && (p.kind === 'local' || p.kind === 'remote');
 const dist = (a, b) => Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -269,9 +270,16 @@ export function createBotTrader(api) {
       }
       // trading bots stand still facing their partner
       let held = holds.get(game);
-      for (const s of api.sessions()) {
+      for (const s of [...api.sessions()]) {
         const bot = s.a.kind === 'bot' ? s.a : s.b.kind === 'bot' ? s.b : null;
         if (!bot) continue;
+        // ...unless their garden needs them (a thief at a planter, a plant being carried off): bye, and off they go
+        // (a deal that is already counting down finishes first, in a moment)
+        if (!s.countdownEndsAt && botBusy(game, bot)) {
+          line(bot, 'tradeBye', bot === s.a ? s.b : s.a, '', 0);
+          api.cancel(bot);
+          continue;
+        }
         if (!held) holds.set(game, (held = new Map()));
         held.set(bot.slot, bot === s.a ? s.b : s.a);
         hookHold(bot.controller);

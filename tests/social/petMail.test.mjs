@@ -226,3 +226,155 @@ test('online: a new host keeps pet mail nobody acked yet; the device applies it 
     Object.assign(settings, keep);
   }
 });
+
+// ------------------------------------------------------------------ a device drops out in the middle of a pet trade
+
+const bagOf = (a) => owned(a.profileId).map((x) => `${x.id}:${x.name || ''}`).sort();
+// a stand-in for a phone that locks or walks out of Wi-Fi: nothing in or out, its presence vanishes
+const down = (r, a, on = true) => r.hub.setDown(a.transport, on);
+
+// Hana hosts, Bo is a client. One of them offers a pet and Bo's phone drops a second into the 3 s countdown,
+// for longer than the host keeps a garden (memberGrace). The swap must not happen: it would take the pet from
+// one bag while Bo's device never hears about the other half.
+for (const giver of ['host', 'client']) {
+  test(`online: a friend's device that drops during the countdown calls the trade off (the ${giver} gives a pet)`, async () => {
+    bus.clear();
+    Object.assign(settings, { onlineBots: 0 });
+    const r = room();
+    const seen = [];
+    const off = bus.on('*', ({ name, payload }) => name.startsWith('trade:') && seen.push({ name, ...payload }));
+    try {
+      const H = r.add('Hana', 'dorian');
+      const B = r.add('Bo', 'esther');
+      const [G, R] = giver === 'host' ? [H, B] : [B, H];
+      bag(G.profileId, [{ uid: 'gd', id: 'dragon', t: 1, name: 'Smokey' }], ['gd']);
+      bag(R.profileId, [], []);
+      const code = await H.online.createRoom({ private: true });
+      assert.ok(await B.online.joinRoom(code));
+      r.hub.latency = 0.04;
+      await r.step(1);
+      tp(H, H, 0, 0);
+      tp(H, B, 4, 0);
+      await r.step(0.3);
+      const hp = H.game.players;
+      assert.equal(H.act('tradeRequest', slotOf(B)), true);
+      await r.step(0.3);
+      B.act('tradeAccept', slotOf(H));
+      await r.step(0.5);
+      G.act('tradeOffer', { planters: [], cash: 0, pets: [{ uid: 'gd', id: 'dragon', name: 'Smokey' }], petRoom: petBag(G).room });
+      R.act('tradeOffer', { planters: [], cash: 0, pets: [], petRoom: petBag(R).room });
+      await r.step(TRADE.readyLock + 0.5);
+      H.act('tradeReady', true, petBag(H).room);
+      B.act('tradeReady', true, petBag(B).room);
+      await r.step(1);
+      const s = H.trades.sessionOf(hp[0]);
+      assert.ok(s && s.readyA && s.readyB && s.countdownEndsAt > H.game.time, 'both Ready, counting down');
+      down(r, B);
+      await r.step(TRADE.countdown);
+      assert.equal(H.trades.sessionOf(hp[0]), null, 'the trade is over');
+      assert.ok(!seen.some((e) => e.name === 'trade:done'), 'and nothing was swapped');
+      const cancel = seen.find((e) => e.name === 'trade:cancel');
+      assert.equal(cancel?.reason, 'left', 'Bo went quiet: he "left" the trade');
+      assert.equal(cancel.by, hp[slotOf(B)]);
+      assert.ok(hp.every((p) => !p.petMail.length), 'no pet mail for anyone');
+      // Bo's phone stays off long enough to lose his garden, then comes back
+      await r.step(10);
+      down(r, B, false);
+      await r.step(12);
+      assert.ok([H, B].some((a) => a.online.isHost) && [H, B].every((a) => a.online.room), 'one room again');
+      assert.deepEqual(bagOf(G), ['dragon:Smokey'], 'the giver still has the dragon');
+      assert.deepEqual(bagOf(R), [], 'and nobody got a copy');
+    } finally {
+      off();
+      r.done();
+      Object.assign(settings, keep);
+    }
+  });
+}
+
+// The swap went through just as Bo's phone dropped (inside the moment the host can't tell yet). Bo is gone longer
+// than the host keeps his garden, so it goes to a computer player; when Bo comes back his pet mail is still there.
+test('online: pet mail waits for a friend who dropped out and comes back (nothing lost, nothing copied)', async () => {
+  bus.clear();
+  Object.assign(settings, { onlineBots: 0 });
+  const r = room();
+  try {
+    const H = r.add('Hana', 'dorian');
+    const C = r.add('Cy', 'maddie');
+    const B = r.add('Bo', 'esther');
+    bag(H.profileId, [{ uid: 'hd', id: 'dragon', t: 1, name: 'Smokey' }], ['hd']);
+    bag(B.profileId, [{ uid: 'bb', id: 'bunny', t: 1, name: 'Hops' }], ['bb']);
+    bag(C.profileId, [], []);
+    const code = await H.online.createRoom({ private: true });
+    assert.ok(await C.online.joinRoom(code));
+    assert.ok(await B.online.joinRoom(code));
+    r.hub.latency = 0.04;
+    await r.step(1);
+    const bPid = B.online.pid;
+    down(r, B);
+    await r.step(0.2);
+    assert.ok(H.game.trade(H.game.players[0], H.game.players[slotOf(B)],
+      { pets: [{ uid: 'hd', id: 'dragon', name: 'Smokey' }], petRoom: 10 }, { pets: [{ uid: 'bb', id: 'bunny', name: 'Hops' }], petRoom: 10 }));
+    await r.step(1);
+    assert.deepEqual(bagOf(H), ['bunny:Hops'], "Hana's own device applied her half right away");
+    await r.step(10); // longer than memberGrace: the host gives Bo's garden away
+    assert.ok(!H.game.players.some((p) => p.pid === bPid), 'Bo lost his garden');
+    down(r, B, false);
+    await r.step(15);
+    assert.ok(H.online.isHost && B.online.isClient, "Bo is back in Hana's room");
+    const back = H.game.players.find((p) => p.pid === bPid);
+    assert.ok(back, 'with a garden again');
+    assert.deepEqual(bagOf(B), ['dragon:Smokey'], 'Bo got Smokey and Hops left his bag');
+    assert.ok(!back.petMail.length, 'acked: the host forgot it');
+    await r.step(2.5);
+    assert.deepEqual(bagOf(B), ['dragon:Smokey'], 'applied once');
+    assert.deepEqual(bagOf(H), ['bunny:Hops']);
+  } finally {
+    r.done();
+    Object.assign(settings, keep);
+  }
+});
+
+// Same, but the host leaves while Bo is away: the device that takes over finds Bo gone, hands his garden to a
+// computer player and keeps his mail for when he's back.
+test('online: a new host keeps the mail of a friend who was away during the host change', async () => {
+  bus.clear();
+  Object.assign(settings, { onlineBots: 0 });
+  const r = room();
+  try {
+    const H = r.add('Hana', 'dorian');
+    const C = r.add('Cy', 'maddie');
+    const B = r.add('Bo', 'esther');
+    bag(H.profileId, [{ uid: 'hd', id: 'dragon', t: 1, name: 'Smokey' }], ['hd']);
+    bag(B.profileId, [{ uid: 'bb', id: 'bunny', t: 1, name: 'Hops' }], ['bb']);
+    bag(C.profileId, [], []);
+    const code = await H.online.createRoom({ private: true });
+    assert.ok(await C.online.joinRoom(code)); // Cy is next in line to host
+    assert.ok(await B.online.joinRoom(code));
+    r.hub.latency = 0.04;
+    await r.step(1);
+    const bPid = B.online.pid;
+    down(r, B);
+    await r.step(0.2);
+    assert.ok(H.game.trade(H.game.players[0], H.game.players[slotOf(B)],
+      { pets: [{ uid: 'hd', id: 'dragon', name: 'Smokey' }], petRoom: 10 }, { pets: [{ uid: 'bb', id: 'bunny', name: 'Hops' }], petRoom: 10 }));
+    await r.step(1);
+    assert.deepEqual(bagOf(H), ['bunny:Hops']);
+    assert.equal(C.game.players[slotOf(B)].petMail.length, 1, "Cy's copy of the world has Bo's mail");
+    H.online.leave();
+    r.apps.splice(r.apps.indexOf(H), 1);
+    await r.step(1);
+    assert.ok(C.online.isHost, 'Cy took over');
+    assert.ok(!C.game.players.some((p) => p.pid === bPid), "Bo wasn't there: his garden went to a computer player");
+    down(r, B, false);
+    await r.step(12);
+    assert.ok(B.online.isClient && B.online.role.hostPid === C.online.pid, 'Bo follows Cy now');
+    const back = C.game.players.find((p) => p.pid === bPid);
+    assert.ok(back, 'with a garden again');
+    assert.deepEqual(bagOf(B), ['dragon:Smokey'], 'Bo got Smokey and Hops left his bag');
+    assert.ok(!back.petMail.length, 'acked to the new host');
+  } finally {
+    r.done();
+    Object.assign(settings, keep);
+  }
+});

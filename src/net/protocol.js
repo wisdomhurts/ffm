@@ -503,6 +503,19 @@ export class EventCodec {
     // Help! Family Hero: three players and a tip (a number); nobody can be their own hero
     if (name === 'steal:rescued' && (!(e.hero instanceof Player) || !(e.thief instanceof Player) || !(e.victim instanceof Player) ||
       e.hero === e.thief || e.hero === e.victim || !(num(e.tip, -1) >= 0))) return null;
+    // Trades: pets ride nested in the offers (trade:update, trade:done) and in trade:done petsA/B. Known pets only,
+    // id-like uids, and nicknames through the pet-name filter, like every other way a nickname reaches this device
+    if (name.startsWith('trade:')) {
+      const pets = (list) => (Array.isArray(list) ? list : []).filter((x) => isObj(x) && own(PET, x.id) && (x.uid == null || isId(x.uid)))
+        .slice(0, 3).map((x) => {
+          const y = { id: x.id, name: sanitizePetName(x.name) };
+          if (x.uid != null) y.uid = x.uid;
+          if (Number.isInteger(x.k) && x.k >= 0 && x.k < 3) y.k = x.k;
+          return y;
+        });
+      for (const o of [e.offerA, e.offerB]) if (isObj(o) && 'pets' in o) o.pets = pets(o.pets);
+      for (const k of ['petsA', 'petsB']) if (k in e) e[k] = pets(e[k]);
+    }
     return e;
   }
 }

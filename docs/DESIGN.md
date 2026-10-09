@@ -140,13 +140,15 @@ own GIANT or TITAN nudges the camera, a nearby family bot shouts WHOA, and the p
   or still growing), up to 3 pets, the seed in their hands and cash; both press Ready, a 3 s countdown, then
   everything swaps at once. Any change un-readies both and locks Ready for 1 s. Both gardens need free planters for
   the plants and seeds coming in (a traded seed is planted at once, with full grow time) and both pet bags need room
-  (bots hold 3 pets). Walking apart (40 studs), a bonk or leaving ends the trade. Family bots (solo and in private
-  rooms): they answer an invite after a moment (busy ones and usually Micah say no), you tap their plants and pets
-  to ask for them, and they say yes when what they get is worth at least Esther 0.8x / Dorian 1x / Mati 1.2x /
-  Micah 1.5x what they give (plants: 90 s of income, a little less while growing; pets: their average hatch cost;
-  cash). Offered something and asked for nothing, a bot proposes a thing of its own (never the same one twice in a
-  row). A pet given to a bot stays with it for the match; giving one asks twice. Saying "Trade?" near a bot may get
-  you an invite.
+  (bots hold 3 pets). Walking apart (40 studs), a bonk or leaving ends the trade; online, so does a friend's device
+  going quiet during the countdown (1.5 s). Family bots (solo and in private rooms): they answer an invite after a
+  moment (busy ones and usually Micah say no; a bot whose garden is being robbed mid-trade says bye and runs to
+  defend it, unless the countdown already runs), you tap their plants and pets to ask for them, and they say yes
+  when what they get is worth at least Esther 0.8x / Dorian 1x / Mati 1.2x / Micah 1.5x what they give (plants:
+  90 s of income, a little less while growing; pets: their average hatch cost; cash). Offered something and asked
+  for nothing, a bot proposes a thing of its own (never the same one twice in a row). A pet given to a bot stays
+  with it for the match (with its nickname, in a solo save too); giving one asks twice. Saying "Trade?" near a bot
+  may get you an invite.
 * **Expand** (walk into your next FOR SALE lot): +5 planters.
 * **Items** (Gear Shop, hotbar 1–5): Banana Peel, Water Balloon, Speed Coil, Invisibility Cloak,
   Water Bucket (halves remaining growth time of the plant you stand next to).

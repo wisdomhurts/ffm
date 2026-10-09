@@ -1813,8 +1813,9 @@ export class Game {
    *         the other garden (a new plant, full grow time), like a gift
    *   petRoom: free spots in a person's pet bag (their device says so); a bot holds MAX_TEAM pets
    * Everything is checked first; nothing changes unless the whole trade fits. A person's pets move through
-   * p.petMail (replicated state, so a lost tick or a new host can't lose them): their device applies each
-   * mail once and acks it (ui/pets.js attachPetMail -> petMailAck).
+   * p.petMail (replicated state, so a lost tick or a new host can't lose them; a host keeps the mail of a device
+   * that drops out until it comes back, net/host.js): their device applies each mail once and acks it
+   * (ui/pets.js attachPetMail -> petMailAck).
    */
   trade(a, b, offerA, offerB) {
     if (!a || !b || a === b) return false;
