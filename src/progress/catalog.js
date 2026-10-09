@@ -27,7 +27,7 @@ export const BONUS = { stars: 25, secs: 240, minCash: 1500 };
 const AVG_INCOME = {};
 for (const p of PLANTS) if (!p.family) (AVG_INCOME[p.rarity] ||= []).push(p.income);
 for (const k of Object.keys(AVG_INCOME)) AVG_INCOME[k] = AVG_INCOME[k].reduce((a, b) => a + b, 0) / AVG_INCOME[k].length;
-const PLANTERS_AT_STAGE = [4, 5, 6, 7, 8, 9, 10, 12, 15];
+const PLANTERS_AT_STAGE = [4, 5, 6, 7, 8, 9, 10, 12, 15, 18, 21, 25];
 
 /**
  * How deep up the Seed Road this player can farm: the last biome whose monster they outrun while
@@ -197,7 +197,7 @@ export const BADGES = [
   { id: 'lightspeed', name: 'Light Speed', icon: 'bolt', stat: (c) => c.speedMax, tiers: SPEED_MILESTONES.slice(1), stars: [60, 100], how: (n) => `Reach Speed level ${n}` },
   { id: 'reborn', name: 'Reborn', icon: 'star', stat: (c) => c.rebirthMax, tiers: [1, 5, 10], stars: [30, 80, 200], how: (n) => (n === 1 ? 'Rebirth once' : `Rebirth ${n} times`) },
   { id: 'explorer', name: 'Explorer', icon: 'compass', stat: (c) => c.deepest, tiers: [6], stars: [15], how: () => `Reach ${BIOMES[5].name}` },
-  { id: 'skywalker', name: 'Sky Walker', icon: 'compass', stat: (c) => c.deepest, tiers: [BIOMES.length], stars: [50], how: () => `Reach every world, all the way to ${BIOMES[BIOMES.length - 1].name}` },
+  { id: 'skywalker', name: 'Sky Walker', icon: 'compass', stat: (c) => c.deepest, tiers: [9], stars: [50], how: () => `Reach ${BIOMES[8].name}, the ninth world` },
   { id: 'divine', name: 'Divine Touch', icon: 'star', stat: (c) => c.seed_divine, tiers: [1], stars: [60], how: () => 'Grab a Divine seed' },
   { id: 'starcatcher', name: 'Star Catcher', icon: 'star', stat: (c) => c.seed_mythic, tiers: [1], stars: [30], how: () => 'Grab a Mythic seed' },
   { id: 'rainbow', name: 'Rainbow Hunter', icon: 'rainbow', stat: (c) => c.rainbowOwned, tiers: [1], stars: [30], how: () => 'Own a Rainbow plant' },

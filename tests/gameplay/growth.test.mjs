@@ -196,13 +196,13 @@ test('fast players get more grip; normal speeds are unchanged', () => {
   assert.ok(T < 1 && Math.abs(out.z - (0.5 * a * T * T + 96 * (1 - T))) < 1e-6);
 });
 
-test('the far biomes: new rarities, monsters, secrets, lucky seeds stop at Divine', () => {
-  assert.equal(BIOMES.length, 9);
-  assert.deepEqual(BIOMES.slice(6).map((b) => b.rarity), ['celestial', 'cosmic', 'divine']);
+test('the far biomes: new rarities, monsters, secrets, lucky seeds stop at Infinity', () => {
+  assert.equal(BIOMES.length, 12);
+  assert.deepEqual(BIOMES.slice(6).map((b) => b.rarity), ['celestial', 'cosmic', 'divine', 'prismatic', 'eternal', 'infinity']);
   for (const b of BIOMES.slice(1)) assert.ok(b.monster && b.monster.speed > 0);
   for (let i = 2; i < BIOMES.length; i++) assert.ok(BIOMES[i].monster.speed > BIOMES[i - 1].monster.speed, 'monsters get faster');
-  assert.equal(RARITY.secret.tier, 9);
-  assert.equal(TOP_TIER, RARITY.divine.tier);
+  assert.equal(RARITY.secret.tier, 12);
+  assert.equal(TOP_TIER, RARITY.infinity.tier);
   const { game } = setup();
   const counts = {};
   for (let bi = 0; bi < BIOMES.length; bi++) {
@@ -217,15 +217,16 @@ test('the far biomes: new rarities, monsters, secrets, lucky seeds stop at Divin
   }
   for (let bi = 0; bi < 5; bi++) assert.ok(!counts[bi].secret, `no secrets in ${BIOMES[bi].name}`);
   for (let bi = 5; bi < BIOMES.length; bi++) assert.ok(counts[bi].secret > 0, `secrets in ${BIOMES[bi].name}`);
-  assert.ok(!counts[8].secret || counts[8].secret > counts[5].secret * 0.9, 'the deepest biome has the best secret odds');
+  const last = BIOMES.length - 1;
+  assert.ok(!counts[last].secret || counts[last].secret > counts[5].secret * 0.9, 'the deepest biome has the best secret odds');
   // incomes climb with rarity; Secret stays on top
   const avg = (r) => {
     const l = Object.values(PLANT).filter((p) => p.rarity === r);
     return l.reduce((a, p) => a + p.income, 0) / l.length;
   };
-  const order = ['mythic', 'celestial', 'cosmic', 'divine', 'secret'];
+  const order = ['mythic', 'celestial', 'cosmic', 'divine', 'prismatic', 'eternal', 'infinity', 'secret'];
   for (let i = 1; i < order.length; i++) assert.ok(avg(order[i]) > avg(order[i - 1]), `${order[i]} pays more than ${order[i - 1]}`);
-  // monsters patrol every biome, the road ends after Cloud Kingdom
-  assert.ok(game.monsters.some((m) => m.type === 'storm'));
+  // monsters patrol every biome, the road ends after Rainbow's End
+  for (const t of ['storm', 'golem', 'puffer', 'comet']) assert.ok(game.monsters.some((m) => m.type === t), t);
   assert.equal(LAYOUT.roadEndZ, WORLD.road.startZ + BIOMES.length * WORLD.road.biomeLength);
 });

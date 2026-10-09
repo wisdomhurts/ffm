@@ -82,7 +82,7 @@ function pill(g, x, y, text, bg, fg, size, stroke = '#1b2440') {
 
 function bannerTextures(bi) {
   const b = BIOMES[bi];
-  const st = STYLE[b.id];
+  const st = STYLE[b.id] || STYLE.cloud;
   const rar = RARITY[b.rarity];
   const W = 1024, H = 240;
   const bg = (g, c1, c2) => {
@@ -1113,7 +1113,7 @@ export function buildRoad(ctx) {
 
   layout.biomeRanges.forEach((R, bi) => {
     const b = BIOMES[bi];
-    const st = STYLE[b.id];
+    const st = STYLE[b.id] || STYLE.cloud;
     const r = makeRand(1000 + bi * 77);
     const group = new THREE.Group();
     group.name = 'biome-' + b.id;
@@ -1131,7 +1131,7 @@ export function buildRoad(ctx) {
     const face = st.channel ? 23.8 : 20;
     for (const s of [-1, 1]) cliffs(B.rockM, B.topM, s, R.minZ, R.maxZ, st, r, face, bi === 0 ? 5 : 0, B.backM, B.ledges);
     if (bi === 0) southFace(B, r);
-    for (const s of [-1, 1]) DECOR[b.id](ctx, B, s, r);
+    for (const s of [-1, 1]) (DECOR[b.id] || DECOR.cloud)(ctx, B, s, r);
     if (b.id === 'starbloom') floatingIslands(ctx, B, r);
     if (b.id === 'cloud') cloudIslands(ctx, B, r);
 

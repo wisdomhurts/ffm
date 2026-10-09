@@ -3,8 +3,10 @@ import { load, save } from './save.js';
 import { bus } from './events.js';
 
 const DEFAULTS = {
-  music: 0.6,
+  music: 0.6, // volume 0..1 (kept when muted or switched off)
   sfx: 0.8,
+  musicOn: true, // music on/off switch (the volume is remembered)
+  sfxOn: true, // sound effects on/off switch
   quality: 'auto', // 'low' | 'medium' | 'high' | 'auto'
   difficulty: 'chill', // 'chill' | 'normal' | 'chaos' (Chill is kindest for a first game)
   camSensitivity: 1,
@@ -16,6 +18,8 @@ const DEFAULTS = {
   hudLayout: 'auto', // 'auto' | 'simple' | 'full' (ui/hudLayout.js: auto = Simple on small screens)
   onlineBots: 3, // online rooms you host: how many empty gardens get a computer player (0-3)
   speedGear: 2, // GEARS index: 0 slow, 1 cruise, 2 full (X / tapping the speedometer cycles it)
+  chatOn: true, // typed chat (private rooms and solo)
+  chatPublic: false, // parents: also allow typed chat (filtered) in PUBLIC rooms
 };
 
 const ENUMS = { quality: ['low', 'medium', 'high', 'auto'], difficulty: ['chill', 'normal', 'chaos'], hudLayout: ['auto', 'simple', 'full'] };

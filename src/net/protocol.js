@@ -37,7 +37,8 @@ import { Player } from '../gameplay/player.js';
 /** Own keys only: catalog lookups must never match 'toString', '__proto__' and friends. */
 export const own = (obj, k) => typeof k === 'string' && !!obj && Object.prototype.hasOwnProperty.call(obj, k);
 
-export const PROTO = 3; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots; 3: base levels + styles, pet teams, boost, treadmills, egg drops
+export const PROTO = 4; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots; 3: base levels + styles, pet teams, boost, treadmills, egg drops;
+// 4: sell button, pet tricks, pet/seed trades, text chat, plant sizes, hero tips, Big Chomp, 3 new zones
 
 // Two builds can only share a room when their rules agree (ids of everything that crosses the wire).
 function fnv(str) {
@@ -344,6 +345,8 @@ export const FORWARD = new Set([
   'gift', 'gift:fail', 'pet:hatched', 'pet:equipped', 'player:look', 'slot:changed', 'practice:steal',
   'base:upgraded', 'base:style', 'base:bounce', 'guard:bonk', 'boost:start', 'boost:up', 'treadmill:up', 'pump:start',
   'drop:spawn', 'drop:claimed', 'drop:expired',
+  // round 4
+  'pet:trick', 'plant:giant', 'steal:rescued', 'boss:spawn', 'boss:hit', 'boss:defeated', 'boss:leave',
 ]);
 export const forwarded = (name) => FORWARD.has(name) || name.startsWith('trade:');
 

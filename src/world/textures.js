@@ -300,7 +300,7 @@ const ROAD_STYLE = {
 /** Returns {map, emissiveMap?} for a biome road: 512px = 40 studs wide, 40 studs long. */
 export function roadTexture(biomeId) {
   return once('road:' + biomeId, () => {
-    const S = ROAD_STYLE[biomeId];
+    const S = ROAD_STYLE[biomeId] || ROAD_STYLE.cloud;
     const W = 512, H = 512;
     const c = makeCanvas(W, H);
     const g = c.getContext('2d');

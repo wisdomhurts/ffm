@@ -14,7 +14,7 @@ import {
 
 const R = WORLD.playerRadius;
 // events that can ride the next regular tick (frequent, and only cosmetic for the others)
-const CALM = new Set(['player:jump', 'bonk:swing', 'bonk:miss', 'pod:respawn', 'monster:aggro', 'plant:grown', 'seed:expired', 'ground:expired', 'chat', 'emote']);
+const CALM = new Set(['player:jump', 'bonk:swing', 'bonk:miss', 'pod:respawn', 'monster:aggro', 'plant:grown', 'seed:expired', 'ground:expired', 'chat', 'emote', 'pet:trick', 'boss:hit']);
 
 /** Intent for a remote player, built from their 'in' messages (edges arrive with sequence numbers). */
 export class RemoteController {

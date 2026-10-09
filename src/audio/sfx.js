@@ -5,6 +5,7 @@ import {
   tone, noise, bell, steelPan, marimba, harp, brass, pad, kick, tom, cymbal,
   formantVoice, growl, finish, kit, mtof, clamp,
 } from './synth.js';
+import { RARITY } from '../config.js';
 
 const V = (o, x) => x * (o.vol ?? 1);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -136,7 +137,7 @@ export const SFX = {
   // ---------------------------------------------------------------- seeds & plants
   /** o.tier 0..9 (rarity; 9 = Secret, the sound tops out at 6), o.mutation */
   grab(ac, out, t, o) {
-    const secret = (o.tier ?? 0) >= 9;
+    const secret = (o.tier ?? 0) >= RARITY.secret.tier;
     const tier = clamp(o.tier ?? 0, 0, 6);
     const mut = o.mutation || 'normal';
     const base = 76 + tier * 2;

@@ -1,7 +1,7 @@
 // Player profiles on this device. The four family members always exist; friends can add their own.
 // Contract: docs/ONLINE.md (Profiles). Everything is stored in localStorage (guarded; the game still runs
 // without it) and mirrored to the cloud by src/online when the player links a save code.
-import { CHARACTERS, CHARACTER } from '../config.js';
+import { CHARACTERS, CHARACTER, PLANT } from '../config.js';
 import { load, save, remove } from './save.js';
 import { bus } from './events.js';
 import { sanitizeName } from './names.js';
@@ -34,7 +34,10 @@ function blank(id, base, name, family) {
     shareFace: false,
     stars: 0,
     unlocks: [],
-    pets: { owned: [], equipped: null, team: [] }, // owned: [{uid, id, t, name?}] (name: the player's nickname); team: up to 3 equipped uids (team[0] === equipped)
+    pets: { owned: [], equipped: null, team: [], mailDone: [] }, // owned: [{uid, id, t, name?}] (name: the player's nickname); team: up to 3 equipped uids (team[0] === equipped); mailDone: applied pet-trade mail ids
+    tutorial: { state: 'new', step: 0 }, // 'new' | 'offered' | 'declined' | 'active' | 'done' (ui/tutorial.js)
+    almanac: { v: 1, s: {} }, // Seed Almanac: speciesId -> bits (1 normal, 2 gold, 4 diamond, 8 rainbow, 16 big, 32 giant, 64 titan)
+    gnomes: [], // Golden Gnome Hunt: ids found
     baseStyle: sanitizeBaseStyle(null), // Base Studio picks (what shows depends on the base level in each game)
     badges: {},
     quests: { day: '', list: [] },
@@ -72,7 +75,16 @@ function normalize(p, id) {
     if (out.pets.equipped && !out.pets.team.includes(out.pets.equipped)) out.pets.team.unshift(out.pets.equipped);
     out.pets.team = out.pets.team.slice(0, 3);
     out.pets.equipped = out.pets.team[0] || null;
+    if (Array.isArray(p.pets.mailDone)) out.pets.mailDone = p.pets.mailDone.filter((t) => typeof t === 'string' && t.length <= 40).slice(-60);
   }
+  if (obj(p.tutorial)) {
+    const st = ['new', 'offered', 'declined', 'active', 'done'];
+    out.tutorial = { state: st.includes(p.tutorial.state) ? p.tutorial.state : 'new', step: Number.isInteger(p.tutorial.step) && p.tutorial.step >= 0 ? p.tutorial.step : 0 };
+  }
+  if (obj(p.almanac) && obj(p.almanac.s)) {
+    for (const [k, v] of Object.entries(p.almanac.s)) if (Object.hasOwn(PLANT, k) && Number.isInteger(v) && v > 0) out.almanac.s[k] = v & 127;
+  }
+  if (Array.isArray(p.gnomes)) out.gnomes = [...new Set(p.gnomes.filter((g) => typeof g === 'string' && g.length <= 24))];
   if (obj(p.baseStyle)) out.baseStyle = sanitizeBaseStyle(p.baseStyle);
   if (obj(p.badges)) out.badges = { ...p.badges };
   if (obj(p.quests) && Array.isArray(p.quests.list)) out.quests = { day: String(p.quests.day || ''), list: p.quests.list };

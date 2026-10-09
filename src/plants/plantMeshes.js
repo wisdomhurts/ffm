@@ -35,9 +35,10 @@ const mutOf = (m) => (MUTATIONS[m] ? m : 'normal');
 const tierOf = (sp) => RARITY[sp.rarity]?.tier ?? 0;
 const lookOf = (sp) => LOOKS[sp.look] || LOOKS.daisy;
 const isSecret = (sp) => sp.rarity === 'secret';
-// Celestial, Cosmic and Divine (tiers 6-8): the top road rarities, above Mythic and below the family Secrets.
+// Celestial and up (tiers 6+): the top road rarities, above Mythic and below the family Secrets.
 const isTop = (sp, tier = tierOf(sp)) => tier >= 6 && !isSecret(sp);
 // Per top tier: sparkle flavour on top of the Mythic-style aura (index = tier - 6).
+const topFx = (tier) => TOP_FX[Math.max(0, Math.min(TOP_FX.length - 1, tier - 6))];
 const TOP_FX = [
   { spark: '#e6fbff', mode: 'twinkle', rise: '#9ff0ff' }, // Celestial: icy star glints
   { spark: '#ffc2f4', mode: 'orbit', rise: '#ff9fe8' }, // Cosmic: candy-pink orbiters
@@ -205,7 +206,7 @@ function addPlantFx(rig, sp, mut, tpl, stage, groundNode, fxNode, ph) {
     rig.sparkles(fxNode, 'twinkle', '#ffffff', 6, rx, h * 0.9, h * 0.2, { size: 0.4, seed: 6 });
   }
   if (top) {
-    const tf = TOP_FX[tier - 6];
+    const tf = topFx(tier);
     rig.column(fxNode, rc, Math.min(2.0, rx * 1.15), h + 1.8, 0.34);
     rig.sparkles(fxNode, 'rise', tf.rise, 12, rx * 1.1, h * 1.3, 0, { size: 0.2, star: false, seed: 5 });
     rig.sparkles(fxNode, tf.mode, tf.spark, 8, rx * 1.05, h * 0.85, h * 0.2, { size: tf.mode === 'orbit' ? 0.34 : 0.44, seed: 6 });
@@ -351,7 +352,7 @@ export function createSeedView(speciesId, mutation = 'normal') {
   rig.halo(root, rc === 'rainbow' ? '#ffffff' : rc, SEED_HALO[ht], SEED_HALO_A[ht], 'halo', [0, cy, 0]);
   if (tier >= 4) rig.sparkles(root, 'twinkle', tier >= 6 ? '#ffffff' : '#fff0a0', 6, 0.85, 1.5, 0.05, { size: 0.4, seed: 31 });
   if (tier === 5) rig.sparkles(root, 'rise', '#ff9fb4', 7, 0.6, 2.2, 0, { size: 0.16, star: false, seed: 32 });
-  if (isTop(sp, tier)) rig.sparkles(root, 'orbit', TOP_FX[tier - 6].spark, 8, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
+  if (isTop(sp, tier)) rig.sparkles(root, 'orbit', topFx(tier).spark, 8, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
   if (isSecret(sp)) {
     rig.sparkles(root, 'orbit', 'rainbow', 10, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
     rig.sparkles(root, 'rise', '#1a0b2e', 7, 0.6, 2.0, 0, { size: 0.26, star: false, dark: true, intensity: 1.3, seed: 34 });
@@ -412,7 +413,7 @@ export function createCarriedPlantView(speciesId, mutation = 'normal') {
   const ph = Math.random() * 100;
   if (tier >= 4) rig.sparkles(fxNode, 'twinkle', '#fff0a0', 7, 1.4, h, h * 0.2, { size: 0.5, seed: 41 });
   if (tier === 5) rig.sparkles(fxNode, 'rise', '#ffb3c6', 8, 1.2, h * 1.2, 0, { size: 0.26, star: false, seed: 42 });
-  if (isTop(sp, tier)) rig.sparkles(fxNode, 'orbit', TOP_FX[tier - 6].spark, 9, 1.6, h * 0.8, h * 0.2, { size: 0.45, seed: 43 });
+  if (isTop(sp, tier)) rig.sparkles(fxNode, 'orbit', topFx(tier).spark, 9, 1.6, h * 0.8, h * 0.2, { size: 0.45, seed: 43 });
   if (isSecret(sp)) {
     rig.sparkles(fxNode, 'orbit', 'rainbow', 10, 1.8, h * 0.8, h * 0.2, { size: 0.5, seed: 43 });
     rig.crown(fxNode, h + 0.6, 1.6, { bob: 0.15, bobSpeed: 2, spin: 1, phase: ph });
