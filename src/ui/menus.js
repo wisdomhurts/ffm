@@ -28,6 +28,8 @@ import { openLeaderboard } from './leaderboard.js';
 import { fullscreenButton } from './fullscreen.js';
 import { buildHomeScreenGuide } from './homescreen.js';
 import { rarityColor } from '../view/gameView.js';
+import { openGnomeMap, GNOME_ICON } from './gnomes.js';
+import { openGazette, gazetteEndSlot, GAZETTE_ICON } from './gazette.js';
 
 const DIFF_DESC = {
   chill: 'Best for your first game: the family goes easy on you.',
@@ -735,7 +737,11 @@ export function createMenus(app) {
         h('div', { class: 'pause-util' },
           btn(iconLabel(ICON.gear, 'Settings'), 'btn-blue', openSettings),
           btn(iconLabel(ICON.camera, 'Photo Booth'), 'btn-blue', openPhotoBooth),
-          btn(iconLabel(ICON.help, 'How to Play'), 'btn-blue', openHowTo))),
+          btn(iconLabel(ICON.help, 'How to Play'), 'btn-blue', openHowTo)),
+        // Golden Gnome Hunt map + The Seed Gazette front page (ui/gnomes.js, ui/gazette.js)
+        h('div', { class: 'pause-util pause-fun', style: 'grid-template-columns:repeat(2,minmax(0,1fr))' },
+          btn(iconLabel(GNOME_ICON, 'Gnome Map'), 'btn-gold', () => feature(openGnomeMap, 'Gnome Map')),
+          btn(iconLabel(GAZETTE_ICON, 'Seed Gazette'), 'btn-blue', () => feature(openGazette, 'Seed Gazette')))),
       h('p', { class: 'pause-note', text: note }));
     const sc = setScreen('pause', panel);
     sc.dispose = () => {
@@ -868,6 +874,7 @@ export function createMenus(app) {
         chips,
         you,
         awards,
+        gazetteEndSlot(app), // The Seed Gazette: the lead headline, opens the front page
         h('div', { class: 'end-actions' },
           btn(iconLabel(ICON.reset, 'Play Again'), 'btn-green btn-lg', again, { 'data-autofocus': '' }),
           btn(iconLabel(ICON.home, 'Title'), 'btn-blue btn-lg', () => app.quitToTitle()))));

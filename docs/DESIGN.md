@@ -215,6 +215,30 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
 * The family bots answer some typed lines by topic (hi, bye, gg, thanks, sorry, jokes, lol, love, how-to, help,
   steal, race, trade, pets, bragging, nice, wow) in their own voices; a bot called by name ("hi mom") answers first.
 
+## 7c. Golden Gnome Hunt
+* 16 tiny golden gnomes (`GNOMES` in gameplay/layout.js): 4 on the island (the fountain rim, behind the surfboards,
+  beside the Pet Egg stand, between the Rebirth Altar and the Wardrobe) and one in each of the 12 worlds, placed
+  relative to the biomes. Every spot is clear of colliders and the pod line, inside the lane (|x| ≤ 17) and at most
+  6 studs up: the Rainbow's End gnome sits on the pot of gold, so you hop up to it.
+* Caught by walking within 3.5 studs (and no more than 4 studs below it). Within 30 studs an unfound gnome giggles
+  from where it hides, at most every 6 s. Found gnomes vanish for that profile only (`profile.gnomes`); each player
+  finds their own, solo or online, in any mode.
+* Badge **Gnome Hunter** I/II/III at 3 / 6 / all (10 / 25 / 60 stars). II unlocks the **Gnome Hat**, III the
+  **Golden Gnome Noodle**. The **Gnome Map** (pause menu) shows every spot on a little map with a riddle hint.
+
+## 7d. The Seed Gazette
+* A newspaper written from the game's events (heists, rescues, bonks that save a plant, Guard Gnome catches,
+  Mythic-or-better and rainbow seeds, giant plants, egg drops and hatches, base levels, rebirths, Showdown wins,
+  pet tricks, trades, Golden Gnomes, Big Chomp, welcome-back reports). Kind templates only; never typed text.
+  Dorian and Esther are "Dad" and "Mom" when the family profiles play them.
+* One story per kind and lead player every 20 s; stories where only bots took part at most one every 15 s.
+  Nothing from the title screen's demo match. The last 20 stories (and today's bonk counts) are kept per profile
+  on this device (`gazette:<profileId>`), never in the profile or the cloud.
+* Front page: the lead (the biggest recent story), three more headlines, and six boxes: Biggest Heist, Best Rescue,
+  Top Seed, Slipperiest Moment, Pet of the Day, Most Bonked (today). Faces are coloured initials, never photos.
+  A billboard by the spawn shows the lead and two more (repainted at most every 5 s); the full page opens from the
+  pause menu and the Showdown end screen, and "Save front page" shares or downloads it as a PNG.
+
 ## 8. Controls
 * Desktop: WASD/arrows move · Space jump · E interact (hold) · V sell (hold) · Click or F bonk (click a pet: trick) ·
   1–5 items · right-drag or Q/Z… orbit camera · wheel zoom · Esc pause · G emotes · T quick chat ·

@@ -183,6 +183,39 @@ export function buildLayout() {
 
 export const LAYOUT = buildLayout();
 
+// Golden Gnome Hunt (progress/gnomes.js, world/gnomes.js, ui/gnomes.js): tiny golden gnomes hidden around the
+// island and up the Seed Road. biome -1: dx/dz are world x/z on the island. Otherwise dx is across the lane
+// and dz is studs into that biome from its start (negative: back from its end), so the spots follow the
+// biomes (biomeRanges) when zones are added. y = what it sits on (a fountain rim, the pot of gold): at most 6,
+// a jump reaches ~6.9. "{z}" in a hint is the spot's STUDS sign. Every spot stays clear of the colliders
+// (the world's props too), the pod line and the walls: tests/progress/gnomes.test.mjs.
+// Facing the road: left is +x, right is -x.
+const GNOME_SPOTS = [
+  { id: 'splashy', name: 'Splashy', biome: -1, dx: -41.6, dz: 53, y: 1.4, hint: 'I sit on the edge of the splashy fountain.' },
+  { id: 'surfer', name: 'Surfer', biome: -1, dx: 64, dz: 50.4, hint: "Surf's up! Peek behind the surfboards." },
+  { id: 'peeky', name: 'Peeky', biome: -1, dx: -75.5, dz: -63, hint: 'Peeking out from beside the Pet Egg stand.' },
+  { id: 'shopper', name: 'Shopper', biome: -1, dx: 41.5, dz: -63.5, hint: 'Hiding between the Rebirth Altar and the Wardrobe.' },
+  { id: 'gatekeeper', name: 'Gatekeeper', biome: 0, dx: -11, dz: 2.5, hint: 'Run through the big Seed Road gate, then look right.' },
+  { id: 'mossy', name: 'Mossy', biome: 1, dx: -15, dz: 90, hint: 'Wait under the {z} STUDS sign on the right.' },
+  { id: 'dusty', name: 'Dusty', biome: 2, dx: 0, dz: 75, hint: "Right in the middle of the road. Don't run me over!" },
+  { id: 'squelch', name: 'Squelch', biome: 3, dx: 15, dz: 40, hint: 'Find the {z} STUDS sign on the left.' },
+  { id: 'sparky', name: 'Sparky', biome: 4, dx: 15, dz: 3, hint: 'Under the big welcome sign, on the left.' },
+  { id: 'twinkle', name: 'Twinkle', biome: 5, dx: -15, dz: 140, hint: 'Look under the {z} STUDS sign on the right.' },
+  { id: 'frosty', name: 'Frosty', biome: 6, dx: 15, dz: 40, hint: 'Brrr! Shivering by the {z} STUDS sign on the left.' },
+  { id: 'sprinkles', name: 'Sprinkles', biome: 7, dx: 0, dz: 3, hint: 'Stand right under the welcome sign.' },
+  { id: 'puff', name: 'Puff', biome: 8, dx: -15, dz: 90, hint: 'Floating by the {z} STUDS sign on the right.' },
+  { id: 'glimmer', name: 'Glimmer', biome: 9, dx: 0, dz: 90, hint: 'Shining in the middle of the road at {z} STUDS.' },
+  { id: 'bubbles', name: 'Bubbles', biome: 10, dx: 14, dz: 3, hint: 'Blowing bubbles under the welcome sign, on the left.' },
+  { id: 'lucky', name: 'Lucky', biome: 11, dx: -14.6, dz: -6.4, y: 4.4, hint: 'At the very end of the road, on the pot of gold. Jump up!' }, // in front of the rainbow pouring in
+];
+
+/** The gnomes with world positions: {id, name, biome, x, y, z, hint}. */
+export const GNOMES = GNOME_SPOTS.map((s) => {
+  const R = LAYOUT.biomeRanges[s.biome];
+  const z = !R ? s.dz : s.dz < 0 ? R.maxZ + s.dz : R.minZ + s.dz;
+  return { id: s.id, name: s.name, biome: R ? s.biome : -1, x: s.dx, y: s.y || 0, z, hint: s.hint.replace('{z}', String(Math.round(z))) };
+});
+
 /** Collider boxes of garden `L`'s lot `k` planters (fresh objects: each Game switches its own on and off). */
 export function lotPlanterBoxes(L, k) {
   return L.planters.filter((p) => p.lot === k).map((p) => ({ minX: p.x - 2.4, maxX: p.x + 2.4, minY: 0, maxY: 1.2, minZ: p.z - 2.4, maxZ: p.z + 2.4, tag: 'planter', off: true }));

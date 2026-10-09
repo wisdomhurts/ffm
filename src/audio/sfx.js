@@ -465,6 +465,28 @@ export const SFX = {
       tone(ac, out, tt, { f0: rnd(500, 900), f1: 180, sweep: 0.04, dur: 0.07, attack: 0.001, vol: V(o, 0.15) });
     }
   },
+  /** A hidden Golden Gnome giggles "hee-hee-hee!" (positional: it leads you to it) with a little twinkle. */
+  gnomeGiggle(ac, out, t, o) {
+    const f0 = rnd(540, 600);
+    [1.12, 1.0, 0.9, 0.95].forEach((r, i) => {
+      formantVoice(ac, out, t + i * 0.12, {
+        f0: f0 * r, rise: 1.08, drop: 0.86, dur: 0.085, vol: V(o, 0.22 - i * 0.02),
+        formants: [[330, 7, 1.6], [2500, 10, 1.1], [3300, 12, 0.5]],
+        fric: { f: 3800, dur: 0.03, vol: V(o, 0.025) },
+      });
+    });
+    bell(ac, out, t + 0.5, mtof(98), { ratio: 2, index: 0.6, vol: V(o, 0.05), decay: 0.4, send: o.send });
+  },
+  /** You found a Golden Gnome: a sparkly run up to a gold chime (o.all: every gnome found, a bigger finish). */
+  gnomeFound(ac, out, t, o) {
+    sparkleRun(ac, out, t, 84, 8, V(o, 0.09), o.send, 0.04);
+    [88, 91, 96].forEach((m, i) => bell(ac, out, t + 0.28 + i * 0.09, mtof(m), { ratio: 1.0, index: 0.35, vol: V(o, 0.13), decay: 1.0, send: o.send }));
+    SFX.gnomeGiggle(ac, out, t + 0.62, { ...o, vol: (o.vol ?? 1) * 0.8 });
+    if (o.all) {
+      [60, 64, 67, 72].forEach((m) => brass(ac, out, t + 0.5, m, V(o, 0.1), 0.9, { send: o.send }));
+      cymbal(ac, out, t + 0.5, V(o, 0.2), 1.4);
+    }
+  },
   /** A pet does a trick: a springy boing (walkers) or a happy two-note chirp (flyers, o.fly), plus a sparkle. */
   petTrick(ac, out, t, o) {
     if (o.fly) {
@@ -656,6 +678,7 @@ export const SFX_GAP = {
   lockOn: 0.2, lockOff: 0.2, item: 0.06, purchase: 0.08, speedUp: 0.15, unlock: 0.15, event: 1, rebirth: 1,
   stolen: 0.5, yoink: 0.3, heist: 0.5, robbed: 0.5, saved: 0.4, dropped: 0.2, shopBell: 0.4, confetti: 0.3,
   boost: 0.2, pump: 0.5, egg: 0.1, baseUp: 1,
+  gnomeGiggle: 1, gnomeFound: 0.5,
   petTrick: 0.12,
   drumroll: 0.3, hero: 0.8, bossSiren: 2, bossHit: 0.05, bossPop: 1, bossBurp: 1,
 };

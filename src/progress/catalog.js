@@ -12,6 +12,7 @@
 import { BIOMES, RARITIES, CHARACTERS, CHARACTER, PLANTS, PLANT, PLAYER, REBIRTH, LOTS, TOP_TIER, SPEED_MILESTONES, speedAt, BASE, BOOST, TREADMILL } from '../config.js';
 import { EGGS, PETS } from '../pets/catalog.js';
 import { EMOTE, QUICK_CHAT } from '../social/catalog.js';
+import { GNOMES } from '../gameplay/layout.js';
 
 export const TIERS = {
   easy: { id: 'easy', name: 'Easy', stars: 5, secs: 60, minCash: 250 },
@@ -319,6 +320,9 @@ export const BADGES = [
   { id: 'legendary', name: 'Legendary Luck', icon: 'egg', stat: (c) => c.legendaryPets, tiers: [1], stars: [50], how: () => 'Hatch a Legendary pet (or rarer)' },
   { id: 'divinepet', name: 'Divine Friend', icon: 'star', stat: (c) => c.divinePets, tiers: [1], stars: [100], how: () => 'Hatch a Divine pet' },
   { id: 'egghunter', name: 'Egg Hunter', icon: 'egg', stat: (c) => c.eggDrops, tiers: [1, 10, 50], stars: [15, 40, 100], how: (n) => (n === 1 ? 'Catch an egg drop' : `Catch ${n} egg drops`) },
+  // Golden Gnome Hunt (progress/gnomes.js): tier 2 unlocks the Gnome Hat, finding them all the Golden Gnome Noodle
+  { id: 'gnomes', name: 'Gnome Hunter', icon: 'gnome', stat: (c, b, p) => (Array.isArray(p?.gnomes) ? GNOMES.filter((g) => p.gnomes.includes(g.id)).length : 0),
+    tiers: [3, 6, GNOMES.length], stars: [10, 25, 60], how: (n) => (n === GNOMES.length ? 'Find every Golden Gnome' : `Find ${n} Golden Gnomes`) },
   { id: 'zookeeper', name: 'Zookeeper', icon: 'paw', stat: (c) => c.speciesMax, tiers: [10, 25, PETS.length], stars: [30, 80, 200], how: (n) => (n === PETS.length ? 'Collect every kind of pet' : `Own ${n} different kinds of pet`) },
   { id: 'homesweet', name: 'Home Sweet Home', icon: 'house', stat: (c) => c.baseMax, tiers: [BASE.guardAt, BASE.maxLevel], stars: [40, 150], how: (n) => `Reach Base level ${n}` },
   { id: 'boostmaster', name: 'Boost Master', icon: 'bolt', stat: (c) => c.boostMax, tiers: [5, BOOST.maxLevel], stars: [20, 60], how: (n) => `Get Boost to level ${n}` },

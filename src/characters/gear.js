@@ -250,6 +250,18 @@ function buildHat(id, col) {
         m.prim('box', 0, 0.9, 0, 0.28, 0.09, 0.1, gold, { ao: 0 });
       });
       break;
+    case 'gnome': {
+      // Golden Gnome Hunt reward: a tall felt gnome hat, its tip flopping forward, with a gold band and star
+      const g = merged((m) => {
+        m.prim('cyl:18', 0, -0.28, 0, 2.52, 0.36, 2.3, '#ffc83a', { ao: 0 });
+        m.add('frustum:18', trs(0, 0.42, -0.02, 2.36, 1.1, 2.16), col, { ao: 0.1 });
+        m.add('frustum:14', trs(0, 1.4, -0.04, 1.65, 0.95, 1.52), col, { ao: 0 });
+        m.prim('cone:12', 0, 2.08, 0.1, 1.16, 0.95, 1.08, shade(col, -0.06), { rx: 0.45, ao: 0 });
+        m.add(star(0.08), trs(0, -0.28, 1.17, 0.62, 0.62, 1), '#fff3a0', { ao: 0 });
+      });
+      out.main = g;
+      break;
+    }
     case 'halo':
       out.anim.push({ anim: 'halo', pos: [0, 0.62, 0], glow: true, geo: merged((m) => m.add(torus(0.78, 0.11, 8, 30), trs(0, 0, 0, 1, 1, 1, Math.PI / 2, 0, 0), '#ffe27a', { ao: 0 })) });
       break;

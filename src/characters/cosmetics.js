@@ -98,6 +98,7 @@ export const HATS = [
   { id: 'propeller', name: 'Propeller Cap', price: 25, covers: true, h: 0.9 },
   { id: 'tophat', name: 'Top Hat', price: 30, tint: '#23232b', covers: true, h: 1.45 },
   { id: 'wizard', name: 'Wizard Hat', price: 35, tint: '#5b3fc4', covers: true, h: 2.1 },
+  { id: 'gnome', name: 'Gnome Hat', price: 0, unlock: 'gnomes2', tint: '#e8323c', covers: true, h: 2.5 }, // Golden Gnome Hunt
   { id: 'viking', name: 'Viking Helmet', price: 40, unlock: 'thief2', covers: true, h: 1.1 },
   { id: 'crown', name: 'Royal Crown', price: 60, unlock: 'champ1', h: 0.85 },
   { id: 'halo', name: 'Halo', price: 50, unlock: 'generous', h: 0.9 },
@@ -151,6 +152,7 @@ export const TRAILS = [
 // colour (wardrobe swatch, bonk effects), shine: the gradient painted along the foam, grip: a handle band.
 export const NOODLES = [
   { id: 'trowel', name: 'Golden Trowel', price: 0, unlock: 'almanac2', color: '#ffc21a', shine: ['#fff3a0', '#ffc21a', '#d98a00'], grip: '#2fb84f' },
+  { id: 'golden', name: 'Golden Gnome Noodle', price: 0, unlock: 'gnomes3', color: '#ffd23f', shine: ['#fffbe0', '#ffd23f', '#c98a00'], grip: '#e8323c' }, // every Golden Gnome found
 ];
 
 /** The catalog, by category (contract shape plus the extras the Wardrobe uses). */

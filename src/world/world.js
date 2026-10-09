@@ -26,6 +26,8 @@ import { buildShops } from './shops.js';
 import { createPetShop } from './petshop.js';
 import { createBoutique } from './boutique.js';
 import { buildRoad } from './road.js';
+import { createGnomes } from './gnomes.js';
+import { createGazetteBoard } from './gazetteBoard.js';
 
 const _dir = new THREE.Vector3();
 
@@ -82,6 +84,8 @@ export function buildWorld(engine, layout, quality = engine.quality) {
     extraColliders: colliders,
     gardens: gardens.gardens,
     speedShop: shops.speed,
+    gnomes: createGnomes({ root, quality, mats }), // Golden Gnome Hunt (world/gnomes.js)
+    gazette: createGazetteBoard(homeCtx), // The Seed Gazette's plaza billboard (world/gazetteBoard.js)
     get weather() {
       return ambience.weatherId;
     },
@@ -115,6 +119,7 @@ export function buildWorld(engine, layout, quality = engine.quality) {
         boutique.userData.update(dt, t);
       }
       road.update(dt, t, cz, ahead, behind);
+      api.gnomes.update(dt, t, cam);
     },
   };
   // Signs are painted synchronously above; repaint them with "Lilita One" as soon as it has loaded.

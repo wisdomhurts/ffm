@@ -41,6 +41,9 @@ import { attachGiants } from './fx/giants.js';
 import { createGlowBeam } from './pets/dropView.js';
 import { attachAway, awayLines } from './ui/away.js';
 import { bossWarmup } from './characters/boss.js';
+import { gnomeWarmup } from './world/gnomes.js';
+import { createGnomeHunt } from './progress/gnomes.js';
+import { createGazette } from './social/gazette.js';
 
 const SAVE_EVERY = 12;
 
@@ -53,6 +56,7 @@ function buildWarmupGroup() {
   g.add(guideWarmup()); // the tutorial beacon (it can switch on mid-game)
   g.add(createGlowBeam().object3d); // egg drop beams and the TITAN plant beam (Giant Harvests)
   g.add(bossWarmup()); // Big Chomp's instanced body (it crawls in mid-game)
+  g.add(gnomeWarmup()); // the Golden Gnomes' gold (found or far-away gnomes are hidden when the scene compiles)
   // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
     for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);
@@ -96,6 +100,8 @@ class App {
     attachAway(this); // the Welcome-Back Garden card
     this.profileId = activeProfileId() || CHARACTERS[0].id;
     this.progress = attachProgress(this);
+    this.gnomes = createGnomeHunt(this); // Golden Gnome Hunt: finds and giggles for the local player (client-only)
+    this.gazette = createGazette(this); // The Seed Gazette: stories for the plaza billboard and the front page
     this.online = createOnline(this);
     this.trades = createTradeManager(this); // host-side trade state machine (docs/ONLINE.md Social)
     this.cloudSync = attachCloudSync(this); // cloud save + high-score sync; silent when offline or not configured

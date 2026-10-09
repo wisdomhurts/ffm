@@ -59,6 +59,13 @@ speed to reach rarer biomes, and steal your family's best plants (while stopping
   water balloons) until it bursts like a piñata: a shower of Gold, Diamond and Rainbow seeds, a pot of cash split
   by bonks, and a gold crown for the top bonker (the **Chomp Champ** badge). Wait too long and it burps and crawls
   off with what it ate (on Chill it never eats anything).
+* **Golden Gnome Hunt**: 16 tiny golden gnomes hide around the island and up the Seed Road (one in every world, the
+  last on the pot of gold). Walk right up to one to catch it; a gnome giggles when you are close. The **Gnome Map**
+  (pause menu) shows where they hide with a riddle for each. Find 6 for the **Gnome Hat**, all of them for the
+  **Golden Gnome Noodle** (plus stars from the Gnome Hunter badge).
+* **The Seed Gazette**: a family newspaper that writes itself as you play ("MICAH PINCHES DAD'S RAINBOW CACTUS
+  CUTIE!"). Read today's headlines on the billboard by the spawn, or the full front page from the pause menu and
+  after a Showdown, then **Save front page** as a picture for the fridge. Faces are coloured initials, never photos.
 
 * One self-contained HTML file: three.js is bundled, textures and music are generated in code, and
   nothing is downloaded at runtime.

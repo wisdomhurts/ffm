@@ -22,6 +22,8 @@ import { createPreview } from '../characters/preview.js';
 // Friendly names for the badges that unlock items (progress module badge ids).
 const BADGE_TEXT = {
   thief2: 'Steal 100 plants',
+  gnomes2: 'Find 6 Golden Gnomes',
+  gnomes3: 'Find every Golden Gnome',
   champ1: 'Win a Family Showdown',
   generous: 'Give someone a gift',
   secret: 'Grow a Secret plant',

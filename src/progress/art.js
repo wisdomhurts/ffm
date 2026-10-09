@@ -20,6 +20,14 @@ const CUSTOM = {
   seed: svg(`<path d="M12 4.2 C 16.8 8.4, 18.4 13, 16.6 16.9 C 15.1 20.2, 8.9 20.2, 7.4 16.9 C 5.6 13, 7.2 8.4, 12 4.2 Z" fill="#d18f4f" ${S}/>
     <path d="M10.1 9.2 C 9.1 11, 8.8 13, 9.3 14.8" fill="none" stroke="#f6cf9b" stroke-width="1.7" stroke-linecap="round"/>
     <path d="M12 4.4 C 12 2.4, 13.8 1.3, 16.4 1.5 C 16.2 3.8, 14.4 4.9, 12 4.7 Z" fill="#4fcf62" ${S}/>`),
+  // a Golden Gnome (Golden Gnome Hunt)
+  gnome: svg(`<path d="M12 1.5 C 13.7 4.5, 16.3 7.9, 18 10.6 H 6 C 7.7 7.9, 10.3 4.5, 12 1.5 Z" fill="#ffd23f" ${S}/>
+    <ellipse cx="12" cy="13.3" rx="4.7" ry="2.3" fill="#ffe9a8"/>
+    <path d="M6.6 13.6 C 7 18.4, 9.3 21.2, 12 22.4 C 14.7 21.2, 17 18.4, 17.4 13.6 C 15.6 15.2, 8.4 15.2, 6.6 13.6 Z" fill="#fff6cc" ${S}/>
+    <rect x="5.2" y="9.9" width="13.6" height="2.5" rx="1.25" fill="#f0a800" ${S}/>
+    <circle cx="10" cy="13.2" r=".85" fill="${INK}"/><circle cx="14" cy="13.2" r=".85" fill="${INK}"/>
+    <circle cx="12" cy="14.6" r="1.5" fill="#ffb347" ${S}/>
+    <path d="M19.4 2.6 l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z" fill="#fff" stroke="${INK}" stroke-width="1" stroke-linejoin="round"/>`),
   sprout: svg(`<path d="M12 21.5 V12" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><path d="M12 21.5 V12" fill="none" stroke="#2e9c46" stroke-width="1.8" stroke-linecap="round"/>
     <path d="M12 12.5 C 12 7.5, 15 4.5, 21 4.5 C 21 9.5, 17.5 12.5, 12 12.5 Z" fill="#6fe07a" ${S}/>
     <path d="M12 14.5 C 12 10.5, 9.4 8, 3.5 8 C 3.5 12.2, 6.5 14.5, 12 14.5 Z" fill="#4fcf62" ${S}/>`),

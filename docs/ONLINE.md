@@ -205,6 +205,13 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 * Exclusive cosmetics travel as ids like every look: hats `familycrown` (badge `familyfour`) and `leafhat`
   (`almanac1`); `look.noodle` may be a special noodle id from `NOODLES` (`trowel`, badge `almanac2`) as well as a
   colour. A client on an older build shows no hat / the family noodle colour for them.
+* Golden Gnome Hunt (`src/progress/gnomes.js`, `src/world/gnomes.js`, `src/ui/gnomes.js`) and The Seed Gazette
+  (`src/social/gazette.js`, `src/world/gazetteBoard.js`, `src/ui/gazette.js`) are client-only: nothing new crosses
+  the network and no game rule changes. Gnomes found live in `profile.gnomes` (ids; cloud-synced with the
+  profile); the hunt emits a local `gnome:found {player, id, gnome, count, total}`. Each device writes its own
+  Gazette from the events on its bus (online: the host's FORWARD events replayed on the mirror game) and keeps it
+  in localStorage `gazette:<profileId>`. Names in stories are the players' (already filtered) names; faces are
+  coloured initials, never photos, so a saved front page is safe to share from a public room too.
 
 ## Social: emotes, quick chat, gifting, trading (`src/ui/emotes.js`, `src/ui/trade.js`, social agent)
 * `QUICK_CHAT` phrases and `EMOTES` list live in `src/social/catalog.js`.
