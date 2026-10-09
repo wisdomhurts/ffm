@@ -182,7 +182,10 @@ export class GameView {
     const human = g.human;
     // labels are sized by distance to the player (or the camera in attract mode)
     const focus = human ? human.pos : camera.position;
-    this.blobs?.begin();
+    if (this.blobs) {
+      this.blobs.strong = !this.engine.renderer.shadowMap.enabled; // the engine may drop shadows on slow devices
+      this.blobs.begin();
+    }
 
     // players
     g.players.forEach((p, i) => {

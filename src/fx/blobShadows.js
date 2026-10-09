@@ -6,8 +6,8 @@ import * as THREE from 'three';
 const _m = new THREE.Matrix4();
 
 /**
- * parent: Object3D to live under. strong: true when there are no real-time shadows.
- * Per frame: begin(), add(x, groundY, z, radius, alpha) for each caster, end().
+ * parent: Object3D to live under. strong: true when there are no real-time shadows (settable later: slow devices
+ * can lose their shadows mid-game). Per frame: begin(), add(x, groundY, z, radius, alpha) for each caster, end().
  */
 export function createBlobShadows(parent, { strong = true, cap = 48 } = {}) {
   const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
@@ -59,10 +59,13 @@ export function createBlobShadows(parent, { strong = true, cap = 48 } = {}) {
   mesh.count = 0; // left visible until the first end() so the match warm-up compiles its shader
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   parent.add(mesh);
-  const strength = strong ? 0.42 : 0.24;
+  let strength = strong ? 0.42 : 0.24;
   let n = 0;
   return {
     mesh,
+    set strong(v) {
+      strength = v ? 0.42 : 0.24;
+    },
     begin() {
       n = 0;
     },

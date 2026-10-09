@@ -160,6 +160,12 @@ test('contact shadows: one batch, refilled every frame, capped and skipping invi
   b.mesh.getMatrixAt(0, m);
   const p = new THREE.Vector3().setFromMatrixPosition(m);
   assert.ok(p.x === 1 && p.z === 2 && p.y > 0 && p.y < 0.3, 'just above the ground under the caster');
+  const a0 = b.mesh.geometry.attributes.aAlpha.array[0];
+  b.strong = false; // real shadows on: a fainter contact disc
+  b.begin();
+  b.add(1, 0, 2, 1.5, 1);
+  b.end();
+  assert.ok(b.mesh.geometry.attributes.aAlpha.array[0] < a0);
   b.begin();
   for (let i = 0; i < 5; i++) b.add(i, 0, 0, 1, 1);
   b.end();
