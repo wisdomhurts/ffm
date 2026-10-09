@@ -467,6 +467,7 @@ export const TEXT_CHAT = {
   history: 40,
   bubble: 5, // seconds a chat bubble stays over the speaker
   maxDigits: 6, // a longer run of digits (spaces and dashes don't break it) looks like a phone number: refused
+  maxDigitsAll: 9, // more digits than this in one message (a round number's last zeros don't count): refused too
   hostSlack: 1, // the host allows this many extra back to back (network jitter bunches messages up)
 };
 

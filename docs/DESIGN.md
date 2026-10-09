@@ -212,8 +212,10 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
   rooms; in public rooms only on devices where a parent turned on Settings > Chat > "Typed chat in public rooms".
   "Typed chat" off = quick chat only on that device.
 * Every typed line is cleaned (odd characters dropped) and then sent as it is or refused with a friendly note: bad
-  or unkind words (the player-name filter plus a few insults), links, emails / @names, phone numbers and runs of
-  more than 6 digits. The sender, the room host and every receiver run the same filter.
+  or unkind words (the player-name filter plus insults, slurs and threats, also split up or in look-alike
+  letters), a few rude emoji, links (also spaced out), emails / @names / app usernames, phone numbers (also split
+  up by words) and runs of more than 6 digits. The sender, the room host and every receiver run the same filter. It refuses rather than
+  guesses and keeps a list of everyday kid sentences that must always pass (tests/social/chat.test.mjs).
 * Rate limit: 3 lines back to back, then one per 1.2 s (the host allows one extra for network bunching).
 * The family bots answer some typed lines by topic (hi, bye, gg, thanks, sorry, jokes, lol, love, how-to, help,
   steal, race, trade, pets, bragging, nice, wow) in their own voices; a bot called by name ("hi mom") answers first.

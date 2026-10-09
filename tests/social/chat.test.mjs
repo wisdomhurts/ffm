@@ -49,6 +49,66 @@ test('links, emails, @names, phone numbers and long digit runs are refused', () 
   for (const k of ['words', 'link', 'email', 'number', 'slow', 'off', 'public']) assert.ok(CHAT_NOTES[k], 'a friendly note for ' + k);
 });
 
+// The filter refuses rather than guesses, so it must never refuse what kids normally say. Every rule below
+// was tried against this list (and a sweep of everyday word pairs for the split-word rule).
+const EVERYDAY = [
+  'hey, me too', 'okay, be nice', 'I got 3 gold seeds', 'lol that was funny', 'can we trade?', 'go to the reef', 'see you at 5', 'my dog is 2',
+  'the comet dragon got me', 'bye mom', 'hi dad!', 'awww so cute', 'Yes. Me!', 'I won. Me again!', 'That was close. gg', 'Nice. Be right back',
+  'wait for me', 'who wants to race?', "I'm at the fountain", 'my pen is red', 'a bit cheaper please', 'this hit was great', "let's hit the reef",
+  "it's a bit chilly here", "it's an all new zone", 'use it as seed', 'good game everyone', 'omg a giant sunflower!', 'can I have your rainbow seed',
+  'I have 455 coins and 1,000,000 cash', 'trade 500 for 1000?', 'I sold it for 2.5K', 'my score is 12345 and yours is 6789', 'I have 12,345,678 cash',
+  'see you at 5:30', 'level 5 of 10', 'what is 7 x 8?', '3 x 4 is 12', 'I have 2 pets and 3 hats', 'that was 10/10', 'Esther stole my plant!',
+  'stop stealing my stuff', 'I hate this level', "don't let my plant die", 'did you see the monster?', 'come on Micah', 'Mati is so fast',
+  "Micah you're it", 'ʜɪ ᴍᴏᴍ', '🌻🌻🌻', 'I love my pet ❤️', 'I need water for my plant 💦', 'I used the banana peel 🍌', 'my cat is called Peach',
+  'the crystal caverns are so pretty', "Rainbow's End is the best", 'pls help me', 'thank you so much!', "you're the best", 'ha ha ha', 'xD',
+  'c u later', 'I play roblox too', 'I watched it on youtube', 'I am a roblox user too', 'xbox 360', 'I got 1st place!', 'the comet got me again 😭',
+  "my dog's name is Max", "I'm from the UK", 'go Micah go', 'shut the door', 'what a big tree', 'I need 50000 more', 'the water balloon hit me',
+  'where is the shop?', 'how do I sell', 'brb', 'o no', 'Oh no!', 'I *love* it', 'the score is 5*5', 'Q&A time', 'yay!!!', 'gg wp', 'r u there?',
+  'who is it', 'Is it 9 or 10?', 'I have 69 coins', 'wow 99 seeds', 'my class won', 'Grandma says hi', 'it is a dumbbell', 'I passed the test',
+];
+
+test('everyday kid sentences always go through', () => {
+  assert.ok(EVERYDAY.length >= 40);
+  for (const s of EVERYDAY) {
+    const r = checkChat(s);
+    assert.ok(r.ok, `"${s}" should pass (${r.why})`);
+    assert.ok(isTypedLine(r.text), `"${r.text}" passes the network vet`);
+  }
+});
+
+test('links are refused however they are written (spaces, "(.)", 0 for o, spelled out, other apps)', () => {
+  for (const s of ['discord .gg/abc', 'go to bit .ly/abc', 'free robux at robux .gift', 'roblox .com', 'roblox. com', 'roblox,com', 'join discord gg slash abcd',
+    'youtube . com/xyz', 'discord gg abc123', 'google. com', 'google .com', 'roblox . com/users/123', 'discord . gg / abc', 'youtube(.)com', 'site . com',
+    'g00gle.c0m', 'mysite.c o m', 'd i s c o r d', 'discord(.)gg', 'w w w', 'h t t p s', 'w.w.w.site', 'youtu.be/x', 'add me on snapchat']) {
+    assert.equal(why(s), 'link', s);
+    assert.equal(isTypedLine(s), false, 'the network vet drops it too: ' + s);
+  }
+  // usernames on apps and games count as @names
+  for (const s of ['insta: kid123', 'snap: sunnykid', 'my snap is kid_12', 'my roblox name is sunnykid', 'insta kid123']) assert.equal(why(s), 'email', s);
+});
+
+test('look-alike letters: fancy small capitals are read as letters, alphabets the filter cannot read are refused', () => {
+  for (const s of ['ꜰᴜᴄᴋ ʏᴏᴜ', 'ɴɪɢɢᴇʀ', 'ʙɪᴛᴄʜ', 'ᴋɪʟʟ ʏᴏᴜʀꜱᴇʟꜰ', 'ꜱᴛᴜᴘɪᴅ', 'ꓝꓴꓚꓗ', 'ꜱhit', 'Ꞙuck', '🅱itch', 'ᏴᏆᎢᏟᎻ']) assert.equal(why(s), 'words', s);
+  assert.ok(checkChat('ʜɪ ᴍᴏᴍ, ɪ ᴡᴏɴ').ok, 'clean fancy text goes through as typed');
+});
+
+test('bad words split up, masked with stars, slurs, threats and rude emoji are refused', () => {
+  for (const s of ['fuc k you', 'f uck', 'shi t', 'b itch', 'you are stu pid', 'id iot', 'st upi d', 'f**k you', 'sh*t head', 'b**ch', 'sh#t',
+    'chink', 'spic', 'kike', 'wetback', 'tranny', 'ni99a', 'ni99er', 'i will murder you', 'unalive yourself', 'i will unalive you', 'kil yourself',
+    'go away and die', 'g o die', 'die die', 'i hate you', '🖕 you', '🖕🏿', '🍆💦', '🔫 you', '🔪']) {
+    assert.equal(why(s), 'words', s);
+    assert.equal(isTypedLine(s), false, 'the network vet drops it too: ' + s);
+  }
+});
+
+test('phone numbers split up by words, with letter o, commas or other scripts\' digits are refused', () => {
+  for (const s of ['call 555 123 then 4567', 'my # is 555 123 and 4567', '555123 x 4567', '555 o 12 o 34', '٥٥٥١٢٣٤٥٦٧', '555,123,4567',
+    'my number is five five five one two three four', '555 one two three 4567']) {
+    assert.equal(why(s), 'number', s);
+  }
+  assert.ok(TEXT_CHAT.maxDigitsAll >= TEXT_CHAT.maxDigits, 'a whole message may hold a few more digits than one run');
+});
+
 test('rate limit: a burst, then one message per gap', () => {
   const lim = new ChatLimiter(TEXT_CHAT.burst, TEXT_CHAT.gap);
   let t = 100;

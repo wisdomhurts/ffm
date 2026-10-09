@@ -227,8 +227,13 @@ Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtCo
 * Filter: `checkChat(raw)` -> `{ok, text, why}`. `text` is the cleaned line (NFKC, odd/invisible characters and
   extra accent marks dropped, spaces tidied, at most `TEXT_CHAT.maxLen` = 80). Refused (never half-censored), with
   a friendly note `CHAT_NOTES[why]`: `words` (the `core/names.js` word filter on the words, and on each word with
-  the symbols inside squeezed out, plus a few unkind words), `link`, `email` (also @names), `number` (phone numbers,
-  spelled-out digits, runs of more than `TEXT_CHAT.maxDigits` digits). `isTypedLine(text)` = passes and unchanged.
+  the symbols inside squeezed out, plus chat-only unkind words, slurs and threats; words split in two or three
+  pieces or masked with `*`/`#`; fancy small capitals read as letters, look-alike alphabets the filter can't read
+  (Lisu, Cherokee, phonetic letters...) refused; a few rude emoji), `link` (also with spaces around the dot, `(.)`,
+  0 for o, letters spaced out, or another chat app named), `email` (also @names and app usernames like
+  "insta: kid123"), `number` (phone numbers, spelled-out digits, runs of more than `TEXT_CHAT.maxDigits` digits,
+  or more than `TEXT_CHAT.maxDigitsAll` digits in the whole line, a round number's last zeros not counted).
+  `isTypedLine(text)` = passes and unchanged.
 * Path: the chat panel calls `sendTyped(app, raw)` (settings, filter, the sender's rate limit) -> `app.act('chat',
   text)`. Solo: `postTyped(game, player, text)` emits `chat {player, text, typed: true}`. Online, a member's act
   rides the reliable action queue (`in.e` edge `'a'`, `['chat', [text]]`) to the host; the host (and the host's own
