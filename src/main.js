@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { Engine } from './core/engine.js';
 import { createBanana, createBalloon } from './fx/props.js';
+import { guideWarmup } from './fx/guide.js';
 import { createPlantView, createSeedView, createCarriedPlantView, setPlantQuality } from './plants/plantMeshes.js';
 import { Input } from './core/input.js';
 import { FollowCamera, reducedMotion } from './core/camera.js';
@@ -15,6 +16,7 @@ import { sanitizeBaseStyle, sameBaseStyle } from './gameplay/basestyle.js';
 import { HumanController } from './gameplay/humanController.js';
 import { BotController } from './ai/bot.js';
 import { buildWorld } from './world/world.js';
+import { roadWarmup } from './world/road.js';
 import { GameView } from './view/gameView.js';
 import { Labels } from './view/labels.js';
 import { createEffects } from './fx/effects.js';
@@ -29,10 +31,22 @@ import { getProfile, activeProfileId, setActiveProfile, updateProfile } from './
 import { attachProgress } from './progress/index.js';
 import { createOnline } from './net/session.js';
 import { reactToSocial } from './social/botReact.js';
+import { postTyped } from './social/chat.js';
 import { attachCloudSync } from './online/sync.js';
-import { attachPets } from './ui/pets.js';
+import { attachPets, attachPetMail } from './ui/pets.js';
+import { attachPetTricks } from './pets/tricks.js';
 import { sameLook } from './characters/cosmetics.js';
 import { createTradeManager } from './social/trades.js';
+import { attachGiants } from './fx/giants.js';
+import { createGlowBeam } from './pets/dropView.js';
+import { attachAway, awayLines } from './ui/away.js';
+import { bossWarmup } from './characters/boss.js';
+import { gnomeWarmup } from './world/gnomes.js';
+import { createGnomeHunt } from './progress/gnomes.js';
+import { createGazette } from './social/gazette.js';
+import { createDropView } from './pets/dropView.js';
+import { createPetView } from './pets/view.js';
+import { PETS } from './pets/catalog.js';
 
 const SAVE_EVERY = 12;
 
@@ -41,6 +55,13 @@ function buildWarmupGroup() {
   const g = new THREE.Group();
   g.name = 'shader-warmup';
   g.add(createBanana(), createBalloon());
+  g.add(roadWarmup()); // the Seed Road's own shader variants (light shafts, glowing cliffs)
+  g.add(guideWarmup()); // the tutorial beacon (it can switch on mid-game)
+  g.add(createGlowBeam().object3d); // egg drop beams and the TITAN plant beam (Giant Harvests)
+  g.add(bossWarmup()); // Big Chomp's instanced body (it crawls in mid-game)
+  g.add(gnomeWarmup()); // the Golden Gnomes' gold (found or far-away gnomes are hidden when the scene compiles)
+  // egg drops and pets turn up mid-game; sky reflections and the rim light are part of their shaders
+  g.add(createDropView('garden').object3d, createPetView(PETS[0].id).object3d);
   // every species in every mutation: plain and skinned plant bodies need different shader programs
   for (const m of ['normal', 'gold', 'diamond', 'rainbow']) {
     for (const sp of PLANTS) g.add(createPlantView(sp.id, m).object3d);
@@ -77,9 +98,15 @@ class App {
     this.cam = null;
     this.menus = createMenus(this);
     attachPets(this); // hatching (solo and online) adds pets to the profile
+    this.petMailbox = attachPetMail(this); // pets traded to / from this player land in (or leave) the profile
     this.touch = createTouchControls(this);
+    attachPetTricks(this); // click / tap a pet: it does a trick (instead of a bonk)
+    attachGiants(this); // Giant Harvests reveals, Family Hero moments
+    attachAway(this); // the Welcome-Back Garden card
     this.profileId = activeProfileId() || CHARACTERS[0].id;
     this.progress = attachProgress(this);
+    this.gnomes = createGnomeHunt(this); // Golden Gnome Hunt: finds and giggles for the local player (client-only)
+    this.gazette = createGazette(this); // The Seed Gazette: stories for the plaza billboard and the front page
     this.online = createOnline(this);
     this.trades = createTradeManager(this); // host-side trade state machine (docs/ONLINE.md Social)
     this.cloudSync = attachCloudSync(this); // cloud save + high-score sync; silent when offline or not configured
@@ -112,11 +139,11 @@ class App {
       if (target === this.human && this.state === 'shop') this.resume();
     });
     bus.on('camera:shake', ({ amount = 0.5 } = {}) => this.cam?.addShake(amount));
-    // family bots wave back, dance along and answer quick chat
+    // family bots wave back, dance along and answer quick chat and typed chat
     for (const ev of ['emote', 'chat']) {
       bus.on(ev, (e) => {
         const g = this.game;
-        if (!g || !e?.player || e.player.kind === 'bot' || (ev === 'chat' && !e.quick)) return;
+        if (!g || !e?.player || e.player.kind === 'bot' || (ev === 'chat' && !e.quick && !e.typed)) return;
         if (this.online?.isClient) return; // the host's bots react; clients just see it
         for (const b of g.players) if (b.kind === 'bot') reactToSocial(g, b, { type: ev, ...e });
       });
@@ -286,16 +313,24 @@ class App {
       case 'setPet': g.setPet(p, args[0] ?? null); return true;
       case 'setLook': g.setLook(p, args[0]); return true;
       case 'gift': return g.giftPlant(p, g.players[args[0]], args[1]);
+      case 'petTrick': return !!g.petTrick(p, args[0], args[1]);
       case 'emote':
       case 'say':
         this.humanCtrl?.queue(name, args[0]);
         return true;
+      case 'chat':
+        // typed chat (social/chat.js): a room's host filters, rate limits and shares it; solo it's said here
+        return this.online?.room ? this.online.act(name, args) : postTyped(g, p, args[0]);
       case 'addCash':
         // quest/badge rewards (host-authoritative online)
         if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);
         return true;
+      case 'petMailAck':
+        // this device applied a pet trade (ui/pets.js attachPetMail)
+        return this.online?.room ? this.online.act(name, args) : g.petMailAck(p, args[0]);
       default:
-        // trades etc. only exist between people online
+        // trades: a room's host runs them for everyone; solo, the family bots trade with you right here
+        if (String(name).startsWith('trade') && !this.online?.room) return this.trades?.handle(p, name, args) ?? false;
         return this.online?.act?.(name, args);
     }
   }
@@ -368,13 +403,17 @@ class App {
     const mySlot = Math.max(0, CHARACTERS.findIndex((c) => c.id === prof.base));
     const slots = CHARACTERS.map((c, i) => (i === mySlot ? { kind: 'local', profile: prof } : { kind: 'bot' }));
     let game;
+    let restored = !!saved;
     try {
       game = this._newGame({ mode, difficulty, save: saved, slots });
     } catch (e) {
       console.warn('[save] unreadable save, starting fresh', e);
       game = this._newGame({ mode, difficulty, save: null, slots });
+      restored = false;
     }
     game.saveKey = mode === 'endless' ? saveKey : null;
+    // Welcome-Back Garden: the gardens kept growing while you were away (reported once the HUD is up)
+    const away = restored ? game.applyAway((Date.now() - saved.savedAt) / 1000) : null;
     this.hud = createHUD(this);
     this.menus.hideAll();
     this.cam.snapBehind(this.human.yaw);
@@ -388,6 +427,7 @@ class App {
     this.audio.setMusicMode('play');
     bus.emit('game:start', { game, human: this.human, resumed: !!saved });
     bus.emit('app:state', { state: 'playing' });
+    if (away) bus.emit('away:report', { ...away, lines: awayLines(game, away) });
   }
 
   /**
@@ -492,6 +532,7 @@ class App {
     if (this.online?.room) this.online.update(dt);
     else if (this.state === 'playing' || this.state === 'title' || this.state === 'shop') g.update(dt);
     if (!this.online?.isClient) this.trades?.update?.();
+    this.petMailbox?.update(); // cheap when there's no mail
     if (this.state === 'title' && this._warmup > 0) {
       for (let i = 0; i < 6 && this._warmup > 0; i++, this._warmup--) g.update(1 / 40);
     }

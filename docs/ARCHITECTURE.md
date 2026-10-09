@@ -71,7 +71,8 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `seed:dropped` | player, item (ground seed), by, cause |
 | `seed:expired`, `ground:expired` | item |
 | `plant:planted` | player, plant, planter, garden |
-| `plant:grown` | plant, planter, garden |
+| `plant:grown` | plant, planter, garden, size ('normal'/'big'/'giant'/'titan': Giant Harvests) |
+| `plant:giant` | player (the owner), plant: {speciesId, mutation, size} (ids only), planter, garden: a finish came out Big, GIANT or TITAN |
 | `plant:sold` | player, plant, value, planter |
 | `plant:returned` | plant, planter (or null), garden, refund? |
 | `plant:watered` | player, planter |
@@ -80,6 +81,7 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `steal:grabbed` | thief, victim, plant, garden |
 | `steal:success` | thief, victim, plant, planter, garden, soldFor? |
 | `steal:foiled` | thief, victim, plant, by (Player or null), cause: 'bonk'/'balloon'/'banana'/'monster' |
+| `steal:rescued` | hero, victim, thief, plant, tip, sneaky: a third player saved someone else's plant (Family Hero; after `steal:foiled`) |
 | `cash:collected` | player, amount, x, z |
 | `lock:on` / `lock:off` | player, garden, until |
 | `garden:full` | player |
@@ -100,8 +102,11 @@ Gameplay (payload fields; `player`/`thief`/`victim`/`by`/`target` are Player obj
 | `practice:steal` | stage ('start'/'carry'/'caught'/'escaped'), thief, victim, plant (the friendly teaching steal on Chill) |
 | `bonk:blocked` | player (pressed bonk while carrying) |
 | `shop:open` | player, shop: 'gear'/'speed'/'rebirth' |
+| `boss:spawn` / `boss:hit` | x, z, hp, max, victim / by, n, hp, max, cause ('bonk'/'balloon'), x, z (Big Chomp, gameplay/boss.js) |
+| `boss:defeated` / `boss:leave` | x, z, by, top, pot, shares[slot], seeds, refund, victim / x, z, slurped, victim |
 
-App: `game:start {game, human, resumed}`, `game:dispose {game}`, `app:state {state: 'title'|'playing'|'paused'|'shop'|'ended'}`,
+App: `game:start {game, human, resumed}`, `away:report {seconds, credit, cash, grown, sizes, giants, bots, lines}` (solo Endless, right
+after `game:start` when the save is 5+ minutes old: Welcome-Back Garden), `game:dispose {game}`, `app:state {state: 'title'|'playing'|'paused'|'shop'|'ended'}`,
 `settings:changed {key, value}`, `face:changed {id}`, `camera:shake {amount}` (emit it to shake the camera),
 `engine:resize {w,h}`.
 
@@ -114,6 +119,8 @@ The placeholder file for each module documents its exact exported API at the top
 * `characters/avatar.js` → `createAvatar(charDef, faceImage, skinHex)`; `characters/monsters.js` → `createMonster(type)`.
 * `plants/plantMeshes.js` → `createPlantView`, `createSeedView`, `createCarriedPlantView`, `createPodView`.
 * `fx/effects.js` → `createEffects(engine, container)` (+ `attach(game)`); `fx/props.js` → `createBanana`, `createBalloon`, `createNoodle`.
+* `audio/levels.js` → the sound settings rules (`level(kind)`, `setChannelOn`, `setVolume`, `setAllMuted`; no DOM):
+  music and effects each play at `level(kind)` (`settings.musicOn ? music : 0`, same for `sfx`). UI: `ui/soundControls.js`.
 * `audio/audio.js` → `audio` singleton (`unlock, attach, setMusicMode, play, update, setMuted`). Named sounds for
   `audio.play(name, opts)`: UI `click`, `hover`, `error`, `shopBell`, `confetti`; gameplay `coins {amount}`,
   `grab {tier, mutation}`, `purchase`, `speedUp`, `unlock`, `rebirth`, `event {type}`; pass `{x, z}` for positional sounds.
@@ -133,7 +140,14 @@ pause(), resume(), quitToTitle(), saveNow()`.
   `window.__FAMILY_FACES__`. Never commit them and never print their base64.
 * Performance budget: 60 fps on a mid laptop, 30+ on a phone. Share geometries/materials, use
   `InstancedMesh`/merged geometry for repeated props, no per-frame allocations in hot paths,
-  respect `engine.quality` (`low|medium|high`, `decorDensity`, `shadows`).
+  respect `engine.quality` (`low|medium|high`, `decorDensity`, `shadows`, and the look flags `env`, `fill`,
+  `shadowRadius`, `swayAmp`, `oceanHQ`, `heightFog`, `groundVar`, `bloom`; every phone runs `low`, where all of
+  them are off).
+* Look helpers (`core/shaderfx.js`): `LOOK` holds the shared sun/rim/sky uniforms that `world/sky.js` feeds every
+  frame; `rimLit(material, k)` / `rimLitTree(root, k)` add the rim light (and, on medium/high, the generated sky
+  reflections on Standard ones) to lit materials with one program per kind. Merger parts take `o.sway` (a weight,
+  or `[bottom, top]`) for wind sway on medium/high (`world/kit.js` `SWAY`). New material variants that can first
+  appear mid-game go into `buildWarmupGroup` in `main.js`.
 * Build: `node build.mjs --out <your-dir>`; dev galleries: `node build.mjs --entry src/<module>/dev/gallery.js --out <dir>`.
 * Test: `DIST_DIR=<dir> OUT_DIR=<dir> node tests/smoke.mjs` and your own Playwright scripts using
   `tests/harness.mjs` (headless Chromium with SwiftShader WebGL; slow but accurate). Look at your screenshots.

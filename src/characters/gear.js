@@ -250,8 +250,74 @@ function buildHat(id, col) {
         m.prim('box', 0, 0.9, 0, 0.28, 0.09, 0.1, gold, { ao: 0 });
       });
       break;
+    case 'gnome': {
+      // Golden Gnome Hunt reward: a tall felt gnome hat, its tip flopping forward, with a gold band and star
+      const g = merged((m) => {
+        m.prim('cyl:18', 0, -0.28, 0, 2.52, 0.36, 2.3, '#ffc83a', { ao: 0 });
+        m.add('frustum:18', trs(0, 0.42, -0.02, 2.36, 1.1, 2.16), col, { ao: 0.1 });
+        m.add('frustum:14', trs(0, 1.4, -0.04, 1.65, 0.95, 1.52), col, { ao: 0 });
+        m.prim('cone:12', 0, 2.08, 0.1, 1.16, 0.95, 1.08, shade(col, -0.06), { rx: 0.45, ao: 0 });
+        m.add(star(0.08), trs(0, -0.28, 1.17, 0.62, 0.62, 1), '#fff3a0', { ao: 0 });
+      });
+      out.main = g;
+      break;
+    }
     case 'halo':
       out.anim.push({ anim: 'halo', pos: [0, 0.62, 0], glow: true, geo: merged((m) => m.add(torus(0.78, 0.11, 8, 30), trs(0, 0, 0, 1, 1, 1, Math.PI / 2, 0, 0), '#ffe27a', { ao: 0 })) });
+      break;
+    case 'familycrown': {
+      // the Family Four reward: a gold crown in the family purple, a shining gem per family member across the
+      // front (Dorian, Esther, Mati, Micah from left to right), and a gentle ring of light that floats round it
+      const gold = '#ffc93c';
+      const fam = ['#2f80ed', '#ff4f9a', '#9b5cff', '#1ec8a5'];
+      const front = [-54, -18, 18, 54].map((d) => (d * Math.PI) / 180);
+      out.main = merged((m) => {
+        m.add('hemi:14', trs(0, 0.12, 0, 1.7, 0.92, 1.56), '#6a35b8', { ao: 0.1 });
+        m.prim('cyl:20', 0, 0.06, 0, 1.96, 0.52, 1.82, gold, { ao: 0.12 });
+        m.prim('cyl:20', 0, -0.2, 0, 2.04, 0.1, 1.9, '#fff0b0', { ao: 0 });
+        m.prim('cyl:20', 0, 0.33, 0, 2.0, 0.07, 1.86, '#fff0b0', { ao: 0 });
+        for (let k = 0; k < 10; k++) {
+          const a = ((k + 0.5) / 10) * Math.PI * 2; // the four front points sit over the gems
+          const x = Math.sin(a) * 0.95;
+          const z = Math.cos(a) * 0.88;
+          m.prim('cone:4', x, 0.6, z, 0.4, 0.56, 0.28, gold, { ry: a, ao: 0 });
+          m.prim('sphere:6', x * 1.02, 0.9, z * 1.02, 0.17, 0.17, 0.17, '#fffbe8', { ao: 0 });
+        }
+        for (const a of front) m.prim('cyl:12', Math.sin(a) * 0.985, 0.07, Math.cos(a) * 0.915, 0.4, 0.06, 0.4, '#fff0b0', { rx: Math.PI / 2, ry: a, ao: 0 });
+        m.prim('sphere:8', 0, 0.64, 0, 0.26, 0.26, 0.26, gold, { ao: 0 });
+        m.add(star(0.08), trs(0, 0.92, 0, 0.44, 0.44, 1), '#ffe066', { ao: 0 });
+      });
+      // the gems are unlit, so they shine
+      out.glow = merged((m) => {
+        front.forEach((a, i) => m.prim('octa', Math.sin(a) * 1.0, 0.07, Math.cos(a) * 0.93, 0.3, 0.36, 0.16, fam[i], { ry: a, ao: 0 }));
+      });
+      out.anim.push({
+        anim: 'halo', pos: [0, 0.3, 0], glow: true,
+        geo: merged((m) => {
+          m.add(torus(1.3, 0.035, 5, 40), trs(0, 0, 0, 1, 1, 1, Math.PI / 2, 0, 0), '#fff2a8', { ao: 0 });
+          fam.forEach((c, i) => {
+            const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+            m.add(star(0.06), trs(Math.sin(a) * 1.3, 0, Math.cos(a) * 1.3, 0.34, 0.34, 1, 0, a, 0), c, { ao: 0 });
+          });
+        }),
+      });
+      break;
+    }
+    case 'leafhat':
+      // the Seed Almanac reward: a cap of big overlapping leaves with a sprout on top
+      out.main = merged((m) => {
+        m.add('hemi:16', trs(0, -0.38, 0, 2.4, 1.36, 2.2), '#2f9a45', { ao: 0.12 });
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          m.prim('sphere:8', Math.sin(a) * 0.95, -0.12, Math.cos(a) * 0.88, 0.85, 0.12, 1.05, k % 2 ? '#3fbf5a' : '#4fcf62', { rx: 0.85, ry: a, ao: 0.05 });
+        }
+        for (let k = 0; k < 6; k++) {
+          const a = ((k + 0.5) / 6) * Math.PI * 2;
+          m.prim('sphere:8', Math.sin(a) * 0.5, 0.3, Math.cos(a) * 0.46, 0.7, 0.12, 0.95, k % 2 ? '#58d66a' : '#6fe07a', { rx: 0.45, ry: a, ao: 0 });
+        }
+        m.prim('cyl:6', 0, 0.62, 0, 0.1, 0.42, 0.1, '#2e9c46', { ao: 0 });
+        for (const s of [-1, 1]) m.prim('sphere:8', s * 0.2, 0.84, 0, 0.4, 0.09, 0.22, '#8dff7e', { rz: s * 0.5, ao: 0 });
+      });
       break;
     default:
       break;

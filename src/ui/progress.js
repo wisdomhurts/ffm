@@ -1,17 +1,22 @@
 // Quests + badges UI. OWNER: progress agent (docs/ONLINE.md "Progress").
-//   openProgress(app, {tab: 'quests'|'badges'}) -> modal with Quests | Badges tabs
+//   openProgress(app, {tab: 'quests'|'badges'|'almanac'}) -> modal with Quests | Badges | Almanac tabs (the Badges
+//   tab opens with the collections, e.g. the Family Four card; the Almanac is the Seed Almanac sticker book)
 //   mountQuestChip(app, hudRoot, {tl, tr, top, bottom}) -> {update(dt), dispose()}: compact HUD quest tracker
-//   installProgressUI(app) -> {toasts, dispose()}: styles + celebration toasts (called once by attachProgress)
+//   installProgressUI(app) -> {toasts, dispose()}: styles + celebration toasts + the collection finale
+//   (celebrate.js; called once by attachProgress)
 // The data comes from app.progress (src/progress/tracker.js). Stars are spent in the Wardrobe.
 import { bus } from '../core/events.js';
 import { load, save } from '../core/save.js';
 import { h, esc, money, noFocus, reducedMotion } from './dom.js';
 import { avatarEl } from './avatars.js';
-import { CHARACTER } from '../config.js';
-import { TIERS, TIER_ORDER, cashText } from '../progress/catalog.js';
+import { CHARACTER, RARITY, BIOMES } from '../config.js';
+import { TIERS, TIER_ORDER, cashText, ALMANAC } from '../progress/catalog.js';
 import { glyph, glyphSvg, glyphTint, medal, metalFor } from '../progress/art.js';
 import { injectProgressStyles } from '../progress/styles.js';
 import { createToasts } from '../progress/toasts.js';
+import { celebrateCollection } from '../progress/celebrate.js';
+import { plantIcon } from '../social/plantIcon.js';
+import { HAT_BY_ID } from '../characters/cosmetics.js';
 
 let toasts = null; // created by installProgressUI; the HUD chip lends it the HUD's top column
 let openPanel = null; // {modal, setTab}
@@ -76,9 +81,11 @@ const sound = (app, name, opts) => {
 export function installProgressUI(app) {
   injectProgressStyles();
   toasts = createToasts(app, { open: (tab) => openProgress(app, { tab }) });
+  const offCel = bus.on('collection:complete', (e) => celebrateCollection(app, e));
   return {
     toasts,
     dispose() {
+      offCel();
       toasts?.dispose();
       toasts = null;
     },
@@ -105,6 +112,7 @@ export function openProgress(app, { tab = 'quests' } = {}) {
     }
     app.touch?.setVisible?.(false);
   }
+  almStripX = -1;
   const panel = buildPanel(app, tr, tab);
   let modal = null;
   panel.el.appendChild(app.menus.doneRow(() => modal?.close()));
@@ -121,8 +129,15 @@ export function openProgress(app, { tab = 'quests' } = {}) {
   return modal;
 }
 
+const TABS = ['quests', 'badges', 'almanac'];
+const tabOf = (t) => (TABS.includes(t) ? t : 'quests');
+const FINISH_NAME = { normal: 'Normal', gold: 'Gold', diamond: 'Diamond', rainbow: 'Rainbow' };
+const SIZE_NAME = { big: 'Big', giant: 'Giant', titan: 'Titan' };
+let almPage = null; // the Almanac page last looked at (this session)
+let almStripX = -1; // how far the page strip is scrolled while the panel is open (-1: show the open page)
+
 function buildPanel(app, tr, startTab) {
-  let tab = startTab === 'badges' ? 'badges' : 'quests';
+  let tab = tabOf(startTab);
   const starsV = h('span');
   const starsEl = h('div', { class: 'pg-stars', title: 'Stars: spend them in the Wardrobe', html: glyph('star') }, starsV);
   const head = h('div', { class: 'pg-head' },
@@ -138,9 +153,11 @@ function buildPanel(app, tr, startTab) {
       setTab(id);
     },
   }, h('span', { html: glyph(icon) }), h('span', { text: label }), extra);
+  const aCount = h('em');
   const tabQ = mkTab('quests', 'scroll', 'Quests', qDot);
   const tabB = mkTab('badges', 'trophy', 'Badges', bCount);
-  const tabs = h('div', { class: 'seg pg-tabs', role: 'tablist', 'aria-label': 'Quests or badges' }, tabQ, tabB);
+  const tabA = mkTab('almanac', 'almanac', 'Almanac', aCount);
+  const tabs = h('div', { class: 'seg pg-tabs', role: 'tablist', 'aria-label': 'Quests, badges or the Seed Almanac' }, tabQ, tabB, tabA);
   const pane = h('div', { class: 'pg-pane', role: 'tabpanel' });
   const el = h('div', { class: 'pg' }, head, tabs, pane);
   let shownStars = tr.stars;
@@ -154,7 +171,9 @@ function buildPanel(app, tr, startTab) {
     qDot.textContent = String(claimable);
     const st = tr.bests();
     bCount.textContent = `${st.badges}/${st.totalBadges}`;
-    for (const b of [tabQ, tabB]) {
+    const alm = tr.almanac?.() || [];
+    aCount.textContent = `${alm.reduce((n, pg) => n + pg.stickers, 0)}/${alm.reduce((n, pg) => n + pg.total, 0)}`;
+    for (const b of [tabQ, tabB, tabA]) {
       const on = b.dataset.tab === tab;
       b.classList.toggle('on', on);
       b.setAttribute('aria-selected', String(on));
@@ -295,6 +314,30 @@ function buildPanel(app, tr, startTab) {
       h('span', { class: 'pg-bfoot', html: (next ? starChip(next.stars) : '') + (earned ? `<span class="pg-date">Earned ${esc(dateText(cur.earnedAt))}</span>` : '') }, pips));
   }
 
+  // ---------------------------------------------------------------- collections (Family Four)
+
+  // Four slots (plant + the family member's face; a dark "?" until you've had it), n/4 and the rewards.
+  function collectionCard(c) {
+    const hat = HAT_BY_ID[c.hat];
+    const slots = c.items.map((it) => {
+      const who = CHARACTER[it.family];
+      return h('div', { class: `pg-col-slot${it.has ? ' has' : ''}`, style: `--c:${who?.color || '#ffd23f'}`, title: it.has ? it.name : `${it.name}: not yet!`, role: 'listitem', 'aria-label': `${it.name}${it.has ? ', collected' : ', not collected yet'}` },
+        h('span', { class: 'pg-col-pl', html: plantIcon(it.id) }, it.has ? null : h('b', { text: '?' })),
+        it.family ? avatarEl(it.family, 'pg-col-ava') : null,
+        h('span', { class: 'pg-col-n', text: who?.name || it.name }));
+    });
+    const rew = c.done
+      ? `<span class="pg-chipv done">${glyph('check')}Complete!</span>${c.earnedAt ? `<span class="pg-date">${esc(dateText(c.earnedAt))}</span>` : ''}`
+      : starChip(c.stars) + (c.cash ? cashChip(c.cash) : '') + (hat ? `<span class="pg-chipv hat">${glyph('crown4')}${esc(hat.name)}</span>` : '');
+    return h('div', { class: `pg-col${c.done ? ' done' : ''}`, 'data-col': c.id },
+      h('div', { class: 'pg-col-head' },
+        h('span', { class: 'pg-col-ic', html: glyph(c.icon) }),
+        h('div', { class: 'pg-col-t' }, h('b', { text: c.name }), h('span', { text: c.done ? `You have them all! The ${hat?.name || 'reward'} is yours.` : `${c.how} (grab, plant, steal or get one as a gift).` })),
+        h('span', { class: 'pg-pill pg-col-n4', text: `${c.count}/${c.total}` })),
+      h('div', { class: 'pg-col-list', role: 'list' }, slots),
+      h('div', { class: 'pg-rew pg-col-rew', html: rew }));
+  }
+
   function badgesPane() {
     const st = tr.bests();
     const best = (label, value, cls = '') => h('div', { class: 'pg-best' }, h('b', { class: cls, text: value }), h('span', { text: label }));
@@ -307,17 +350,99 @@ function buildPanel(app, tr, startTab) {
       best('Best streak', `${st.streakBest} day${st.streakBest === 1 ? '' : 's'}`));
     const now = Date.now();
     const list = tr.badges();
-    return [bests, h('div', { class: 'pg-grid', role: 'list' }, list.map((f) => badgeCard(f, now)))];
+    const cols = (tr.collections?.() || []).map(collectionCard);
+    return [bests, ...cols, h('div', { class: 'pg-grid', role: 'list' }, list.map((f) => badgeCard(f, now)))];
+  }
+
+  // ---------------------------------------------------------------- the Seed Almanac
+
+  // Page tabs (they scroll sideways on phones) and the open page; only the open page is built.
+  function almanacPane() {
+    const pages = tr.almanac();
+    if (!pages.find((pg) => pg.id === almPage)) almPage = (pages.find((pg) => pg.stickers < pg.total) || pages[0])?.id || null;
+    const stickers = pages.reduce((n, pg) => n + pg.stickers, 0);
+    const total = pages.reduce((n, pg) => n + pg.total, 0);
+    const mastered = pages.reduce((n, pg) => n + pg.mastered, 0);
+    const top = h('div', { class: 'pg-qtop' }, h('h3', { text: 'Seed Almanac' }),
+      h('div', { class: 'pg-meta' },
+        h('span', { class: 'pg-pill', html: `${glyph('almanac')}<span>${stickers}/${total} stickers</span>` }),
+        mastered ? h('span', { class: 'pg-pill hot', html: `${glyph('star')}<span>${mastered} mastered</span>` }) : null));
+    const body = h('div', { class: 'pg-alm-page' });
+    const strip = h('div', { class: 'pg-alm-tabs', role: 'tablist', 'aria-label': 'Almanac pages' }, pages.map((pg) => {
+      const b = h('button', {
+        class: `pg-alm-tab${pg.id === almPage ? ' on' : ''}${pg.full ? ' full' : ''}`, type: 'button', role: 'tab', 'aria-selected': String(pg.id === almPage),
+        style: `--rc:${rarityColor(pg.rarity)}`, 'data-page': pg.id,
+        onclick: () => {
+          if (almPage === pg.id) return;
+          app.menus?.click?.();
+          almPage = pg.id;
+          for (const x of strip.children) {
+            const on = x.dataset.page === pg.id;
+            x.classList.toggle('on', on);
+            x.setAttribute('aria-selected', String(on));
+          }
+          fillPage(body, tr.almanac().find((x) => x.id === pg.id));
+        },
+      }, h('i'), h('span', { text: pg.name }), h('em', { text: pg.full ? '' : `${pg.stickers}/${pg.total}`, html: pg.full ? glyph('check') : null }));
+      return b;
+    }));
+    fillPage(body, pages.find((pg) => pg.id === almPage));
+    // a repaint keeps the strip where it was; the first time it shows the open page
+    strip.addEventListener('scroll', () => (almStripX = strip.scrollLeft), { passive: true });
+    requestAnimationFrame(() => {
+      if (almStripX >= 0) strip.scrollLeft = almStripX;
+      else {
+        const on = strip.querySelector('.on');
+        if (on) strip.scrollLeft = Math.max(0, on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2);
+      }
+    });
+    const note = h('p', { class: 'pg-note', text: `Grab, plant or steal a plant to get its sticker. New plant: +${ALMANAC.firstStars} star. All 4 finishes: +${ALMANAC.masterStars} stars!` });
+    return [top, strip, body, note];
+  }
+
+  function rarityColor(r) {
+    const c = RARITY[r]?.color || '#ffd23f';
+    return r === 'secret' ? '#ff66d9' : c;
+  }
+
+  function fillPage(body, pg) {
+    body.textContent = '';
+    if (!pg) return;
+    body.style.setProperty('--rc', rarityColor(pg.rarity));
+    const status = pg.badge
+      ? pg.earnedAt
+        ? `<span class="pg-chipv done">${glyph('check')}Page complete!</span><span class="pg-date">${esc(dateText(pg.earnedAt))}</span>`
+        : `${starChip(pg.stars)}<span>Fill the page: every plant in all 4 finishes</span>`
+      : `<span>Secret seeds hide on the Seed Road from ${esc(BIOMES.find((b) => b.secret)?.name || 'the far worlds')} on.</span>`;
+    body.append(h('div', { class: 'pg-alm-head' },
+      h('div', { class: 'pg-alm-ht' }, h('b', { text: pg.name }), h('span', { text: `${RARITY[pg.rarity]?.name || ''} plants · ${pg.mastered}/${pg.plants.length} mastered` })),
+      bar(pg.stickers, pg.total),
+      h('div', { class: 'pg-rew pg-alm-rew', html: status })));
+    if (!pg.badge) for (const c of tr.collections?.() || []) if (c.items.some((it) => pg.plants.some((x) => x.id === it.id))) body.append(collectionCard(c));
+    body.append(h('div', { class: 'pg-alm-grid', role: 'list' }, pg.plants.map(plantCard)));
+  }
+
+  function plantCard(pl) {
+    const stickers = pl.finishes.map((f) => h('span', { class: `pg-stk f-${f.id}${f.has ? '' : ' off'}`, title: `${FINISH_NAME[f.id]}${f.has ? '' : ': not yet'}` },
+      h('span', { class: 'pg-stk-art', html: plantIcon(pl.id, f.id) }, f.has ? null : h('b', { text: '?' })),
+      h('span', { class: 'pg-stk-l', text: FINISH_NAME[f.id] })));
+    const got = pl.finishes.filter((f) => f.has).length;
+    return h('div', { class: `pg-pl${pl.mastered ? ' mastered' : ''}${pl.bits ? '' : ' unknown'}`, role: 'listitem', 'aria-label': `${pl.name}: ${got} of 4 finishes${pl.mastered ? ', mastered' : ''}` },
+      h('div', { class: 'pg-pl-top' },
+        h('b', { class: 'pg-pl-n', text: pl.name }),
+        pl.mastered ? h('span', { class: 'pg-pl-m', html: `${glyph('star')}<span>Mastered</span>` }) : h('span', { class: 'pg-pl-c', text: `${got}/4` })),
+      h('div', { class: 'pg-stks' }, stickers),
+      pl.sizes.length ? h('div', { class: 'pg-pl-sz' }, pl.sizes.map((z) => h('span', { class: 'sz-' + z, text: SIZE_NAME[z] || z }))) : null);
   }
 
   function render() {
     paintHead();
     pane.textContent = '';
-    pane.append(...(tab === 'badges' ? badgesPane() : questsPane()));
+    pane.append(...(tab === 'badges' ? badgesPane() : tab === 'almanac' ? almanacPane() : questsPane()));
   }
 
   function setTab(t) {
-    const next = t === 'badges' ? 'badges' : 'quests';
+    const next = tabOf(t);
     if (next === tab && pane.childNodes.length) return;
     tab = next;
     pane.classList.remove('pg-pane');
@@ -334,7 +459,7 @@ function buildPanel(app, tr, startTab) {
       render();
     }, 60);
   };
-  const offs = ['progress:changed', 'badge:earned', 'quest:claimed', 'quest:bonus'].map((n) => bus.on(n, schedule));
+  const offs = ['progress:changed', 'badge:earned', 'quest:claimed', 'quest:bonus', 'almanac:sticker'].map((n) => bus.on(n, schedule));
   offs.push(bus.on('stars:changed', ({ stars }) => countTo(stars)));
   const timer = setInterval(() => {
     if (resetEl?.isConnected) resetEl.lastChild.textContent = `New quests in ${hoursLeft(tr.resetsIn())}`;

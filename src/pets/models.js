@@ -8,6 +8,7 @@
 //   lift: hop/fly offset + squash; headPivot/tailPivot/wings: animate rotations (see view.js)
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { rimLit } from '../core/shaderfx.js';
 import { PET } from './catalog.js';
 import { EYE, WHITE, BLUSH, sym, face, smile } from './kit.js';
 import { FARM_OCEAN_FROST } from './species/farmOceanFrost.js';
@@ -188,7 +189,7 @@ export function petMaterial() {
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * (0.14 + vGlow);');
   };
   MAT.customProgramCacheKey = () => 'sas-pet';
-  return MAT;
+  return rimLit(MAT, 0.5);
 }
 
 let softTex = null;

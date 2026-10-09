@@ -2,6 +2,7 @@
 // the leaderboard UI). Server whitelist: supabase/migrations (sas_submit / sas_top).
 import { CHARACTERS } from '../config.js';
 import { load } from '../core/save.js';
+import { BADGE_BY_ID } from '../progress/catalog.js';
 
 export const BOARDS = [
   { id: 'networth', title: 'Richest Garden', short: 'Richest', unit: 'money', blurb: 'Biggest garden net worth ever' },
@@ -53,7 +54,8 @@ export function profileSummary(profile, app = null) {
     steals: s.steals,
     rebirths: s.rebirths,
     stars: num(profile?.stars),
-    badges: profile?.badges && typeof profile.badges === 'object' ? Object.keys(profile.badges).length : 0,
+    // earned badges this version knows (the same count as the Badges tab: n of ALL_BADGES)
+    badges: profile?.badges && typeof profile.badges === 'object' ? Object.keys(profile.badges).filter((id) => BADGE_BY_ID[id]).length : 0,
     pets: Array.isArray(profile?.pets?.owned) ? profile.pets.owned.length : 0,
     cash: Math.floor(num(me?.cash)),
     plants,

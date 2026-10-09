@@ -2,13 +2,14 @@
 import { DIFFICULTY } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings, setSetting } from '../core/settings.js';
-import { save } from '../core/save.js';
-import { h, uiSound, setMuted } from './dom.js';
+import { h, uiSound } from './dom.js';
 import { ICON } from './icons.js';
 import { resetTutorial } from './tutorial.js';
 import { fsMode, isFullscreen, toggleFullscreen, onFullscreenChange, autoFullscreenApplies } from './fullscreen.js';
 import { openCloudSave } from './cloudsave.js';
 import { onlineConfigured } from '../online/config.js';
+import { buildSoundControls } from './soundControls.js';
+import { askGrownUp } from './chat.js';
 
 export function buildSettings(app) {
   const rows = [];
@@ -30,8 +31,6 @@ export function buildSettings(app) {
     };
     input.addEventListener('input', () => {
       setSetting(key, +input.value);
-      // turning a volume up un-mutes
-      if (settings.muted && +input.value > 0) setSetting('muted', false);
       paint();
     });
     paint();
@@ -73,15 +72,12 @@ export function buildSettings(app) {
     toggles.push(paint);
     b.addEventListener('click', () => {
       uiSound(app, 'click');
-      if (key === 'muted') setMuted(app, !settings.muted);
-      else setSetting(key, !settings[key]);
+      setSetting(key, !settings[key]);
       paint();
     });
     paint();
     return b;
   };
-
-  const pct = (v) => Math.round(v * 100) + '%';
 
   // Cloud Save (save codes) lives here; the panel itself comes from the backend module. Until a backend
   // is configured it is a quiet "coming soon" row (the panel then shows a coming-soon card).
@@ -100,9 +96,9 @@ export function buildSettings(app) {
   const cloudRow = cloudOn ? null : row('Cloud Save', cloudBtn, 'Save codes to take your garden to another phone or computer.');
   const qualityNote = h('span', { class: 'set-note warn', text: 'Applies after you reload the page.', hidden: true });
 
-  row('Music', slider('music', 0, 1, 0.05, pct));
-  row('Sound effects', slider('sfx', 0, 1, 0.05, pct));
-  row('Mute everything', toggleCtl('muted', 'Mute'));
+  // Music and sound effects: an on/off switch and a volume each (ui/soundControls.js)
+  const sound = buildSoundControls(app, { rowClass: 'set-row' });
+  rows.push(sound.el);
 
   // Full screen: a live switch where the browser allows it (plus "go full screen by yourself" on phones and
   // tablets); iPhones get a button that opens the Add to Home Screen guide instead
@@ -139,15 +135,36 @@ export function buildSettings(app) {
   row('Auto-rotate camera', toggleCtl('autoRotate', 'Auto-rotate camera'), 'Swings behind you as you run');
   row('Tips and tutorial', toggleCtl('tips', 'Tips'));
 
-  const resetBtn = h('button', { class: 'btn btn-grey btn-sm', type: 'button', html: `<span class="bi">${ICON.reset}</span><span>Replay tutorial</span>` });
+  // the guided tutorial, from the first step (ui/tutorial.js): in a game it starts as you go back to it
+  const resetBtn = h('button', { class: 'btn btn-green btn-sm set-tut', type: 'button', html: `<span class="bi">${ICON.play}</span><span>Play tutorial</span>` });
   resetBtn.addEventListener('click', () => {
-    resetTutorial();
-    save('ui:hints-off', false);
+    uiSound(app, 'click');
+    resetTutorial(app);
     if (!settings.tips) setSetting('tips', true);
-    resetBtn.innerHTML = `<span class="bi">${ICON.check}</span><span>Starts next game</span>`;
+    resetBtn.innerHTML = `<span class="bi">${ICON.check}</span><span>${app.game && app.human ? 'Starts when you play' : 'Starts next game'}</span>`;
     resetBtn.disabled = true;
   });
-  row('Tutorial', resetBtn, 'Shows the checklist and key hints again');
+  row('Tutorial', resetBtn, 'A quick guided tour: grab, grow, cash in, steal');
+
+  // Chat (social/chat.js): typed chat on this device, and a parents' switch for typed chat in public rooms
+  rows.push(h('div', { class: 'set-sec', role: 'heading', 'aria-level': '3', text: 'Chat' }));
+  row('Typed chat', toggleCtl('chatOn', 'Typed chat'), 'Type messages in solo games and private rooms. Quick chat always works.');
+  // the parents' switch: ON only after a grown-up question (ui/chat.js askGrownUp), OFF in one tap
+  const pub = h('button', { class: 'switch', type: 'button', role: 'switch', 'aria-label': 'Typed chat in public rooms' }, h('i'));
+  const paintPub = () => {
+    pub.classList.toggle('on', !!settings.chatPublic);
+    pub.setAttribute('aria-checked', String(!!settings.chatPublic));
+  };
+  toggles.push(paintPub);
+  paintPub();
+  pub.addEventListener('click', () => {
+    uiSound(app, 'click');
+    if (settings.chatPublic) setSetting('chatPublic', false);
+    else askGrownUp(app, () => setSetting('chatPublic', true));
+    paintPub();
+  });
+  row('Typed chat in public rooms', pub,
+    'For parents: off = public rooms use quick chat only. On = your child can type there too (bad words, links and numbers are blocked).');
 
   const el = h('div', { class: 'set-body' },
     h('div', { class: 'mh' }, h('span', { class: 'mh-ic', html: ICON.gear }), h('h2', { text: 'Settings' })),
@@ -163,6 +180,7 @@ export function buildSettings(app) {
     dispose() {
       off();
       offFs();
+      sound.dispose();
     },
   };
 }

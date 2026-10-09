@@ -1,7 +1,7 @@
 // Cosmetics catalog for the Wardrobe (docs/ONLINE.md "Customization").
 //
 // Look = { build: 'adult'|'kid', skin, hair, hairColor, shirt, shirtColor, shirtColor2, pants, shoes,
-//          hat: null|id, face: 'photo'|expression, acc: null|id, noodle: null|'#hex', trail: null|id,
+//          hat: null|id, face: 'photo'|expression, acc: null|id, noodle: null|'#hex'|special id (NOODLES), trail: null|id,
 //          // optional extras (older looks without them keep working):
 //          legs: 'jeans'|'pants'|'shorts'|'skirt' (default: from the shirt, as the family wore it),
 //          hatColor, accColor: '#hex' (tintable hats/accessories), num: 0..99 (jersey number) }
@@ -14,12 +14,22 @@ import { CHARACTER, CHARACTERS } from '../config.js';
 
 // ------------------------------------------------------------------ colour palettes
 
+// Hair: natural shades (dark to light, then grey, silver and white) and fun dyes. randomLook() mostly picks natural.
+export const HAIR_NATURAL = ['#17110f', '#3a2a20', '#5a3b28', '#8a4b2a', '#c8642a', '#e2b85c', '#f3e3b5', '#b9b9c4', '#cfd3dc', '#f2f1ec'];
+export const HAIR_FUN = ['#e8323c', '#ff6fb5', '#9b5cff', '#3d9bff', '#2fd6a0'];
+/** Names for the Wardrobe swatches. */
+export const HAIR_NAMES = {
+  '#17110f': 'Black', '#3a2a20': 'Dark brown', '#5a3b28': 'Brown', '#8a4b2a': 'Auburn', '#c8642a': 'Ginger', '#e2b85c': 'Blonde',
+  '#f3e3b5': 'Platinum', '#b9b9c4': 'Grey', '#cfd3dc': 'Silver', '#f2f1ec': 'White',
+  '#e8323c': 'Red', '#ff6fb5': 'Pink', '#9b5cff': 'Purple', '#3d9bff': 'Blue', '#2fd6a0': 'Mint',
+};
+
 export const COLORS = {
   cloth: [
     '#ffffff', '#c9ced8', '#4a4f5c', '#1d1d1d', '#e8323c', '#ff6b5a', '#ff8a1a', '#ffd23f', '#9be34a', '#2fb84f', '#8ff0d8',
     '#1ec8a5', '#5cc8ff', '#2f80ed', '#2b3a55', '#8a5cc8', '#c9a6ff', '#ff4f9a', '#ffb3d1', '#8a5a34', '#c8b48a',
   ],
-  hair: ['#17110f', '#3a2a20', '#5a3b28', '#8a4b2a', '#c8642a', '#e2b85c', '#f3e3b5', '#b9b9c4', '#e8323c', '#ff6fb5', '#9b5cff', '#3d9bff', '#2fd6a0'],
+  hair: [...HAIR_NATURAL, ...HAIR_FUN],
   skin: ['#f7d7c4', '#eec1a4', '#e0ac8a', '#d19a82', '#c98d78', '#b87a5a', '#9c6444', '#7d4a30', '#5c3622', '#3f2518', '#f5cd30'],
   noodle: ['#ff4f9a', '#2f80ed', '#9b5cff', '#1ec8a5', '#ffd23f', '#ff8a1a', '#e8323c', '#63d45a', '#5cc8ff', '#ffffff', '#1d1d1d', '#ffb3d1'],
   shoes: ['#ffffff', '#1d1d1d', '#e8323c', '#ff8a1a', '#ffd23f', '#2fb84f', '#1ec8a5', '#2f80ed', '#8a5cc8', '#ff4f9a', '#8a5a34', '#f2d0b8'],
@@ -88,9 +98,13 @@ export const HATS = [
   { id: 'propeller', name: 'Propeller Cap', price: 25, covers: true, h: 0.9 },
   { id: 'tophat', name: 'Top Hat', price: 30, tint: '#23232b', covers: true, h: 1.45 },
   { id: 'wizard', name: 'Wizard Hat', price: 35, tint: '#5b3fc4', covers: true, h: 2.1 },
+  { id: 'gnome', name: 'Gnome Hat', price: 0, unlock: 'gnomes2', tint: '#e8323c', covers: true, h: 2.5 }, // Golden Gnome Hunt
   { id: 'viking', name: 'Viking Helmet', price: 40, unlock: 'thief2', covers: true, h: 1.1 },
   { id: 'crown', name: 'Royal Crown', price: 60, unlock: 'champ1', h: 0.85 },
   { id: 'halo', name: 'Halo', price: 50, unlock: 'generous', h: 0.9 },
+  // badge-only rewards (progress/catalog.js): the Family Four collection and the Seed Almanac
+  { id: 'familycrown', name: 'Family Crown', price: 0, unlock: 'familyfour', h: 1.05 },
+  { id: 'leafhat', name: 'Leaf Hat', price: 0, unlock: 'almanac1', covers: true, h: 0.75 },
 ];
 
 // at: where it attaches ('face' on the head front, 'neck', 'back'); back items push the slung noodle
@@ -134,8 +148,15 @@ export const TRAILS = [
   { id: 'rainbow', name: 'Rainbow', price: 50, unlock: 'rainbow' },
 ];
 
+// Special pool noodles: a look of their own instead of a plain colour (look.noodle = id). color: the base
+// colour (wardrobe swatch, bonk effects), shine: the gradient painted along the foam, grip: a handle band.
+export const NOODLES = [
+  { id: 'trowel', name: 'Golden Trowel', price: 0, unlock: 'almanac2', color: '#ffc21a', shine: ['#fff3a0', '#ffc21a', '#d98a00'], grip: '#2fb84f' },
+  { id: 'golden', name: 'Golden Gnome Noodle', price: 0, unlock: 'gnomes3', color: '#ffd23f', shine: ['#fffbe0', '#ffd23f', '#c98a00'], grip: '#e8323c' }, // every Golden Gnome found
+];
+
 /** The catalog, by category (contract shape plus the extras the Wardrobe uses). */
-export const COSMETICS = { builds: BUILDS, hair: HAIR, shirts: SHIRTS, legs: LEGS, hats: HATS, accs: ACCS, faces: FACES, trails: TRAILS, colors: COLORS };
+export const COSMETICS = { builds: BUILDS, hair: HAIR, shirts: SHIRTS, legs: LEGS, hats: HATS, accs: ACCS, faces: FACES, trails: TRAILS, noodles: NOODLES, colors: COLORS };
 
 const byId = (list) => Object.assign(Object.create(null), Object.fromEntries(list.map((x) => [x.id, x])));
 export const HAIR_BY_ID = byId(HAIR);
@@ -145,6 +166,7 @@ export const HAT_BY_ID = byId(HATS);
 export const ACC_BY_ID = byId(ACCS);
 export const FACE_BY_ID = byId(FACES);
 export const TRAIL_BY_ID = byId(TRAILS);
+export const NOODLE_BY_ID = byId(NOODLES);
 
 // Look field -> {cat (unlock prefix), items}
 export const SLOTS = {
@@ -156,6 +178,7 @@ export const SLOTS = {
   acc: { cat: 'acc', items: ACCS },
   face: { cat: 'face', items: FACES },
   trail: { cat: 'trail', items: TRAILS },
+  noodle: { cat: 'noodle', items: NOODLES }, // plain '#hex' noodles are free and not items
 };
 
 // ------------------------------------------------------------------ ownership
@@ -228,7 +251,7 @@ export function sanitizeLook(look, base = CHARACTERS[0].id) {
     hat: l.hat == null ? null : pick(l.hat, HAT_BY_ID, null),
     face: pick(l.face, FACE_BY_ID, 'photo'),
     acc: l.acc == null ? null : pick(l.acc, ACC_BY_ID, null),
-    noodle: l.noodle == null ? null : hex(l.noodle, null),
+    noodle: l.noodle == null ? null : NOODLE_BY_ID[l.noodle] ? l.noodle : hex(l.noodle, null),
     trail: l.trail == null ? null : pick(l.trail, TRAIL_BY_ID, null),
   };
   if (LEGS_BY_ID[l.legs]) out.legs = l.legs;
@@ -264,7 +287,7 @@ export function randomLook(profile, current, r = Math.random) {
   const look = {
     ...c,
     hair: pickOf(own('hair', HAIR), r).id,
-    hairColor: r() < 0.75 ? pickOf(COLORS.hair.slice(0, 8), r) : pickOf(COLORS.hair, r),
+    hairColor: r() < 0.75 ? pickOf(HAIR_NATURAL, r) : pickOf(COLORS.hair, r),
     shirt,
     shirtColor: c1,
     shirtColor2: c2,

@@ -1,13 +1,20 @@
-// Celebration toasts: badge earned, quest complete, quest cash delivered, yesterday's rewards collected.
+// Celebration toasts: badge earned, quest complete, quest cash delivered, yesterday's rewards collected, a new
+// Seed Almanac sticker ("NEW! Gold Desert Rose"; a burst becomes one "5 new stickers!" toast) and a collection
+// step ("Family Four 2/4"; the last step is the full-screen celebration in celebrate.js, not a toast).
 // One at a time from a short queue. In a game they sit in the HUD's top column (above the alert banners, so the
 // HUD's own layout rules keep them clear of the prompt/carry pills); otherwise, or while a menu is open, in a
 // layer of their own at the top of the screen. Tapping one opens the Quests & Badges panel.
 import { bus } from '../core/events.js';
 import { h, esc } from '../ui/dom.js';
+import { avatarEl } from '../ui/avatars.js';
+import { plantIcon } from '../social/plantIcon.js';
 import { glyph, medal, metalFor } from './art.js';
-import { cashText } from './catalog.js';
+import { cashText, stickerName, collectionOfBadge, COLLECTIONS } from './catalog.js';
 
-const MS = { badge: 3600, quest: 3200, cash: 3000, settled: 3600, many: 3600 };
+const MS = { badge: 3600, quest: 3200, cash: 3000, settled: 3600, many: 3600, sticker: 2600, stickers: 3200, collection: 3800 };
+// which panel tab a tapped toast opens
+const TAB = { badge: 'badges', many: 'badges', collection: 'badges', sticker: 'almanac', stickers: 'almanac' };
+const inCollection = (speciesId) => COLLECTIONS.some((c) => c.items.some((it) => it.id === speciesId));
 const SPARK_COLORS = ['#ffd23f', '#ff7cbc', '#5cb8ff', '#6fe07a', '#ffffff', '#b36bff'];
 
 const starChip = (n) => `<span class="pg-chipv">${glyph('star')}+${n | 0}</span>`;
@@ -82,9 +89,26 @@ export function createToasts(app, { open } = {}) {
       kicker = 'New day, new quests!';
       name = "Yesterday's rewards collected";
       sub = `${t.stars ? starChip(t.stars) : ''}${t.cash ? cashChip(t.cash) : ''}`;
+    } else if (t.kind === 'sticker') {
+      ic = `<span class="pg-t-disc stk">${plantIcon(t.speciesId, t.mutation || 'normal')}</span>`;
+      kicker = t.mastered ? 'Mastered!' : 'Seed Almanac';
+      name = 'NEW! ' + stickerName(t.speciesId, t.mutation || 'normal', t.mutation ? null : t.size);
+      sub = `${t.stars ? starChip(t.stars) : ''}<span>${t.mastered ? 'All 4 finishes!' : t.first ? 'New plant sticker' : 'New sticker'}</span>`;
+    } else if (t.kind === 'stickers') {
+      ic = `<span class="pg-t-disc stk">${plantIcon(t.last.speciesId, t.last.mutation || 'normal')}</span>`;
+      cls = 'sticker';
+      kicker = 'Seed Almanac';
+      name = `${t.count} new stickers!`;
+      sub = `${t.stars ? starChip(t.stars) : ''}<span>${esc(t.names.slice(0, 2).join(', ') + (t.count > 2 ? '…' : ''))}</span>`;
+    } else if (t.kind === 'collection') {
+      ic = `<span class="pg-t-disc stk">${plantIcon(t.item.id)}</span>`;
+      kicker = `${t.collection.name} ${t.count}/${t.total}`;
+      name = t.item.name + '!';
+      sub = `<span class="pg-t-pips">${t.collection.items.map((_, i) => `<i class="${i < t.count ? 'on' : ''}"></i>`).join('')}</span><span>${t.total - t.count} to go</span>`;
     }
     const icEl = h('span', { class: 'pg-t-ic', html: ic });
-    if (t.kind === 'badge' || t.kind === 'many' || t.kind === 'quest') icEl.appendChild(sparks());
+    if (t.kind === 'collection' && t.item.family) icEl.appendChild(avatarEl(t.item.family, 'pg-t-ava'));
+    if (t.kind === 'badge' || t.kind === 'many' || t.kind === 'quest' || t.kind === 'collection' || t.mastered) icEl.appendChild(sparks());
     const el = h('div', { class: `pg-toast ${cls}`, role: 'button', tabindex: '-1', 'aria-label': `${kicker} ${name}` },
       icEl,
       h('span', { class: 'pg-t-copy' },
@@ -98,15 +122,15 @@ export function createToasts(app, { open } = {}) {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       hide(true);
-      open?.(t.kind === 'badge' || t.kind === 'many' ? 'badges' : 'quests');
+      open?.(TAB[t.kind] || 'quests');
     });
     return el;
   }
 
   function sound(t) {
     try {
-      if (t.kind === 'badge' || t.kind === 'many') app.audio?.play?.('confetti', { important: true, vol: 0.7 });
-      else if (t.kind === 'quest') app.audio?.play?.('unlock', { important: true });
+      if (t.kind === 'badge' || t.kind === 'many' || t.kind === 'collection') app.audio?.play?.('confetti', { important: true, vol: 0.7 });
+      else if (t.kind === 'quest' || t.kind === 'sticker' || t.kind === 'stickers') app.audio?.play?.('unlock', { important: true, vol: t.kind === 'quest' ? 1 : 0.6 });
       else app.audio?.play?.('coins', { amount: t.amount || 100, important: true });
     } catch {
       /* sound is optional */
@@ -154,12 +178,29 @@ export function createToasts(app, { open } = {}) {
         const all = [...merged.map((m) => m.badge), t.badge];
         queue.push({ kind: 'many', count: all.length, stars: all.reduce((a, b) => a + b.stars, 0), names: all.map((b) => b.name) });
       }
+    } else if (t.kind === 'sticker' && queue.some((x) => x.kind === 'sticker' || x.kind === 'stickers')) {
+      // a burst of new stickers (a returning player's garden, a lucky run) becomes one summary toast
+      let sum = queue.find((x) => x.kind === 'stickers');
+      if (!sum) {
+        const one = queue.find((x) => x.kind === 'sticker');
+        sum = { kind: 'stickers', count: 1, stars: one.stars || 0, names: [stickerName(one.speciesId, one.mutation || 'normal')], last: one };
+        queue.splice(queue.indexOf(one), 1, sum);
+      }
+      sum.count++;
+      sum.stars += t.stars || 0;
+      sum.names.push(stickerName(t.speciesId, t.mutation || 'normal'));
+      sum.last = t;
     } else queue.push(t);
     pump();
   }
 
   const offs = [
-    bus.on('badge:earned', ({ badge }) => badge && push({ kind: 'badge', badge })),
+    // a collection's badge has its own full-screen celebration (celebrate.js)
+    bus.on('badge:earned', ({ badge }) => badge && !collectionOfBadge(badge.id) && push({ kind: 'badge', badge })),
+    // a plant's first sticker in a collection is told by the collection toast instead
+    bus.on('almanac:sticker', ({ speciesId, mutation, size, first, mastered, stars }) => speciesId && !(first && inCollection(speciesId)) &&
+      push({ kind: 'sticker', speciesId, mutation, size, first, mastered, stars })),
+    bus.on('collection:progress', ({ collection, item, count, total }) => collection && item && count < total && push({ kind: 'collection', collection, item, count, total })),
     bus.on('quest:done', ({ quest }) => quest && push({ kind: 'quest', quest })),
     bus.on('progress:delivered', ({ amount }) => amount > 0 && push({ kind: 'cash', amount })),
     bus.on('progress:settled', ({ stars, cash }) => (stars || cash) && push({ kind: 'settled', stars, cash })),

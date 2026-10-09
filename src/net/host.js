@@ -7,6 +7,7 @@ import { bus } from '../core/events.js';
 import { emptyIntent } from '../gameplay/player.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { BotController } from '../ai/bot.js';
+import { postTyped } from '../social/chat.js';
 import {
   RATES, TIMEOUTS, MAX_HUMANS, EventCodec, forwarded, packPlayers, packMonsters, packProjectiles, sectionize, signature,
   stringifyR, num, int, isId, isObj, own, sanitizeLook, sanitizePet, sanitizePetTeam, vetSlotData, RateLimiter, upTopic, relay, isPid, predict,
@@ -14,13 +15,15 @@ import {
 
 const R = WORLD.playerRadius;
 // events that can ride the next regular tick (frequent, and only cosmetic for the others)
-const CALM = new Set(['player:jump', 'bonk:swing', 'bonk:miss', 'pod:respawn', 'monster:aggro', 'plant:grown', 'seed:expired', 'ground:expired', 'chat', 'emote']);
+const CALM = new Set(['player:jump', 'bonk:swing', 'bonk:miss', 'pod:respawn', 'monster:aggro', 'plant:grown', 'seed:expired', 'ground:expired', 'chat', 'emote', 'pet:trick', 'boss:hit']);
 
 /** Intent for a remote player, built from their 'in' messages (edges arrive with sequence numbers). */
 export class RemoteController {
   constructor() {
     this.held = false;
     this.release = false; // report one released tick (a fresh press while still held)
+    this.sellHeld = false; // the Sell button: the same, on its own
+    this.sellRelease = false;
     this.sel = null;
     this.q = []; // pending one-shot actions: ['j'|'b'|'u'|'m'|'s', value]
   }
@@ -31,6 +34,8 @@ export class RemoteController {
     const it = emptyIntent();
     it.interact = this.held && !this.release;
     this.release = false;
+    it.sell = this.sellHeld && !this.sellRelease;
+    this.sellRelease = false;
     if (this.sel != null) {
       it.selectSlot = this.sel;
       this.sel = null;
@@ -63,6 +68,7 @@ export class HostRole {
     this.epoch = epoch;
     this.order = order ? order.slice() : [s.pid];
     this.members = new Map(); // pid -> member (remote humans only)
+    this.mailKept = new Map(); // pid -> pet mail their device never acked before their garden went (given back on rejoin)
     this.banned = new Set(banned || []); // removed by a host of this room: never seated again
     this.bannedDirty = this.banned.size > 0;
     this.seq = 0;
@@ -75,6 +81,7 @@ export class HostRole {
     this.limitIn = new RateLimiter(40, 60);
     this.limitHello = new RateLimiter(1, 4);
     this.limitAct = new RateLimiter(6, 16); // shop/look/gift/trade actions per member
+    this.limitTrick = new RateLimiter(4, 8); // pet tricks: their own budget, so clicking pets never blocks a purchase
     this.forceKey = true;
     this.off = [
       bus.on('*', ({ name, payload }) => {
@@ -167,6 +174,12 @@ export class HostRole {
       console.warn('[net] could not load a joiner\'s garden; starting them fresh', e);
       p = g.setSlot(slot, { kind: 'remote', profile, pid });
     }
+    // pet trades they never got to apply (they dropped out): their device's mailDone list skips any it already did
+    const mail = this.mailKept.get(pid);
+    if (mail) {
+      this.mailKept.delete(pid);
+      p.petMail = [...mail, ...p.petMail].slice(-8);
+    }
     const ctrl = new RemoteController();
     p.controller = ctrl;
     p.remoteMotion = true;
@@ -182,7 +195,7 @@ export class HostRole {
       pid, slot: p.slot, ctrl, up: null,
       base: { x: p.pos.x, y: p.pos.y, z: p.pos.z, vx: 0, vy: 0, vz: 0, tx: 0, tz: 0, yaw: p.yaw, og: true, t: this.s.clock, c: null },
       ex: { x: p.pos.x, y: p.pos.y, z: p.pos.z },
-      lastIn: this.s.clock, goneAt: null, lastEdge: 0, ip: 0, welcomedAt: -9, hn: null,
+      lastIn: this.s.clock, goneAt: null, lastEdge: 0, ip: 0, sp: 0, welcomedAt: -9, hn: null,
       show: { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw },
       kick: 0, kickPending: false, kickAt: 0, kickTries: 0, kickGraceUntil: 0, needKick: false, fixAt: 0,
     };
@@ -217,6 +230,7 @@ export class HostRole {
           m.up.subscribe().catch(() => {});
         } else {
           this.s.forgetWho(p.pid);
+          this._keepMail(p);
           this._toBot(p.slot);
           this.fillSlots();
         }
@@ -224,12 +238,30 @@ export class HostRole {
         p.controller = new BotController(p.char.personality, g.difficultyId);
       }
     }
+    if (!this.s.room?.private) this.fillSlots(); // (public rooms never keep a computer player)
     this.order = this.order.filter((pid) => pid === this.s.pid || this.members.has(pid));
     this.order = [this.s.pid, ...this.order.filter((x) => x !== this.s.pid)];
     for (const pid of this.members.keys()) if (!this.order.includes(pid)) this.order.push(pid);
     this.orderDirty = true;
     g.paused = false;
     this.forceKey = true;
+  }
+
+  // A person loses their garden (left, dropped, not there after a host change): the pet mail their device hasn't
+  // acked would go with it (setSlot), and with it half of a trade. Keep it for when that device comes back.
+  _keepMail(p) {
+    if (!p?.pid || !p.petMail.length) return;
+    this.mailKept.delete(p.pid);
+    this.mailKept.set(p.pid, p.petMail.map((m) => ({ tid: m.tid, give: [...m.give], get: m.get.map((x) => ({ ...x })) })));
+    if (this.mailKept.size > 16) this.mailKept.delete(this.mailKept.keys().next().value);
+  }
+
+  /** Seconds since a remote player's device was last heard from (Infinity once it left the room's presence; 0
+   *  for everyone else). A trade doesn't finish with a device that isn't listening (social/trades.js). */
+  silentFor(p) {
+    const m = p?.kind === 'remote' ? this.members.get(p.pid) : null;
+    if (!m || m.slot !== p.slot) return 0;
+    return m.goneAt != null ? Infinity : this.s.clock - m.lastIn;
   }
 
   _toBot(slot) {
@@ -242,10 +274,12 @@ export class HostRole {
 
   /**
    * Gardens nobody plays get a computer player, up to game.maxBots (the room's "Computer players" setting);
-   * the rest stay empty. Bots that are over the limit leave (the last gardens first).
+   * the rest stay empty. Bots that are over the limit leave (the last gardens first). Public rooms (Quick
+   * Play, the room list) are people only: no computer players there, whatever was asked.
    */
   fillSlots() {
     const g = this.game;
+    if (!this.s.room?.private) g.maxBots = 0;
     const open = g.players.filter((p) => !p.isPlayer);
     const want = Math.max(0, Math.min(g.maxBots, open.length));
     let bots = open.filter((p) => p.kind === 'bot').length;
@@ -270,7 +304,7 @@ export class HostRole {
   setMaxBots(n) {
     const g = this.game;
     const v = Math.max(0, Math.min(CHARACTERS.length - 1, Math.round(Number(n) || 0)));
-    if (v === g.maxBots) return false;
+    if (v === g.maxBots || !this.s.room?.private) return false;
     g.maxBots = v;
     this.fillSlots();
     return true;
@@ -284,6 +318,8 @@ export class HostRole {
     this.limitIn.forget(pid);
     this.order = this.order.filter((x) => x !== pid);
     this.orderDirty = true;
+    const p = this.game.players[m.slot];
+    if (p?.pid === pid) this._keepMail(p);
     this._toBot(m.slot);
     this.fillSlots();
     this.s.forgetWho(pid);
@@ -335,6 +371,13 @@ export class HostRole {
       m.ip = msg.ip;
     }
     ctrl.held = held;
+    // held Sell, the same way
+    const sh = !!msg.s;
+    if (Number.isInteger(msg.sp) && msg.sp !== m.sp) {
+      if (ctrl.sellHeld && sh) ctrl.sellRelease = true;
+      m.sp = msg.sp;
+    }
+    ctrl.sellHeld = sh;
     if (Number.isInteger(msg.sel) && msg.sel >= 0 && msg.sel < ITEMS.length && msg.sel !== p.selectedItem) ctrl.sel = msg.sel;
     if (m.kickPending && Number.isInteger(msg.ka) && msg.ka >= m.kick) {
       m.kickPending = false;
@@ -362,7 +405,8 @@ export class HostRole {
     } else if (k === 's') {
       if (own(PHRASE, v)) ctrl.push('s', v);
     } else if (k === 'a' && Array.isArray(v) && typeof v[0] === 'string') {
-      if (this.limitAct.allow(m.pid, this.s.clock)) this.act(p, v[0], Array.isArray(v[1]) ? v[1].slice(0, 4) : []);
+      const limit = v[0] === 'petTrick' ? this.limitTrick : this.limitAct;
+      if (limit.allow(m.pid, this.s.clock)) this.act(p, v[0], Array.isArray(v[1]) ? v[1].slice(0, 4) : []);
     }
   }
 
@@ -544,8 +588,13 @@ export class HostRole {
         const to = g.players[int(args[0], 0, 3, -1)];
         return to ? g.giftPlant(p, to, int(args[1], 0, WORLD.planterCount - 1, -1)) : false;
       }
+      case 'petMailAck': // their device applied a pet trade (ui/pets.js): stop sending it
+        return isId(args[0]) ? g.petMailAck(p, args[0]) : false;
+      case 'petTrick': // ownerSlot, pet index, the trick their device already started (kept if that pet knows it)
+        return !!g.petTrick(p, int(args[0], 0, 3, -1), int(args[1], 0, 2, -1), isId(args[2]) ? args[2] : null);
       case 'addCash':
         return false; // quest cash is banked on the device for solo play; online nobody prints money
+      case 'chat': return postTyped(g, p, args[0], this.s.clock); // typed chat: filtered again, rate limited per player
       case 'emote':
       case 'say': {
         const id = args[0];
@@ -588,7 +637,7 @@ export class HostRole {
       m.ex.x = p.pos.x;
       m.ex.y = p.pos.y;
       m.ex.z = p.pos.z;
-      if (now - m.lastIn > 1.3) m.ctrl.held = false; // lost contact: let go of the E key
+      if (now - m.lastIn > 1.3) m.ctrl.held = m.ctrl.sellHeld = false; // lost contact: let go of E and Sell
     }
     g.paused = false; // an online world never pauses (the pause menu is just an overlay)
     g.update(dt);

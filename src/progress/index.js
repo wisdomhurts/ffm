@@ -1,7 +1,8 @@
 // Quests, badges, stars and lifetime counters. OWNER: progress agent (docs/ONLINE.md "Progress").
 // attachProgress(app) is called once at boot (main.js) and becomes `app.progress`:
-//   the tracker API (quests(), claim(i), swap(i), bonus(), claimBonus(), badges(), bests(), stars, ...; see
-//   tracker.js) plus the celebration toasts. The HUD chip and the panel live in ui/progress.js.
+//   the tracker API (quests(), claim(i), swap(i), bonus(), claimBonus(), badges(), bests(), almanac(), collections(),
+//   stars, ...; see tracker.js) plus the celebration toasts. The HUD chip and the panel live in ui/progress.js,
+//   the collection finale in celebrate.js.
 import { createTracker } from './tracker.js';
 import { installProgressUI } from '../ui/progress.js';
 

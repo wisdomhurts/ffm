@@ -3,8 +3,9 @@
 // the rest are recipe-specific options. Works on any BaseAudioContext.
 import {
   tone, noise, bell, steelPan, marimba, harp, brass, pad, kick, tom, cymbal,
-  formantVoice, growl, finish, kit, mtof, clamp,
+  formantVoice, growl, finish, kit, mtof, clamp, snare,
 } from './synth.js';
+import { RARITY } from '../config.js';
 
 const V = (o, x) => x * (o.vol ?? 1);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -30,6 +31,12 @@ export const GROWLS = {
   gummy: { gain: 0.6, f0: 185, rough: 58, formant: 1350, q: 9, noise: 0.1, dur: 0.5, contour: [0.7, 1.6, 1.15] },
   // slow thunder rumble with electric crackle
   storm: { gain: 1.3, f0: 44, rough: 9, formant: 400, q: 3, noise: 0.9, dur: 1.3, contour: [1, 1.12, 0.55], clicks: true },
+  // gravelly rock grind with clattering pebbles
+  golem: { gain: 1.35, f0: 48, rough: 31, formant: 470, q: 4, noise: 0.55, dur: 1.05, contour: [0.8, 1.15, 0.62], clicks: true },
+  // bubbly blub that swells up as it puffs
+  puffer: { gain: 0.6, f0: 160, rough: 70, formant: 900, q: 10, noise: 0.15, dur: 0.6, contour: [0.6, 1.45, 1.7] },
+  // whooshing roar with a twinkly starry shimmer
+  comet: { gain: 1.0, f0: 70, rough: 14, formant: 820, q: 4, noise: 0.85, dur: 1.15, contour: [1.2, 1.35, 0.6], ethereal: true },
 };
 
 function oof(ac, out, t, o) {
@@ -136,7 +143,7 @@ export const SFX = {
   // ---------------------------------------------------------------- seeds & plants
   /** o.tier 0..9 (rarity; 9 = Secret, the sound tops out at 6), o.mutation */
   grab(ac, out, t, o) {
-    const secret = (o.tier ?? 0) >= 9;
+    const secret = (o.tier ?? 0) >= RARITY.secret.tier;
     const tier = clamp(o.tier ?? 0, 0, 6);
     const mut = o.mutation || 'normal';
     const base = 76 + tier * 2;
@@ -458,6 +465,112 @@ export const SFX = {
       tone(ac, out, tt, { f0: rnd(500, 900), f1: 180, sweep: 0.04, dur: 0.07, attack: 0.001, vol: V(o, 0.15) });
     }
   },
+  /** A hidden Golden Gnome giggles "hee-hee-hee!" (positional: it leads you to it) with a little twinkle. */
+  gnomeGiggle(ac, out, t, o) {
+    const f0 = rnd(540, 600);
+    [1.12, 1.0, 0.9, 0.95].forEach((r, i) => {
+      formantVoice(ac, out, t + i * 0.12, {
+        f0: f0 * r, rise: 1.08, drop: 0.86, dur: 0.085, vol: V(o, 0.22 - i * 0.02),
+        formants: [[330, 7, 1.6], [2500, 10, 1.1], [3300, 12, 0.5]],
+        fric: { f: 3800, dur: 0.03, vol: V(o, 0.025) },
+      });
+    });
+    bell(ac, out, t + 0.5, mtof(98), { ratio: 2, index: 0.6, vol: V(o, 0.05), decay: 0.4, send: o.send });
+  },
+  /** You found a Golden Gnome: a sparkly run up to a gold chime (o.all: every gnome found, a bigger finish). */
+  gnomeFound(ac, out, t, o) {
+    sparkleRun(ac, out, t, 84, 8, V(o, 0.09), o.send, 0.04);
+    [88, 91, 96].forEach((m, i) => bell(ac, out, t + 0.28 + i * 0.09, mtof(m), { ratio: 1.0, index: 0.35, vol: V(o, 0.13), decay: 1.0, send: o.send }));
+    SFX.gnomeGiggle(ac, out, t + 0.62, { ...o, vol: (o.vol ?? 1) * 0.8 });
+    if (o.all) {
+      [60, 64, 67, 72].forEach((m) => brass(ac, out, t + 0.5, m, V(o, 0.1), 0.9, { send: o.send }));
+      cymbal(ac, out, t + 0.5, V(o, 0.2), 1.4);
+    }
+  },
+  /** A pet does a trick: a springy boing (walkers) or a happy two-note chirp (flyers, o.fly), plus a sparkle. */
+  petTrick(ac, out, t, o) {
+    if (o.fly) {
+      for (let i = 0; i < 2; i++) {
+        tone(ac, out, t + i * 0.09, { f0: rnd(1250, 1400), f1: rnd(2200, 2500), sweep: 0.06, dur: 0.09, attack: 0.003, vol: V(o, 0.15), vib: { rate: 34, depth: 0.03 } });
+      }
+    } else {
+      tone(ac, out, t, { type: 'triangle', f0: 190, pts: [[0.12, 620], [0.36, 300]], dur: 0.42, attack: 0.004, vol: V(o, 0.3), vib: { rate: 15, depth: 0.12, fade: 0.2 } });
+    }
+    [88, 93].forEach((m, i) => bell(ac, out, t + 0.1 + i * 0.07, mtof(m), { ratio: 2, index: 0.7, vol: V(o, 0.06), decay: 0.45, send: o.send }));
+  },
+  /** Giant Harvests: a snare drumroll that speeds up for o.reveal seconds, then the reveal sting.
+   *  o.size: 'big' (a happy pan run) | 'giant' (brass + crash) | 'titan' (the works). */
+  drumroll(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    const T = t + (o.reveal ?? 1.2);
+    for (let tt = t, gap = 0.1, i = 0; tt < T - 0.03; tt += gap, gap = Math.max(0.045, gap * 0.92), i++) {
+      snare(ac, out, tt, (0.18 + 0.4 * ((tt - t) / (T - t))) * v);
+      if (i % 3 === 0) tom(ac, out, tt, 110, 0.12 * v);
+    }
+    if (o.size === 'big') {
+      [77, 81, 84, 89].forEach((m, i) => steelPan(ac, out, T + i * 0.06, m, 0.8 * v, { send: o.send }));
+      return;
+    }
+    kick(ac, out, T, 0.6 * v);
+    cymbal(ac, out, T, (o.size === 'titan' ? 0.6 : 0.45) * v, o.size === 'titan' ? 2.2 : 1.4);
+    const chord = o.size === 'titan' ? [53, 57, 60, 65, 69] : [60, 64, 67, 72];
+    chord.forEach((m) => brass(ac, out, T, m, 0.75 * v, o.size === 'titan' ? 1.1 : 0.6, { send: o.send }));
+    [84, 88, 91, 96].forEach((m, i) => bell(ac, out, T + 0.12 + i * 0.07, mtof(m), { ratio: 2, index: 0.9, vol: V(o, 0.1), decay: 1.1, send: o.send }));
+    if (o.size === 'titan') {
+      pad(ac, out, T, [65, 69, 72, 77], 1.2 * v, 2.4);
+      for (let i = 0; i < 10; i++) harp(ac, out, T + 0.3 + i * 0.06, 77 + [0, 2, 4, 7, 9][i % 5] + 12 * Math.floor(i / 5), 0.45 * v, { decay: 0.9, send: o.send });
+    }
+  },
+  /** Family Hero: you saved someone else's plant. A bright brass fanfare with a sparkle. */
+  hero(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    [[67, 0], [72, 0.12], [76, 0.24]].forEach(([m, d]) => brass(ac, out, t + d, m, 0.75 * v, d === 0.24 ? 0.7 : 0.14, { send: o.send }));
+    [79, 84, 88, 91].forEach((m, i) => steelPan(ac, out, t + 0.36 + i * 0.05, m, 0.7 * v, { send: o.send }));
+    cymbal(ac, out, t + 0.24, 0.35 * v, 1.2);
+  },
+
+  // ---------------------------------------------------------------- Big Chomp (the world boss)
+  /** Here it comes: a goofy wee-woo siren, a slide whistle and a hungry rumble. */
+  bossSiren(ac, out, t, o) {
+    o = { ...o, vol: (o.vol ?? 1) * 0.8 };
+    for (let i = 0; i < 2; i++) {
+      const s = t + i * 0.62;
+      const env = { attack: 0.02, hold: 0.45, dur: 0.6 };
+      tone(ac, out, s, { ...env, type: 'triangle', f0: 640, pts: [[0.26, 900], [0.3, 900], [0.58, 620]], vol: V(o, 0.17), vib: { rate: 7, depth: 0.02 } });
+      tone(ac, out, s, { ...env, type: 'square', f0: 320, pts: [[0.26, 450], [0.58, 310]], vol: V(o, 0.03) });
+    }
+    tone(ac, out, t + 1.3, { f0: 300, f1: 1400, sweep: 0.42, dur: 0.5, attack: 0.03, hold: 0.3, vol: V(o, 0.14), vib: { rate: 6, depth: 0.03 } });
+    growl(ac, out, t + 1.78, { ...GROWLS.gummy, f0: 92, dur: 0.75, vol: V(o, 0.3) });
+  },
+  /** A bonk on its squishy body: a rubbery boing and a pop (pitch climbs as it weakens: o.low 0..1). */
+  bossHit(ac, out, t, o) {
+    const up = 1 + (o.low ?? 0) * 0.5;
+    bonkKnock(ac, out, t, { ...o, vol: (o.vol ?? 1) * 0.8 }, 0.62 * up);
+    tone(ac, out, t + 0.03, { type: 'triangle', f0: 140 * up, pts: [[0.1, 330 * up], [0.3, 180 * up]], dur: 0.34, vol: V(o, 0.22), vib: { rate: 18, depth: 0.1, fade: 0.12 } });
+    noise(ac, out, t + 0.02, { filter: 'bandpass', f0: 2600, q: 3, dur: 0.05, attack: 0.001, vol: V(o, 0.3) });
+  },
+  /** POP! A giant balloon pop, a shower of confetti pops and a happy fanfare. */
+  bossPop(ac, out, t, o) {
+    const v = o.vol ?? 1;
+    noise(ac, out, t, { filter: 'lowpass', f0: 3200, f1: 400, sweep: 0.25, dur: 0.35, attack: 0.001, vol: V(o, 0.9) });
+    kick(ac, out, t, 0.9 * v);
+    cymbal(ac, out, t + 0.02, 0.5 * v, 1.6);
+    for (let i = 0; i < 8; i++) {
+      const tt = t + 0.12 + i * rnd(0.05, 0.11);
+      noise(ac, out, tt, { filter: 'bandpass', f0: rnd(1200, 2800), q: 1.5, dur: 0.05, attack: 0.001, vol: V(o, 0.22) });
+    }
+    [72, 76, 79, 84].forEach((m, i) => brass(ac, out, t + 0.25 + i * 0.12, m, 0.7 * v, i === 3 ? 0.8 : 0.2, { send: o.send }));
+    [84, 88, 91, 96].forEach((m, i) => bell(ac, out, t + 0.7 + i * 0.06, mtof(m), { ratio: 2, index: 0.9, vol: V(o, 0.1), decay: 1.2, send: o.send }));
+  },
+  /** BUUUURP (time's up: it crawls away). */
+  bossBurp(ac, out, t, o) {
+    formantVoice(ac, out, t, {
+      f0: 70, rise: 1.15, drop: 0.6, dur: 0.95, vol: V(o, 0.75),
+      formants: [[420, 5, 2.4], [760, 7, 1.4], [2300, 10, 0.3]],
+      fric: { f: 900, dur: 0.3, vol: V(o, 0.05) },
+    });
+    noise(ac, out, t, { filter: 'lowpass', f0: 500, dur: 0.9, attack: 0.05, vol: V(o, 0.2), lfo: { rate: 23, depth: 260 } });
+  },
 };
 
 // ------------------------------------------------------------------ loops (start/stop handles)
@@ -565,4 +678,7 @@ export const SFX_GAP = {
   lockOn: 0.2, lockOff: 0.2, item: 0.06, purchase: 0.08, speedUp: 0.15, unlock: 0.15, event: 1, rebirth: 1,
   stolen: 0.5, yoink: 0.3, heist: 0.5, robbed: 0.5, saved: 0.4, dropped: 0.2, shopBell: 0.4, confetti: 0.3,
   boost: 0.2, pump: 0.5, egg: 0.1, baseUp: 1,
+  gnomeGiggle: 1, gnomeFound: 0.5,
+  petTrick: 0.12,
+  drumroll: 0.3, hero: 0.8, bossSiren: 2, bossHit: 0.05, bossPop: 1, bossBurp: 1,
 };

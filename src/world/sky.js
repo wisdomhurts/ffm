@@ -1,8 +1,9 @@
-// Sky dome (gradient, sun/moon, stars, galaxy), blocky clouds, per-biome ambience blending and
+// Sky dome (gradient, sun/moon, stars, galaxy, aurora), blocky clouds, per-biome ambience blending and
 // weather (Golden Hour, Diamond Night, Rainbow Rain) with camera-following particle fields.
 import * as THREE from 'three';
 import { BIOMES } from '../config.js';
 import { Merger, makeRand, uTime } from './kit.js';
+import { LOOK } from '../core/shaderfx.js';
 
 // ------------------------------------------------------------------ palettes
 
@@ -12,7 +13,7 @@ function palette(p) {
     skyTop: C(p.skyTop), skyHorizon: C(p.skyHorizon), fog: C(p.fog), fogNear: p.fogNear, fogFar: p.fogFar,
     hemiSky: C(p.hemiSky), hemiGround: C(p.hemiGround), hemi: p.hemi, sun: C(p.sun), sunI: p.sunI,
     sunDir: new THREE.Vector3(...(p.sunDir || [40, 80, -30])).normalize(), sunGlow: C(p.sunGlow || p.sun),
-    stars: p.stars || 0, galaxy: p.galaxy || 0, night: p.night || 0,
+    stars: p.stars || 0, galaxy: p.galaxy || 0, night: p.night || 0, aurora: p.aurora || 0,
     cloud: C(p.cloud || '#ffffff'), cloudEm: C(p.cloudEm || '#8595a8'), exposure: p.exposure ?? 1.05,
     resist: p.resist || 0, // how much a strong biome mood holds out against the weather (0..1)
   };
@@ -33,7 +34,14 @@ const ZONE = {
   candy: palette({ skyTop: '#ff8fd0', skyHorizon: '#ffe4f2', fog: '#ffd4ea', fogNear: 80, fogFar: 400, hemiSky: '#fff0f8', hemiGround: '#e89cc2', hemi: 1.25, sun: '#fff0dc', sunI: 2.1, sunGlow: '#fff2c8', cloud: '#ffe6f4', cloudEm: '#d88ab8', exposure: 1.02, resist: 0.5 }),
   // heavenly golden light high above the clouds: bright, warm and soft, white-gold haze
   cloud: palette({ skyTop: '#4aa2ff', skyHorizon: '#fff0c8', fog: '#fff5e2', fogNear: 110, fogFar: 460, hemiSky: '#fffaf0', hemiGround: '#f4e8cc', hemi: 1.65, sun: '#ffe6b0', sunI: 2.1, sunGlow: '#ffd27a', sunDir: [60, 50, -50], cloud: '#ffffff', cloudEm: '#c8b48a', exposure: 1.08, resist: 0.5 }),
+  // violet-teal cavern twilight: a deep purple sky glowing teal at the horizon, low fog, a pale moon and a few stars
+  caverns: palette({ skyTop: '#241052', skyHorizon: '#3fb8c0', fog: '#4a4690', fogNear: 30, fogFar: 260, hemiSky: '#c4b4ff', hemiGround: '#3a7a88', hemi: 1.5, sun: '#d8ccff', sunI: 1.5, sunGlow: '#9fe8ff', sunDir: [-40, 65, -35], stars: 0.6, night: 0.6, cloud: '#5a4a8a', cloudEm: '#20183a', exposure: 1.12, resist: 1 }),
+  // under the sea: sunlight from high above, blue-green haze, warm bounce off the sand and coral
+  reef: palette({ skyTop: '#0b74b8', skyHorizon: '#7fe8dc', fog: '#58c4d0', fogNear: 45, fogFar: 300, hemiSky: '#c4f6ff', hemiGround: '#ffcfae', hemi: 1.45, sun: '#fffaf0', sunI: 2.0, sunGlow: '#c8ffff', sunDir: [35, 70, -30], cloud: '#c8f4f4', cloudEm: '#4a9aa8', exposure: 1.05, resist: 0.7 }),
+  // an aurora sunset: twilight indigo overhead with stars and aurora ribbons, peach-pink at the horizon
+  rainbowend: palette({ skyTop: '#3a2a84', skyHorizon: '#ffb48c', fog: '#ffcce4', fogNear: 90, fogFar: 420, hemiSky: '#fff0fa', hemiGround: '#d8c4ff', hemi: 1.35, sun: '#ffd8b8', sunI: 1.7, sunGlow: '#ff9a7a', sunDir: [-35, 20, 80], stars: 1, night: 0.15, aurora: 1, cloud: '#ffd6ec', cloudEm: '#b07ab8', exposure: 1.04, resist: 0.8 }),
 };
+export { ZONE };
 const ZONES = [ZONE.plaza, ...BIOMES.map((b) => ZONE[b.id] || ZONE.field)];
 // zone index of a biome id (0 = plaza if unknown)
 const zoneOf = (id) => 1 + BIOMES.findIndex((b) => b.id === id);
@@ -68,6 +76,7 @@ function createSkyDome() {
       uStars: { value: 0 },
       uGalaxy: { value: 0 },
       uNight: { value: 0 },
+      uAurora: { value: 0 },
       uTime,
     },
     vertexShader: `
@@ -80,7 +89,7 @@ function createSkyDome() {
     fragmentShader: `
       uniform vec3 uTop, uHorizon, uSun;
       uniform vec3 uSunDir;
-      uniform float uStars, uGalaxy, uNight, uTime;
+      uniform float uStars, uGalaxy, uNight, uAurora, uTime;
       varying vec3 vDir;
       float h31(vec3 p){ p = fract(p*0.1031); p += dot(p, p.zyx+31.32); return fract((p.x+p.y)*p.z); }
       float vn3(vec3 p){ vec3 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -104,6 +113,9 @@ function createSkyDome() {
         col = mix(col, uHorizon, (1.0 - smoothstep(0.0, 0.08, up)) * 0.5);
         float sd = max(dot(d, normalize(uSunDir)), 0.0);
         col += uSun * (pow(sd, 6.0) * 0.18 + pow(sd, 48.0) * 0.35) * (1.0 - 0.5*uNight);
+        // forward scattering: the low sky glows warmer on the sun's side
+        float hz = 1.0 - up;
+        col += uSun * pow(sd, 3.0) * hz * hz * 0.14 * (1.0 - 0.6*uNight);
         // disc: sun by day, pale moon at night
         float disc = smoothstep(0.9975, 0.9982, sd);
         vec3 discCol = mix(uSun * 1.6 + 0.4, vec3(0.92, 0.95, 1.0), uNight);
@@ -121,8 +133,24 @@ function createSkyDome() {
           float s = starLayer(d, 150.0, 0.92, 0.0) + starLayer(d, 320.0, 0.94, 17.0) * 0.7;
           col += vec3(1.0, 0.97, 0.9) * s * uStars * smoothstep(-0.02, 0.25, h);
         }
+        if (uAurora > 0.01) {
+          // two drifting aurora ribbons: a bright lower hem and soft streaky curtains above it, green-teal to pink
+          float az = atan(d.z, d.x);
+          float wob = vn3(vec3(d.x * 2.5, uTime * 0.05, d.z * 2.5)) * 0.12;
+          for (int k = 0; k < 2; k++) {
+            float fk = float(k);
+            float hem = 0.2 + fk * 0.13 + 0.06 * sin(az * (2.0 + fk) + uTime * (0.05 + fk * 0.03) + fk * 2.0) + wob;
+            float above = h - hem;
+            float curtain = smoothstep(-0.015, 0.01, above) * exp(-max(above, 0.0) * (9.0 - fk * 2.0));
+            float streak = 0.55 + 0.45 * sin(az * 70.0 + vn3(d * 9.0 + fk * 5.0 + uTime * 0.12) * 9.0);
+            vec3 acol = mix(vec3(0.35, 1.0, 0.75), vec3(1.0, 0.45, 0.9), clamp(above * 5.0 + fk * 0.45, 0.0, 1.0));
+            col += acol * curtain * streak * (0.55 - fk * 0.15) * uAurora;
+          }
+        }
         gl_FragColor = vec4(col, 1.0);
         #include <colorspace_fragment>
+        // dither by a fraction of an 8-bit step so the long smooth gradients don't band
+        gl_FragColor.rgb += (h31(vec3(gl_FragCoord.xy, 7.0)) - 0.5) / 255.0;
       }`,
     side: THREE.BackSide,
     depthWrite: false,
@@ -150,7 +178,41 @@ function createClouds(count) {
   ];
   for (const [x, y, z, w, h, d] of puffs) g.box(x, y, z, w, h, d, '#d6e2ee', { top: '#ffffff', ao: 0 });
   const geo = g.buildGeometry();
-  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff, fog: false });
+  // Still blocky, but lit: wrap lighting from the sun, shaded bellies, a silver lining when the sun is behind
+  // them and a slow breathing swell (no extra draw calls).
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(1, 1, 1) }, uShade: { value: new THREE.Color('#8595a8') }, uSunDir: LOOK.sunDir, uSunCol: LOOK.sunColor, uTime },
+    vertexColors: true,
+    vertexShader: `
+      uniform float uTime;
+      varying vec3 vCol; varying vec3 vN; varying vec3 vV; varying float vH;
+      void main(){
+        vec3 ip = instanceMatrix[3].xyz;
+        vec3 p = position * (1.0 + 0.035 * sin(uTime * 0.35 + (ip.x * 0.013 + ip.z * 0.017) * 6.0));
+        vec4 wp = modelMatrix * instanceMatrix * vec4(p, 1.0);
+        vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+        vV = normalize(cameraPosition - wp.xyz);
+        vCol = color;
+        vH = clamp((position.y + 2.5) / 12.5, 0.0, 1.0);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor, uShade, uSunDir, uSunCol;
+      varying vec3 vCol; varying vec3 vN; varying vec3 vV; varying float vH;
+      void main(){
+        vec3 n = normalize(vN);
+        float lit = dot(n, uSunDir) * 0.5 + 0.5;
+        vec3 col = vCol * uColor * (0.74 + 0.4 * lit);
+        // soft lavender-grey bellies, sunlit tops
+        col = mix(col, uShade * 1.15, (1.0 - vH) * 0.5 * (1.0 - 0.5 * lit));
+        float edge = 1.0 - abs(dot(n, vV));
+        col += uSunCol * edge * edge * (0.1 + 0.6 * pow(max(dot(-vV, uSunDir), 0.0), 4.0));
+        gl_FragColor = vec4(col, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    fog: false,
+  });
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   mesh.frustumCulled = false;
   mesh.name = 'clouds';
@@ -188,8 +250,9 @@ function createClouds(count) {
  * Camera-following point sprites computed entirely on the GPU (no per-frame CPU work).
  * anchor: 'world' keeps y in [y0, y0+box.y] in world space (fireflies, embers); 'camera' centres on the camera.
  * colors: a list of up to 3 colours picked per particle (sprinkles) instead of a blend of color..color2.
+ * ring: draw each one as a bubble (a thin rim and a highlight); rainbow: pastel hues that slowly cycle.
  */
-function particleField({ count, box, size, color, color2, colors = null, vel = [0, 0, 0], twinkle = 0.5, wobble = 1, anchor = 'camera', y0 = 0, seed = 1, blending = THREE.AdditiveBlending }) {
+function particleField({ count, box, size, color, color2, colors = null, vel = [0, 0, 0], twinkle = 0.5, wobble = 1, anchor = 'camera', y0 = 0, seed = 1, blending = THREE.AdditiveBlending, ring = 0, rainbow = 0, star = 0 }) {
   const r = makeRand(seed);
   const pos = new Float32Array(count * 3);
   const rnd = new Float32Array(count * 4);
@@ -214,6 +277,9 @@ function particleField({ count, box, size, color, color2, colors = null, vel = [
       uColor2: { value: new THREE.Color(colors ? colors[1] : color2 || color) },
       uColor3: { value: new THREE.Color(colors ? colors[2] || colors[1] : color2 || color) },
       uPick: { value: colors ? 1 : 0 },
+      uRing: { value: ring },
+      uStar: { value: star },
+      uRainbow: { value: rainbow },
       uTwinkle: { value: twinkle },
       uWobble: { value: wobble },
       uWorld: { value: anchor === 'world' ? 1 : 0 },
@@ -242,16 +308,24 @@ function particleField({ count, box, size, color, color2, colors = null, vel = [
         gl_PointSize = min(uSize * (0.6 + aRand.z*0.8) * uScale / max(1.0, -mv.z), 40.0);
       }`,
     fragmentShader: `
-      uniform vec3 uColor, uColor2, uColor3; uniform float uOpacity, uPick;
+      uniform vec3 uColor, uColor2, uColor3; uniform float uOpacity, uPick, uRing, uStar, uRainbow, uTime;
       varying float vA; varying float vMix;
       void main(){
         vec2 c = gl_PointCoord - 0.5;
         float d = length(c);
         float core = smoothstep(0.5, 0.0, d);
-        float a = core*core * vA * uOpacity;
+        float bubble = smoothstep(0.5, 0.43, d) * smoothstep(0.3, 0.42, d) + smoothstep(0.15, 0.0, length(c + 0.14));
+        // soft glow with a hot centre; star fields add a four-point twinkle
+        float soft = core * core * 0.8 + smoothstep(0.16, 0.0, d) * 0.4;
+        vec2 ac = abs(c);
+        float rays = max(smoothstep(0.07, 0.0, ac.x) * smoothstep(0.5, 0.0, ac.y), smoothstep(0.07, 0.0, ac.y) * smoothstep(0.5, 0.0, ac.x));
+        soft = mix(soft, max(soft * 0.75, rays), uStar);
+        float a = mix(soft, bubble, uRing) * vA * uOpacity;
         if (a < 0.01) discard;
         vec3 pick = vMix < 0.34 ? uColor : (vMix < 0.67 ? uColor2 : uColor3);
-        vec3 col = (uPick > 0.5 ? pick : mix(uColor, uColor2, vMix)) * (0.8 + core);
+        vec3 base = uPick > 0.5 ? pick : mix(uColor, uColor2, vMix);
+        if (uRainbow > 0.5) base = clamp(abs(mod((vMix + uTime*0.08)*6.0 + vec3(0.0,4.0,2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0) * 0.6 + 0.4;
+        vec3 col = base * (0.8 + core * (1.0 + 0.4 * uStar));
         gl_FragColor = vec4(col, a);
         #include <colorspace_fragment>
       }`,
@@ -359,15 +433,21 @@ export function createAmbience(engine, quality, layout) {
   const fx = {
     fireflies: particleField({ count: Math.round(160 * dens + 40), box: [90, 9, 90], size: 0.9, color: '#e8ff7a', color2: '#9dffb0', vel: [0.3, 0.2, 0.4], twinkle: 1, wobble: 1.6, anchor: 'world', y0: 0.6, seed: 11 }),
     embers: particleField({ count: Math.round(220 * dens + 60), box: [90, 40, 90], size: 0.7, color: '#ffb347', color2: '#ff4a1a', vel: [0.6, 3.2, 0.3], twinkle: 0.6, wobble: 1.2, anchor: 'world', y0: 0, seed: 12 }),
-    stardust: particleField({ count: Math.round(200 * dens + 60), box: [100, 34, 100], size: 0.8, color: '#bff4ff', color2: '#ffb8f0', vel: [0, 0.5, 0], twinkle: 1, wobble: 0.8, anchor: 'world', y0: 0.5, seed: 13 }),
+    stardust: particleField({ count: Math.round(200 * dens + 60), box: [100, 34, 100], size: 0.8, color: '#bff4ff', color2: '#ffb8f0', vel: [0, 0.5, 0], twinkle: 1, wobble: 0.8, anchor: 'world', y0: 0.5, seed: 13, star: 1 }),
     pollen: particleField({ count: Math.round(120 * dens + 30), box: [80, 12, 80], size: 0.5, color: '#fffbe0', color2: '#fff2a0', vel: [0.8, 0.1, 0.5], twinkle: 0.3, wobble: 1.5, anchor: 'world', y0: 0.8, seed: 14, blending: THREE.NormalBlending }),
-    sparkles: particleField({ count: Math.round(260 * dens + 60), box: [90, 40, 90], size: 1.0, color: '#ffffff', color2: '#8ff0ff', vel: [0, -0.3, 0], twinkle: 1, wobble: 0.4, anchor: 'camera', seed: 15 }),
+    sparkles: particleField({ count: Math.round(260 * dens + 60), box: [90, 40, 90], size: 1.0, color: '#ffffff', color2: '#8ff0ff', vel: [0, -0.3, 0], twinkle: 1, wobble: 0.4, anchor: 'camera', seed: 15, star: 1 }),
     goldmotes: particleField({ count: Math.round(160 * dens + 40), box: [80, 30, 80], size: 0.8, color: '#ffe08a', color2: '#ffb347', vel: [0.5, 0.6, 0.2], twinkle: 0.7, wobble: 1.2, anchor: 'camera', seed: 16 }),
     snow: particleField({ count: Math.round(320 * dens + 90), box: [80, 40, 80], size: 0.75, color: '#ffffff', color2: '#e4f4ff', vel: [1.2, -5.5, 0.6], twinkle: 0.1, wobble: 1.6, anchor: 'camera', seed: 17, blending: THREE.NormalBlending }),
     sprinkles: particleField({ count: Math.round(220 * dens + 60), box: [80, 30, 80], size: 0.6, colors: ['#ff4f9a', '#4fd8ff', '#ffe14d'], vel: [0.3, -1.2, 0.2], twinkle: 0.5, wobble: 1.4, anchor: 'camera', seed: 18, blending: THREE.NormalBlending }),
     heaven: particleField({ count: Math.round(200 * dens + 60), box: [90, 30, 90], size: 0.9, color: '#ffe27a', color2: '#ffffff', vel: [0.3, 0.9, 0.2], twinkle: 0.9, wobble: 1.3, anchor: 'world', y0: 0.5, seed: 19, blending: THREE.NormalBlending }),
+    glints: particleField({ count: Math.round(200 * dens + 60), box: [90, 28, 90], size: 0.75, colors: ['#9fefff', '#e0b0ff', '#ff9ae8'], vel: [0.1, 0.25, 0.1], twinkle: 1, wobble: 0.6, anchor: 'world', y0: 0.5, seed: 20, star: 1 }),
+    bubbles: particleField({ count: Math.round(160 * dens + 50), box: [80, 40, 80], size: 1.05, color: '#e8ffff', color2: '#9ff0ff', vel: [0.15, 2.4, 0.1], twinkle: 0.15, wobble: 0.9, anchor: 'world', y0: 0, seed: 21, ring: 1 }),
+    prisms: particleField({ count: Math.round(200 * dens + 60), box: [90, 34, 90], size: 0.85, color: '#ffffff', vel: [0.3, 0.5, 0.2], twinkle: 0.9, wobble: 1.3, anchor: 'world', y0: 0.5, seed: 22, rainbow: 1, star: 0.6 }),
   };
-  for (const k in fx) root.add(fx[k]);
+  for (const k in fx) {
+    fx[k].name = 'fx-' + k;
+    root.add(fx[k]);
+  }
   const rain = createRain(Math.round(900 * dens + 300));
   root.add(rain);
   const rainbow = createRainbow();
@@ -463,6 +543,7 @@ export function createAmbience(engine, quality, layout) {
       su.uStars.value = cur.stars;
       su.uGalaxy.value = cur.galaxy;
       su.uNight.value = cur.night;
+      su.uAurora.value = cur.aurora;
       sky.position.copy(cp);
       engine.hemi.color.copy(cur.hemiSky);
       engine.hemi.groundColor.copy(cur.hemiGround);
@@ -472,7 +553,21 @@ export function createAmbience(engine, quality, layout) {
       sunDir.copy(cur.sunDir).multiplyScalar(baseSunLen);
       engine.sunOffset.copy(sunDir);
       engine.renderer.toneMappingExposure = cur.exposure;
-      clouds.mat.color.copy(cur.cloud);
+      // shared look uniforms (rim light on characters, cloud and water lighting), bounce light, reflections
+      LOOK.sunDir.value.copy(cur.sunDir);
+      LOOK.sunColor.value.copy(cur.sunGlow);
+      LOOK.skyColor.value.copy(su.uHorizon.value).lerp(cur.skyTop, 0.5);
+      const bright = cur.hemi * (0.2126 * cur.hemiSky.r + 0.7152 * cur.hemiSky.g + 0.0722 * cur.hemiSky.b);
+      // the rim matters most where the light is dim (night, caverns): stronger there, gentle in full sun
+      LOOK.rimColor.value.copy(cur.hemiSky).lerp(cur.sunGlow, 0.45).multiplyScalar(THREE.MathUtils.clamp(1.25 - 0.5 * bright, 0.6, 1.15));
+      if (engine.fill) {
+        engine.fill.color.copy(cur.hemiGround).lerp(cur.hemiSky, 0.35);
+        engine.fill.intensity = cur.hemi * 0.13;
+        engine.fill.position.set(-cur.sunDir.x, 0.45, -cur.sunDir.z).normalize().multiplyScalar(100);
+      }
+      LOOK.envScale.value = THREE.MathUtils.clamp(bright / 1.15, 0.3, 1.1);
+      clouds.mat.uniforms.uColor.value.copy(cur.cloud);
+      clouds.mat.uniforms.uShade.value.copy(cur.cloudEm);
       clouds.update(t, cp.x, cp.z);
 
       // particles
@@ -486,6 +581,9 @@ export function createAmbience(engine, quality, layout) {
       setFx(fx.snow, zoneW[Z.frostfall] * 0.9);
       setFx(fx.sprinkles, zoneW[Z.candy] * 0.85);
       setFx(fx.heaven, zoneW[Z.cloud] * 0.8);
+      setFx(fx.glints, zoneW[Z.caverns]);
+      setFx(fx.bubbles, zoneW[Z.reef] * 0.9);
+      setFx(fx.prisms, zoneW[Z.rainbowend] * 0.9);
       setFx(fx.sparkles, weather.diamond);
       setFx(fx.goldmotes, weather.golden * 0.8);
       rain.material.uniforms.uOpacity.value = weather.rainbow;

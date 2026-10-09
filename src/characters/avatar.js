@@ -15,13 +15,14 @@
 //   avatar.dispose()
 import * as THREE from 'three';
 import { composeFaceCanvas, FACE_LAYOUT, boostSkin } from './faces.js';
-import { drawOutfit, drawHeadAtlas, drawHairTexture, headRects, atlasRects, TORSO_ATLAS, LIMB_ATLAS, shoeColors, loadFacePrint, facePrintReady, makeCanvas } from './outfits.js';
+import { drawOutfit, drawHeadAtlas, drawHairTexture, headRects, atlasRects, TORSO_ATLAS, LIMB_ATLAS, shoeColors, loadFacePrint, facePrintReady, makeCanvas, hairTone } from './outfits.js';
 import { LEG_H, TORSO_H, ARM_TOP, SHOULDER_Y, HEAD, ADULT_SCALE, KID, TAU, box, part, mergeParts, markShared, clamp01, lerp, damp, smooth } from './rig.js';
 import { hairGeometry, hasTallHair, HAIR_SIDE } from './hair.js';
 import { hatGeometry, accGeometry } from './gear.js';
 import { EMOTE_ANIM } from './emotes.js';
 import { createTrail } from './trails.js';
 import { sanitizeLook, sameLook, HAIR_BY_ID, HAT_BY_ID } from './cosmetics.js';
+import { rimLit } from '../core/shaderfx.js';
 
 const NOODLE_SEG = 1.5; // the noodle is 3 segments = 4.5 studs
 const NOODLE_CURVE = [0.07, -0.07, -0.07]; // gentle permanent bend per segment
@@ -36,6 +37,20 @@ const SLING = { tilt: Math.PI / 4, y: 1.25, z: -0.95, pitch: 0, twist: 0, chin: 
 const SLING_LONG = { y: 1.05, z: -1.55, pitch: -0.08, twist: 0.75, chin: -0.1 };
 const PACK_Z = -1.5;
 const GLOW = 0.2; // soft self-illumination so characters pop against the world
+const HAIR_COOL = new THREE.Color(0xdbe4ff);
+
+// Hair material settings for a colour. Hair glows a little less than the body (GLOW * 0.6); light hair glows
+// less again, or white would blow out in the sun, and its glow is cool so the shade side stays a clean white
+// with its strands showing instead of going flat and grey. A little rougher: no hot specular spot either.
+function hairMatOpts(hc) {
+  const tone = hairTone(hc);
+  const t = Math.max(0, Math.min(1, (tone.lum - 0.74) / 0.21)); // 0 up to blonde and grey, ~1 for white
+  return {
+    roughness: 0.42 + 0.14 * t,
+    emissiveIntensity: GLOW * 0.6 * (1 - 0.45 * t),
+    emissive: tone.cool ? HAIR_COOL : 0xffffff,
+  };
+}
 // the noodle's grip frame inside the baked sling mesh (the hand noodle's frame maps onto it)
 const SLING_BASE = new THREE.Matrix4()
   .makeTranslation(-Math.sin(SLING.tilt) * NOODLE_SEG * 1.5, Math.cos(SLING.tilt) * NOODLE_SEG * 1.5, 0)
@@ -287,7 +302,7 @@ function cosmeticMaterial() {
     sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += vColor.rgb * ${GLOW.toFixed(2)};`);
   };
   m.customProgramCacheKey = () => 'avatar-cosmetic';
-  return m;
+  return rimLit(m, 0.75);
 }
 
 // Which emote poses need the hands (the noodle goes onto the back and is tucked away)
@@ -368,7 +383,8 @@ export function createAvatar(char, faceImage, skinHex, lookArg) {
     // ---- materials (owned by this avatar so opacity can change per player)
     const mats = [];
     const std = (o) => {
-      const m = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, ...o });
+      // sun-side rim light (core/shaderfx.js) so the family stands out from busy ground and dark zones
+      const m = rimLit(new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0, ...o }), 0.75);
       mats.push(m);
       return m;
     };
@@ -380,7 +396,7 @@ export function createAvatar(char, faceImage, skinHex, lookArg) {
       leg: texMat(tex.leg, { roughness: 0.62 }),
       // vertex-coloured: shares its shader with the monsters, so that program compiles with the family
       shoe: std({ vertexColors: true, roughness: 0.4, emissive: 0x000000 }),
-      hair: texMat(tex.hair, { roughness: 0.42, emissiveIntensity: GLOW * 0.6 }),
+      hair: texMat(tex.hair, hairMatOpts(look.hairColor)),
       noodle: texMat(tex.noodle, { roughness: 0.75, emissiveIntensity: GLOW * 1.4 }),
       skirt: tex.skirt ? texMat(tex.skirt, { roughness: 0.42 }) : null,
       cos: null,
@@ -1114,7 +1130,7 @@ export function createHeadBust(lookArg, base = 'dorian') {
   const tex = [canvasTexture(headCanvas), canvasTexture(drawHairTexture(look, skin))];
   const mats = [
     new THREE.MeshStandardMaterial({ map: tex[0], emissive: 0xffffff, emissiveMap: tex[0], emissiveIntensity: GLOW, roughness: 0.66 }),
-    new THREE.MeshStandardMaterial({ map: tex[1], emissive: 0xffffff, emissiveMap: tex[1], emissiveIntensity: GLOW * 0.6, roughness: 0.42 }),
+    new THREE.MeshStandardMaterial({ map: tex[1], emissiveMap: tex[1], ...hairMatOpts(look.hairColor) }),
   ];
   const root = new THREE.Group();
   root.add(new THREE.Mesh(G.head, mats[0]));

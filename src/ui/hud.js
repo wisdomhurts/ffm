@@ -1,13 +1,13 @@
 // In-game HUD. Contract: createHUD(app) -> { update(dt, t), dispose() }
 // Reads app.game / app.human every frame (DOM writes are throttled and change-detected) and listens to `bus`.
 import { Vector3 } from 'three';
-import { ITEMS, BIOMES, RARITY, PLANT, speedAt, WORLD, ROAD_END_Z, biomeIndexAtZ } from '../config.js';
+import { ITEMS, BIOMES, RARITY, PLANT, speedAt, WORLD, ROAD_END_Z, biomeIndexAtZ, TEXT_CHAT } from '../config.js';
 import { bus } from '../core/events.js';
 import { settings } from '../core/settings.js';
 import { load, save } from '../core/save.js';
 import { LAYOUT, gardenContains } from '../gameplay/layout.js';
 import { rarityColor } from '../view/gameView.js';
-import { h, esc, setText, setHTML, setStyle, toggle, money, clock, noFocus, screenAngle, uiSound, setMuted } from './dom.js';
+import { h, esc, setText, setHTML, setStyle, toggle, money, clock, noFocus, screenAngle, uiSound } from './dom.js';
 import { avatarEl } from './avatars.js';
 import { ICON, ITEM_ICONS, EVENT_ICON } from './icons.js';
 import { createAlerts } from './alerts.js';
@@ -21,13 +21,19 @@ import { mountSocial } from './trade.js';
 import { mountQuestChip } from './progress.js';
 import { mountRoomPanel } from './lobby.js';
 import { mountSpeedo } from './speedo.js';
+import { mountChat } from './chat.js';
+import { typedChatAllowed } from '../social/chat.js';
 import { fullscreenButton } from './fullscreen.js';
+import { mountSoundButton } from './soundControls.js';
+import { createSellPrompt, sellHow } from './sell.js';
+import { mountHero } from './hero.js';
+import { createBossBar } from './bossBar.js';
 
 // HUD buttons act on the pointer itself, not on `click`: browsers never synthesise a click for a second
 // finger while another one is down (thumb on the joystick), so items and pause must not wait for one.
 // `when` 'down' fires on press (hotbar), 'up' on release over the button (pause/mute). Keyboard
 // activation (Enter/Space, a click with detail 0) still works.
-function onPress(el, fn, when = 'down') {
+export function onPress(el, fn, when = 'down') {
   let armed = null;
   let firedAt = -1e9; // the click that trails a press can also report detail 0: it must not fire again
   const fire = (e) => {
@@ -99,11 +105,13 @@ export function createHUD(app) {
   }
   tr.appendChild(anchors.room);
   parts.push(createEventChip(app, top));
+  parts.push(createBossBar(app, top)); // Big Chomp's hit points, beside the weather chip
   const alerts = createAlerts(top, root);
   const unwire = me ? wireNotifications(app, alerts) : () => {};
   if (me) {
     parts.push(createRoadMeter(app, root, me));
     parts.push(createPrompt(app, bottom, me));
+    parts.push(createSellPrompt(app, bottom, me)); // Sell has its own button (V): the gold pill
     bottom.appendChild(anchors.social);
     parts.push(createCarry(app, bottom, me));
     parts.push(createHotbar(app, bottom, me, anchors.emote, root));
@@ -112,7 +120,7 @@ export function createHUD(app) {
   parts.push(createKeyHints(app, root));
   parts.push(createMatchClock(app, alerts));
   // feature widgets (each owns its DOM + styles; see docs/ONLINE.md)
-  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel, mountSpeedo]) {
+  if (me) for (const mount of [mountQuestChip, mountEmotes, mountSocial, mountRoomPanel, mountSpeedo, mountHero]) {
     try {
       const w = mount(app, root, anchors);
       if (w) parts.push(w);
@@ -120,6 +128,7 @@ export function createHUD(app) {
       console.warn('[hud] widget failed', e);
     }
   }
+  if (me) parts.push(mountChat(app, root, anchors)); // typed chat panel + chat button (ui/chat.js)
 
   // Small phones: banners (and the tutorial card) must never cover the prompt / carry pills. While one would,
   // the HUD squeezes: level 1 moves the tutorial card aside (in portrait the banners sit under it, so they
@@ -282,30 +291,20 @@ export function createHUD(app) {
 
 function createMenuButtons(app, parent) {
   const pause = noFocus(h('button', { class: 'hbtn', type: 'button', 'aria-label': 'Pause menu', title: 'Menu (Esc)', html: ICON.pause }));
-  const mute = noFocus(h('button', { class: 'hbtn', type: 'button', 'aria-label': 'Mute', title: 'Sound on/off' }));
-  const paint = () => {
-    const m = !!settings.muted;
-    mute.innerHTML = m ? ICON.soundOff : ICON.soundOn;
-    mute.setAttribute('aria-pressed', String(m));
-    mute.classList.toggle('off', m);
-  };
-  paint();
+  // the speaker: tap for the music / sound effects pop-up, hold to mute everything (ui/soundControls.js)
+  const mute = noFocus(h('button', { class: 'hbtn', type: 'button' }));
+  const sound = mountSoundButton(app, mute, parent.closest('.hud') || parent);
   onPress(pause, () => {
     uiSound(app, 'click');
     app.pause();
   }, 'up');
-  onPress(mute, () => {
-    setMuted(app, !settings.muted);
-    paint();
-  }, 'up');
-  const off = bus.on('settings:changed', ({ key }) => (key === 'muted' || key === 'music' || key === 'sfx') && paint());
   // full screen (hidden where the browser can't do it: iPhone Safari, sandboxed frames; on portrait phones the
   // one under the family board shows instead)
   const fs = fullscreenButton('hbtn', { hud: true, bind: (el, fn) => onPress(el, fn, 'up'), onToggle: () => uiSound(app, 'click') });
   parent.appendChild(h('div', { class: 'hud-btns' }, pause, mute, fs));
   return {
     dispose() {
-      off();
+      sound.dispose();
       fs?._dispose?.();
     },
   };
@@ -632,7 +631,7 @@ function createCarry(app, parent, me) {
         toggle(carry.el, 'stolen', c.kind === 'plant');
         toggle(carry.el, 'full', full);
         setHTML(carry.l1, c.kind === 'plant' ? `STOLEN ${name}` : `Carrying ${name}`);
-        if (full) setHTML(carry.l2, 'Garden full! Sell a grown plant or drop the seed');
+        if (full) setHTML(carry.l2, `Garden full! Sell a plant (${sellHow(app)}) or drop the seed`);
         else {
           const g = guide(L.inside);
           aim(carry, g);
@@ -799,8 +798,9 @@ function createChat(app, parent) {
   const bubbles = new Map(); // slot -> {html, until, at, chars}
   const timers = new Set();
   const placed = [];
-  const off = bus.on('chat', ({ player, text, quick }) => {
-    if (!player || app.online?.isMuted?.(player)) return;
+  const off = bus.on('chat', ({ player, text, quick, typed }) => {
+    // typed lines only where this device takes typed chat (a room's host still passes them on: social/chat.js)
+    if (!player || app.online?.isMuted?.(player) || (typed && !typedChatAllowed(app.online))) return;
     const line = h('div', { class: 'cl' }, h('b', { style: `--c:${player.char.color}`, text: player.name + ': ' }), h('span', { text }));
     el.appendChild(line);
     while (el.children.length > 5) el.firstChild.remove();
@@ -810,7 +810,9 @@ function createChat(app, parent) {
     }, 9000);
     timers.add(id);
     const now = performance.now();
-    if (!player.isHuman || quick) bubbles.set(player.slot, { html: `<div class="bb">${esc(text)}</div>`, at: now, until: now + BUBBLE_MS, chars: String(text).length });
+    if (!player.isHuman || quick || typed) {
+      bubbles.set(player.slot, { html: `<div class="bb${typed ? ' bb-t' : ''}">${esc(text)}</div>`, at: now, until: now + (typed ? TEXT_CHAT.bubble * 1000 : BUBBLE_MS), chars: String(text).length });
+    }
   });
   // rough on-screen box of a bubble (the label scales with distance like labels.js does)
   function box(p, b, cam) {
@@ -863,11 +865,11 @@ function createKeyHints(app, parent) {
   if (load('ui:hints-off', false) || settings.tips === false) return {};
   const k = (s) => `<kbd>${s}</kbd>`;
   const kb = [
-    [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'],
-    [k('Click') + k('F'), 'Bonk'], [k('Shift'), 'Boost'], [k('X'), 'Speed gear'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T'), 'Quick chat'], [k('Right-drag'), 'Camera'], [k('Esc'), 'Menu'],
+    [k('W') + k('A') + k('S') + k('D'), 'Move'], [k('Space'), 'Jump'], [k('E'), 'Grab / hold to Steal'], [k('V'), 'Hold to Sell'],
+    [k('Click') + k('F'), 'Bonk'], [k('Shift'), 'Boost'], [k('X'), 'Speed gear'], [k('1') + '-' + k('5'), 'Items'], [k('G'), 'Emotes'], [k('T') + k('Enter'), 'Chat'], [k('Right-drag'), 'Camera'], [k('M'), 'Music on/off'], [k('Esc'), 'Menu'],
   ];
   const gp = [
-    [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('X'), 'Bonk'], [k('RT'), 'Boost'], [k('LT'), 'Speed gear'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],
+    [k('L'), 'Move'], [k('A'), 'Jump'], [k('B'), 'Grab / hold to Steal'], [k('\u2193'), 'D-pad: hold to Sell'], [k('X'), 'Bonk'], [k('RT'), 'Boost'], [k('LT'), 'Speed gear'], [k('Y'), 'Use item'], [k('LB') + k('RB'), 'Pick item'], [k('R'), 'Camera'],
   ];
   const body = h('div', { class: 'kh-body' });
   const close = noFocus(h('button', { class: 'kh-x', type: 'button', 'aria-label': 'Hide key hints', html: ICON.close }));

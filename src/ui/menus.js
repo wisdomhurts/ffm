@@ -15,8 +15,10 @@ import { avatarEl, lookFigure } from './avatars.js';
 import { ICON, TILE_ICONS, LOGO_SPROUT } from './icons.js';
 import { buildShop } from './shops.js';
 import { buildSettings } from './settingsPanel.js';
+import { buildSoundControls } from './soundControls.js';
 import { buildPhotoBooth } from './photobooth.js';
 import { buildHowTo } from './howto.js';
+import { offerTutorial, tutorialButton } from './tutorial.js';
 import { buildPetShop, openPets } from './pets.js';
 import { buildWardrobe, openWardrobe } from './wardrobe.js';
 import { buildBase } from './base.js';
@@ -26,6 +28,8 @@ import { openLeaderboard } from './leaderboard.js';
 import { fullscreenButton } from './fullscreen.js';
 import { buildHomeScreenGuide } from './homescreen.js';
 import { rarityColor } from '../view/gameView.js';
+import { openGnomeMap, GNOME_ICON } from './gnomes.js';
+import { openGazette, gazetteEndSlot, GAZETTE_ICON } from './gazette.js';
 
 const DIFF_DESC = {
   chill: 'Best for your first game: the family goes easy on you.',
@@ -225,6 +229,8 @@ export function createMenus(app) {
 
   function startGame(o) {
     document.activeElement?.blur?.();
+    // a brand-new player is asked once if they'd like the quick tutorial first (ui/tutorial.js)
+    if (offerTutorial(app, o.charId, () => app.startGame(o))) return;
     app.startGame(o);
   }
 
@@ -675,7 +681,8 @@ export function createMenus(app) {
         h('button', { class: 'link', type: 'button', text: 'Change', onclick: () => { click(); showSelect(() => showMode(back)); } })),
       h('div', { class: 'mode-grid', role: 'radiogroup', 'aria-label': 'Game mode' }, modeCards),
       h('div', { class: 'diff' }, h('div', { class: 'diff-label', text: 'Difficulty' }), h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Difficulty' }, segs), diffDesc),
-      startRow, confirm);
+      startRow, confirm,
+      tutorialButton(app, () => startGame({ charId: p.id, mode: 'endless', difficulty: sel.difficulty, fresh: !app.hasSave(p.id) })));
     paint();
     const s = setScreen('mode', body);
     s.back = back;
@@ -711,6 +718,7 @@ export function createMenus(app) {
       })
       : btn(iconLabel(ICON.home, g?.match || !storageOK ? 'Quit to Title' : 'Save & Quit'), 'btn-red pb-quit', () => app.quitToTitle());
     const fs = fullscreenButton('btn btn-ghost btn-round pp-fs', { onHelp: openFullscreenHelp });
+    const sound = buildSoundControls(app, { compact: true, pad: true }); // music + effects switches and volumes
     const panel = h('div', { class: 'panel pause-panel' + (online ? ' online' : '') },
       fs,
       online ? h('div', { class: 'pp-live' }, h('i'), h('span', { text: code ? `Live in room ${code}` : 'Live online game' })) : null,
@@ -725,13 +733,21 @@ export function createMenus(app) {
           quick('pets', 'Pets', openPets, 'Pets'),
           quick('base', 'My Base', () => openShop('base'), 'My Base'),
           quick('quests', 'Quests', openProgress, 'Quests & Badges')),
+        sound.el,
         h('div', { class: 'pause-util' },
           btn(iconLabel(ICON.gear, 'Settings'), 'btn-blue', openSettings),
           btn(iconLabel(ICON.camera, 'Photo Booth'), 'btn-blue', openPhotoBooth),
-          btn(iconLabel(ICON.help, 'How to Play'), 'btn-blue', openHowTo))),
+          btn(iconLabel(ICON.help, 'How to Play'), 'btn-blue', openHowTo)),
+        // Golden Gnome Hunt map + The Seed Gazette front page (ui/gnomes.js, ui/gazette.js)
+        h('div', { class: 'pause-util pause-fun', style: 'grid-template-columns:repeat(2,minmax(0,1fr))' },
+          btn(iconLabel(GNOME_ICON, 'Gnome Map'), 'btn-gold', () => feature(openGnomeMap, 'Gnome Map')),
+          btn(iconLabel(GAZETTE_ICON, 'Seed Gazette'), 'btn-blue', () => feature(openGazette, 'Seed Gazette')))),
       h('p', { class: 'pause-note', text: note }));
     const sc = setScreen('pause', panel);
-    if (fs) sc.dispose = () => fs._dispose?.();
+    sc.dispose = () => {
+      fs?._dispose?.();
+      sound.dispose();
+    };
   }
 
   function hidePause() {
@@ -858,6 +874,7 @@ export function createMenus(app) {
         chips,
         you,
         awards,
+        gazetteEndSlot(app), // The Seed Gazette: the lead headline, opens the front page
         h('div', { class: 'end-actions' },
           btn(iconLabel(ICON.reset, 'Play Again'), 'btn-green btn-lg', again, { 'data-autofocus': '' }),
           btn(iconLabel(ICON.home, 'Title'), 'btn-blue btn-lg', () => app.quitToTitle()))));

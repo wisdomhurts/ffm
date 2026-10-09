@@ -23,9 +23,10 @@
 //   welcome {to, hn, slot, ep, order, priv, st} host -> joiner (st = full world state)
 //   kick    {to, k, p, v, su, iu}               host -> member: the rules moved you (knockback, caught, respawn)
 //   kicked  {to}                                host -> member: removed from the room
-import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL } from '../config.js';
+import { CHARACTERS, CHARACTER, PLANTS, PLANT, ITEMS, BIOMES, MUTATIONS, EVENTS, CHAT, PLAYER, WORLD, accelFor, BASE, BOOST, TREADMILL, PET_TRICKS, RARITY, SIZES } from '../config.js';
 import { EMOTES, QUICK_CHAT, EMOTE, PHRASE } from '../social/catalog.js';
-import { REPLIES, EMOTE_LINES } from '../social/replies.js';
+import { REPLIES, EMOTE_LINES, TYPED_REPLIES } from '../social/replies.js';
+import { isTypedLine } from '../social/chat.js';
 import { PRACTICE_LINES } from '../ai/personalities.js';
 import { PETS, PET, EGG } from '../pets/catalog.js';
 import { sanitizePetName } from '../pets/names.js';
@@ -33,11 +34,14 @@ import { sanitizeBaseStyle } from '../gameplay/basestyle.js';
 import { sanitizeLook as canonLook } from '../characters/cosmetics.js';
 import { sanitizeName, isNameAllowed } from '../core/names.js';
 import { Player } from '../gameplay/player.js';
+import { BOSS_STATES, BOSS_NEVER } from '../gameplay/boss.js';
+import { ROAD_END_Z } from '../config.js';
 
 /** Own keys only: catalog lookups must never match 'toString', '__proto__' and friends. */
 export const own = (obj, k) => typeof k === 'string' && !!obj && Object.prototype.hasOwnProperty.call(obj, k);
 
-export const PROTO = 3; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots; 3: base levels + styles, pet teams, boost, treadmills, egg drops
+export const PROTO = 4; // 2: garden lots (25 planters), 'empty' slots and a room's maxBots; 3: base levels + styles, pet teams, boost, treadmills, egg drops;
+// 4: sell button, pet tricks, pet/seed trades, text chat, plant sizes, hero tips, Big Chomp, 3 new zones
 
 // Two builds can only share a room when their rules agree (ids of everything that crosses the wire).
 function fnv(str) {
@@ -222,6 +226,7 @@ function templates() {
   walk(CHAT);
   walk(REPLIES);
   walk(EMOTE_LINES);
+  walk(TYPED_REPLIES);
   walk(PRACTICE_LINES);
   // {name}, {plant}, {a_plant}... = a player name (sanitizeName charset) or a plant name
   const slot = "[\\p{L}\\p{N} _.'’-]{1,40}";
@@ -245,7 +250,8 @@ export function vetPlantData(d, owner = null) {
   if (!isObj(d) || !own(PLANT, d.speciesId)) return null;
   const sp = PLANT[d.speciesId];
   const growTotal = num(d.growTotal, sp.grow) > 0 ? Math.min(num(d.growTotal, sp.grow), 1e6) : sp.grow;
-  const out = { speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal', growTotal, growLeft: Math.max(0, Math.min(growTotal, num(d.growLeft))) };
+  const out = { speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal', growTotal, growLeft: Math.max(0, Math.min(growTotal, num(d.growLeft))),
+    size: own(SIZES, d.size) ? d.size : 'normal' };
   if ('uid' in d) out.uid = num(d.uid);
   if (owner != null) out.owner = int(d.owner, 0, CHARACTERS.length - 1, owner);
   return out;
@@ -260,7 +266,7 @@ export function vetSlotData(data) {
   const items = {};
   for (const it of ITEMS) items[it.id] = cap(isObj(p.items) ? p.items[it.id] : 0, 999);
   const stats = {};
-  if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds', 'eggs']) stats[k] = cap(p.stats[k], 1e12);
+  if (isObj(p.stats)) for (const k of ['steals', 'robbed', 'planted', 'bonks', 'collected', 'seeds', 'eggs', 'rescues']) stats[k] = cap(p.stats[k], 1e12);
   out.player = {
     cash: cap(p.cash, 1e18, PLAYER.startCash), speedLevel: cap(p.speedLevel, 999), rebirths: cap(p.rebirths, 50),
     upgradeSpend: cap(p.upgradeSpend, 1e18), items, stats,
@@ -344,6 +350,8 @@ export const FORWARD = new Set([
   'gift', 'gift:fail', 'pet:hatched', 'pet:equipped', 'player:look', 'slot:changed', 'practice:steal',
   'base:upgraded', 'base:style', 'base:bounce', 'guard:bonk', 'boost:start', 'boost:up', 'treadmill:up', 'pump:start',
   'drop:spawn', 'drop:claimed', 'drop:expired',
+  // round 4
+  'pet:trick', 'plant:giant', 'steal:rescued', 'boss:spawn', 'boss:hit', 'boss:defeated', 'boss:leave',
 ]);
 export const forwarded = (name) => FORWARD.has(name) || name.startsWith('trade:');
 
@@ -381,7 +389,7 @@ export class EventCodec {
     if (ref) return ref;
     if (Array.isArray(v)) return v.slice(0, 16).map((x) => this.encode(x, depth + 1));
     if (typeof v.speciesId === 'string' && 'growTotal' in v) {
-      return { $pl: { uid: v.uid, speciesId: v.speciesId, mutation: v.mutation, growTotal: r3(v.growTotal), growLeft: r3(v.growLeft), owner: v.owner } };
+      return { $pl: { uid: v.uid, speciesId: v.speciesId, mutation: v.mutation, growTotal: r3(v.growTotal), growLeft: r3(v.growLeft), owner: v.owner, size: v.size } };
     }
     if ((v.kind === 'seed' || v.kind === 'banana') && 'expiresAt' in v) {
       const o = {};
@@ -453,15 +461,17 @@ export class EventCodec {
     for (const p of g.players) if (p.carrying?.kind === 'plant' && p.carrying.plant.uid === d.uid) return p.carrying.plant;
     return {
       uid: num(d.uid), speciesId: d.speciesId, mutation: own(MUTATIONS, d.mutation) ? d.mutation : 'normal',
-      growTotal: num(d.growTotal, 1), growLeft: num(d.growLeft), owner: int(d.owner, 0, 3, 0),
+      growTotal: num(d.growTotal, 1), growLeft: num(d.growLeft), owner: int(d.owner, 0, 3, 0), size: own(SIZES, d.size) ? d.size : 'normal',
     };
   }
 
   /**
    * Last line of defence for what an event may say. Free text only where the game itself writes it
-   * (quick-chat phrases are looked up locally, bot lines must look like clean game lines).
+   * (quick-chat phrases are looked up locally, bot lines must look like clean game lines), and a person's
+   * typed chat line ({typed: true}) only when `typed` says this device takes typed chat in this room
+   * (social/chat.js typedChatAllowed) and the chat filter leaves the line exactly as it is.
    */
-  static vet(name, e) {
+  static vet(name, e, { typed = false } = {}) {
     if (!isObj(e)) return null;
     for (const [k, v] of Object.entries(e)) {
       if (typeof v !== 'string' || v === '') continue;
@@ -478,9 +488,34 @@ export class EventCodec {
       if (e.quick) {
         if (!own(PHRASE, e.phrase)) return null;
         e.text = PHRASE[e.phrase].text;
+        delete e.typed;
+      } else if (e.typed === true) {
+        if (!typed || !p.isPlayer || !isTypedLine(e.text)) return null;
       } else if (p.kind !== 'bot' || !isBotLine(e.text)) return null;
+      else delete e.typed;
     }
     if (name === 'emote' && !own(EMOTE, e.id)) return null;
+    if (name === 'pet:trick' && (int(e.owner, 0, 3, -1) < 0 || int(e.k, 0, 2, -1) < 0 ||
+      (!PET_TRICKS.walk.includes(e.trick) && !PET_TRICKS.fly.includes(e.trick)))) return null;
+    // Giant Harvests: the size ids travel as plain ids (unknown ones mean the event is not about this build's rules)
+    if ((name === 'plant:grown' && e.size != null && !own(SIZES, e.size)) || (name === 'plant:giant' &&
+      (!isObj(e.plant) || !own(PLANT, e.plant.speciesId) || !own(MUTATIONS, e.plant.mutation) || !own(SIZES, e.plant.size)))) return null;
+    // Help! Family Hero: three players and a tip (a number); nobody can be their own hero
+    if (name === 'steal:rescued' && (!(e.hero instanceof Player) || !(e.thief instanceof Player) || !(e.victim instanceof Player) ||
+      e.hero === e.thief || e.hero === e.victim || !(num(e.tip, -1) >= 0))) return null;
+    // Trades: pets ride nested in the offers (trade:update, trade:done) and in trade:done petsA/B. Known pets only,
+    // id-like uids, and nicknames through the pet-name filter, like every other way a nickname reaches this device
+    if (name.startsWith('trade:')) {
+      const pets = (list) => (Array.isArray(list) ? list : []).filter((x) => isObj(x) && own(PET, x.id) && (x.uid == null || isId(x.uid)))
+        .slice(0, 3).map((x) => {
+          const y = { id: x.id, name: sanitizePetName(x.name) };
+          if (x.uid != null) y.uid = x.uid;
+          if (Number.isInteger(x.k) && x.k >= 0 && x.k < 3) y.k = x.k;
+          return y;
+        });
+      for (const o of [e.offerA, e.offerB]) if (isObj(o) && 'pets' in o) o.pets = pets(o.pets);
+      for (const k of ['petsA', 'petsB']) if (k in e) e[k] = pets(e[k]);
+    }
     return e;
   }
 }
@@ -499,20 +534,22 @@ export function sectionize(full) {
   S.gr = full.ground;
   S.dr = full.drops || [];
   S.mo = full.monsters;
+  S.bs = { next: full.nextBossAt, boss: full.boss ?? null }; // Big Chomp (gameplay/boss.js)
   return S;
 }
 
 /** The part of a section whose change must reach clients right away. */
 export function signature(key, v) {
   if (key[0] === 'p' && key !== 'pd') {
-    const { pos, vel, yaw, onGround, interact, trainT, ...rest } = v;
-    return stringifyR([rest, interact.key, interact.verb, interact.label, trainT > 0]);
+    const { pos, vel, yaw, onGround, interact, sell, trainT, ...rest } = v;
+    return stringifyR([rest, interact.key, interact.verb, interact.label, sell?.key, sell?.label, trainT > 0]);
   }
   if (key[0] === 'g' && key !== 'gr') {
-    return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.guardReadyAt, v.guardAlert, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0]])]);
+    return stringifyR([v.lockedUntil, v.lockReadyAt, v.lockActive, v.guardReadyAt, v.guardAlert, v.planters.map((pl) => [pl.unlocked, pl.stealer, pl.plant && [pl.plant.uid, pl.plant.speciesId, pl.plant.mutation, pl.plant.owner, pl.plant.growLeft <= 0, pl.plant.size]])]);
   }
   if (key === 'mo') return stringifyR(v.map((m) => [m.stunUntil, m.attackAt]));
   if (key === 'm') return stringifyR([v.over, v.mode, v.difficulty, v.nextEventAt, v.event, v.match, v.maxBots]); // uid: only for promotion
+  if (key === 'bs') return stringifyR(v.boss && [v.boss.uid, v.boss.hp, v.boss.state, v.boss.target]); // it crawls: position rides the periodic refresh
   return stringifyR(v);
 }
 
@@ -523,7 +560,10 @@ export function mergeSections(full, D) {
     else if (k === 'pd') full.pods = v;
     else if (k === 'gr') full.ground = v;
     else if (k === 'dr') full.drops = v;
-    else if (k === 'mo') {
+    else if (k === 'bs') {
+      full.boss = v.boss;
+      full.nextBossAt = v.next;
+    } else if (k === 'mo') {
       if (Array.isArray(v)) v.forEach((m, i) => full.monsters[i] && Object.assign(full.monsters[i], m));
     } else if (k[0] === 'p') {
       const i = +k.slice(1);
@@ -546,6 +586,8 @@ export function vetFull(s) {
   s.ground = vetGround(s.ground);
   s.drops = vetDrops(s.drops);
   if (s.nextDropAt != null && !Number.isFinite(s.nextDropAt)) s.nextDropAt = 0;
+  s.boss = vetBoss(s.boss);
+  s.nextBossAt = num(s.nextBossAt, BOSS_NEVER);
   if (!Number.isFinite(s.time)) return null;
   return s;
 }
@@ -575,6 +617,21 @@ export function vetDrops(list) {
   }));
 }
 
+/** Big Chomp from the network: a known state, numbers clamped to the world, target a garden slot (or null: none). */
+export function vetBoss(d) {
+  if (!isObj(d) || !BOSS_STATES.includes(d.state)) return null;
+  const cl = (v, lo, hi, def = lo) => Math.max(lo, Math.min(hi, num(v, def)));
+  const max = cl(d.max, 1, 10000, 1);
+  return {
+    uid: num(d.uid), x: cl(d.x, -WORLD.homeHalfW, WORLD.homeHalfW), z: cl(d.z, WORLD.homeMinZ, ROAD_END_Z), yaw: num(d.yaw),
+    hp: cl(d.hp, 0, max), max, target: int(d.target, 0, CHARACTERS.length - 1, 0), slurped: cl(d.slurped, 0, 1e18),
+    hits: CHARACTERS.map((_, i) => cl(Array.isArray(d.hits) ? d.hits[i] : 0, 0, 1e5)), state: d.state, born: num(d.born), until: num(d.until),
+  };
+}
+
+/** The 'bs' section of a host delta ({next, boss}), or null when it isn't one. */
+export const vetBossSection = (v) => (isObj(v) ? { next: num(v.next, BOSS_NEVER), boss: vetBoss(v.boss) } : null);
+
 export function vetPlayer(d, i) {
   if (!isObj(d) || !isObj(d.pos) || !isObj(d.vel) || !isObj(d.items) || !isObj(d.stats) || !isObj(d.interact)) return false;
   d.name = sanitizeName(d.name, CHARACTERS[i].name);
@@ -587,8 +644,9 @@ export function vetPlayer(d, i) {
   d.baseLevel = int(d.baseLevel, 1, BASE.maxLevel, 1);
   d.boostLevel = int(d.boostLevel, 0, BOOST.maxLevel, 0);
   d.treadmillTier = int(d.treadmillTier, 0, TREADMILL.tiers.length - 1, 0);
-  for (const k of ['boostUntil', 'boostReadyAt', 'pumpUntil', 'trainT']) d[k] = num(d[k]);
+  for (const k of ['boostUntil', 'boostReadyAt', 'pumpUntil', 'trainT', 'heroUntil']) d[k] = num(d[k]);
   d.pumpMult = Math.max(1, Math.min(2, num(d.pumpMult, 1)));
+  d.crownUntil = Math.max(0, num(d.crownUntil)); // Big Chomp's crown
   if (d.emote && (!isObj(d.emote) || !own(EMOTE, d.emote.id))) d.emote = null;
   const c = d.carrying;
   if (c) {
@@ -596,7 +654,7 @@ export function vetPlayer(d, i) {
       const plant = vetPlantData(c.plant, int(c.fromSlot, 0, 3, 0));
       d.carrying = plant ? { kind: 'plant', plant, fromSlot: int(c.fromSlot, 0, 3, 0), fromIndex: int(c.fromIndex, 0, WORLD.planterCount - 1, 0) } : null;
     } else if (c.kind === 'seed' && own(PLANT, c.speciesId)) {
-      d.carrying = { kind: 'seed', speciesId: c.speciesId, mutation: own(MUTATIONS, c.mutation) ? c.mutation : 'normal', podId: int(c.podId, 0, 999, 0), lucky: !!c.lucky };
+      d.carrying = { kind: 'seed', speciesId: c.speciesId, mutation: own(MUTATIONS, c.mutation) ? c.mutation : 'normal', podId: c.podId === null ? null : int(c.podId, 0, 999, 0), lucky: !!c.lucky };
     } else d.carrying = null;
   }
   const items = {};
@@ -604,5 +662,22 @@ export function vetPlayer(d, i) {
   d.items = items;
   const it = d.interact;
   for (const k of ['label', 'verb', 'key', 'rarity']) if (it[k] != null && (typeof it[k] !== 'string' || it[k].length > 64)) it[k] = '';
+  // the Sell prompt (its own button): same shape as interact, plus what it sells for
+  const sl = isObj(d.sell) ? d.sell : {};
+  d.sell = { key: null, t: num(sl.t), hold: num(sl.hold), label: '', verb: '', rarity: undefined, value: Math.max(0, num(sl.value)) };
+  for (const k of ['label', 'verb', 'key']) if (typeof sl[k] === 'string' && sl[k].length <= 64) d.sell[k] = sl[k];
+  if (own(RARITY, sl.rarity)) d.sell.rarity = sl.rarity;
+  d.petMail = vetPetMail(d.petMail);
   return true;
+}
+
+/** Pet-trade mail for a player's device ([{tid, give: [uid], get: [{id, name}]}], game.js trade): ids that look
+ *  like ids, known pets, names through the pet-name filter, a few at most. */
+export function vetPetMail(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(-8).filter((m) => isObj(m) && isId(m.tid)).map((m) => ({
+    tid: m.tid,
+    give: Array.isArray(m.give) ? [...new Set(m.give.filter(isId))].slice(0, 3) : [],
+    get: Array.isArray(m.get) ? m.get.slice(0, 3).filter((x) => isObj(x) && own(PET, x.id)).map((x) => ({ id: x.id, name: sanitizePetName(x.name) })) : [],
+  }));
 }

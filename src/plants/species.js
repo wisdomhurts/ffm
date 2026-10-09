@@ -309,6 +309,126 @@ function gumdrop(b, p, n, s, c, i) {
   b.add(P.dome(7, 3), { p, q: aim(n), s: [s, s * 1.2, s], c: shade(c, -0.08), c2: shade(c, 0.28), gy: [0, 1], glow: 0.18, glow2: 0.4, cf: (x, y, z, k) => (hash(k * 3.7 + i * 11) > 0.72 ? shade(c, 0.6) : null) });
 }
 
+// ------------------------------------------------------------------ top-tier helpers (Crystal Caverns, Bubble Reef, Rainbow's End)
+
+const CAVE = '#4b3d72';
+const SAND = '#f2dcb0';
+const KELP = '#3fae8a';
+const SPECTRUM = ['#ff3d5e', '#ff8f1f', '#ffd91f', '#3ae36a', '#1fb8ff', '#4f63ff', '#a640ff'];
+const AURORA = ['#1b6a5e', '#3dff9a', '#38d8ff', '#7a6bff', '#ff7ad9'];
+// Grown heights, shared by build() and fx()
+const PRISM_H = 2.85;
+const ROSE_H = 2.7;
+const STAR_H = 2.45;
+
+/** Faceted (flat-shaded) lathe for crystals and cut gems. Cached by key. */
+function gemGeo(key, profile, segs) {
+  return cachedGeo('gem' + key, () => {
+    const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segs).toNonIndexed();
+    g.computeVertexNormals();
+    return g;
+  });
+}
+/** Hexagonal crystal point: base at the origin (open: it grows out of something), 1 long along +Y, radius 1. */
+export const crystalGeo = () => gemGeo('crystal', [[1, 0], [1, 0.68], [0, 1]], 6);
+// Round brilliant: pointed at the origin, flat table (radius 0.78) on top at y = 0.72.
+const gemCut = () => gemGeo('brilliant', [[0, 0], [1, 0.42], [0.78, 0.72], [0, 0.72]], 8);
+
+/** A crystal growing from p toward dir (len long, r thick): colour c at the base, c2 at the tip. */
+function crystal(b, p, dir, len, r, c, c2, o = {}) {
+  b.add(crystalGeo(), { p, q: aim(dir), s: [r, len, r], c, c2, gy: [0.2, 1], glow: o.glow ?? 0.25, glow2: o.glow2 ?? 0.8 });
+}
+
+/**
+ * Scallop half-shell: a fan of 7 ribs, hinge at the origin, opening toward +Z (radius 1, 72 degrees each side),
+ * bowl bulging down to about y = -0.36 with its rim at y = 0. Scale y by -1 for the top shell.
+ */
+export function scallopGeo() {
+  return cachedGeo('scallop', () => {
+    const NA = 14, NR = 4, SPAN = 1.25, RIBS = 7;
+    const pos = [], idx = [];
+    for (let i = 0; i <= NR; i++) {
+      const r = i / NR;
+      for (let j = 0; j <= NA; j++) {
+        const u = (j / NA) * 2 - 1;
+        const a = u * SPAN;
+        const rib = Math.abs(Math.cos(u * RIBS * PI * 0.5));
+        const rr = r * (1 + 0.07 * rib * r);
+        const y = -0.32 * Math.pow(Math.sin(PI * r), 0.8) * Math.sqrt(Math.cos(u * PI * 0.5)) - 0.04 * rib * r;
+        pos.push(Math.sin(a) * rr, y, Math.cos(a) * rr);
+      }
+    }
+    const row = NA + 1;
+    for (let i = 0; i < NR; i++) {
+      for (let j = 0; j < NA; j++) {
+        const a = i * row + j, c = a + row;
+        idx.push(a, c, a + 1, a + 1, c, c + 1);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  });
+}
+// Colour every other rib of a scallop (per triangle, from its angle on the fan).
+const scallopRibs = (c) => (x, y, z) => (Math.floor((Math.atan2(x, z) / 1.25 + 1) * 7 + 0.5) % 2 ? c : null);
+
+// The infinity sign: a closed tube along a lemniscate in the XY plane (2 wide, 0.7 tall); the strands pass over and
+// under each other at the crossing.
+class Lemniscate extends THREE.Curve {
+  getPoint(t, out = new THREE.Vector3()) {
+    const a = t * TAU, s = Math.sin(a), c = Math.cos(a);
+    return out.set(c / (1 + s * s), (s * c) / (1 + s * s), 0.14 * s);
+  }
+}
+const infinityGeo = (segs = 30, radial = 5) => cachedGeo(`infinity${segs}_${radial}`, () => new THREE.TubeGeometry(new Lemniscate(), segs, 0.1, radial, true));
+// Rainbow bands across x (-1..1), red on the left: per triangle.
+const rainbowX = (x) => SPECTRUM[Math.max(0, Math.min(6, Math.floor((x + 1) * 3.5)))];
+
+/** A plump five-pointed star prism along Z (flat front face at z = 0.42, radius 0.9), twisted as it goes: a star fruit. */
+function starFruitGeo() {
+  return cachedGeo('starfruit', () => {
+    // [z, scale, twist] per ring, back to front
+    const rings = [[-0.45, 0.55, -0.24], [-0.26, 0.88, -0.12], [0.04, 1, 0], [0.3, 0.98, 0.1], [0.42, 0.9, 0.16]];
+    const R = rings.map(([z, s, tw]) => Array.from({ length: 10 }, (_, k) => {
+      const a = (k / 10) * TAU + tw, r = (k % 2 ? 0.5 : 1) * s;
+      return [Math.sin(a) * r, Math.cos(a) * r, z];
+    }));
+    const pos = [];
+    const tri = (...v) => v.forEach((p) => pos.push(p[0], p[1], p[2]));
+    for (let i = 0; i < R.length - 1; i++) {
+      for (let k = 0; k < 10; k++) {
+        const a = R[i][k], b2 = R[i][(k + 1) % 10], c = R[i + 1][k], d = R[i + 1][(k + 1) % 10];
+        tri(a, b2, c);
+        tri(b2, d, c);
+      }
+    }
+    const F = R[R.length - 1], B = R[0];
+    for (let k = 0; k < 10; k++) {
+      tri([0, 0, rings[rings.length - 1][0]], F[k], F[(k + 1) % 10]);
+      tri([0, 0, rings[0][0]], B[(k + 1) % 10], B[k]);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+// Sea floor: a sand mound with darker grains.
+function sandMound(b, s = 1) {
+  b.add(P.dome(12, 3), { s: [1.2 * s, 0.3 * s, 1.1 * s], c: shade(SAND, -0.12), c2: SAND, gy: [0, 1], cf: (x, y, z, i) => (hash(i * 4.3) > 0.8 ? shade(SAND, -0.28) : null) });
+}
+function starfish(b, p, s, c, yaw = 0) {
+  b.add(shapeGeo('starfish', () => starShape(5, 0.42), 0.3), { p, r: [-PI / 2, yaw, 0], s, c, c2: shade(c, 0.35), gy: [-1, 1] });
+}
+// Cave floor: dark rock with lighter flecks.
+function caveFloor(b, s = 1) {
+  b.add(P.dome(10, 3), { s: [1.15 * s, 0.32 * s, 1.05 * s], c: shade(CAVE, -0.25), c2: CAVE, gy: [0, 1], cf: (x, y, z, i) => (hash(i * 2.7) > 0.86 ? shade(CAVE, 0.14) : null) });
+}
+
 export const LOOKS = {
   daisy: {
     build(b, o) {
@@ -1715,6 +1835,625 @@ export const LOOKS = {
       p.zap2.scale.setScalar(on2 ? 1 : 0.001);
       p.zap2.rotation.z = (f(k2 + 5) - 0.5) * 1.4;
       p.head.rotation.z = Math.sin(t * 1.3 + ph) * 0.05 + (on1 && on2 ? (f(k1 + 7) - 0.5) * 0.08 : 0);
+    },
+  },
+
+  // ---------------------------------------------------------------- Prismatic: Crystal Caverns
+
+  prismpetal: {
+    leaf: () => '#3fcf9f',
+    sproutTop(b, o, p) {
+      crystal(b, [p[0], p[1] - 0.06, p[2]], [0.12, 1, 0.08], 0.42, 0.1, o.c0, '#ffffff', { glow: 0.4, glow2: 1 });
+      crystal(b, [p[0] + 0.05, p[1] - 0.06, p[2]], [0.8, 1, 0.2], 0.26, 0.07, o.c1, '#ffffff', { glow: 0.4, glow2: 1 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, PRISM_H + 0.5, 0.1], size: 4.8, color: o.c0, opacity: 0.35 },
+      { kind: 'sparkle', mode: 'twinkle', color: 'rainbow', count: 10, rx: 1.7, h: 2.8, y0: PRISM_H - 0.9, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const mint = o.c0, lav = o.c1;
+      // cave rock studded with little crystal clusters
+      caveFloor(b);
+      [[0.8, 0.35, 0.62, mint], [-0.82, -0.3, 0.55, lav], [0.3, -0.85, 0.48, lav], [-0.5, 0.75, 0.42, mint]].forEach(([x, z, l, c]) => {
+        crystal(b, [x, 0.05, z], [x * 0.7, 1, z * 0.7], l, 0.13, shade(c, -0.25), '#ffffff', { glow: 0.2, glow2: 0.8 });
+        crystal(b, [x * 1.12, 0.03, z * 1.12 + 0.1], [x * 1.5, 1, z * 1.5 + 0.6], l * 0.55, 0.08, c, '#ffffff', { glow: 0.3, glow2: 0.9 });
+      });
+      const H = o.bud ? 2.3 : PRISM_H;
+      // glassy leaves, then a crystal stalk with shards sprouting from it
+      [[0.5, 1.2], [2.6, 1.05], [4.4, 1.15]].forEach(([a, l]) =>
+        blade(b, { p: [0, 0.22, 0], a, up: 0.5, len: l, wid: 0.5, shape: 'point', segL: 3, cup: 0.4, bend: -0.15, c: '#2a8f72', c2: mixCol(mint, '#ffffff', 0.35), glow: 0.05, glow2: 0.45 }));
+      stem(b, [[0, 0.1, 0], [0.07, H * 0.38, 0.02], [-0.05, H * 0.72, 0.06], [0, H, 0.12]], 0.1, 0.07, '#3fa98c', { c2: '#b8ffe6', gy: [0, H], glow: 0.05, glow2: 0.35 });
+      [[0.75, 0.5, 0.7, mint], [1.15, 3.7, 0.6, lav], [1.65, 1.9, 0.5, mint], [2.05, 5.1, 0.4, lav]].forEach(([y, a, l, c]) =>
+        crystal(b, [0, y * (H / PRISM_H), 0.04], [Math.sin(a), 0.8, Math.cos(a)], l, 0.1, shade(c, -0.2), mixCol(c, '#ffffff', 0.6), { glow: 0.15, glow2: 0.7 }));
+      if (o.bud) {
+        // a closed two-tone crystal point, fast asleep
+        b.use('head', [0, H, 0.12], { look: true });
+        b.add(crystalGeo(), { p: [0, H - 0.1, 0.12], r: [0, PI / 6, 0], s: [0.36, 1.3, 0.36], c: lav, c2: mint, gy: [0, 1], glow: 0.25, glow2: 0.7 });
+        for (let k = 0; k < 5; k++) {
+          const a = (k / 5) * TAU + 0.3;
+          crystal(b, [0, H - 0.05, 0.12], [Math.sin(a), 1.4, Math.cos(a)], 0.55, 0.09, shade(mint, -0.2), '#ffffff', { glow: 0.2, glow2: 0.7 });
+        }
+        face(b, 'sleepy', [0, H + 0.32, 0.12 + 0.36 * 0.866 + 0.012], 0.42, 0);
+        return;
+      }
+      const C = [0, H + 0.42, 0.18];
+      // light split into a rainbow: spectrum rays fanned out behind the bloom
+      b.use('fan', C, { look: true });
+      b.frame(fm([C[0], C[1], C[2] - 0.24]));
+      SPECTRUM.forEach((col, k) => {
+        const a = -1.35 + (k / 6) * 2.7, R = 2.3 - Math.abs(k - 3) * 0.08;
+        flatBlade(b, { p: [-Math.sin(a) * R, Math.cos(a) * R, 0], ang: a + PI, len: R - 0.3, wid: 0.58, shape: 'blade', segL: 3, segW: 1, bend: 0, cup: 0.1, c: col, c2: mixCol(col, '#ffffff', 0.3), glow: 0.22, glow2: 0.45 });
+      });
+      b.frame(null);
+      // the bloom: five long crystal petals with lavender shards between them, slowly turning
+      b.use('star', C, { look: true });
+      b.frame(fm(C));
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * TAU, a2 = a + PI / 5;
+        const d = [-Math.sin(a), Math.cos(a), 0.2], d2 = [-Math.sin(a2), Math.cos(a2), 0.05];
+        crystal(b, [d[0] * 0.2, d[1] * 0.2, 0], d, 1.25, 0.21, shade(mint, -0.3), mixCol(mint, '#ffffff', 0.3), { glow: 0.2, glow2: 0.6 });
+        crystal(b, [d2[0] * 0.15, d2[1] * 0.15, -0.08], d2, 0.85, 0.15, shade(lav, -0.25), mixCol(lav, '#ffffff', 0.3), { glow: 0.2, glow2: 0.55 });
+      }
+      b.frame(null);
+      // the heart: a cut gem that wears the face
+      b.use('head', C, { look: true });
+      b.add(gemCut(), { p: [C[0], C[1], C[2] - 0.05], r: [PI / 2, 0, 0], s: [0.52, 0.44, 0.52], c: shade(mint, -0.1), c2: mixCol(mint, '#ffffff', 0.55), gy: [0, 0.72], glow: 0.2, glow2: 0.45 });
+      face(b, 'wink', [C[0], C[1] - 0.02, C[2] - 0.05 + 0.72 * 0.44 + 0.012], 0.66, 0);
+    },
+    anim(p, t, ph) {
+      if (p.star) {
+        const y = p.head.userData.base.y + Math.sin(t * 1.4 + ph) * 0.06;
+        p.star.rotation.x = p.head.rotation.x = p.fan.rotation.x = -0.2;
+        p.star.rotation.z = t * 0.4 + ph;
+        p.fan.rotation.z = Math.sin(t * 0.9 + ph) * 0.1;
+        p.head.rotation.z = Math.sin(t * 1.2 + ph) * 0.07;
+        p.head.position.y = p.star.position.y = p.fan.position.y = y;
+      } else p.head.rotation.z = Math.sin(t * 1.3 + ph) * 0.06;
+    },
+  },
+
+  geodegourd: {
+    leaf: () => '#3f9f86',
+    sproutTop(b, o, p) {
+      b.add(P.dome(7, 3), { p: [p[0], p[1] - 0.02, p[2]], s: [0.17, 0.2, 0.17], c: '#7a7090', c2: '#9a90b0', gy: [0, 1] });
+      for (let k = 0; k < 3; k++) {
+        const a = k * 2.1;
+        crystal(b, [p[0] + Math.sin(a) * 0.06, p[1] + 0.12, p[2] + Math.cos(a) * 0.06], [Math.sin(a) * 0.4, 1, Math.cos(a) * 0.4], 0.16, 0.045, o.c0, o.c1, { glow: 0.5, glow2: 1 });
+      }
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 3.25, 0.15], size: 4.4, color: o.c0, opacity: 0.38 },
+      { kind: 'sparkle', mode: 'rise', color: o.c1, count: 12, rx: 0.75, h: 2.4, y0: 2.6, size: 0.18, star: false },
+    ],
+    build(b, o) {
+      const vio = o.c0, pink = o.c1;
+      const lf = '#3f9f86', stone = '#6c6386';
+      // a curly vine with broad leaves on the cave floor
+      stem(b, [[-1.35, 0.1, -0.35], [-0.85, 0.16, -0.9], [0.05, 0.12, -1.0], [0.9, 0.16, -0.65], [1.4, 0.12, 0.15]], 0.08, 0.06, shade(lf, -0.2), { segs: 8, radial: 4 });
+      [[-1.15, -0.7, 2.6], [0.6, -0.9, 3.9], [1.35, -0.2, 4.9], [-1.35, 0.05, 1.8]].forEach(([x, z, a]) =>
+        blade(b, { p: [x, 0.14, z], a, up: 0.35, len: 0.9, wid: 0.85, shape: 'round', notch: 0.2, c: shade(lf, -0.15), c2: shade(lf, 0.2), bend: -0.1, cup: 0.3 }));
+      b.add(P.torus(0.1, 3, 10, 4.6), { p: [1.4, 0.3, 0.45], r: [0.5, 0.3, 0], s: 0.22, c: lf });
+      // the gourd sits up on a stout stalk in a saucer of leaves
+      const R = o.bud ? 0.66 : 1.12, ks = R / 1.12;
+      const P0 = o.bud ? 0.6 : 1.0;
+      const cy = P0 + R * 0.92;
+      stem(b, [[0, 0, 0.05], [0.05, P0 * 0.5, 0.08], [0, P0 + 0.15, 0.1]], 0.3 * ks, 0.22 * ks, shade(lf, -0.25), { radial: 7, segs: 4 });
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU + 0.35;
+        blade(b, { p: [Math.sin(a) * 0.2, P0 - 0.05, 0.1 + Math.cos(a) * 0.2], a, up: 0.25, len: 1.35 * ks, wid: 0.9 * ks, shape: 'round', notch: 0.2, c: shade(lf, -0.2), c2: shade(lf, 0.25), bend: 0.5, cup: 0.35 });
+      }
+      b.use('gourd', [0, P0, 0.1], { look: true });
+      // ribbed stone with pale flecks
+      const rock = (x, y, z, i) => (hash(i * 1.9) > 0.86 ? shade(stone, 0.35) : Math.floor(((Math.atan2(x, z) + PI) / TAU) * 12) % 2 ? shade(stone, -0.14) : null);
+      if (o.bud) {
+        // still whole, its stalk on top: nobody knows what is inside yet
+        b.add(P.sphere(12, 8), { p: [0, cy, 0.1], s: [R * 1.08, R, R * 1.08], c: shade(stone, -0.1), c2: shade(stone, 0.12), gy: [-1, 1], cf: rock });
+        b.add(P.cyl(0.8, 1, 6), { p: [0, cy + R * 0.9, 0.1], s: [0.1, 0.3, 0.1], c: '#5a7a4a' });
+        sphereFace(b, 'sleepy', [0, cy, 0.1], R, R * 0.9, 0.18);
+        return;
+      }
+      const SHELL = [[0, -0.92], [0.45, -0.86], [0.82, -0.6], [1.0, -0.18], [1.0, 0.18], [0.88, 0.45], [0.72, 0.6]];
+      b.add(latheGeo('geodeShell', SHELL, 12), { p: [0, cy, 0.1], s: R, c: shade(stone, -0.12), c2: shade(stone, 0.15), gy: [-0.9, 0.6], cf: rock });
+      // cracked open: a quartz rim around a dark cavity full of glowing crystals
+      const top = cy + 0.6 * R;
+      b.add(P.torus(0.14, 3, 14), { p: [0, top, 0.1], r: [PI / 2, 0, 0], s: 0.72 * R, c: '#efe6ff', glow: 0.35 });
+      b.add(P.disc(12), { p: [0, top - 0.14, 0.1], s: 0.7 * R, c: shade(vio, -0.6), glow: 0.25 });
+      for (let k = 0; k < 9; k++) {
+        const a = (k / 9) * TAU + 0.2;
+        const l = (Math.cos(a) > 0.5 ? 0.5 : 0.72) + hash(k + 3) * 0.25;
+        crystal(b, [Math.sin(a) * 0.42 * R, top - 0.22, 0.1 + Math.cos(a) * 0.42 * R], [Math.sin(a) * 0.45, 1, Math.cos(a) * 0.45], l, 0.13, shade(vio, -0.2), k % 3 ? pink : mixCol(pink, '#ffffff', 0.3), { glow: 0.25, glow2: 0.65 });
+      }
+      crystal(b, [0, top - 0.25, 0.05], [0.05, 1, -0.05], 1.0, 0.22, shade(vio, -0.1), mixCol(pink, '#ffffff', 0.3), { glow: 0.3, glow2: 0.7 });
+      crystal(b, [0.22, top - 0.2, -0.08], [0.4, 1, -0.2], 0.68, 0.14, pink, mixCol(pink, '#ffffff', 0.4), { glow: 0.3, glow2: 0.7 });
+      sphereFace(b, 'oh', [0, cy, 0.1], R, R * 0.86, 0.1);
+      // the lid popped off and floats above, crystals glinting underneath
+      const L = [0.55, top + 1.3, -0.35], LR = 0.56 * R;
+      b.use('lid', L);
+      b.frame(fm(L, -0.55, 0, -0.45));
+      b.add(P.dome(12, 3), { s: [LR, 0.5 * LR, LR], c: shade(stone, -0.05), c2: shade(stone, 0.2), gy: [0, 1], cf: rock });
+      b.add(P.disc(12), { r: [PI, 0, 0], s: LR, c: shade(vio, -0.5), glow: 0.2 });
+      for (let k = 0; k < 4; k++) {
+        const a = (k / 4) * TAU + 0.5;
+        crystal(b, [Math.sin(a) * 0.28, -0.02, Math.cos(a) * 0.28], [Math.sin(a) * 0.3, -1, Math.cos(a) * 0.3], 0.3, 0.08, shade(vio, -0.1), pink, { glow: 0.3, glow2: 0.7 });
+      }
+      stem(b, [[0, 0.4 * LR, 0], [0.05, 0.75 * LR, 0], [0.2, 0.92 * LR, 0.02]], 0.06, 0.045, '#5a7a4a');
+      blade(b, { p: [0.18, 0.9 * LR, 0.02], a: 1.2, up: 0.5, len: 0.45, wid: 0.38, shape: 'round', c: lf, c2: shade(lf, 0.25), bend: -0.1 });
+      b.frame(null);
+    },
+    anim(p, t, ph) {
+      const k = Math.sin(t * 2.0 + ph) * 0.02;
+      p.gourd.scale.set(1 + k, 1 - k, 1 + k);
+      if (p.lid) {
+        p.lid.position.y = p.lid.userData.base.y + Math.sin(t * 1.5 + ph) * 0.12;
+        p.lid.rotation.y = t * 0.6 + ph;
+      }
+    },
+  },
+
+  glimmergrape: {
+    leaf: (o) => o.c1,
+    sproutTop(b, o, p) {
+      stem(b, [[p[0], p[1] - 0.02, p[2]], [p[0] + 0.12, p[1] + 0.1, p[2]], [p[0] + 0.2, p[1] - 0.02, p[2]]], 0.025, 0.02, o.c1, { radial: 3, segs: 3 });
+      [[0.2, -0.1, 0.07], [0.12, -0.2, 0.06], [0.27, -0.2, 0.06], [0.2, -0.3, 0.05]].forEach(([x, y, s]) =>
+        b.add(P.ico(0), { p: [p[0] + x, p[1] + y, p[2] + 0.02], s, c: o.c0, c2: '#ffffff', gy: [-1, 1], glow: 0.5, glow2: 0.9 }));
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 2.6, 0.6], size: 4.2, color: o.c0, opacity: 0.4 },
+      { kind: 'sparkle', mode: 'twinkle', color: '#e6fdff', count: 10, rx: 1.5, h: 2.6, y0: 1.5, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const lf = o.c1, bark = '#4a3450';
+      const c = o.bud ? mixCol(lf, '#d8ff9a', 0.55) : o.c0; // unripe grapes are green
+      caveFloor(b, 0.95);
+      const k = o.bud ? 0.82 : 1;
+      const sy = (pts) => pts.map(([x, y, z]) => [x, y * k, z]);
+      // a gnarled vine climbs up and arches over to one side, like a question mark: a living trellis
+      const trunk = sy([[-0.35, 0, -0.25], [-0.6, 0.9, -0.35], [-0.42, 1.9, -0.35], [-0.62, 2.8, -0.3], [-0.32, 3.5, -0.15], [0.2, 3.66, 0.02], [0.52, 3.42, 0.22]]);
+      stem(b, trunk, 0.18, 0.07, bark, { segs: 12, radial: 5, c2: shade(bark, 0.12), gy: [0, 3.5] });
+      const side = sy([[-0.5, 2.0, -0.35], [-0.9, 2.42, -0.25], [-1.12, 2.5, -0.02], [-1.15, 2.32, 0.15]]);
+      stem(b, side, 0.08, 0.05, bark, { segs: 6, radial: 4 });
+      // big grape leaves over the arch, and curly tendrils
+      [[-0.3, 3.62, -0.1, -0.7, 0.3], [0.25, 3.75, -0.15, 0.6, 0.35], [-0.55, 3.35, -0.35, -2.4, 0.25], [0.6, 3.6, -0.25, 2.2, 0.2], [-1.0, 2.6, -0.25, -2.1, 0.3]].forEach(([x, y, z, a, up]) =>
+        blade(b, { p: [x, y * k, z], a, up, len: 0.85, wid: 0.85, shape: 'round', notch: 0.25, serrate: 0.15, segL: 4, c: shade(lf, -0.25), c2: shade(lf, 0.3), bend: -0.35, cup: 0.4 }));
+      b.add(P.torus(0.12, 3, 8, 4.4), { p: [0.75, 3.2 * k, -0.15], r: [0.3, 0.8, 0.9], s: 0.18, c: lf });
+      b.add(P.torus(0.12, 3, 8, 4.4), { p: [-0.95, 1.55 * k, -0.3], r: [0.3, -0.6, 0.5], s: 0.15, c: lf });
+      const grape = (p, s, i, col = c) => b.add(P.ico(0), { p, s, r: [i, i * 2, 0], c: shade(col, -0.3), c2: mixCol(col, '#ffffff', 0.12), gy: [-1, 1], glow: 0.2, glow2: 0.45 });
+      const deep = mixCol(c, '#5a4bff', 0.5); // some grapes are a deeper blue-violet
+      // two glowing grapes fell on the floor
+      grape([0.85, 0.2, 0.55], 0.17, 1);
+      grape([-0.7, 0.18, 0.7], 0.15, 2, deep);
+      // the big bunch hangs from the end of the arch, the biggest grape up front wears the face
+      const H2 = trunk[6];
+      b.use('bunch', H2, { look: true });
+      stem(b, [H2, [H2[0], H2[1] - 0.2, H2[2] + 0.05], [H2[0], H2[1] - 0.32, H2[2] + 0.1]], 0.04, 0.035, shade(lf, -0.3), { radial: 3, segs: 3 });
+      const T = H2[1] - 0.42;
+      const rows = o.bud ? [[3, 0.2, 0], [2, 0.12, -0.24], [1, 0, -0.44]] : [[6, 0.5, 0], [5, 0.41, -0.37], [4, 0.31, -0.72], [3, 0.18, -1.04], [1, 0, -1.3]];
+      const gs = o.bud ? 0.13 : 0.24;
+      rows.forEach(([n, r, dy], ri) => {
+        for (let j = 0; j < n; j++) {
+          const a = (j / n) * TAU + ri * 0.7;
+          grape([H2[0] + Math.sin(a) * r, T + dy, H2[2] + 0.1 + Math.cos(a) * r * 0.85], gs * (1 - ri * 0.04), ri * 5 + j, (ri + j) % 3 ? c : deep);
+        }
+      });
+      const fr = o.bud ? 0.2 : 0.34;
+      const F = [H2[0], T - (o.bud ? 0.16 : 0.36), H2[2] + 0.1 + (o.bud ? 0.24 : 0.4)];
+      b.add(P.sphere(10, 7), { p: F, s: fr, c: shade(c, -0.2), c2: mixCol(c, '#ffffff', 0.2), gy: [-1, 1], glow: 0.2, glow2: 0.4 });
+      sphereFace(b, o.bud ? 'sleepy' : 'happy', F, fr, fr * 1.35, 0.2);
+      // a smaller bunch on the side branch
+      const S2 = side[3];
+      b.use('bunch2', S2);
+      [[3, 0.17, -0.22], [2, 0.11, -0.46], [1, 0, -0.64]].forEach(([n, r, dy], ri) => {
+        for (let j = 0; j < n; j++) {
+          const a = (j / n) * TAU + ri;
+          grape([S2[0] + Math.sin(a) * r, S2[1] + dy, S2[2] + 0.05 + Math.cos(a) * r], gs * 0.75, 40 + ri * 3 + j, (ri + j) % 2 ? c : deep);
+        }
+      });
+    },
+    anim(p, t, ph) {
+      p.bunch.rotation.z = Math.sin(t * 1.3 + ph) * 0.07;
+      p.bunch.rotation.x = Math.sin(t * 0.9 + ph) * 0.05;
+      p.bunch2.rotation.z = Math.sin(t * 1.6 + ph + 2) * 0.1;
+    },
+  },
+
+  // ---------------------------------------------------------------- Eternal: Bubble Reef
+
+  coralcrown: {
+    leaf: () => KELP,
+    sproutTop(b, o, p) {
+      stem(b, [[p[0], p[1] - 0.05, p[2]], [p[0] + 0.02, p[1] + 0.15, p[2]], [p[0] - 0.08, p[1] + 0.3, p[2]]], 0.045, 0.03, o.c0, { radial: 4, segs: 3 });
+      stem(b, [[p[0] + 0.01, p[1] + 0.1, p[2]], [p[0] + 0.13, p[1] + 0.22, p[2]]], 0.03, 0.025, o.c0, { radial: 4, segs: 2 });
+      b.add(P.sphere(5, 3), { p: [p[0] - 0.08, p[1] + 0.32, p[2]], s: 0.05, c: o.c1, glow: 0.8 });
+      b.add(P.sphere(5, 3), { p: [p[0] + 0.14, p[1] + 0.24, p[2]], s: 0.04, c: o.c1, glow: 0.8 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 2.6, 0.1], size: 4.6, color: o.c0, opacity: 0.33 },
+      { kind: 'sparkle', mode: 'rise', color: '#e8fbff', count: 12, rx: 1.5, h: 4.2, y0: 0.2, size: 0.22, star: false },
+    ],
+    build(b, o) {
+      const coral = o.c0, peach = o.c1;
+      sandMound(b);
+      starfish(b, [0.82, 0.12, 0.6], 0.3, '#ffa23d', 0.6);
+      // a purple sea fan, with a lacy lattice
+      const lattice = (x, y) => ((Math.floor(x * 9 + y * 7) + Math.floor(-x * 9 + y * 7)) % 2 ? '#e0a8ff' : null);
+      blade(b, { p: [-0.75, 0.15, 0.3], a: -1.1, up: 1.15, len: 1.15, wid: 1.0, shape: 'round', segL: 4, segW: 3, bend: -0.1, cup: 0.2, c: '#9a52ef', c2: '#d494ff', cf: lattice });
+      // swaying kelp ribbons behind
+      b.use('kelp', [0, 0, -0.6]);
+      [[-0.7, -0.45, 2.6, 2.4], [0.72, -0.5, 2.2, 2.0], [-0.15, -0.85, 2.9, 2.7]].forEach(([x, z, a, l]) =>
+        blade(b, { p: [x, 0.05, z], a, up: 1.45, len: l, wid: 0.36, shape: 'blade', segL: 7, segW: 1, twist: 0.7, bend: -0.25, cup: 0.1, c: shade(KELP, -0.2), c2: '#9fe8b8', glow2: 0.2 }));
+      b.use('body');
+      // a stout coral stalk with little branches
+      const sc = o.bud ? 0.7 : 1;
+      const C = [0, o.bud ? 1.45 : 2.1, 0.08];
+      const R = 0.72 * sc;
+      stem(b, [[0, 0, 0], [0.06, C[1] * 0.4, 0], [0, C[1] - R * 0.6, 0.05]], 0.32, 0.24, shade(coral, -0.25), { radial: 7, segs: 4, c2: coral, gy: [0, C[1]] });
+      [[0.6, 0.8, 0.5], [1.0, 3.6, 0.42], [1.2, 2.0, 0.36]].forEach(([y, a, l]) => {
+        const p0 = [Math.sin(a) * 0.22, y * sc, Math.cos(a) * 0.22];
+        stem(b, [p0, [p0[0] + Math.sin(a) * l * 0.6, p0[1] + l * 0.5, p0[2] + Math.cos(a) * l * 0.6], [p0[0] + Math.sin(a) * l * 0.7, p0[1] + l, p0[2] + Math.cos(a) * l * 0.7]], 0.08, 0.05, coral, { radial: 4, segs: 3, cap: true });
+      });
+      // the head: a round brain coral that wears the face...
+      b.use('head', C, { look: true });
+      const head = mixCol(peach, coral, 0.2);
+      b.add(P.sphere(11, 8), { p: C, s: R, c: shade(head, -0.08), c2: shade(head, 0.12), gy: [-1, 1], cf: (x, y, z) => (Math.sin(x * 9 + Math.sin(y * 8) * 1.6 + z * 4) > 0.45 ? mixCol(head, coral, 0.4) : null) });
+      sphereFace(b, o.bud ? 'sleepy' : 'grin', C, R, R * 1.1, 0.15);
+      // ...and its crown: a coral band set with pearls, branching coral points tipped with glowing polyps
+      const B = C[1] + R * 0.5;
+      b.add(P.torus(0.17, 3, 14), { p: [C[0], B, C[2]], r: [PI / 2, 0, 0], s: [R * 0.9, R * 0.9, R * 0.75], c: shade(coral, -0.1), c2: coral, glow: 0.05 });
+      const n = 7;
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * TAU + PI / n;
+        const dx = Math.sin(a), dz = Math.cos(a);
+        const base = [C[0] + dx * R * 0.8, B + 0.02, C[2] + dz * R * 0.8];
+        const L = (o.bud ? 0.42 : 1.15) * (k % 2 ? 0.85 : 1);
+        const mid = [base[0] + dx * L * 0.25, base[1] + L * 0.55, base[2] + dz * L * 0.25];
+        const tip = [base[0] + dx * L * 0.45, base[1] + L, base[2] + dz * L * 0.45];
+        stem(b, [base, mid, tip], 0.12, 0.07, shade(coral, -0.1), { radial: 4, segs: 3, c2: mixCol(coral, peach, 0.25), gy: [B, B + L], glow: 0.05, glow2: 0.25 });
+        b.add(P.sphere(5, 3), { p: tip, s: 0.11, c: mixCol(peach, '#ffffff', 0.3), glow: 0.7 });
+        b.add(P.oct(), { p: [C[0] + Math.sin(a + PI / n) * R * 0.98, B, C[2] + Math.cos(a + PI / n) * R * 0.98], s: 0.085, c: '#fff6ee', glow: 0.45 });
+        if (o.bud) continue;
+        const sa = a + (k % 2 ? 0.55 : -0.55);
+        const sTip = [mid[0] + Math.sin(sa) * 0.32, mid[1] + 0.42, mid[2] + Math.cos(sa) * 0.32];
+        stem(b, [mid, [mid[0] + Math.sin(sa) * 0.22, mid[1] + 0.18, mid[2] + Math.cos(sa) * 0.22], sTip], 0.07, 0.05, coral, { radial: 4, segs: 2 });
+        b.add(P.oct(), { p: sTip, s: 0.07, c: peach, glow: 0.8 });
+      }
+    },
+    anim(p, t, ph) {
+      p.head.rotation.z = Math.sin(t * 1.1 + ph) * 0.06;
+      p.head.position.y = p.head.userData.base.y + Math.sin(t * 1.6 + ph) * 0.04;
+      p.kelp.rotation.z = Math.sin(t * 1.3 + ph) * 0.07;
+      p.kelp.rotation.x = Math.sin(t * 0.9 + ph + 1) * 0.06;
+    },
+  },
+
+  pearlclam: {
+    lookAll: true,
+    leaf: () => '#4fbf9a',
+    sproutTop(b, o, p) {
+      // a tiny clam peeking open (two half domes)
+      const h = [p[0], p[1] + 0.04, p[2] - 0.08];
+      b.add(P.dome(8, 2), { p: h, r: [PI, 0, 0], s: [0.2, 0.09, 0.17], c: o.c0, c2: o.c1, gy: [-1, 0] });
+      b.add(P.dome(8, 2), { p: [h[0], h[1], h[2] - 0.12], r: [-0.7, 0, 0], s: [0.2, 0.09, 0.17], c: o.c0, c2: o.c1, gy: [0, 1] });
+      b.add(P.sphere(6, 4), { p: [p[0], p[1] + 0.07, p[2] - 0.02], s: 0.07, c: '#ffffff', glow: 0.5 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 2.5, -0.2], size: 4.4, color: o.c1, opacity: 0.35 },
+      { kind: 'sparkle', mode: 'twinkle', color: '#ffffff', count: 9, rx: 1.4, h: 2.0, y0: 1.9, size: 0.32, star: true },
+      { kind: 'sparkle', mode: 'rise', color: '#e8fbff', count: 8, rx: 1.2, h: 3.4, y0: 1.5, size: 0.2, star: false },
+    ],
+    build(b, o) {
+      const pearl = o.c0, pink = o.c1;
+      sandMound(b);
+      starfish(b, [-0.85, 0.1, 0.6], 0.28, '#ff7a59', 2.1);
+      // a wavy stalk with frilly sea-lettuce leaves
+      const Hc = o.bud ? 1.55 : 2.1;
+      stem(b, [[0, 0, 0], [0.12, Hc * 0.35, 0.02], [-0.08, Hc * 0.7, -0.1], [0, Hc - 0.2, -0.3]], 0.15, 0.11, mixCol(pink, '#ff7a59', 0.4), { radial: 6, segs: 6 });
+      [[0.3, 1.0, 1.2], [2.3, 1.05, 1.1], [4.2, 1.0, 1.15], [5.4, 0.7, 0.9]].forEach(([a, up, l]) =>
+        blade(b, { p: [0, 0.12, 0], a, up, len: l, wid: 0.62, shape: 'leaf', segL: 5, serrate: 0.3, bend: -0.35, cup: 0.35, twist: 0.6, c: '#2f8f6a', c2: '#b8f5d8' }));
+      // the clam: a ribbed scallop hinged at the back, its pearl sitting on a frilly pink mantle
+      const S = 1.25, hinge = [0, Hc, -0.95];
+      const shell = { c: shade(pearl, -0.08), c2: mixCol(pearl, pink, 0.3), gy: [-0.36, 0], cf: scallopRibs(mixCol(pearl, pink, 0.5)), glow: 0.05 };
+      b.add(scallopGeo(), { p: hinge, s: [S, S * 1.1, S], ...shell });
+      b.add(P.cyl(1, 1, 8), { p: [0.3, Hc - 0.06, hinge[2] - 0.02], r: [0, 0, PI / 2], s: [0.12, 0.6, 0.12], c: mixCol(pearl, pink, 0.5) });
+      if (o.bud) {
+        // barely open, a sleepy little pearl peeking out
+        b.add(scallopGeo(), { p: hinge, r: [-0.36, 0, 0], s: [S, -S * 1.1, S], ...shell });
+        const q = [0, Hc + 0.06, 0.02];
+        b.add(P.sphere(9, 7), { p: q, s: 0.24, c: shade(pearl, -0.05), c2: mixCol(pearl, pink, 0.25), gy: [-1, 1], glow: 0.25 });
+        sphereFace(b, 'sleepy', q, 0.24, 0.34, 0.2);
+        return;
+      }
+      ring(b, 9, { center: [0, Hc - 0.28, -0.3], r0: 0.25, up: 0.25, len: 0.55, wid: 0.5, shape: 'round', segL: 3, bend: 0.25, cup: 0.4, c: shade(pink, -0.1), c2: mixCol(pink, '#ffffff', 0.4), glow: 0.1, glow2: 0.3 });
+      const PR = 0.42, PC = [0, Hc + 0.05, -0.28];
+      b.use('pearl', PC);
+      b.add(P.sphere(11, 8), { p: PC, s: PR, c: shade(pearl, -0.05), c2: mixCol(pearl, pink, 0.25), gy: [-1, 1], glow: 0.25, glow2: 0.4 });
+      // a glassy skin over the pearl gives it a rainbow sheen
+      b.add(P.sphere(10, 7), { p: PC, s: PR * 1.05, ch: 'trans', c: '#ffffff', c2: mixCol(pink, '#ffffff', 0.5), gy: [-1, 1] });
+      sphereFace(b, 'joy', PC, PR * 1.05, PR * 1.2, 0.25);
+      // the top shell, propped open (anim claps it now and then)
+      b.use('lid', hinge);
+      b.add(scallopGeo(), { p: hinge, r: [-1.05, 0, 0], s: [S, -S * 1.1, S], ...shell });
+      // bubbles drifting up out of it
+      b.use('bub', [0, Hc + 1.4, 0]);
+      [[0.55, Hc + 1.0, 0.1, 0.16], [-0.42, Hc + 1.45, 0.0, 0.12], [0.15, Hc + 1.9, -0.15, 0.1]].forEach(([x, y, z, r]) => {
+        b.add(P.sphere(7, 5), { p: [x, y, z], s: r, ch: 'trans', c: '#dff8ff', c2: '#ffffff', gy: [-1, 1] });
+        b.add(P.oct(), { p: [x - r * 0.35, y + r * 0.45, z + r * 0.7], s: [r * 0.22, r * 0.12, r * 0.06], r: [0.3, 0, 0.6], c: '#ffffff', glow: 0.9, keep: true });
+      });
+    },
+    anim(p, t, ph) {
+      if (p.lid) {
+        // the shell breathes, and claps shut for a quick peekaboo now and then
+        const c = ((t * 0.15 + ph) % 1 + 1) % 1;
+        const clap = c < 0.1 ? Math.sin((c / 0.1) * PI) : 0;
+        p.lid.rotation.x = Math.sin(t * 1.2 + ph) * 0.1 + clap * 0.35;
+        p.pearl.rotation.z = Math.sin(t * 1.4 + ph) * 0.08;
+        p.pearl.position.y = p.pearl.userData.base.y + Math.sin(t * 1.8 + ph) * 0.04 - clap * 0.05;
+        p.bub.position.y = p.bub.userData.base.y + Math.sin(t * 1.1 + ph) * 0.15;
+      }
+    },
+  },
+
+  jellybell: {
+    leaf: () => '#6fd8c8',
+    sproutTop(b, o, p) {
+      b.add(P.dome(8, 3), { p: [p[0], p[1] + 0.06, p[2]], s: [0.18, 0.16, 0.18], ch: 'trans', c: o.c1, c2: '#ffffff', gy: [0, 1], glow: 0.2 });
+      b.add(P.dome(6, 2), { p: [p[0], p[1] + 0.06, p[2]], s: 0.1, c: o.c0, glow: 0.6 });
+      for (let k = 0; k < 3; k++) blade(b, { p: [p[0] + (k - 1) * 0.07, p[1] + 0.06, p[2]], a: k * 2.1, up: -1.35, len: 0.24, wid: 0.05, shape: 'blade', segL: 3, segW: 1, c: o.c0, c2: o.c1, glow: 0.3 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, 3.25, 0.1], size: 4.6, color: o.c0, opacity: 0.38 },
+      { kind: 'sparkle', mode: 'rise', color: o.c1, count: 12, rx: 1.4, h: 3.4, y0: 0.8, size: 0.18, star: false },
+      { kind: 'sparkle', mode: 'twinkle', color: '#ffffff', count: 6, rx: 1.4, h: 1.6, y0: 2.8, size: 0.28, star: true },
+    ],
+    build(b, o) {
+      const lav = o.c0, aqua = o.c1;
+      sandMound(b, 0.95);
+      // a sea anemone holds the jelly's tether
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * TAU + 0.2;
+        stem(b, [[Math.sin(a) * 0.2, 0.18, Math.cos(a) * 0.2], [Math.sin(a) * 0.45, 0.45, Math.cos(a) * 0.45], [Math.sin(a) * 0.6, 0.62, Math.cos(a) * 0.6]], 0.09, 0.05, '#ff7ab8', { radial: 4, segs: 3, cap: true, c2: '#ffd1ec', gy: [0.2, 0.6], glow: 0.05, glow2: 0.4 });
+      }
+      b.add(P.cyl(0.9, 1, 8), { p: [0, 0.08, 0], s: [0.3, 0.2, 0.3], c: '#ff5ca8' });
+      const J = [0, o.bud ? 2.2 : 2.95, 0.1];
+      const sc = o.bud ? 0.62 : 1;
+      stem(b, [[0, 0.2, 0], [0.16, J[1] * 0.3, 0.05], [-0.12, J[1] * 0.55, 0.06], [0.1, J[1] * 0.78, 0.08], [0, J[1] - 0.1, 0.1]], 0.05, 0.035, aqua, { radial: 4, segs: 10, glow: 0.2, glow2: 0.5 });
+      // ribbon tentacles and frilly pink arms trailing under the bell
+      b.use('tent', J);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * TAU + 0.3;
+        blade(b, { p: [J[0] + Math.sin(a) * 0.66 * sc, J[1] - 0.05, J[2] + Math.cos(a) * 0.66 * sc], a, up: -1.32, len: (1.7 + hash(k + 4) * 0.5) * sc, wid: 0.15 * sc, shape: 'leaf', segL: 8, segW: 1, bend: k % 2 ? 0.3 : -0.2, cup: 0, c: shade(lav, -0.1), c2: aqua, glow: 0.35, glow2: 0.7 });
+      }
+      for (let k = 0; k < 3; k++) {
+        const a = (k / 3) * TAU;
+        blade(b, { p: [J[0] + Math.sin(a) * 0.15, J[1] - 0.05, J[2] + Math.cos(a) * 0.15], a, up: -1.45, len: 1.1 * sc, wid: 0.22 * sc, shape: 'leaf', segL: 6, segW: 1, bend: 0.2, serrate: 0.35, c: '#ff7ac8', c2: mixCol(lav, '#ff9ad8', 0.5), glow: 0.3, glow2: 0.5 });
+      }
+      // the bell: a glassy dome around a glowing heart, a frilly rim and starry spots
+      b.use('jelly', J, { look: true });
+      b.add(latheGeo('jellyBell', [[0, 0.95], [0.5, 0.86], [0.85, 0.6], [1.02, 0.25], [1.08, 0.02], [0.98, -0.06]], 14), { p: J, s: sc, ch: 'trans', c: aqua, c2: mixCol(aqua, '#ffffff', 0.6), gy: [0, 0.95], glow: 0.25, glow2: 0.4 });
+      b.add(P.dome(12, 4), { p: [J[0], J[1] + 0.02, J[2]], s: [0.66 * sc, 0.62 * sc, 0.66 * sc], c: shade(lav, -0.1), c2: mixCol(lav, '#ffffff', 0.45), gy: [0, 1], glow: 0.4, glow2: 0.7 });
+      ring(b, 12, { center: J, r0: 1.0 * sc, y: -0.04, up: -0.6, len: 0.3 * sc, wid: 0.32 * sc, shape: 'round', segL: 2, segW: 1, bend: 0.2, cup: 0.2, c: lav, c2: mixCol(lav, aqua, 0.5), glow: 0.35, glow2: 0.6 });
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * TAU + 0.9;
+        if (Math.cos(a) > 0.55) continue; // keep the face clear
+        b.add(P.oct(), { p: [J[0] + Math.sin(a) * 0.62 * sc, J[1] + 0.68 * sc, J[2] + Math.cos(a) * 0.62 * sc], s: 0.07 * sc, c: '#ffffff', glow: 0.9 });
+      }
+      sphereFace(b, o.bud ? 'sleepy' : 'happy', [J[0], J[1] + 0.05 * sc, J[2]], 0.98 * sc, 0.95 * sc, 0.32);
+      if (o.bud) return;
+      // two baby jellies swim around it
+      b.use('babies', J);
+      [[1.35, 0.2, 0.25, lav], [-1.25, -0.55, 0.2, '#ff9ad8']].forEach(([x, y, s, col], i) => {
+        const q = [J[0] + x, J[1] + y, J[2] - 0.2 * i];
+        b.add(P.dome(8, 3), { p: q, s: [s, s * 0.85, s], ch: 'trans', c: aqua, c2: '#ffffff', gy: [0, 1], glow: 0.3 });
+        b.add(P.dome(6, 2), { p: q, s: s * 0.6, c: col, glow: 0.6 });
+        for (let k = 0; k < 3; k++) blade(b, { p: [q[0] + (k - 1) * s * 0.5, q[1] - 0.02, q[2]], a: k * 2.1, up: -1.35, len: s * 3, wid: s * 0.4, shape: 'blade', segL: 4, segW: 1, bend: 0.2, c: col, c2: aqua, glow: 0.4 });
+      });
+    },
+    anim(p, t, ph) {
+      // the bell pulses (the tentacles stretch as it squeezes) and bobs on its tether
+      const k = Math.sin(t * 2.4 + ph);
+      const y = p.jelly.userData.base.y + Math.sin(t * 1.2 + ph) * 0.14;
+      p.jelly.position.y = p.tent.position.y = y;
+      p.jelly.scale.set(1 + k * 0.06, 1 - k * 0.07, 1 + k * 0.06);
+      p.tent.scale.set(1 - k * 0.05, 1 + k * 0.08, 1 - k * 0.05);
+      p.tent.rotation.z = Math.sin(t * 1.3 + ph) * 0.08;
+      p.tent.rotation.x = Math.sin(t * 1.7 + ph + 1) * 0.08;
+      if (p.babies) {
+        p.babies.rotation.y = t * 0.5 + ph;
+        p.babies.position.y = p.babies.userData.base.y + Math.sin(t * 2 + ph) * 0.1;
+      }
+    },
+  },
+
+  // ---------------------------------------------------------------- Infinity: Rainbow's End
+
+  infinityrose: {
+    leaf: () => '#3f8f7a',
+    sproutTop(b, o, p) {
+      b.add(infinityGeo(18, 3), { p: [p[0], p[1] + 0.14, p[2]], s: 0.18, c: o.c0, cf: rainbowX, glow: 0.6 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, ROSE_H + 0.6, 0.2], size: 4.6, color: o.c0, opacity: 0.38 },
+      { kind: 'sparkle', mode: 'twinkle', color: o.c1, count: 10, rx: 1.7, h: 2.4, y0: ROSE_H - 0.6, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const peri = o.c0, pink = o.c1;
+      const sg = '#3f8f7a';
+      // soft pale ground scattered with rainbow drops
+      b.add(P.dome(12, 3), { s: [1.15, 0.26, 1.05], c: '#e8defa', c2: '#fff6fd', gy: [0, 1] });
+      SPECTRUM.forEach((c, i) => {
+        const a = i * 0.9 + 0.4, r = 0.75 + hash(i + 9) * 0.3;
+        b.add(P.oct(), { p: [Math.sin(a) * r, 0.14, Math.cos(a) * r], r: [0.3, a, 0], s: [0.08, 0.12, 0.08], c, glow: 0.6 });
+      });
+      const H = ROSE_H;
+      // two stems twined around each other, forever
+      const twine = (a0, r) => Array.from({ length: 9 }, (_, k) => {
+        const y = (k / 8) * H, a = k * 1.1 + a0;
+        return [Math.sin(a) * r, y, 0.12 * (y / H) + Math.cos(a) * r];
+      });
+      stem(b, twine(0, 0.06), 0.085, 0.06, sg, { segs: 14, radial: 5 });
+      stem(b, twine(PI, 0.07), 0.04, 0.03, mixCol(peri, '#ffffff', 0.2), { segs: 10, radial: 3, glow: 0.4 });
+      [[0.55, 0.4], [1.0, 2.8], [1.5, 1.1], [1.95, 4.0]].forEach(([y, a]) =>
+        b.add(P.oct(), { p: [Math.sin(a) * 0.09, y, Math.cos(a) * 0.09 + 0.12 * (y / H)], q: aim([Math.sin(a), 0.4, Math.cos(a)]), s: [0.05, 0.15, 0.05], c: mixCol(peri, '#ffffff', 0.4), glow: 0.6 }));
+      [[0.85, 0.6, 0.85], [1.35, 3.6, 0.8], [1.9, 1.9, 0.7]].forEach(([y, a, l]) => {
+        const lc = { serrate: 0.15, segL: 4, c: '#2a6e60', c2: mixCol(peri, '#9ff0e0', 0.5), bend: -0.2, cup: 0.25, glow2: 0.3 };
+        stem(b, [[0, y, 0.04], [Math.sin(a) * 0.3, y + 0.12, Math.cos(a) * 0.3]], 0.035, 0.03, sg, { radial: 3, segs: 2 });
+        blade(b, { p: [Math.sin(a) * 0.3, y + 0.12, Math.cos(a) * 0.3], a, up: 0.35, len: l, wid: l * 0.6, ...lc });
+        blade(b, { p: [Math.sin(a) * 0.2, y + 0.08, Math.cos(a) * 0.2], a: a + 0.9, up: 0.4, len: l * 0.7, wid: l * 0.45, ...lc });
+      });
+      if (o.bud) return bud(b, [0, H, 0.12], 0.44, shade(peri, -0.1), { tip: pink, glow: 0.3, sepal: sg });
+      // the infinity sign: a glowing rainbow loop behind the bloom
+      const B = [0, H + 0.62, -0.3];
+      b.use('loop', B, { look: true });
+      b.add(infinityGeo(), { p: B, s: [1.55, 1.5, 1.4], c: peri, cf: rainbowX, glow: 0.45 });
+      // the rose: periwinkle petals blushing pink toward the heart, glowing at the edges
+      b.use('head', [0, H, 0.12], { look: true });
+      b.frame(fm([0, H + 0.02, 0.18], 0.75, 0, 0, 0.95));
+      ring(b, 5, { r0: 0.1, up: -0.3, len: 0.5, wid: 0.22, shape: 'point', c: sg, c2: '#7fd8c0' });
+      ring(b, 7, { r0: 0.28, up: 0.45, len: 0.9, wid: 0.9, shape: 'round', segL: 3, c: shade(peri, -0.2), c2: mixCol(peri, '#ffffff', 0.25), bend: -0.3, cup: 0.4, off: 0.2, glow: 0.12, glow2: 0.35 });
+      ring(b, 6, { r0: 0.2, y: 0.08, up: 0.95, len: 0.82, wid: 0.86, shape: 'round', segL: 3, c: shade(peri, -0.25), c2: mixCol(peri, pink, 0.6), bend: 0.05, cup: 0.55, off: 0.8, glow: 0.15, glow2: 0.45 });
+      ring(b, 5, { r0: 0.12, y: 0.15, up: 1.25, len: 0.7, wid: 0.74, shape: 'round', segL: 3, c: shade(pink, -0.25), c2: pink, bend: 0.3, cup: 0.7, off: 0.3, glow: 0.2, glow2: 0.45 });
+      ring(b, 3, { r0: 0.05, y: 0.22, up: 1.45, len: 0.5, wid: 0.55, shape: 'round', segL: 2, c: shade(pink, -0.35), c2: shade(pink, -0.1), bend: 0.4, cup: 0.8, off: 1.0, glow: 0.2 });
+      b.add(P.oct(), { p: [0, 0.62, 0], s: [0.08, 0.16, 0.08], c: '#ffffff', glow: 1 });
+      b.frame(null);
+    },
+    anim(p, t, ph) {
+      p.head.rotation.z = Math.sin(t * 1.0 + ph) * 0.05;
+      if (p.loop) {
+        p.loop.rotation.z = Math.sin(t * 0.8 + ph) * 0.12;
+        p.loop.rotation.x = -0.15 + Math.sin(t * 1.1 + ph) * 0.08;
+        p.loop.position.y = p.loop.userData.base.y + Math.sin(t * 1.4 + ph) * 0.08;
+      }
+    },
+  },
+
+  aurorafern: {
+    sprout: 'curl',
+    glowy: true,
+    leaf: (o) => o.c0,
+    fx: (o) => [
+      { kind: 'halo', p: [0, 3.0, -0.2], size: 5.0, color: o.c0, opacity: 0.3 },
+      { kind: 'sparkle', mode: 'rise', color: o.c1, count: 12, rx: 1.4, h: 4.6, y0: 0.4, size: 0.18, star: false },
+      { kind: 'sparkle', mode: 'twinkle', color: '#d8fff0', count: 8, rx: 1.6, h: 3.0, y0: 1.2, size: 0.3, star: true },
+    ],
+    build(b, o) {
+      const green = o.c0, peri = o.c1;
+      // northern-lights bands up each frond (per triangle; y = 0 at the stalk .. 1 at the tip)
+      const aurora = (x, y) => (y > 0.86 ? [AURORA[4], 0.5] : y > 0.68 ? [AURORA[3], 0.35] : y > 0.48 ? [AURORA[2], 0.3] : y > 0.26 ? [AURORA[1], 0.25] : null);
+      // night-dark moss with a few glowing dew drops
+      b.add(P.dome(12, 3), { s: [1.15, 0.28, 1.05], c: '#123a44', c2: '#245a5a', gy: [0, 1] });
+      [[0.8, 0.5], [-0.75, 0.55], [0.45, -0.8], [-0.6, -0.65], [0.95, -0.15]].forEach(([x, z], i) =>
+        b.add(P.oct(), { p: [x, 0.12, z], s: 0.07, c: AURORA[1 + (i % 4)], glow: 1 }));
+      const sc = o.bud ? 0.7 : 1;
+      const frond = { shape: 'feather', serrate: 0.45, c: AURORA[0], c2: shade(green, -0.35), cf: aurora, glow2: 0.15 };
+      // tall fronds fanned out behind like curtains of light, two at the sides and a short skirt in front
+      [-1.3, -0.65, 0, 0.65, 1.3].forEach((d, i) => blade(b, { ...frond, p: [-Math.sin(d) * 0.15, 0.1, -Math.cos(d) * 0.15], a: PI + d, up: 1.32, len: (4.1 - Math.abs(d) * 0.5) * sc, wid: 0.9, segL: 10, bend: -0.15, cup: 0.05, twist: i % 2 ? 0.25 : -0.25 }));
+      [-1.75, 1.75].forEach((a) => blade(b, { ...frond, p: [0, 0.1, 0], a, up: 1.1, len: 2.4 * sc, wid: 0.75, segL: 9, bend: -0.35, cup: 0.05 }));
+      [-0.8, 0.0, 0.8].forEach((d) => blade(b, { ...frond, p: [0, 0.08, 0], a: d, up: 0.5, len: 1.4 * sc, wid: 0.6, segL: 8, bend: -0.45 }));
+      // two little fiddleheads on the sides
+      [[-0.55, 1.9, 0.9], [0.6, 2.1, -0.9]].forEach(([x, y, rz]) => {
+        y *= sc;
+        stem(b, [[x * 0.2, 0.05, 0], [x * 0.6, y * 0.55, -0.05], [x, y, -0.05]], 0.06, 0.05, '#2a8f7a', { radial: 4, segs: 4 });
+        b.add(P.torus(0.35, 4, 9, TAU * 0.8), { p: [x, y + 0.2, -0.05], r: [0, 0, rz], s: 0.22, c: AURORA[1], c2: AURORA[3], gy: [-1, 1], glow: 0.3, glow2: 0.6 });
+      });
+      // the big curl in the middle wears the face
+      const H = o.bud ? 1.9 : 2.65;
+      stem(b, [[0, 0, 0], [0.05, H * 0.45, 0.05], [0, H - 0.3, 0.15]], 0.1, 0.08, '#2a8f7a', { c2: green, gy: [0, H], glow2: 0.3 });
+      b.use('head', [0, H - 0.3, 0.15], { look: true });
+      const hz = 0.2;
+      b.add(P.torus(0.42, 5, 10, TAU * 0.82), { p: [0, H, hz], r: [0, 0, -0.9], s: 0.48, c: AURORA[1], c2: AURORA[3], gy: [-1, 1], glow: 0.2, glow2: 0.45 });
+      b.add(P.sphere(9, 7), { p: [0, H, hz], s: [0.38, 0.38, 0.3], c: shade(green, -0.1), c2: AURORA[2], gy: [-1, 1], glow: 0.2, glow2: 0.35 });
+      sphereFace(b, o.bud ? 'sleepy' : 'joy', [0, H, hz], 0.31, 0.56, 0.2);
+      // a little crown of star glints over the curl
+      if (!o.bud) {
+        for (let k = 0; k < 3; k++) b.add(P.oct(), { p: [(k - 1) * 0.28, H + 0.62 + (k === 1 ? 0.12 : 0), hz - 0.1], r: [0, 0.4, (k - 1) * 0.4], s: [0.07, 0.16, 0.07], c: k === 1 ? AURORA[4] : AURORA[2], glow: 1 });
+      }
+      b.use('body');
+      if (o.bud) return;
+      // ribbons of aurora light drifting around the top
+      b.use('wisps', [0, 3.1, -0.1]);
+      [[0.85, 3.3, -0.3, 0.2], [-0.8, 2.8, 0.2, 3.4], [0.15, 4.0, -0.75, 1.9]].forEach(([x, y, z, a], i) =>
+        blade(b, { p: [x, y, z], a, up: 0.25, len: 1.0, wid: 0.3, shape: 'blade', segL: 6, segW: 1, twist: 0.8, bend: 0.3, cup: 0, ch: 'trans', c: green, c2: i % 2 ? AURORA[4] : peri, glow: 0.6, glow2: 0.9 }));
+    },
+    anim(p, t, ph) {
+      p.head.rotation.z = Math.sin(t * 1.5 + ph) * 0.08;
+      p.head.rotation.x = Math.sin(t * 1.1 + ph) * 0.05;
+      p.body.rotation.z = Math.sin(t * 0.7 + ph) * 0.02;
+      if (p.wisps) {
+        p.wisps.rotation.y = t * 0.45 + ph;
+        p.wisps.position.y = p.wisps.userData.base.y + Math.sin(t * 1.2 + ph) * 0.12;
+      }
+    },
+  },
+
+  starfruit: {
+    leaf: () => '#5cc860',
+    sproutTop(b, o, p) {
+      b.add(starFruitGeo(), { p: [p[0], p[1] + 0.16, p[2] + 0.02], r: [-0.2, 0.3, 0.2], s: 0.17, c: o.c0, c2: o.c1, gy: [-1, 1], glow: 0.35 });
+    },
+    fx: (o) => [
+      { kind: 'halo', p: [0, STAR_H + 1.0, 0.2], size: 4.8, color: o.c0, opacity: 0.38 },
+      { kind: 'sparkle', mode: 'orbit', color: '#fff3a0', count: 8, rx: 1.8, h: 1.4, y0: STAR_H + 0.4, size: 0.34, star: true },
+    ],
+    build(b, o) {
+      const gold = o.c0, coral = o.c1;
+      const lf = '#5cc860', bark = '#9a7044';
+      b.add(P.dome(12, 3), { s: [1.1, 0.26, 1.0], c: '#e8defa', c2: '#fff6fd', gy: [0, 1] });
+      // a twisty little tree: the trunk swirls as it climbs
+      const H = o.bud ? 1.9 : STAR_H;
+      const trunk = Array.from({ length: 7 }, (_, k) => {
+        const y = (k / 6) * H, a = k * 1.25, r = 0.14 * (1 - k / 7);
+        return [Math.sin(a) * r, y, Math.cos(a) * r + 0.1 * (k / 6)];
+      });
+      stem(b, trunk, 0.17, 0.11, bark, { segs: 12, radial: 6, c2: shade(bark, 0.2), gy: [0, H] });
+      // star-fruit leaves: little leaflets in pairs along each stalk
+      [[0.9, 0.7, 1.0], [1.3, 2.9, 0.9], [1.65, 4.6, 0.85], [1.1, 5.6, 0.75]].forEach(([y, a, l]) => {
+        y *= H / STAR_H;
+        const dx = Math.sin(a), dz = Math.cos(a);
+        const leaflet = { up: 0.45, len: 0.36, wid: 0.2, shape: 'leaf', segL: 2, segW: 1, bend: -0.1, c: shade(lf, -0.15), c2: shade(lf, 0.25) };
+        const end = [dx * l, y + l * 0.35, dz * l];
+        stem(b, [[0, y, 0.05], [dx * l * 0.5, y + l * 0.25, dz * l * 0.5], end], 0.03, 0.02, shade(lf, -0.3), { radial: 3, segs: 3 });
+        for (let j = 1; j <= 3; j++) {
+          const f = j / 3.3;
+          for (const s of [-1, 1]) blade(b, { ...leaflet, p: [dx * l * f, y + l * 0.3 * f + 0.02, dz * l * f], a: a + s * 1.2 });
+        }
+        blade(b, { ...leaflet, p: end, a, up: 0.4 });
+      });
+      // two unripe star fruits hanging under the leaves
+      [[-0.75, 1.55, 0.25, 0.5], [0.8, 1.2, -0.1, -0.4]].forEach(([x, y, z, yaw]) => {
+        y *= H / STAR_H;
+        stem(b, [[x * 0.3, y + 0.35, 0.05], [x * 0.85, y + 0.32, z], [x, y + 0.2, z]], 0.025, 0.02, shade(lf, -0.3), { radial: 3, segs: 2 });
+        b.add(starFruitGeo(), { p: [x, y, z], r: [PI / 2, yaw, 0], s: 0.24, c: '#c8e84d', c2: gold, gy: [-1, 1], glow: 0.15 });
+      });
+      if (o.bud) {
+        b.use('head', [0, H, 0.15], { look: true });
+        const C = [0, H + 0.42, 0.15];
+        b.add(starFruitGeo(), { p: C, s: 0.48, c: '#c8e84d', c2: gold, gy: [-1, 1], glow: 0.1 });
+        face(b, 'sleepy', [C[0], C[1] - 0.02, C[2] + 0.42 * 0.48 + 0.012], 0.42, 0);
+        return;
+      }
+      // the star fruit: a twisted golden star with glowing coral ridges, spinning (its face stays put)
+      const R = 1.05, C = [0, H + R * 0.88, 0.15];
+      stem(b, [[0, H - 0.1, 0.1], [0, H + 0.15, 0.12]], 0.09, 0.08, bark);
+      b.use('fruit', C, { look: true });
+      const ridge = (x, y) => (Math.hypot(x, y) > 0.78 ? [coral, 0.55] : null);
+      b.add(starFruitGeo(), { p: C, s: R, c: shade(gold, -0.1), c2: mixCol(gold, '#ffffff', 0.12), gy: [-1, 1], cf: ridge, glow: 0.08, glow2: 0.2 });
+      b.use('head', C, { look: true });
+      face(b, 'cool', [C[0], C[1] - 0.04, C[2] + 0.42 * R + 0.015], 0.82, 0);
+      // three little rainbow star fruits orbit it
+      b.use('orbit', C);
+      ['#ff7ad9', '#5ce8ff', '#9dff6a'].forEach((col, k) => {
+        const a = (k / 3) * TAU + 0.4;
+        b.add(starFruitGeo(), { p: [C[0] + Math.sin(a) * 1.5, C[1] + (k === 1 ? 0.35 : -0.15), C[2] + Math.cos(a) * 1.5], r: [0.4, a, 0.3], s: 0.26, c: col, c2: '#ffffff', gy: [-1, 1], glow: 0.5, glow2: 0.8 });
+      });
+    },
+    anim(p, t, ph) {
+      if (p.fruit) {
+        const y = p.head.userData.base.y + Math.sin(t * 1.5 + ph) * 0.07;
+        p.fruit.rotation.x = p.head.rotation.x = -0.2;
+        p.fruit.rotation.z = -t * 0.8 + ph;
+        p.head.rotation.z = Math.sin(t * 1.2 + ph) * 0.07;
+        p.fruit.position.y = p.head.position.y = y;
+        p.orbit.rotation.y = t * 0.9 + ph;
+      } else p.head.rotation.z = Math.sin(t * 1.3 + ph) * 0.06;
     },
   },
 };

@@ -1464,6 +1464,20 @@ function gnomeRecipe(color) {
   return r;
 }
 
+// The Golden Gnome Hunt's gnome (world/gnomes.js): the guard cast in shiny gold, one merged geometry (feet at
+// y = 0, facing +Z, its noodle held up high) and the gold material. Pale vertex colours read as gold, dark ones
+// as engraving. Shared: never dispose them.
+let golden = null;
+export function goldenGnome() {
+  if (golden) return golden;
+  const m = new Merger();
+  gnomeBody(m, { tunic: '#fff1cc', arms: 'guard' });
+  gnomeHead(m, { hat: '#ffffff' }, GNOME.neck);
+  gnomeArm(placed(m, trs(...GNOME.shoulder, 1, 1, 1, -2.05, 0, 0.42, 'ZXY')), { tunic: '#fff1cc', noodle: '#ffffff' });
+  golden = { geometry: geoOf(m), material: mats().gold };
+  return golden;
+}
+
 const smooth = (x) => x * x * (3 - 2 * x);
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 

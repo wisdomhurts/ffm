@@ -1,5 +1,5 @@
 // Dev gallery for the characters module: the four family avatars (with photo faces when the page is
-// family.html) and the eight road monsters on a studded baseplate, plus contact sheets of every
+// family.html) and the eleven road monsters on a studded baseplate, plus contact sheets of every
 // Wardrobe look, hat, accessory, hair style, face, trail and emote.
 // URL hash (or window.__gallery.apply({...})) controls what is shown:
 //   view=family|lineup|lineup34|all|close:<id>|close34:<id>|side:<id>|back:<id>|backr:<id>|back34:<id>|rside:<id>|lside:<id>|game[:dist]|game34|behind|monsters[:<type>]|monster:<type>|faces
@@ -20,7 +20,7 @@ import { HATS, ACCS, HAIR, SHIRTS, FACES, TRAILS, randomLook, baseLook } from '.
 import { EMOTE_ANIM } from '../emotes.js';
 import { createBoutique } from '../../world/boutique.js';
 
-const MONSTERS = ['stump', 'crab', 'snapper', 'lavasprout', 'lurker', 'yeti', 'gummy', 'storm'];
+const MONSTERS = ['stump', 'crab', 'snapper', 'lavasprout', 'lurker', 'yeti', 'gummy', 'storm', 'golem', 'puffer', 'comet'];
 const monsterX = (i) => (i - (MONSTERS.length - 1) / 2) * 10;
 
 document.body.style.margin = '0';

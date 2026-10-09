@@ -200,7 +200,8 @@ export const DROPS = {
   roadChance: 0.65,
   rainbowChance: 0.05,
   plaza: ['garden', 'farm', 'jungle'],
-  byBiome: [['garden', 'farm'], ['farm', 'jungle'], ['jungle', 'ocean'], ['ocean', 'volcano'], ['volcano', 'galaxy'], ['galaxy', 'frost'], ['frost', 'candy'], ['candy', 'cloud'], ['cloud']],
+  byBiome: [['garden', 'farm'], ['farm', 'jungle'], ['jungle', 'ocean'], ['ocean', 'volcano'], ['volcano', 'galaxy'], ['galaxy', 'frost'], ['frost', 'candy'], ['candy', 'cloud'], ['cloud'],
+    ['galaxy', 'cloud'], ['ocean', 'cloud'], ['cloud']],
   rain: { count: 10, every: 4.5, rainbowChance: 0.15 },
   max: 14, // never more than this many at once
 };
@@ -221,11 +222,15 @@ export const RARITIES = [
   { id: 'celestial', name: 'Celestial', color: '#6ff3ff', glow: 0x6ff3ff, tier: 6 },
   { id: 'cosmic', name: 'Cosmic', color: '#ff5ce1', glow: 0xff5ce1, tier: 7 },
   { id: 'divine', name: 'Divine', color: '#ffe75e', glow: 0xffe75e, tier: 8 },
-  { id: 'secret', name: 'Secret', color: '#111111', glow: 0xffffff, tier: 9 },
+  { id: 'prismatic', name: 'Prismatic', color: '#3dffb4', glow: 0x3dffb4, tier: 9 },
+  { id: 'eternal', name: 'Eternal', color: '#ff7a59', glow: 0xff7a59, tier: 10 },
+  { id: 'infinity', name: 'Infinity', color: '#8a7dff', glow: 0x8a7dff, tier: 11 },
+  // Secret stays LAST: code indexes RARITIES by tier (RARITIES[tier + 1], rarityName)
+  { id: 'secret', name: 'Secret', color: '#111111', glow: 0xffffff, tier: 12 },
 ];
 export const RARITY = Object.assign(Object.create(null), Object.fromEntries(RARITIES.map((r) => [r.id, r])));
 // The top rarity a road seed can have without being a Secret (a lucky seed goes up one tier, never past it).
-export const TOP_TIER = RARITY.divine.tier;
+export const TOP_TIER = RARITY.infinity.tier;
 
 export const MUTATIONS = {
   normal: { id: 'normal', name: '', mult: 1, color: null },
@@ -278,11 +283,23 @@ export const PLANTS = [
   { id: 'cloudberry', name: 'Cloudberry Puff', rarity: 'divine', income: 7600, grow: 380, look: 'cloudpuff', colors: ['#ffffff', '#b07cff'] },
   { id: 'halolily', name: 'Halo Lily', rarity: 'divine', income: 8500, grow: 400, look: 'halolily', colors: ['#fffaf0', '#ffd23f'] },
   { id: 'thunderbloom', name: 'Thunder Bloom', rarity: 'divine', income: 9500, grow: 420, look: 'thunder', colors: ['#3d6bff', '#fff04d'] },
-  // Secret: the family
-  { id: 'dorianfruit', name: "Dorian's Dragonfruit", rarity: 'secret', income: 12000, grow: 300, look: 'dragonfruit', colors: ['#ff3f8e', '#7ee36b'], family: 'dorian' },
-  { id: 'estherlotus', name: "Esther's Eternal Lotus", rarity: 'secret', income: 12000, grow: 300, look: 'lotus', colors: ['#ff8fc8', '#ffe066'], family: 'esther' },
-  { id: 'maddiemarigold', name: "Mati's Magic Marigold", rarity: 'secret', income: 12000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
-  { id: 'micahmelon', name: "Micah's Mega Melon", rarity: 'secret', income: 12000, grow: 300, look: 'melon', colors: ['#3ddc84', '#ff5d5d'], family: 'micah' },
+  // Prismatic: Crystal Caverns
+  { id: 'prismpetal', name: 'Prism Petal', rarity: 'prismatic', income: 12000, grow: 440, look: 'prismpetal', colors: ['#3dffb4', '#b48cff'] },
+  { id: 'geodegourd', name: 'Geode Gourd', rarity: 'prismatic', income: 13500, grow: 460, look: 'geodegourd', colors: ['#7a5cff', '#ff9ef0'] },
+  { id: 'glimmergrapes', name: 'Glimmer Grapes', rarity: 'prismatic', income: 15000, grow: 480, look: 'glimmergrape', colors: ['#5ce1ff', '#2a8f6b'] },
+  // Eternal: Bubble Reef
+  { id: 'coralcrown', name: 'Coral Crown', rarity: 'eternal', income: 19000, grow: 500, look: 'coralcrown', colors: ['#ff7a59', '#ffd1a8'] },
+  { id: 'pearlbloom', name: 'Pearl Clam Bloom', rarity: 'eternal', income: 21500, grow: 520, look: 'pearlclam', colors: ['#fff6ee', '#ff9ec4'] },
+  { id: 'jellybell', name: 'Jelly Bell', rarity: 'eternal', income: 24000, grow: 540, look: 'jellybell', colors: ['#b28cff', '#7ee8ff'] },
+  // Infinity: Rainbow's End
+  { id: 'infinityrose', name: 'Infinity Rose', rarity: 'infinity', income: 30000, grow: 560, look: 'infinityrose', colors: ['#8a7dff', '#ff7ad9'] },
+  { id: 'aurorafern', name: 'Aurora Fern', rarity: 'infinity', income: 34000, grow: 580, look: 'aurorafern', colors: ['#5cffb0', '#8a7dff'] },
+  { id: 'starfruit', name: 'Starfruit Swirl', rarity: 'infinity', income: 38000, grow: 600, look: 'starfruit', colors: ['#ffe14d', '#ff7a59'] },
+  // Secret: the family (always out-earn the top road rarity)
+  { id: 'dorianfruit', name: "Dorian's Dragonfruit", rarity: 'secret', income: 50000, grow: 300, look: 'dragonfruit', colors: ['#ff3f8e', '#7ee36b'], family: 'dorian' },
+  { id: 'estherlotus', name: "Esther's Eternal Lotus", rarity: 'secret', income: 50000, grow: 300, look: 'lotus', colors: ['#ff8fc8', '#ffe066'], family: 'esther' },
+  { id: 'maddiemarigold', name: "Mati's Magic Marigold", rarity: 'secret', income: 50000, grow: 300, look: 'marigold', colors: ['#ffae00', '#b36bff'], family: 'maddie' },
+  { id: 'micahmelon', name: "Micah's Mega Melon", rarity: 'secret', income: 50000, grow: 300, look: 'melon', colors: ['#3ddc84', '#ff5d5d'], family: 'micah' },
 ];
 export const PLANT = Object.assign(Object.create(null), Object.fromEntries(PLANTS.map((p) => [p.id, p])));
 export const NAMESAKE_BONUS = 2; // owning your own family secret plant doubles it
@@ -306,6 +323,12 @@ export const BIOMES = [
     monster: { id: 'gummy', name: 'Gummy Bear', speed: 50, aggro: 34, count: 3 } },
   { id: 'cloud', name: 'Cloud Kingdom', rarity: 'divine', ground: '#f4f8ff', wall: '#c8d8ff', sky: '#8fd0ff', fog: '#eaf4ff', secret: 0.05,
     monster: { id: 'storm', name: 'Storm Puff', speed: 56, aggro: 36, count: 3 } },
+  { id: 'caverns', name: 'Crystal Caverns', rarity: 'prismatic', ground: '#5b3f8f', wall: '#2e1f52', sky: '#3b2a6b', fog: '#4a3a7a', secret: 0.055,
+    monster: { id: 'golem', name: 'Gem Golem', speed: 62, aggro: 38, count: 3 } },
+  { id: 'reef', name: 'Bubble Reef', rarity: 'eternal', ground: '#f2dcb0', wall: '#ff8a7a', sky: '#3fc6d9', fog: '#7fd8e0', secret: 0.06,
+    monster: { id: 'puffer', name: 'Puffer Pop', speed: 68, aggro: 40, count: 3 } },
+  { id: 'rainbowend', name: "Rainbow's End", rarity: 'infinity', ground: '#fff4fb', wall: '#b9a6ff', sky: '#ffb3e6', fog: '#ffe0f4', secret: 0.065,
+    monster: { id: 'comet', name: 'Comet Dragon', speed: 74, aggro: 42, count: 3 } },
 ];
 // `secret`: chance that a seed in that biome is a Secret family seed (the deepest biomes only).
 export const ROAD_END_Z = WORLD.road.startZ + BIOMES.length * WORLD.road.biomeLength;
@@ -346,6 +369,114 @@ export const EVENTS = {
 };
 
 export const MATCH = { showdownSeconds: 480 };
+
+// ------------------------------------------------------------------ round 4 features
+
+// Giant Harvests: a plant rolls a size the moment it finishes growing (host-rolled, travels in plant data).
+// Economy guard (tests/gameplay/giant.test.mjs): sum of p x (mult - 1) stays under 0.08, i.e. sizes add less than
+// +8% to a garden's income at the base odds (a Big every ~10 plants, a GIANT every ~50, a TITAN every ~500).
+export const SIZES = {
+  normal: { id: 'normal', name: '', p: 0, mult: 1, scale: 1 },
+  big: { id: 'big', name: 'Big', p: 0.1, mult: 1.25, scale: 1.25 },
+  giant: { id: 'giant', name: 'GIANT', p: 0.02, mult: 3, scale: 1.5 },
+  titan: { id: 'titan', name: 'TITAN', p: 0.002, mult: 6, scale: 1.8, beam: true },
+};
+export const SIZE_ODDS = { growPet: 1.25, watered: 1.5 }; // multipliers on the big/giant/titan chances
+
+// Help! Family Hero: bonk a thief carrying SOMEONE ELSE's plant -> a tip from the game.
+export const HERO = {
+  tipSecs: 30, // tip = min(tipSecs x the plant's income, sellCapSecs x income)
+  sellCapSecs: 90,
+  pairGap: 90, // one tip per hero/thief pair per 90 s
+  maxPer10Min: 5,
+  sneakySteals: 3, // a thief with 3+ steals in the last 2 min is SNEAKY: the tip doubles
+  sneakyWindow: 120,
+  ribbon: 60, // seconds the gold HERO ribbon shows
+  owes: 120, // seconds a rescued bot won't steal from its hero
+  // who answers a call for HELP (quick chat "Help!" while you're robbed): range in studs and how often, by personality
+  help: { guardian: [150, 1], tycoon: [60, 1], speedster: [999, 0.5], thief: [999, 0.25] },
+  helpFor: 20, // seconds a helper keeps chasing the thief
+  alertRange: 80, // a family bot robbed this close to you: "Esther needs help!"
+};
+
+// Family bot lines for Giant Harvests (giant: someone's plant came out GIANT or TITAN) and Family Hero (thanks: to
+// whoever saved their plant; helping: answering a call for help). {plant} {size} {hero} {name} are filled in.
+// Merged into CHAT below, so they are ordinary bot lines (net/protocol.js isBotLine knows them).
+export const FAMILY_LINES = {
+  dorian: {
+    giant: ['WHOA! Look at that {size} {plant}!', 'Now THAT is a {size} {plant}!', 'WHOA! That {plant} is HUGE!'],
+    thanks: ['Thanks, {hero}! You saved my {plant}!', 'My hero! Thanks, {hero}!', '{hero} to the rescue! Thank you!'],
+    helping: ['Hang on, {name}! Dad is coming!', 'On my way, champ!'],
+  },
+  esther: {
+    giant: ['WHOA! What a {size} {plant}!', 'Look how big that {plant} grew!', 'WHOA! So pretty AND so big!'],
+    thanks: ['Thank you, {hero}! You are my hero!', 'Aww, thanks {hero}! Big hug!', '{hero} saved the day!'],
+    helping: ['Mom is coming, {name}!', 'I got you, sweetie!'],
+  },
+  maddie: {
+    giant: ['WHOA!! A {size} {plant}!!', 'That {plant} is GINORMOUS!', 'WHOA! Can I touch it?!'],
+    thanks: ['THANK YOU {hero}!!', '{hero} is my HERO!', 'Yay! Thanks, {hero}!'],
+    helping: ['Zooming to help!', 'Coming, {name}! Zoom zoom!'],
+  },
+  micah: {
+    giant: ['WHOA... that {size} {plant} looks stealable. Hehe.', 'WHOA! That {plant} is enormous!', 'Ooh, a {size} {plant}. Nice.'],
+    thanks: ['Thanks, {hero}! I owe you one.', 'Whoa, thanks {hero}!', 'You saved my {plant}! Thanks, {hero}!'],
+    helping: ['Fine, I will help. Just this once!', 'Ninja rescue mode!'],
+  },
+};
+
+// Welcome-Back Garden (solo Endless only): time away keeps your garden growing, at half speed, capped.
+export const AWAY = {
+  minGap: 300, // seconds; shorter breaks do nothing
+  rate: 0.5,
+  cap: (baseLevel) => (baseLevel >= 10 ? 8 : baseLevel >= 6 ? 4 : 2) * 3600,
+  maxGap: 30 * 86400,
+};
+
+// Big Chomp the Garden Gobbler: a world boss everyone bonks.
+export const BOSS = {
+  firstAt: 300, // Endless: not before 5 min
+  gapMin: 540,
+  gapMax: 720,
+  showdown: [150, 300], // Showdown: once, between 2:30 and 5:00 in (never in the last 90 s)
+  hp: 40,
+  hpPerPlayer: 20,
+  speed: 6,
+  life: 90,
+  slurpRate: 0.02, // of the target garden's cash pile per second
+  slurpCap: 0.25,
+  seeds: [12, 20],
+  seedMutations: { gold: 0.6, diamond: 0.3, rainbow: 0.1 },
+  potSecs: 60,
+  crown: 60,
+  splashHits: 3,
+  botHitChill: 0.5,
+  seedLife: 45, // seconds its burst seeds wait on the ground (they have no pod to go back to)
+  reach: 3, // a bonk lands within PLAYER.bonk.range + reach of its body's middle line (it's BIG)
+  body: { front: 5, back: 12, radius: 3.3 }, // middle line: head `front` ahead of its centre, tail `back` behind it
+  park: 6, // munches lying along the fence this far outside the target garden's gate (clear of the laser)
+  leaveSpeed: 1.6, // x speed when it crawls back up the road
+  lastSecs: 90, // Showdown: it must be gone this long before the buzzer
+};
+
+// Text chat (kid-safe). Private rooms and solo: on. Public rooms: only when a parent allows it in Settings.
+export const TEXT_CHAT = {
+  maxLen: 80,
+  gap: 1.2, // seconds between two messages from one player
+  burst: 3, // messages allowed back to back before the gap applies
+  history: 40,
+  bubble: 5, // seconds a chat bubble stays over the speaker
+  maxDigits: 6, // a longer run of digits (spaces and dashes don't break it) looks like a phone number: refused
+  maxDigitsAll: 9, // more digits than this in one message (a round number's last zeros don't count): refused too
+  hostSlack: 1, // the host allows this many extra back to back (network jitter bunches messages up)
+};
+
+// Pet tricks (click / tap a pet). Ids travel in 'pet:trick' events.
+export const PET_TRICKS = {
+  walk: ['backflip', 'spin', 'jump', 'dance', 'roll'],
+  fly: ['loop', 'barrel', 'spinrise', 'dive'],
+  cooldown: 1.0, // per pet
+};
 
 // Bot rubber band (read by ai/, tuned with the headless kid sim): biomeLead = how many biomes past the
 // human's deepest seed grab a bot may farm (only while it trails the human; level or ahead it stays a
@@ -434,6 +565,8 @@ export const CHAT = {
       'Watch your garden, {human}...', 'I have a plan. A sneaky plan.', 'Is it snack time yet?'],
   },
 };
+
+for (const [id, lines] of Object.entries(FAMILY_LINES)) Object.assign(CHAT[id], lines); // round 4: giant / thanks / helping
 
 // Keyed tables are looked up with ids from saves and the network: no inherited keys ('constructor', 'toString'...).
 for (const t of [MUTATIONS, DIFFICULTY, CHAT]) Object.setPrototypeOf(t, null);

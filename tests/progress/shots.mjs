@@ -54,7 +54,8 @@ for (const s of sizes) {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await page.addInitScript((tut) => {
-    if (!tut) localStorage.setItem('steal-a-seed:v1:tutorial:done', 'true');
+    // first session: Mati said yes to the tutorial (its card is on screen); otherwise she finished it long ago
+    localStorage.setItem('steal-a-seed:v1:profile:maddie', JSON.stringify({ id: 'maddie', tutorial: { state: tut ? 'active' : 'done', step: tut ? 1 : 0 } }));
     window.__UI_HOLD_ALERTS__ = true;
   }, tut);
   await page.goto('file://' + path.join(DIST, 'index.html'), { timeout: 300000 });
@@ -104,6 +105,7 @@ for (const s of sizes) {
   await page.evaluate(() => {
     const app = window.__app;
     app.profile.counters.steals = 99;
+    app.progress.stamp('daisy', 'normal'); // already in the Seed Almanac, so no sticker toast goes first
     app.progress.toasts.clear();
     const me = app.human;
     const victim = app.game.players.find((p) => p !== me);

@@ -1,7 +1,7 @@
 // Tiny DOM helpers shared by the UI modules.
 
-import { settings, setSetting } from '../core/settings.js';
-import { load, save } from '../core/save.js';
+import { settings } from '../core/settings.js';
+import { setAllMuted } from '../audio/levels.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -95,23 +95,14 @@ export function noFocus(el) {
   return el;
 }
 
-/** Mute = music and sfx volume to 0 (the previous levels are remembered and restored on unmute). */
+/**
+ * Mute all = both sound switches off; the volumes are never touched (audio/levels.js). Un-muting brings back
+ * the switches that were on.
+ */
 export function setMuted(app, muted) {
-  muted = !!muted;
-  if (muted === !!settings.muted) return;
-  if (muted) {
-    save('ui:unmute', { music: settings.music, sfx: settings.sfx });
-    setSetting('muted', true);
-    setSetting('music', 0);
-    setSetting('sfx', 0);
-  } else {
-    const prev = load('ui:unmute', null) || {};
-    setSetting('muted', false);
-    if (!settings.music) setSetting('music', prev.music || 0.6);
-    if (!settings.sfx) setSetting('sfx', prev.sfx || 0.8);
-  }
+  setAllMuted(muted);
   try {
-    app.audio?.setMuted?.(muted);
+    app.audio?.setMuted?.(!!settings.muted);
   } catch {
     /* audio is optional */
   }

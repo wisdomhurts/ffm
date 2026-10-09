@@ -19,7 +19,7 @@
 // FxRig whose items are drawn by a handful of scene-wide instanced batches (see fx.js), and all glow, rainbow and
 // sparkle animation runs in shaders from one shared time uniform, so update() is O(1).
 import * as THREE from 'three';
-import { PLANT, PLANTS, RARITY, MUTATIONS, BIOMES } from '../config.js';
+import { PLANT, PLANTS, RARITY, MUTATIONS, BIOMES, SIZES } from '../config.js';
 import { Builder, P } from './geometry.js';
 import { LOOKS, buildSeedling, seedBody } from './species.js';
 import { U, camPos } from './materials.js';
@@ -32,16 +32,22 @@ export { fxStats } from './fx.js';
 const TAU = Math.PI * 2;
 const speciesOf = (id) => PLANT[id] || PLANTS[0];
 const mutOf = (m) => (MUTATIONS[m] ? m : 'normal');
+// opts.size (Giant Harvests: 'big' | 'giant' | 'titan'): the whole view grows by SIZES[size].scale
+const sizeK = (size) => (Object.prototype.hasOwnProperty.call(SIZES, size) ? SIZES[size].scale : 1);
 const tierOf = (sp) => RARITY[sp.rarity]?.tier ?? 0;
 const lookOf = (sp) => LOOKS[sp.look] || LOOKS.daisy;
 const isSecret = (sp) => sp.rarity === 'secret';
-// Celestial, Cosmic and Divine (tiers 6-8): the top road rarities, above Mythic and below the family Secrets.
+// Celestial and up (tiers 6+): the top road rarities, above Mythic and below the family Secrets.
 const isTop = (sp, tier = tierOf(sp)) => tier >= 6 && !isSecret(sp);
-// Per top tier: sparkle flavour on top of the Mythic-style aura (index = tier - 6).
+// Per top tier: sparkle flavour on top of the Mythic-style aura (index = tier - 6, one row per road rarity above Mythic).
+const topFx = (tier) => TOP_FX[Math.max(0, Math.min(TOP_FX.length - 1, tier - 6))];
 const TOP_FX = [
   { spark: '#e6fbff', mode: 'twinkle', rise: '#9ff0ff' }, // Celestial: icy star glints
   { spark: '#ffc2f4', mode: 'orbit', rise: '#ff9fe8' }, // Cosmic: candy-pink orbiters
   { spark: '#fff3b0', mode: 'orbit', rise: '#ffe66e' }, // Divine: golden motes
+  { spark: '#b8fff0', mode: 'twinkle', rise: '#c9a8ff' }, // Prismatic: mint crystal glints over lavender motes
+  { spark: '#ffe2cc', mode: 'orbit', rise: '#bff4ff' }, // Eternal: sunset-coral orbiters over rising bubbles
+  { spark: 'rainbow', mode: 'orbit', rise: '#c4bcff' }, // Infinity: rainbow orbiters over periwinkle motes
 ];
 
 const SEED_SIZE = 1.34; // seeds are ~1.5 studs tall
@@ -120,6 +126,9 @@ const FIT = [
   { hmax: 6.8, rmax: 2.55, hmin: 6.2, kmax: 1.9 }, // celestial
   { hmax: 6.9, rmax: 2.55, hmin: 6.3, kmax: 1.9 }, // cosmic
   { hmax: 7.0, rmax: 2.6, hmin: 6.4, kmax: 1.9 }, // divine
+  { hmax: 7.05, rmax: 2.6, hmin: 6.45, kmax: 1.9 }, // prismatic
+  { hmax: 7.1, rmax: 2.6, hmin: 6.5, kmax: 1.9 }, // eternal
+  { hmax: 7.1, rmax: 2.65, hmin: 6.5, kmax: 1.9 }, // infinity
   { hmax: 7.1, rmax: 2.6, hmin: 6.5, kmax: 1.9 }, // secret
 ];
 const R_HARD = 2.75;
@@ -205,7 +214,7 @@ function addPlantFx(rig, sp, mut, tpl, stage, groundNode, fxNode, ph) {
     rig.sparkles(fxNode, 'twinkle', '#ffffff', 6, rx, h * 0.9, h * 0.2, { size: 0.4, seed: 6 });
   }
   if (top) {
-    const tf = TOP_FX[tier - 6];
+    const tf = topFx(tier);
     rig.column(fxNode, rc, Math.min(2.0, rx * 1.15), h + 1.8, 0.34);
     rig.sparkles(fxNode, 'rise', tf.rise, 12, rx * 1.1, h * 1.3, 0, { size: 0.2, star: false, seed: 5 });
     rig.sparkles(fxNode, tf.mode, tf.spark, 8, rx * 1.05, h * 0.85, h * 0.2, { size: tf.mode === 'orbit' ? 0.34 : 0.44, seed: 6 });
@@ -234,6 +243,7 @@ function addPlantFx(rig, sp, mut, tpl, stage, groundNode, fxNode, ph) {
 /**
  * opts.facing: yaw for the plant's front (its face side). By default a plant in a garden faces the
  * central aisle (where visitors come from); anywhere else it faces the camera it first sees.
+ * opts.size: a Giant Harvests size id; scales the whole view (topY too, so labels lift).
  */
 export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
   const sp = speciesOf(speciesId);
@@ -242,6 +252,8 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
   const baseScale = plantScale(sp.id);
   const root = new THREE.Group();
   root.name = 'plant:' + sp.id;
+  const big = sizeK(opts.size);
+  root.scale.setScalar(big);
   const orient = new THREE.Group();
   const sway = new THREE.Group();
   const body = new THREE.Group();
@@ -288,7 +300,7 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
     mutation: mut,
     /** Current height of the plant top above the soil (studs), e.g. for placing its label. */
     get topY() {
-      return tpl ? tpl.height * baseScale * growScale : 1;
+      return tpl ? tpl.height * baseScale * growScale * big : 1;
     },
     setGrowth(p) {
       p = Math.max(0, Math.min(1, p || 0));
@@ -329,9 +341,11 @@ export function createPlantView(speciesId, mutation = 'normal', opts = {}) {
 
 // ------------------------------------------------------------------ seeds
 
-// Seed halo size / opacity per rarity tier (common .. divine, secret).
-const SEED_HALO = [2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.7, 3.8, 3.9, 3.8];
-const SEED_HALO_A = [0.45, 0.6, 0.7, 0.8, 0.9, 0.95, 0.95, 0.95, 1.0, 0.9];
+// Seed halo size / opacity per rarity tier (common .. infinity, secret).
+const SEED_HALO = [2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.7, 3.8, 3.9, 4.0, 4.05, 4.1, 3.8];
+const SEED_HALO_A = [0.45, 0.6, 0.7, 0.8, 0.9, 0.95, 0.95, 0.95, 1.0, 1.0, 1.0, 1.0, 0.9];
+// The per-rarity tables, for tests (every tier needs its own row: Secret is always the last one).
+export const TIER_TABLES = { FIT, TOP_FX, SEED_HALO, SEED_HALO_A };
 
 export function createSeedView(speciesId, mutation = 'normal') {
   const sp = speciesOf(speciesId);
@@ -351,7 +365,7 @@ export function createSeedView(speciesId, mutation = 'normal') {
   rig.halo(root, rc === 'rainbow' ? '#ffffff' : rc, SEED_HALO[ht], SEED_HALO_A[ht], 'halo', [0, cy, 0]);
   if (tier >= 4) rig.sparkles(root, 'twinkle', tier >= 6 ? '#ffffff' : '#fff0a0', 6, 0.85, 1.5, 0.05, { size: 0.4, seed: 31 });
   if (tier === 5) rig.sparkles(root, 'rise', '#ff9fb4', 7, 0.6, 2.2, 0, { size: 0.16, star: false, seed: 32 });
-  if (isTop(sp, tier)) rig.sparkles(root, 'orbit', TOP_FX[tier - 6].spark, 8, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
+  if (isTop(sp, tier)) rig.sparkles(root, 'orbit', topFx(tier).spark, 8, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
   if (isSecret(sp)) {
     rig.sparkles(root, 'orbit', 'rainbow', 10, 0.9, 0.9, 0.2, { size: 0.28, seed: 33, fine: false });
     rig.sparkles(root, 'rise', '#1a0b2e', 7, 0.6, 2.0, 0, { size: 0.26, star: false, dark: true, intensity: 1.3, seed: 34 });
@@ -384,12 +398,13 @@ export function createSeedView(speciesId, mutation = 'normal') {
 
 // ------------------------------------------------------------------ carried potted plant
 
-export function createCarriedPlantView(speciesId, mutation = 'normal') {
+export function createCarriedPlantView(speciesId, mutation = 'normal', opts = {}) {
   const sp = speciesOf(speciesId);
   const mut = mutOf(mutation);
   const tier = tierOf(sp);
   const root = new THREE.Group();
   root.name = 'carried:' + sp.id;
+  root.scale.setScalar(1 + (sizeK(opts.size) - 1) * 0.5); // a giant pot overhead, but not a TITAN-sized one
   const wob = new THREE.Group();
   root.add(wob);
   const pot = potTemplate().instantiate();
@@ -412,7 +427,7 @@ export function createCarriedPlantView(speciesId, mutation = 'normal') {
   const ph = Math.random() * 100;
   if (tier >= 4) rig.sparkles(fxNode, 'twinkle', '#fff0a0', 7, 1.4, h, h * 0.2, { size: 0.5, seed: 41 });
   if (tier === 5) rig.sparkles(fxNode, 'rise', '#ffb3c6', 8, 1.2, h * 1.2, 0, { size: 0.26, star: false, seed: 42 });
-  if (isTop(sp, tier)) rig.sparkles(fxNode, 'orbit', TOP_FX[tier - 6].spark, 9, 1.6, h * 0.8, h * 0.2, { size: 0.45, seed: 43 });
+  if (isTop(sp, tier)) rig.sparkles(fxNode, 'orbit', topFx(tier).spark, 9, 1.6, h * 0.8, h * 0.2, { size: 0.45, seed: 43 });
   if (isSecret(sp)) {
     rig.sparkles(fxNode, 'orbit', 'rainbow', 10, 1.8, h * 0.8, h * 0.2, { size: 0.5, seed: 43 });
     rig.crown(fxNode, h + 0.6, 1.6, { bob: 0.15, bobSpeed: 2, spin: 1, phase: ph });

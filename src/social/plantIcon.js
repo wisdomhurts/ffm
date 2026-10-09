@@ -2,10 +2,11 @@
 // to render per card). One archetype per plant `look`, tinted with the species colours; mutations add
 // sparkles (gold/diamond) or a rainbow behind the plant. plantIcon(speciesId, mutation) -> '<svg ...>'.
 import { PLANT } from '../config.js';
-import { INK, st, ink, sparkle, svg } from './icons.js';
+import { INK, st, ink, star, sparkle, svg } from './icons.js';
 
 const LEAF = '#4fcf62';
-const KIND = {
+// Sticker archetype per plant look (a look missing here falls back to a plain bloom).
+export const KIND = {
   daisy: 'bloom', sunflower: 'bloom', marigold: 'bloom', lotus: 'lotus', orchid: 'bloom',
   tulip: 'cup', rose: 'cup', lily: 'cup',
   mushroom: 'shroom', glowcap: 'shroom',
@@ -15,7 +16,11 @@ const KIND = {
   snowflake: 'snowflake', icerose: 'crystal', frostbell: 'bells',
   lollipop: 'lollipop', gumdrop: 'gumdrop', candycane: 'cane',
   cloudpuff: 'cloud', halolily: 'halo', thunder: 'bolt',
+  prismpetal: 'prism', geodegourd: 'geode', glimmergrape: 'grapes',
+  coralcrown: 'coral', pearlclam: 'clam', jellybell: 'jelly',
+  infinityrose: 'infinity', aurorafern: 'aurora', starfruit: 'starfruit',
 };
+const SPECTRUM = ['#ff3d5e', '#ff8f1f', '#ffd91f', '#3ae36a', '#1fb8ff', '#a640ff'];
 
 const POT = `${st('<rect x="14" y="45" width="36" height="7" rx="2.5"/>', '#e8894b')}${st('<path d="M17 51 H47 L44 61 H20 Z"/>', '#d06a33')}
   <path d="M20 54 H44" stroke="#b8552a" stroke-width="2" opacity=".7"/>`;
@@ -131,6 +136,59 @@ function body(kind, c0, c1) {
     case 'bolt':
       return `${stem(24)}${leaves(40, '#4a6fd0')}${petals(8, 10, 4.2, 7.5, 19, c0)}${st('<path d="M35 8 L26 21 H31 L28 31 L39 16 H33.5 Z"/>', c1, 4.5)}
         ${ink('M8 14 L12 12 L10 17 L14 15', 2.2).replaceAll(INK, c1)}${ink('M52 26 L56 24 L54 29 L58 27', 2.2).replaceAll(INK, c1)}`;
+    case 'prism': {
+      // a crystal star in front of a fan of rainbow rays
+      let rays = '';
+      SPECTRUM.forEach((c, i) => (rays += `<path transform="rotate(${-75 + i * 30} 32 20)" d="M32 18 L28.6 1.5 H35.4 Z" fill="${c}" stroke="${INK}" stroke-width="1.8" stroke-linejoin="round"/>`));
+      return `${stem(30)}${leaves(41, '#3fcf9f')}${rays}${st(`<path d="${star(32, 20, 13.5, 5.6)}"/>`, c0, 5)}
+        ${st('<path d="M32 15 L36.5 19 L32 25 L27.5 19 Z"/>', '#e9fff7', 3.5)}<path d="M29 16 L31 14.5" stroke="${c1}" stroke-width="2" stroke-linecap="round"/>`;
+    }
+    case 'geode':
+      return `${leaves(45, '#3f9f86')}${st('<path d="M30 6 L33 21 L27 21 Z"/><path d="M22 10 L27 22 L20 22 Z"/><path d="M39 9 L43 22 L36 22 Z"/><path d="M45 15 L47 23 L42 23 Z"/><path d="M17 15 L20 23 L15 23 Z"/>', c0, 4)}
+        <path d="M30 10 L32 21 L29 21 Z M39 13 L41 21 L38 21 Z" fill="${c1}"/>
+        ${st('<path d="M11 22 H53 C53 37 44 46 32 46 C20 46 11 37 11 22 Z"/>', '#7a7090')}
+        <path d="M11.5 22 H52.5" stroke="#efe6ff" stroke-width="3.2" stroke-linecap="round"/>
+        <path d="M20 26 V40 M32 27 V44 M44 26 V40" stroke="#5f5676" stroke-width="2" stroke-linecap="round"/>
+        ${st('<path d="M44 7 C44 2 56 2 56 7 Z"/>', '#7a7090', 3.5)}`;
+    case 'grapes': {
+      const g = [[38, 21], [45, 21], [41.5, 27], [48, 27], [35, 27], [38.5, 33], [45, 33], [41.8, 39]];
+      return `${stroke('M18 46 C13 32 15 14 29 9 C37 6 42 10 42 16', '#5a4258', 3.6)}${st('<path d="M22 13 C14 6 24 1 28 7 C31 1 40 4 35 11 Z"/>', c1, 5)}
+        ${st(g.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4.6"/>`).join(''), c0, 4)}
+        ${g.slice(0, 5).map(([x, y]) => `<circle cx="${x - 1.4}" cy="${y - 1.5}" r="1.3" fill="#fff" opacity=".8"/>`).join('')}`;
+    }
+    case 'coral':
+      return `${stroke('M23 18 L17 7 M20 13 L14 11 M28 15 L26 3 M36 15 L38 3 M41 18 L47 7 M44 13 L50 11', c0, 3.4)}
+        ${st('<circle cx="17" cy="7" r="2.4"/><circle cx="26" cy="3.5" r="2.4"/><circle cx="38" cy="3.5" r="2.4"/><circle cx="47" cy="7" r="2.4"/>', c1, 3)}
+        ${st('<rect x="27" y="33" width="10" height="14" rx="4"/>', c0)}${st('<circle cx="32" cy="27" r="11"/>', c1)}
+        <path d="M24 25 C27 22 29 28 32 25 C35 22 37 28 40 25 M25 31 C28 28 30 34 33 31 C35 29 37 33 39 31" stroke="${c0}" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        ${st('<path d="M20 19 C26 14 38 14 44 19 L43 22.5 C37 18.5 27 18.5 21 22.5 Z"/>', c0, 4)}`;
+    case 'clam': {
+      let ribs = '';
+      for (let i = 0; i < 6; i++) ribs += `<path transform="rotate(${-62 + i * 25} 32 25)" d="M32 25 V6" stroke="${c1}" stroke-width="2" stroke-linecap="round"/>`;
+      return `${stem(40)}${leaves(45, '#4fbf9a')}${st('<path d="M11 25 C12 13 21 4 32 4 C43 4 52 13 53 25 C46 22 39 21 32 21 C25 21 18 22 11 25 Z"/>', c0)}${ribs}
+        ${st('<path d="M10 28 C10 37 20 42 32 42 C44 42 54 37 54 28 Z"/>', c0)}${st('<circle cx="32" cy="26" r="7.5"/>', '#fff', 4)}
+        <circle cx="29.5" cy="23.5" r="2.2" fill="${c1}" opacity=".6"/>`;
+    }
+    case 'jelly':
+      return `${stroke('M32 47 C29 41 35 37 32 31', c1, 2.4)}${stroke('M19 26 C16 32 22 36 19 43', c0, 2.6)}${stroke('M26 28 C24 34 29 37 27 44', c1, 2.6)}
+        ${stroke('M38 28 C40 34 35 37 37 44', c1, 2.6)}${stroke('M45 26 C48 32 42 36 45 43', c0, 2.6)}
+        ${st('<path d="M11 27 C11 13 20 5 32 5 C44 5 53 13 53 27 C49 29 45 25 41 28 C37 31 27 31 23 28 C19 25 15 29 11 27 Z"/>', c0)}
+        <ellipse cx="25" cy="13" rx="6" ry="3.4" transform="rotate(-25 25 13)" fill="${c1}" opacity=".7"/><circle cx="40" cy="12" r="1.6" fill="#fff"/><circle cx="45" cy="18" r="1.2" fill="#fff"/>`;
+    case 'infinity': {
+      const lobe = (d, c) => `<path d="${d}" stroke="${c}" stroke-width="3.6" fill="none" stroke-linecap="round"/>`;
+      return `${stem(30)}${leaves(41)}${ink('M32 16 C28 9 13 8 13 16 C13 24 28 23 32 16 C36 9 51 8 51 16 C51 24 36 23 32 16', 7.6)}
+        ${lobe('M32 16 C28 9 13 8 13 16', SPECTRUM[0])}${lobe('M13 16 C13 24 28 23 32 16', SPECTRUM[2])}${lobe('M32 16 C36 9 51 8 51 16', SPECTRUM[4])}${lobe('M51 16 C51 24 36 23 32 16', SPECTRUM[5])}
+        ${st('<path d="M23 15 L27 19 L32 12 L37 19 L41 15 C43 25 39 31 32 31 C25 31 21 25 23 15 Z"/>', c0)}<path d="M28 23 C30 27 34 27 36 23" stroke="${c1}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+    }
+    case 'aurora':
+      return `${st('<path d="M32 46 C22 34 15 22 16 6 C24 16 28 30 32 44 Z"/>', '#3ae36a')}${st('<path d="M32 46 C42 34 49 22 48 6 C40 16 36 30 32 44 Z"/>', '#7a6bff')}
+        ${st('<path d="M31 46 C26 32 26 16 32 2 C38 16 38 32 33 46 Z"/>', '#1fb8ff')}
+        <path d="M17 9 L19 15 M47 9 L45 15 M32 5 V11" stroke="#ff7ad9" stroke-width="3" stroke-linecap="round"/>
+        ${stroke('M32 44 C33 36 39 32 39 26 C39 21 33 20 32 24 C31 27 35 28 35 25', c0, 3)}`;
+    case 'starfruit':
+      return `${stem(34)}${leaves(42, '#5cc860')}${st(`<path d="${star(32, 20, 16, 7.6)}"/>`, c0)}
+        ${ink('M32 20 L32 6 M32 20 L45.2 15.7 M32 20 L40.2 31.4 M32 20 L23.8 31.4 M32 20 L18.8 15.7', 1.8).replaceAll(INK, c1)}
+        ${st(`<path d="${star(9, 10, 4.2, 1.9)}"/>`, '#ff7ad9', 3)}${st(`<path d="${star(55, 12, 3.6, 1.6)}"/>`, '#5ce8ff', 3)}`;
     default:
       return `${stem(22)}${leaves()}${st('<circle cx="32" cy="20" r="10"/>', c0)}`;
   }

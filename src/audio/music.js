@@ -306,6 +306,7 @@ export class MusicEngine {
     this.eventOffAt = 0;
     this.sparkleOn = false;
     this.stopAt = 0;
+    this.held = null; // where 'off' stopped the song: {mode, secIdx, bar, iter}
     this.lite = false; // low-end devices: fewer voices per bar
     this.tr = 0; // semitones: every third loop of 'play' lifts the song a whole step
   }
@@ -319,7 +320,10 @@ export class MusicEngine {
     };
   }
 
-  /** Switch arrangement. 'off' fades out. Changes land on the next beat (victory: next 16th). */
+  /**
+   * Switch arrangement. 'off' fades out. Changes land on the next beat (victory: next 16th). Switching the
+   * same arrangement back on after 'off' (the music switch) picks the song up at the top of the next bar.
+   */
   setMode(mode, when = this.ac.currentTime) {
     const G = this.out.gain;
     if (!ARRANGEMENTS[mode]) {
@@ -344,6 +348,8 @@ export class MusicEngine {
   }
 
   _begin(mode, t) {
+    const held = this.held;
+    this.held = null;
     this.mode = mode;
     this.active = true;
     this.pending = null;
@@ -351,6 +357,14 @@ export class MusicEngine {
     this.bar = 0;
     this.step = 0;
     this.iter = 0;
+    if (held && held.mode === mode) {
+      // resume: the bar after the one the fade cut off (same section and loop), on its downbeat
+      this.secIdx = held.secIdx;
+      this.bar = held.bar;
+      this.iter = held.iter;
+      this.step = 15;
+      this._advance();
+    }
     this.nextTime = t;
     this.out.gain.cancelScheduledValues(t);
     this.out.gain.setValueAtTime(1, t);
@@ -398,6 +412,7 @@ export class MusicEngine {
     if (!this.active) return;
     const now = this.ac.currentTime;
     if (this.stopAt && now >= this.stopAt) {
+      this.held = { mode: this.mode, secIdx: this.secIdx, bar: this.bar, iter: this.iter };
       this.active = false;
       this.stopAt = 0;
       this.mode = 'off';

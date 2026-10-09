@@ -2,7 +2,7 @@
 // network and stored, so never renumber or reuse an id; add new ones instead.
 // Emote ids are also the avatar animation names (characters/avatar.js: wave, cheer, laugh, point,
 // dance1, dance2, dance3, sit). `dur` = seconds the emote lasts (loops repeat until then or until you move).
-// Quick chat is the only chat there is (kid-safe: no free typing). `tab` puts a phrase on a wheel page.
+// Quick chat works everywhere (public rooms too); typed chat (social/chat.js) only where it is allowed. `tab` puts a phrase on a wheel page.
 import { SOCIAL_ICONS as I } from './icons.js';
 
 export const EMOTES = [

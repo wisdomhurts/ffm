@@ -1,10 +1,12 @@
 // Touch controls. Contract: createTouchControls(app) -> { setVisible(bool), update(dt), dispose() }
-// Floating joystick (left), camera drag + pinch (right), Jump / Bonk / contextual Action buttons.
+// Floating joystick (left), camera drag + pinch (right), Jump / Bonk / contextual Action and Sell buttons.
+// A quick tap on the camera area goes to app.input.onTap (a tapped pet does a trick).
 // Writes into app.input.virtual and uses app.input.tap(); visible only on touch devices while playing.
 import { rarityColor } from '../view/gameView.js';
 import { h, setText, setStyle, toggle } from './dom.js';
 import { ICON, NOODLE } from './icons.js';
 import { isTouch, onTouchChange } from './device.js';
+import { createSellButton } from './sell.js';
 
 const RING_C = 2 * Math.PI * 44;
 
@@ -23,7 +25,8 @@ export function createTouchControls(app) {
     h('span', { class: 'ta-ring', html: `<svg viewBox="0 0 100 100"><circle class="bg" cx="50" cy="50" r="44"/><circle class="fg" cx="50" cy="50" r="44" stroke-dasharray="${RING_C.toFixed(1)}" stroke-dashoffset="${RING_C.toFixed(1)}"/></svg>` }),
     actVerb);
   const actFg = act.querySelector('.fg');
-  root.append(camZone, moveZone, idle, stick, bonk, jump, act);
+  const sell = createSellButton(app); // selling has its own (gold) button, shown only when there's a plant to sell
+  root.append(camZone, moveZone, idle, stick, bonk, jump, act, sell.el);
   app.root.appendChild(root);
 
   let wanted = false;
@@ -94,11 +97,13 @@ export function createTouchControls(app) {
     const [a, b] = [...cams.values()];
     return Math.hypot(a.x - b.x, a.y - b.y);
   };
+  let tap = null; // a single finger that might be a tap (not a drag): {id, x, y, at}
   camZone.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     camZone.setPointerCapture?.(e.pointerId);
     cams.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (cams.size === 2) pinchD = pinchDist();
+    tap = cams.size === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY, at: performance.now() } : null;
   });
   camZone.addEventListener('pointermove', (e) => {
     const p = cams.get(e.pointerId);
@@ -120,6 +125,10 @@ export function createTouchControls(app) {
   const camEnd = (e) => {
     cams.delete(e.pointerId);
     if (cams.size === 2) pinchD = pinchDist();
+    // a quick tap that didn't turn the camera: maybe a pet
+    if (tap && tap.id === e.pointerId && e.type === 'pointerup' && performance.now() - tap.at < 300 &&
+      Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 12) app.input.onTap?.(e.clientX, e.clientY, true);
+    tap = null;
   };
   camZone.addEventListener('pointerup', camEnd);
   camZone.addEventListener('pointercancel', camEnd);
@@ -149,6 +158,11 @@ export function createTouchControls(app) {
   }, () => {
     v().interact = false;
   });
+  press(sell.el, () => {
+    v().sell = true;
+  }, () => {
+    v().sell = false;
+  });
 
   function releaseAll() {
     stickEnd();
@@ -156,10 +170,11 @@ export function createTouchControls(app) {
     const iv = app.input?.virtual;
     if (iv) {
       iv.interact = false;
+      iv.sell = false;
       iv.moveX = iv.moveY = 0;
       iv.active = false;
     }
-    [jump, bonk, act].forEach((b) => b.classList.remove('down'));
+    [jump, bonk, act, sell.el].forEach((b) => b.classList.remove('down'));
   }
 
   function apply() {
@@ -196,6 +211,7 @@ export function createTouchControls(app) {
         const f = it.hold > 0 ? Math.min(1, it.t / it.hold) : 0;
         setStyle(actFg, 'strokeDashoffset', (RING_C * (1 - f)).toFixed(1));
       } else lastKey = null;
+      sell.update(me);
       toggle(bonk, 'dim', !!me.carrying);
     },
     dispose() {

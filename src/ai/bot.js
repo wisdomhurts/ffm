@@ -125,6 +125,7 @@ export class BotController {
     it.moveZ = 0;
     it.jump = false;
     it.interact = false;
+    it.sell = false;
     it.bonk = false;
     it.useItem = null;
     it.selectSlot = null;

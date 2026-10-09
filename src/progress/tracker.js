@@ -11,14 +11,18 @@
 // Bus events emitted: quest:progress {quest, profile} · quest:done {quest, profile} · quest:claimed {quest,
 // profile, stars, cash, banked} · quest:bonus {profile, stars, cash, banked} · badge:earned {badge, profile}
 // · stars:changed {profile, stars, delta, reason} · progress:changed {profile} · progress:delivered {amount}
-// · progress:settled {profile, stars, cash} (yesterday's finished quests were claimed at midnight).
+// · progress:settled {profile, stars, cash} (yesterday's finished quests were claimed at midnight)
+// · almanac:sticker {profile, speciesId, mutation, size, first, mastered, stars} (a new Seed Almanac sticker)
+// · collection:progress {profile, collection, item, count, total} · collection:complete {profile, collection,
+// stars, cash, banked} (catalog.js COLLECTIONS: Family Four). badge:earned also carries {cash, banked}.
 import { bus } from '../core/events.js';
 import { getProfile, updateProfile } from '../core/profiles.js';
 import { makeRng } from '../core/rng.js';
-import { PLANT, RARITY, biomeIndexAtZ } from '../config.js';
+import { PLANT, PLANTS, RARITY, biomeIndexAtZ } from '../config.js';
 import { PET } from '../pets/catalog.js';
 import {
   QUESTS, QUEST, STARTER, TIER_ORDER, questContext, questReward, bonusReward, BADGES, BADGE_BY_ID, ALL_BADGES, badgeId, badgeName,
+  badgeCash, FINISHES, FINISH_BIT, SIZE_BIT, MASTERED, ALMANAC, ALMANAC_PAGES, COLLECTIONS, logBits, isMastered, pageStats, collectionCount,
 } from './catalog.js';
 
 export const SAVE_EVERY_MS = 10000;
@@ -395,6 +399,9 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
 
   // ---------------------------------------------------------------- badges
 
+  // what the last badge with a cash reward paid: badge id -> {cash, banked} (collection:complete reports it)
+  const badgePaid = new Map();
+
   function checkBadges(p = profile()) {
     if (!p) return [];
     const got = [];
@@ -412,15 +419,19 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
         p.badges[id] = now();
         markDirty(p);
         addStars(p, b.stars, 'badge');
-        got.push(b);
+        // a few badges pay cash too: into a solo Endless garden, otherwise banked (same path as quest cash)
+        const cash = fam.cash ? badgeCash(fam, ctxFor(p)) : 0;
+        const banked = cash > 0 && !payCash(p, cash);
+        if (cash) badgePaid.set(id, { cash, banked });
+        got.push({ b, cash, banked });
       });
     }
     if (got.length) {
-      for (const b of got) bus.emit('badge:earned', { badge: b, profile: p });
+      for (const { b, cash, banked } of got) bus.emit('badge:earned', { badge: b, profile: p, cash, banked });
       flush();
       changed(p);
     }
-    return got;
+    return got.map((x) => x.b);
   }
 
   /** One entry per badge family: current tier, next goal, value (for the Badges tab and the HUD chip). */
@@ -461,12 +472,98 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     };
   }
 
+  // ---------------------------------------------------------------- the plant log (Seed Almanac + collections)
+
+  /**
+   * A plant is (or was) yours: stamp its finish (and Giant Harvest size) into the Almanac. A plant's first
+   * sticker pays a star, Mastering it (all four finishes) five; collections and page badges follow.
+   * Returns the new bits (0 when nothing was new).
+   */
+  function stamp(speciesId, mutation = 'normal', size = null) {
+    const p = profile();
+    if (!p || typeof speciesId !== 'string' || !PLANT[speciesId]) return 0;
+    const fin = FINISH_BIT[mutation] ? mutation : 'normal';
+    const prev = logBits(p, speciesId);
+    const next = prev | FINISH_BIT[fin] | (SIZE_BIT[size] || 0);
+    if (next === prev) return 0;
+    const counts = COLLECTIONS.map((col) => collectionCount(p, col));
+    if (!p.almanac || typeof p.almanac !== 'object') p.almanac = { v: 1, s: {} };
+    if (!p.almanac.s || typeof p.almanac.s !== 'object') p.almanac.s = {};
+    p.almanac.s[speciesId] = next;
+    markDirty(p);
+    const first = !prev;
+    const mastered = isMastered(next) && !isMastered(prev);
+    const stars = (first ? ALMANAC.firstStars : 0) + (mastered ? ALMANAC.masterStars : 0);
+    addStars(p, stars, 'almanac');
+    const newFinish = (next & MASTERED) !== (prev & MASTERED);
+    const newSize = (next & ~MASTERED) !== (prev & ~MASTERED);
+    bus.emit('almanac:sticker', { profile: p, speciesId, mutation: newFinish ? fin : null, size: newSize ? size : null, first, mastered, stars, bits: next });
+    // collections that just gained an item
+    const done = [];
+    COLLECTIONS.forEach((col, i) => {
+      const count = collectionCount(p, col);
+      if (count <= counts[i]) return;
+      const item = col.items.find((it) => it.id === speciesId) || null;
+      bus.emit('collection:progress', { profile: p, collection: col, item, count, total: col.items.length });
+      if (count >= col.items.length) done.push(col);
+    });
+    checkBadges(p);
+    for (const col of done) {
+      const paid = badgePaid.get(col.badge) || { cash: 0, banked: false };
+      bus.emit('collection:complete', { profile: p, collection: col, stars: col.reward.stars, cash: paid.cash, banked: paid.banked });
+    }
+    changed(p);
+    return next;
+  }
+  /** Stamp a plant object ({speciesId, mutation, size?}) that is now yours. */
+  const stampPlant = (pt) => (pt && typeof pt === 'object' ? stamp(pt.speciesId, pt.mutation, pt.size) : 0);
+
+  // Players from before the Almanac: owning your own family plant ("That's Me!") proves you had it.
+  function backfill(p) {
+    if (p.counters.almBackfill) return;
+    p.counters.almBackfill = 1;
+    markDirty(p);
+    const mine = (p.counters.namesakeOwned || 0) > 0 && PLANTS.find((x) => x.family && x.family === p.base);
+    if (mine && !logBits(p, mine.id)) stamp(mine.id, 'normal');
+  }
+
+  /** The Almanac for the UI: pages with every plant's stickers. */
+  function almanac() {
+    const p = profile();
+    return ALMANAC_PAGES.map((pg) => {
+      const plants = pg.plants.map((id) => {
+        const bits = logBits(p, id);
+        return {
+          id, name: PLANT[id].name, bits, mastered: isMastered(bits),
+          finishes: FINISHES.map((f) => ({ id: f, has: !!(bits & FINISH_BIT[f]) })),
+          sizes: Object.keys(SIZE_BIT).filter((k) => bits & SIZE_BIT[k]),
+        };
+      });
+      return { ...pg, ...pageStats(p, pg), plants, earnedAt: pg.badge ? p?.badges?.[pg.badge] || 0 : 0 };
+    });
+  }
+
+  /** Collections for the UI: items with has/not, count, and the reward (cash at today's stage). */
+  function collections() {
+    const p = profile();
+    return COLLECTIONS.map((col) => {
+      const items = col.items.map((it) => ({ ...it, has: !!p && col.has(p, it) }));
+      const count = items.filter((it) => it.has).length;
+      const badge = BADGE_BY_ID[col.badge];
+      return {
+        id: col.id, name: col.name, icon: col.icon, hat: col.hat, how: col.how, items, count, total: items.length, done: count >= items.length,
+        earnedAt: p?.badges?.[col.badge] || 0, stars: col.reward.stars, cash: p ? badgeCash(badge, ctxFor(p)) : 0,
+      };
+    });
+  }
+
   // ---------------------------------------------------------------- sampling (position, net worth, garden)
 
   function tick() {
     const p = profile();
     if (!p) return;
     ensureDay(p);
+    backfill(p);
     const h = app.human;
     const g = app.game;
     if (h && g && app.state !== 'title') {
@@ -486,6 +583,8 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
           if (pl.unlocked) unlocked++;
           const pt = pl.plant;
           if (!pt) continue;
+          // the Almanac catches every plant that is in your garden, however it got there
+          stampPlant(pt);
           if (pt.mutation === 'rainbow') rainbow++;
           const sp = PLANT[pt.speciesId];
           if (sp?.rarity === 'secret') {
@@ -530,7 +629,7 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
 
   // ---------------------------------------------------------------- bus: the local player's deeds
 
-  on('seed:grabbed', ({ player, mutation, rarity }) => {
+  on('seed:grabbed', ({ player, speciesId, mutation, rarity }) => {
     if (!isMe(player)) return;
     const tier = RARITY[rarity]?.tier ?? 0;
     add('seeds');
@@ -538,12 +637,14 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     if (MUTANT(mutation)) add('mut_' + mutation);
     setMax('seedTierMax', tier);
     fact('seed', { tier, mutation, rarity });
+    stamp(speciesId, mutation);
     checkBadges();
   });
   on('plant:planted', ({ player, plant }) => {
     if (!isMe(player)) return;
     const sp = PLANT[plant?.speciesId];
     add('planted');
+    stampPlant(plant);
     fact('plant', { tier: RARITY[sp?.rarity]?.tier ?? 0, mutation: plant?.mutation });
     tick(); // owned rainbow/secret plants
   });
@@ -551,6 +652,22 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     if (!app.human || garden?.owner !== app.human) return;
     add('grown');
     fact('grow');
+  });
+  on('plant:giant', ({ player, plant }) => {
+    if (!isMe(player) || (plant?.size !== 'giant' && plant?.size !== 'titan')) return;
+    add('giants');
+    if (plant.size === 'titan') add('titans');
+    checkBadges();
+  });
+  // Welcome-Back Garden: plants that finished while you were away grew quietly (Game.applyAway, no plant:giant);
+  // their GIANT and TITAN ones count from the report, which is always about the local player's own garden
+  on('away:report', (r) => {
+    if (!app.human) return;
+    const giant = Math.max(0, r?.sizes?.giant | 0), titan = Math.max(0, r?.sizes?.titan | 0);
+    if (!(giant + titan > 0)) return;
+    add('giants', giant + titan);
+    add('titans', titan);
+    checkBadges();
   });
   on('plant:sold', ({ player }) => {
     if (!isMe(player)) return;
@@ -563,9 +680,10 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     add('cash', amount);
     fact('cash', { amount });
   });
-  on('steal:success', ({ thief, victim }) => {
+  on('steal:success', ({ thief, victim, plant }) => {
     if (!isMe(thief)) return;
     add('steals');
+    stampPlant(plant); // it was yours, even if a full garden sold it on the spot
     fact('steal', { victim: victim?.char?.id || victim?.id });
     tick();
   });
@@ -573,6 +691,11 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     if (!isMe(by) || thief === by) return;
     add('foils');
     fact('foil');
+    checkBadges();
+  });
+  on('steal:rescued', ({ hero }) => {
+    if (!isMe(hero)) return;
+    add('rescues');
     checkBadges();
   });
   on('player:hit', ({ target, by, cause }) => {
@@ -660,6 +783,11 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     }, 0);
     checkBadges();
   });
+  // Giant Harvests: a big/giant/titan plant in your garden earns a size stamp on its sticker
+  on('plant:giant', ({ player, plant }) => {
+    if (!isMe(player)) return;
+    stampPlant(plant);
+  });
   on('drop:claimed', ({ player }) => {
     if (!isMe(player)) return;
     add('eggDrops');
@@ -707,17 +835,34 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     fact('chat');
     checkBadges();
   });
-  on('gift', ({ from, to }) => {
+  on('gift', ({ from, to, plant }) => {
     if (isMe(from) && to && to !== from) {
       add('gifts');
       fact('gift');
       checkBadges();
-    } else if (isMe(to)) add('giftsReceived');
+    } else if (isMe(to)) {
+      add('giftsReceived');
+      stampPlant(plant);
+    }
   });
-  on('trade:done', ({ a, b }) => {
+  on('trade:done', ({ a, b, plantsA, plantsB }) => {
     if (!isMe(a) && !isMe(b)) return;
+    // what the other side gave you (plantsA came from a, plantsB from b)
+    const got = isMe(a) ? plantsB : plantsA;
+    if (Array.isArray(got)) got.forEach(stampPlant);
     add('trades');
     fact('trade');
+    checkBadges();
+  });
+  // Big Chomp, the world boss: every bonk on it, and its crown
+  on('boss:hit', ({ by }) => {
+    if (!isMe(by)) return;
+    add('bossHits');
+    fact('boss');
+  });
+  on('boss:defeated', ({ top }) => {
+    if (!isMe(top)) return;
+    add('bossCrowns');
     checkBadges();
   });
   on('net:joined', () => {
@@ -785,6 +930,9 @@ export function createTracker(app, { now = () => Date.now(), interval = 1000, au
     claimBonus,
     badges,
     bests,
+    almanac,
+    collections,
+    stamp,
     checkBadges,
     ensureDay: () => ensureDay(),
     resetsIn: () => msToMidnight(now()),

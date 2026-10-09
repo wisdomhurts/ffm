@@ -1,8 +1,8 @@
 // When is the human ready for the practice steal, and which plant does it take?
 // Chill: once per match. Normal: once, and only if nobody has robbed the human by ~4 minutes.
 // The human must be playing (not AFK), close to home (so the chase is fair) and have a plant to spare.
-import { load } from '../core/save.js';
 import { bus } from '../core/events.js';
+import { getProfile } from '../core/profiles.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { getBoard } from './blackboard.js';
 import { hyp } from './util.js';
@@ -13,11 +13,12 @@ const AFK_AFTER = 20; // seconds without moving
 let tutorialAt = -99;
 let tutorialDone = false;
 
-/** The tutorial checklist (ui/tutorial.js) is finished, or the human has clearly played it through. */
+/** The human finished (or said no thanks to) the tutorial (ui/tutorialFlow.js), or has clearly played it through. */
 function finishedTutorial(game, h) {
   if (game.time - tutorialAt > 5 || game.time < tutorialAt) {
     tutorialAt = game.time;
-    tutorialDone = !!load('tutorial:done', false);
+    const st = getProfile(h.profileId)?.tutorial?.state;
+    tutorialDone = st === 'done' || st === 'declined';
   }
   return tutorialDone || (h.stats.steals > 0 && h.speedLevel > 0 && h.stats.collected > 0);
 }

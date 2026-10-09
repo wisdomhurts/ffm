@@ -22,6 +22,8 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 async function open(w, hgt, { touch = true, layout = null } = {}) {
   const ctx = await browser.newContext({ viewport: { width: w, height: hgt }, deviceScaleFactor: 1, isMobile: touch, hasTouch: touch, userAgent: touch ? IPHONE : undefined });
   if (layout) await ctx.addInitScript((l) => localStorage.setItem('steal-a-seed:v1:settings', JSON.stringify({ hudLayout: l })), layout);
+  // a first game where Dorian said "Yes, show me!" to the tutorial (its card is on screen until Skip)
+  await ctx.addInitScript(() => localStorage.setItem('steal-a-seed:v1:profile:dorian', JSON.stringify({ id: 'dorian', tutorial: { state: 'active', step: 0 } })));
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));

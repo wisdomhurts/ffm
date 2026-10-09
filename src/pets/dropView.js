@@ -441,3 +441,42 @@ export function createDropView(eggId) {
     },
   };
 }
+
+// ------------------------------------------------------------------ the glow on its own
+
+/**
+ * The drop's light beam, ground ring, sparkles and halo without an egg, for other showpieces (Giant Harvests'
+ * TITAN plants). Same shared shader and geometry as the drops (no new program, one draw call), and it animates
+ * itself from the clock (no update call). opts: {rainbow, y: () => height of its glowing crown (halo and
+ * sparkles), in its own units}. The ground ring sends out one shockwave when it appears.
+ *   createGlowBeam(colorA, colorB, opts) -> {object3d, dispose()}
+ */
+export function createGlowBeam(colorA = '#ffd23f', colorB = '#ffffff', { rainbow = false, y = () => 0 } = {}) {
+  const fx = fxShared();
+  const glow = new THREE.Mesh(rainbow ? fx.geoRainbow : fx.geo, fx.mat);
+  glow.name = 'glow-beam';
+  glow.renderOrder = 5;
+  const colA = new THREE.Color(colorA), colB = new THREE.Color(colorB);
+  const born = performance.now() / 1000;
+  const phase = Math.random() * 10;
+  glow.onBeforeRender = () => {
+    const age = performance.now() / 1000 - born;
+    const u = fx.mat.uniforms;
+    u.uTime.value = age + phase;
+    u.uEggY.value = Math.max(0, y() - EGG_SCALE * 0.5);
+    u.uLand.value = 1;
+    u.uFade.value = 1;
+    u.uPulse.value = age < 1 ? age : -1;
+    u.uRainbow.value = rainbow ? 1 : 0;
+    u.uColA.value.copy(colA);
+    u.uColB.value.copy(colB);
+    fx.mat.uniformsNeedUpdate = true;
+  };
+  return {
+    object3d: glow,
+    dispose() {
+      glow.parent?.remove(glow);
+      glow.onBeforeRender = () => {};
+    },
+  };
+}

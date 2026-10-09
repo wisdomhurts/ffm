@@ -1,10 +1,13 @@
 // Bot goals: small state machines the brain picks between. Each update() fills the Intent and
 // returns 'running' | 'done' | 'failed'. Movement goes through bot.motor; shared helpers live on the bot.
-import { PLAYER, ITEM, planterCost, BASE, BOOST, TREADMILL } from '../config.js';
+import { PLAYER, ITEM, planterCost, BASE, BOOST, TREADMILL, HERO } from '../config.js';
 import { gardenContains } from '../gameplay/layout.js';
 import { hyp, gardenInfo, planterSpot, podSpot, podGuards, yawTo, seedIncome, runSpeed, carrySeedSpeed, wrapAngle } from './util.js';
 import { getBoard, claimPod, releaseClaims } from './blackboard.js';
 import { practiceEvent } from './practice.js';
+import { isRobbing } from './family.js';
+import { BOSS } from '../config.js';
+import { bossNearest } from '../gameplay/boss.js';
 
 export class Goal {
   constructor(type, u = 0) {
@@ -65,7 +68,7 @@ export function goToPlanter(bot, game, p, it, dt, g, pl, key, interactable, hold
   if (!spot) return 'fail';
   const px = p.pos.x, pz = p.pos.z;
   const dc = hyp(pl.x - px, pl.z - pz);
-  if ((key && p.interact.key === key) || (!key && dc < 3.98)) {
+  if ((key && (p.interact.key === key || p.sell.key === key)) || (!key && dc < 3.98)) {
     bot.motor.stop();
     it.moveX = 0;
     it.moveZ = 0;
@@ -116,7 +119,7 @@ function stepSell(bot, game, p, it, dt, s) {
   if (info.free > 0 || !info.weakest) return true;
   if (!s.pl || !s.pl.plant) s.pl = info.weakest;
   const r = goToPlanter(bot, game, p, it, dt, info.g, s.pl, 'sell' + s.pl.index, grownPlant, s);
-  if (r === 'ready') it.interact = true;
+  if (r === 'ready') it.sell = true; // its own button, like a person (ready = this planter's Sell prompt is up)
   return r === 'fail';
 }
 
@@ -185,7 +188,7 @@ export class ReturnGoal extends Goal {
       const pl = info.weakest;
       const r = goToPlanter(bot, game, p, it, dt, g, pl, 'sell' + pl.index, grownPlant, this);
       if (r === 'ready') {
-        if (p.interact.key === 'sell' + pl.index) it.interact = true;
+        if (p.sell.key === 'sell' + pl.index) it.sell = true;
         else if ((this.sellT += dt) >= PLAYER.sellHold) {
           this.sellT = 0;
           game.sellPlant(p, pl);
@@ -588,6 +591,38 @@ export class DefendGoal extends Goal {
   }
 }
 
+/** Help! Family Hero: a family member called for help (ai/family.js): run down their thief and bonk them. */
+export class HelpGoal extends Goal {
+  constructor(thief, victim, u) {
+    super('help', u);
+    this.q = thief;
+    this.victim = victim;
+    this.sig = 'help:' + thief.slot;
+  }
+
+  get interruptible() {
+    return false;
+  }
+
+  update(bot, game, p, it, dt) {
+    const q = this.q;
+    if (!isRobbing(game, q, this.victim)) return 'done';
+    if (q.invisible(game.time) || this.age(game) > HERO.helpFor) return 'failed';
+    const d = hyp(q.pos.x - p.pos.x, q.pos.z - p.pos.z);
+    if (bot.tryBalloon(game, p, q, it, d)) return 'running';
+    const lead = Math.min(0.7, d / Math.max(8, runSpeed(game, p)));
+    bot.sepIgnore = q;
+    bot.motor.goTo(q.pos.x + q.vel.x * lead, q.pos.z + q.vel.z * lead, this.opts || (this.opts = { chase: true, arrive: 0.3, key: 'help' + q.slot }));
+    bot.motor.update(game, p, dt, it);
+    bot.tryBonk(game, p, q, it);
+    return 'running';
+  }
+
+  end(bot) {
+    bot.sepIgnore = null;
+  }
+}
+
 /** Bonk a rival carrying a good seed, then grab the seed they drop. */
 export class MugGoal extends Goal {
   constructor(target, u) {
@@ -783,6 +818,47 @@ export class DropGoal extends Goal {
     bot.motor.update(game, p, dt, it);
     if (bot.motor.failed) return 'failed';
     if (bot.motor.arrived) bot.motor.stop();
+    return 'running';
+  }
+}
+
+/**
+ * Big Chomp is in town: run over and bonk it with everyone else. Each bot takes its own spot along the big
+ * caterpillar (head to tail, on the open side: it lies along a fence when it munches) and swings at the
+ * nearest bit of its body.
+ */
+const BOSS_OPTS = { chase: true, arrive: 0.8, key: 'boss' };
+const BOSS_ALONG = [0.5, -0.1, -0.45, -0.8]; // per slot, of BOSS.body.front (+) / back (-)
+export class BossGoal extends Goal {
+  constructor(u) {
+    super('boss', u);
+    this.aim = { x: 0, z: 0 };
+    this.swingAt = 0;
+  }
+
+  update(bot, game, p, it, dt) {
+    const b = game.boss;
+    if (!b || b.state === 'leave' || p.carrying) return 'done';
+    const k = BOSS_ALONG[p.slot % 4];
+    const along = k > 0 ? BOSS.body.front * k : BOSS.body.back * k;
+    let side = (p.slot % 2 ? 1 : -1) * (BOSS.body.radius + 2);
+    const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw);
+    const ax = b.x + fx * along, az = b.z + fz * along;
+    // not into a fence or off the road
+    const lim = az > game.layout.roadGate.z ? 17 : 27;
+    if (Math.abs(ax + fz * side) > lim) side = -side;
+    bot.motor.goTo(ax + fz * side, az - fx * side, BOSS_OPTS);
+    bot.motor.update(game, p, dt, it);
+    // swing when it's in reach; a "miss" (difficulty) is a moment's hesitation, never a wild swing at the family
+    const aim = bossNearest(b, p.pos.x, p.pos.z, this.aim);
+    const now = game.time;
+    if (now < p.bonkReadyAt || now < p.stunUntil || now < this.swingAt) return 'running';
+    if (hyp(aim.x - p.pos.x, aim.z - p.pos.z) > PLAYER.bonk.range + 1) return 'running';
+    this.swingAt = now + bot.diff.reaction * bot.rng.range(0.1, 0.5);
+    if (bot.rng.next() > bot.diff.bonkAccuracy) return 'running';
+    it.moveX = it.moveZ = 0;
+    it.aimYaw = yawTo(p.pos.x, p.pos.z, aim.x, aim.z);
+    it.bonk = true;
     return 'running';
   }
 }

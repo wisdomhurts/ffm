@@ -3,7 +3,7 @@
 import {
   ROAD_END_Z, WORLD, PLAYER, PLANTS, PLANT, RARITIES, RARITY, MUTATIONS, BASE_MUTATION_CHANCE, BIOMES, PODS, ITEMS, ITEM,
   EVENTS, MATCH, DIFFICULTY, CHARACTERS, CHAT, LOCK, PLANTERS, LOTS, REBIRTH, NAMESAKE_BONUS, speedCost, TOP_TIER, planterCost, accelFor,
-  BASE, BOOST, TREADMILL, DROPS, baseIncomeMult, petSlotsFor,
+  BASE, BOOST, TREADMILL, DROPS, baseIncomeMult, petSlotsFor, PET_TRICKS, SIZES, SIZE_ODDS, HERO, AWAY,
 } from '../config.js';
 import { LAYOUT, gardenContains, lotPlanterBoxes, beltRect } from './layout.js';
 import { PhysicsWorld } from '../core/physics.js';
@@ -11,11 +11,12 @@ import { bus } from '../core/events.js';
 import { makeRng } from '../core/rng.js';
 import { Player, emptyIntent } from './player.js';
 import { teamMods, MAX_TEAM } from '../pets/effects.js';
-import { PET, EGG, petScore } from '../pets/catalog.js';
+import { PET, EGG, petScore, PET_CAPACITY } from '../pets/catalog.js';
 import { sanitizePetName } from '../pets/names.js';
 import { sanitizeBaseStyle, sameBaseStyle, effectiveBaseStyle, DECOR, BOT_STYLES } from './basestyle.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { sanitizeLook, sameLook } from '../characters/cosmetics.js';
+import { initBoss, spawnBoss, updateBoss, bonkBoss, hitBoss, balloonOnBoss, besideBoss, splashOnBoss, splashBoss, bossSlot, bossState, applyBoss } from './boss.js';
 
 /** A profile's equipped pet team as [{id, name}] (name: the nickname, '' if none). profile.pets.team = [uid...],
  *  older saves: equipped uid; online profile summaries send `pets: [id...]` + `petNames: [...]` or `pet: id`. */
@@ -40,12 +41,19 @@ export const profileTeamNames = (profile) => profileTeamPets(profile).map((x) =>
 
 let UID = 1;
 const uid = () => UID++;
+// pet-trade mail ids stay unique across matches, page loads and hosts (devices remember the ones they applied)
+let MAIL = 0;
+const mailId = () => 'm' + Date.now().toString(36) + (++MAIL).toString(36) + Math.random().toString(36).slice(2, 6);
 // keep locally made ids above any id received from an online host (see applyFull)
 const bumpUid = (n) => {
   if (Number.isFinite(n) && n >= UID) UID = Math.floor(n) + 1;
 };
 const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Giant Harvests: a plant's size id from a save or the network ('normal' for anything unknown)
+const sizeId = (s) => (typeof s === 'string' && Object.prototype.hasOwnProperty.call(SIZES, s) ? s : 'normal');
+// the sizes a finished plant can roll, rarest first
+const SIZE_ROLL = Object.values(SIZES).filter((s) => s.p > 0).sort((a, b) => a.p - b.p);
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // Safety net: anyone who ends up outside the island or the road gets sent home.
 const inPlayArea = ({ x, z }) =>
@@ -70,6 +78,16 @@ function homeTreadmillBoxes(t) {
     { minX: c.x - cx, maxX: c.x + cx, minZ: c.z - cz, maxZ: c.z + cz, minY: 0, maxY: 4.6, tag: 'deco', off: true },
   ];
 }
+
+/** A copy of pet-trade mail ([{tid, give: [uid], get: [{id, name}]}]) without anything malformed. */
+const copyMail = (list) => (Array.isArray(list) ? list : []).filter((m) => m && typeof m.tid === 'string').map((m) => ({
+  tid: m.tid,
+  give: Array.isArray(m.give) ? m.give.filter((u) => typeof u === 'string') : [],
+  get: Array.isArray(m.get) ? m.get.filter((x) => x && PET[x.id]).map((x) => ({ id: x.id, name: sanitizePetName(x.name) })) : [],
+}));
+
+/** Which seed someone carries (trades drop a seed from an offer when this changes). */
+export const seedSig = (c) => (c?.kind === 'seed' ? `${c.speciesId}|${c.mutation}|${c.podId ?? ''}` : '');
 
 export const SELL_SECONDS = 90;
 export const NETWORTH_PLANT_SECONDS = 60;
@@ -115,6 +133,7 @@ export class Game {
     this.event = null;
     this.nextEventAt = EVENTS.firstDelay;
     this.match = mode === 'showdown' ? { endsAt: MATCH.showdownSeconds } : null;
+    initBoss(this, seed); // Big Chomp, the world boss (gameplay/boss.js)
     this.netWorth = new Map();
     // online rooms: how many gardens nobody plays may get a computer player (the rest stay empty; see net/host.js)
     this.maxBots = CHARACTERS.length - 1;
@@ -193,6 +212,7 @@ export class Game {
     const sp = PLANT[plant.speciesId];
     let v = sp.income * MUTATIONS[plant.mutation].mult * REBIRTH.incomeMult(owner.rebirths) * owner.mods.income * baseIncomeMult(owner.baseLevel);
     if (sp.family && sp.family === owner.id) v *= NAMESAKE_BONUS;
+    if (plant.size) v *= SIZES[sizeId(plant.size)].mult; // Big / GIANT / TITAN (so sell value, net worth and steals follow)
     return v;
   }
 
@@ -382,6 +402,7 @@ export class Game {
       this._handleItems(p);
       this._handleBonk(p);
       this._handleInteraction(p, dt);
+      this._handleSell(p, dt);
       this._handlePads(p);
       this._handleAutoPlant(p);
       this._handleTraining(p, dt);
@@ -391,6 +412,7 @@ export class Game {
     this._updateDrops();
     this._updateGuards();
     this._updateMonsters(dt);
+    this._updateBoss(dt);
     this._updatePods();
     this._updateGardens(dt);
     this._updateEvents();
@@ -557,8 +579,9 @@ export class Game {
   // ------------------------------------------------------------------ interactions
 
   /** Returns the thing this player can interact with right now, or null.
-   *  {key, verb, label, hold, action(), target} */
-  // Carrying a seed into your own garden with no free planter: only offer Sell prompts so you can make room.
+   *  {key, verb, label, hold, action(), target}. Selling is NOT an interaction: it has its own button (findSell). */
+  // Carrying a seed into your own garden with no free planter: only offer Unlock / Expand / Drop here (and Sell on the
+  // Sell button) so you can make room.
   _ownGardenFull(p) {
     const g = this.gardens[p.slot];
     return gardenContains(g.L, p.pos.x, p.pos.z) && !g.planters.some((pl) => pl.unlocked && !pl.plant);
@@ -617,10 +640,6 @@ export class Game {
             const cost = PLANTERS.unlockCost[pl.index];
             consider(d2, { key: 'unlock' + pl.index, verb: 'Unlock', label: `Planter ($${fmt(cost)})`, hold: 0, cost, target: pl,
               action: () => this.unlockPlanter(p, pl.index) });
-          } else if (pl.plant && pl.plant.growLeft <= 0) {
-            const value = Math.round(this.plantIncome(pl.plant, p) * SELL_SECONDS);
-            consider(d2, { key: 'sell' + pl.index, verb: 'Sell', label: `${this.plantName(pl.plant.speciesId, pl.plant.mutation)} (+$${fmt(value)})`,
-              hold: PLAYER.sellHold, rarity: PLANT[pl.plant.speciesId].rarity, target: pl, action: () => this.sellPlant(p, pl) });
           }
         } else if (!swapping && pl.plant && pl.plant.growLeft <= 0) {
           consider(d2, { key: 'steal' + g.slot + '_' + pl.index, verb: 'Steal', label: this.plantName(pl.plant.speciesId, pl.plant.mutation),
@@ -630,7 +649,7 @@ export class Game {
     }
     // shops (human-facing prompts; bots call the buy methods directly)
     if (swapping) {
-      // nothing to sell or unlock: let them put the seed down instead of carrying it forever
+      // nothing to unlock: let them put the seed down instead of carrying it forever (or sell with the Sell button)
       if (!best) best = { key: 'drop', verb: 'Drop', label: 'Seed (garden full)', hold: 0.4, action: () => this.dropCarried(p, null, 'drop') };
       return best;
     }
@@ -713,6 +732,63 @@ export class Game {
     p.prevInteract = pressed;
   }
 
+  /** The grown plant in your own garden you could sell right now (its own button: V / Sell / D-pad down), or
+   *  null. Like findInteraction: not while stunned, and only empty-handed or with a seed for a full garden.
+   *  {key, verb, label (the plant's name), value (what it sells for), hold, rarity, target, action()} */
+  findSell(p) {
+    const swapping = p.carrying?.kind === 'seed' && this._ownGardenFull(p);
+    if (this.time < p.stunUntil || (p.carrying && !swapping)) return null;
+    const g = this.gardenAt(p.pos.x, p.pos.z);
+    if (!g || g.owner !== p) return null;
+    let best = null;
+    let bestD = 4.8 * 4.8;
+    for (const pl of g.planters) {
+      if (!pl.unlocked || !pl.plant || pl.plant.growLeft > 0) continue;
+      const d2 = dist2(p.pos, pl);
+      if (d2 < bestD) {
+        bestD = d2;
+        best = pl;
+      }
+    }
+    if (!best) return null;
+    const plant = best.plant;
+    const value = Math.round(this.plantIncome(plant, p) * SELL_SECONDS);
+    return {
+      key: 'sell' + best.index, verb: 'Sell', label: this.plantName(plant.speciesId, plant.mutation), value,
+      hold: PLAYER.sellHold, rarity: PLANT[plant.speciesId].rarity, target: best, action: () => this.sellPlant(p, best),
+    };
+  }
+
+  // Same hold rules as _handleInteraction (pets' hold boost counts; one hold = one sale), on intent.sell.
+  _handleSell(p, dt) {
+    const it = this.findSell(p);
+    const pressed = !!p.intent.sell;
+    if (!pressed) p.sellSpent = false;
+    if (!it) {
+      if (p.sell.key) p.sell = { key: null, t: 0, hold: 0, label: '', verb: '', value: 0, fired: false };
+      p.prevSell = pressed;
+      return;
+    }
+    if (it.key !== p.sell.key) p.sell = { key: it.key, t: 0, hold: it.hold, label: it.label, verb: it.verb, rarity: it.rarity, value: it.value, fired: false, target: it.target };
+    const s = p.sell;
+    s.label = it.label;
+    s.value = it.value;
+    if (pressed) {
+      if (!s.fired && !p.sellSpent) {
+        s.t += dt / p.mods.hold;
+        if (s.t >= it.hold) {
+          s.fired = true;
+          p.sellSpent = true; // release before the next sale charges
+          it.action();
+        }
+      }
+    } else {
+      s.t = 0;
+      s.fired = false;
+    }
+    p.prevSell = pressed;
+  }
+
   _clearStealer(pl, p) {
     if (pl.stealer === p.slot) {
       pl.stealer = null;
@@ -746,6 +822,8 @@ export class Game {
     pl.plant = null;
     pl.stealer = null;
     p.carrying = { kind: 'plant', plant, fromSlot: g.slot, fromIndex: pl.index };
+    (p._stealAt ||= []).push(this.time); // recent grabs: a busy thief is SNEAKY (Family Hero tips double)
+    if (p._stealAt.length > 8) p._stealAt.shift();
     bus.emit('steal:grabbed', { thief: p, victim: g.owner, plant, garden: g });
     return true;
   }
@@ -913,8 +991,10 @@ export class Game {
     const cosHalf = Math.cos(((PLAYER.bonk.arcDeg / 2) * Math.PI) / 180);
     const R = PLAYER.bonk.range;
     let hitAny = false;
+    const chomp = this.boss && bonkBoss(this, p, fx, fz, cosHalf); // Big Chomp in reach (gameplay/boss.js)
     for (const q of this.players) {
       if (q === p || now < q.invulnUntil) continue;
+      if (chomp && !q.carrying) continue; // a swing at Big Chomp spares empty-handed teammates
       if (Math.abs(q.pos.y - p.pos.y) > 4.5) continue;
       const dx = q.pos.x - p.pos.x, dz = q.pos.z - p.pos.z;
       const d = Math.hypot(dx, dz);
@@ -934,6 +1014,7 @@ export class Game {
       hitAny = true;
       bus.emit('monster:bonked', { monster: m, by: p });
     }
+    if (chomp && hitBoss(this, p, 1, 'bonk')) hitAny = true;
     if (!hitAny) bus.emit('bonk:miss', { player: p });
   }
 
@@ -961,6 +1042,8 @@ export class Game {
     if (c.kind === 'plant') {
       this.returnPlant(c.plant, c.fromSlot, c.fromIndex);
       bus.emit('steal:foiled', { thief: q, victim: this.players[c.fromSlot], plant: c.plant, by, cause });
+      // Help! Family Hero: a third player knocked it out of the thief's hands (the Guard Gnome is by = null)
+      if (by && by !== q && by.slot !== c.fromSlot && (cause === 'bonk' || cause === 'balloon')) this._rescue(by, q, this.players[c.fromSlot], c.plant);
       return c;
     }
     const a = this.rng.range(0, Math.PI * 2);
@@ -989,6 +1072,30 @@ export class Game {
       g.owner.cash += value;
       bus.emit('plant:returned', { plant, planter: null, garden: g, refund: value });
     }
+  }
+
+  /**
+   * Help! Family Hero: `hero` knocked `victim`'s plant out of `thief`'s hands. The game tips the hero (HERO.tipSecs
+   * of the plant's income, at most HERO.sellCapSecs of what the hero could sell it for; doubled when the thief is
+   * SNEAKY: HERO.sneakySteals grabs in HERO.sneakyWindow s) and pins a gold HERO ribbon on them. One tip per
+   * hero/thief pair per HERO.pairGap s and HERO.maxPer10Min per hero, so friends can't farm it; a capped rescue
+   * is just a good bonk. `this.rescues` = [{hero, thief, victim (slots), at}] of the last 10 minutes (bots read it:
+   * a rescued bot owes its hero, ai/family.js). Returns the tip, or 0.
+   */
+  _rescue(hero, thief, victim, plant) {
+    if (!hero.present || hero === victim || !victim) return 0;
+    const now = this.time;
+    const log = (this.rescues = (this.rescues || []).filter((r) => now - r.at < 600));
+    if (log.some((r) => r.hero === hero.slot && r.thief === thief.slot && now - r.at < HERO.pairGap)) return 0;
+    if (log.filter((r) => r.hero === hero.slot).length >= HERO.maxPer10Min) return 0;
+    const sneaky = (thief._stealAt || []).filter((t) => now - t < HERO.sneakyWindow).length >= HERO.sneakySteals;
+    const tip = Math.round(Math.min(HERO.tipSecs * this.plantIncome(plant, victim) * (sneaky ? 2 : 1), HERO.sellCapSecs * this.plantIncome(plant, hero)));
+    log.push({ hero: hero.slot, thief: thief.slot, victim: victim.slot, at: now });
+    hero.cash += tip;
+    hero.heroUntil = now + HERO.ribbon;
+    hero.stats.rescues = (hero.stats.rescues || 0) + 1;
+    bus.emit('steal:rescued', { hero, victim, thief, plant, tip, sneaky });
+    return tip;
   }
 
   // ------------------------------------------------------------------ items
@@ -1036,6 +1143,7 @@ export class Game {
           return false;
         }
         best.plant.growLeft *= 0.5;
+        best.plant.watered = true; // better odds of a Big / GIANT / TITAN harvest (SIZE_ODDS)
         bus.emit('plant:watered', { player: p, planter: best });
         break;
       }
@@ -1055,10 +1163,11 @@ export class Game {
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.z += b.vz * dt;
-      let pop = b.y <= 0.3 || this.time - b.born > 4;
+      let pop = b.y <= 0.3 || this.time - b.born > 4 || balloonOnBoss(this, b);
       if (!pop) {
         for (const q of this.players) {
           if (q.slot === b.owner) continue;
+          if (this.boss && !q.carrying && besideBoss(this, q)) continue; // flies past the family bonking Big Chomp
           if ((q.pos.x - b.x) ** 2 + (q.pos.z - b.z) ** 2 < 2.4 ** 2 && b.y > q.pos.y - 0.5 && b.y < q.pos.y + WORLD.playerHeight + 2.5) {
             pop = true;
             break;
@@ -1069,12 +1178,16 @@ export class Game {
       this.projectiles.splice(i, 1);
       const owner = this.players[b.owner];
       const R = ITEM.balloon.radius;
+      const onBoss = splashOnBoss(this, b); // a splash on Big Chomp (gameplay/boss.js)
       for (const q of this.players) {
         if (q.slot === b.owner || this.time < q.invulnUntil) continue;
+        // like a swing at Big Chomp: a splash on it, or by the family bonking it, spares empty-handed teammates
+        if (this.boss && !q.carrying && (onBoss || besideBoss(this, q))) continue;
         const dx = q.pos.x - b.x, dz = q.pos.z - b.z;
         const d = Math.hypot(dx, dz);
         if (d < R && Math.abs(q.pos.y - b.y) < 7) this.hitPlayer(q, owner, { x: dx / (d || 1), z: dz / (d || 1) }, ITEM.balloon.stun, 'balloon');
       }
+      splashBoss(this, b, owner);
       bus.emit('balloon:splash', { x: b.x, y: Math.max(0, b.y), z: b.z, owner });
     }
   }
@@ -1194,6 +1307,22 @@ export class Game {
     }
   }
 
+  // ------------------------------------------------------------------ Big Chomp (world boss: gameplay/boss.js)
+
+  /** Bring Big Chomp in right now (debug: __app.game.spawnBoss()). opts {target: slot, x, z}. Returns it, or null. */
+  spawnBoss(opts) {
+    return spawnBoss(this, opts);
+  }
+
+  _updateBoss(dt) {
+    updateBoss(this, dt);
+  }
+
+  /** A fresh id for something new in this world (ground items, the boss). */
+  newUid() {
+    return uid();
+  }
+
   // ------------------------------------------------------------------ pods, gardens, events
 
   _updatePods() {
@@ -1307,7 +1436,20 @@ export class Game {
 
   /** Bots keep their three best pets (from egg drops) as their team. */
   _botAdoptPet(p, pet) {
-    p.pets = [...new Set([...p.pets, pet])].sort((a, b) => petScore(b) - petScore(a)).slice(0, MAX_TEAM);
+    const team = this._botTeam(p);
+    if (!team.some((x) => x.id === pet)) team.push({ id: pet, name: '' });
+    this._setBotTeam(p, team);
+  }
+
+  /** A bot's team as [{id, name}] (a pet traded to a bot keeps its nickname). */
+  _botTeam(p) {
+    return p.pets.map((id, i) => ({ id, name: p.petNames[i] || '' }));
+  }
+
+  _setBotTeam(p, team) {
+    const best = team.slice().sort((a, b) => petScore(b.id) - petScore(a.id)).slice(0, MAX_TEAM);
+    p.pets = best.map((x) => x.id);
+    p.petNames = best.map((x) => x.name);
     this._refreshMods(p);
     bus.emit('pet:equipped', { player: p, pet: p.pet });
   }
@@ -1348,10 +1490,7 @@ export class Game {
         if (!pt) continue;
         if (pt.growLeft > 0) {
           pt.growLeft -= gdt;
-          if (pt.growLeft <= 0) {
-            pt.growLeft = 0;
-            bus.emit('plant:grown', { plant: pt, planter: pl, garden: g });
-          }
+          if (pt.growLeft <= 0) this._finishGrowth(g, pl, pt);
         } else {
           g.cashPile += this.plantIncome(pt, g.owner) * dt;
         }
@@ -1361,6 +1500,81 @@ export class Game {
         bus.emit('lock:off', { player: g.owner, garden: g });
       }
     }
+  }
+
+  /**
+   * Welcome-Back Garden (solo Endless): `sec` seconds passed since the save. Every garden keeps growing for
+   * AWAY.rate x min(sec, AWAY.cap(its owner's base level)) seconds of credit, in closed form: plants that finish
+   * roll their size (_finishGrowth, quietly) and grown plants pay into the COLLECT pile (not cash, so the first
+   * thing to do is run to the pad). Gaps under AWAY.minGap, negative or not a number do nothing (returns null).
+   * Returns what happened in the local player's garden: {seconds, credit, cash, grown, sizes: {big, giant, titan},
+   * giants: [{speciesId, mutation, size}], bots: [{slot, grown, cash}]}.
+   */
+  applyAway(sec) {
+    if (!(sec >= AWAY.minGap)) return null;
+    sec = Math.min(sec, AWAY.maxGap);
+    const me = this.human;
+    let report = null;
+    const bots = [];
+    for (const g of this.gardens) {
+      if (!g.owner.present) continue;
+      const credit = AWAY.rate * Math.min(sec, AWAY.cap(g.owner.baseLevel));
+      const rate = this.growRate(g);
+      let cash = 0, grown = 0;
+      const sizes = { big: 0, giant: 0, titan: 0 };
+      const giants = [];
+      for (const pl of g.planters) {
+        const pt = pl.plant;
+        if (!pt) continue;
+        let paid = credit; // seconds this plant spends grown
+        if (pt.growLeft > 0) {
+          const need = pt.growLeft / rate;
+          if (need > credit) {
+            pt.growLeft -= credit * rate;
+            continue;
+          }
+          paid = credit - need;
+          const size = this._finishGrowth(g, pl, pt, true);
+          grown++;
+          if (size !== 'normal') {
+            sizes[size] = (sizes[size] || 0) + 1;
+            giants.push({ speciesId: pt.speciesId, mutation: pt.mutation, size });
+          }
+        }
+        cash += this.plantIncome(pt, g.owner) * paid;
+      }
+      g.cashPile += cash;
+      if (g.owner === me) report = { seconds: sec, credit, cash, grown, sizes, giants };
+      else bots.push({ slot: g.slot, grown, cash });
+    }
+    this._recomputeNetWorth();
+    return report ? { ...report, bots } : null;
+  }
+
+  /** Giant Harvests: the size a plant finishing in garden g grows to. One roll of the rules' dice every time
+   *  (so the random stream stays the same whatever the odds); a grow pet and a watered plant raise the odds. */
+  rollSize(g, pt) {
+    let k = 1;
+    if (g.owner.mods.grow > 1) k *= SIZE_ODDS.growPet;
+    if (pt.watered) k *= SIZE_ODDS.watered;
+    const r = this.rng.next();
+    let acc = 0;
+    for (const s of SIZE_ROLL) if (r < (acc += s.p * k)) return s.id;
+    return 'normal';
+  }
+
+  /** A plant just finished growing: it rolls its size, then everyone hears about it ('plant:grown' {size},
+   *  and 'plant:giant' when it came out Big, GIANT or TITAN). `quiet` (Welcome-Back) skips the events: the
+   *  caller reports. Returns the size id. */
+  _finishGrowth(g, pl, pt, quiet = false) {
+    pt.growLeft = 0;
+    const size = (pt.size = this.rollSize(g, pt));
+    if (quiet) return size;
+    bus.emit('plant:grown', { plant: pt, planter: pl, garden: g, size });
+    if (size !== 'normal') {
+      bus.emit('plant:giant', { player: g.owner, plant: { speciesId: pt.speciesId, mutation: pt.mutation, size }, planter: pl, garden: g });
+    }
+    return size;
   }
 
   _updateEvents() {
@@ -1526,6 +1740,34 @@ export class Game {
     return true;
   }
 
+  /** Player `by` clicked (or tapped) pet `k` of the player in slot `ownerSlot`: it does a trick that everyone
+   *  sees ('pet:trick'). Cosmetic, one per pet per PET_TRICKS.cooldown s. Walkers and flyers know different
+   *  tricks; `want` (a trick a client already started, online) is kept when the pet knows it. Returns the
+   *  trick id, or null. */
+  petTrick(by, ownerSlot, k, want = null) {
+    const owner = this.players[ownerSlot];
+    if (!by || !owner?.present || !Number.isInteger(k) || k < 0) return null;
+    const id = this.activePets(owner)[k];
+    if (!PET[id]) return null;
+    const key = ownerSlot * MAX_TEAM + k;
+    const ready = (this._trickReady ||= []);
+    if (this.time < (ready[key] ?? -Infinity)) return null;
+    ready[key] = this.time + PET_TRICKS.cooldown;
+    const list = PET[id].flies ? PET_TRICKS.fly : PET_TRICKS.walk;
+    const last = (this._trickLast ||= [])[key];
+    let trick = list.includes(want) ? want : null;
+    if (!trick) {
+      // never the same one twice in a row (its own dice: the rules' random stream stays untouched)
+      const rng = (this._trickRng ||= makeRng(0x7e7));
+      do {
+        trick = rng.pick(list);
+      } while (trick === last && list.length > 1);
+    }
+    this._trickLast[key] = trick;
+    bus.emit('pet:trick', { player: by, owner: ownerSlot, k, trick, pet: id });
+    return trick;
+  }
+
   setLook(p, look) {
     if (!look || typeof look !== 'object') return;
     const next = sanitizeLook({ ...p.look, ...look }, p.char.id);
@@ -1567,24 +1809,56 @@ export class Game {
   }
 
   /**
-   * Swap plants and cash between two players in one go. offer = {planters: [index...], cash}.
-   * Everything is checked first; nothing changes unless the whole trade fits.
+   * Swap plants, cash, pets and seeds between two players in one go.
+   * offer = {planters: [index...], cash, pets: [{uid, id, name, k?}], seed, petRoom}
+   *   pets: a person's come from their device's pet bag (uid = its id there, the host can't see the bag); a
+   *         bot's are its egg-drop team (k = its index in p.pets, which must still hold that species)
+   *   seed: true (or seedSig of it) = the seed in their hands: it is planted straight into a free planter of
+   *         the other garden (a new plant, full grow time), like a gift
+   *   petRoom: free spots in a person's pet bag (their device says so); a bot holds MAX_TEAM pets
+   * Everything is checked first; nothing changes unless the whole trade fits. A person's pets move through
+   * p.petMail (replicated state, so a lost tick or a new host can't lose them; a host keeps the mail of a device
+   * that drops out until it comes back, net/host.js): their device applies each mail once and acks it
+   * (ui/pets.js attachPetMail -> petMailAck).
    */
   trade(a, b, offerA, offerB) {
     if (!a || !b || a === b) return false;
-    const norm = (o) => ({
-      planters: [...new Set((Array.isArray(o?.planters) ? o.planters : []).filter((i) => Number.isInteger(i)))].slice(0, 10),
-      cash: Math.max(0, Math.floor(Number(o?.cash) || 0)),
-    });
-    const oa = norm(offerA), ob = norm(offerB);
+    const norm = (p, o) => {
+      const out = {
+        planters: [...new Set((Array.isArray(o?.planters) ? o.planters : []).filter((i) => Number.isInteger(i)))].slice(0, 10),
+        cash: Math.max(0, Math.floor(Number(o?.cash) || 0)),
+        pets: [],
+        seed: false,
+        petRoom: p.kind === 'bot' ? Math.max(0, MAX_TEAM - p.pets.length) : Number.isFinite(o?.petRoom) ? clamp(Math.floor(o.petRoom), 0, PET_CAPACITY) : PET_CAPACITY,
+        bad: false,
+      };
+      for (const x of Array.isArray(o?.pets) ? o.pets.slice(0, MAX_TEAM + 1) : []) {
+        const dup = out.pets.some((y) => (p.kind === 'bot' ? y.k === x?.k : y.uid === x?.uid));
+        const fine = p.kind === 'bot'
+          ? Number.isInteger(x?.k) && p.pets[x.k] === x.id && !dup
+          : typeof x?.uid === 'string' && x.uid.length <= 40 && typeof x.id === 'string' && !!PET[x.id] && !dup;
+        if (!fine || out.pets.length >= MAX_TEAM) out.bad = true;
+        else out.pets.push(p.kind === 'bot' ? { k: x.k, id: x.id, name: p.petNames[x.k] || '' } : { uid: x.uid, id: x.id, name: sanitizePetName(x.name) });
+      }
+      if (o?.seed) {
+        const c = p.carrying;
+        if (c?.kind === 'seed' && PLANT[c.speciesId] && (o.seed === true || o.seed === seedSig(c))) out.seed = true;
+        else out.bad = true;
+      }
+      return out;
+    };
+    const oa = norm(a, offerA), ob = norm(b, offerB);
     const ga = this.gardens[a.slot], gb = this.gardens[b.slot];
-    const ok = (p, g, o) => p.cash >= o.cash && o.planters.every((i) => g.planters[i]?.plant && g.planters[i].stealer == null);
-    const room = (g, give, get) => g.planters.filter((x) => x.unlocked && !x.plant).length + give >= get;
-    if (!ok(a, ga, oa) || !ok(b, gb, ob) || !room(ga, oa.planters.length, ob.planters.length) || !room(gb, ob.planters.length, oa.planters.length)) {
+    const ok = (p, g, o) => !o.bad && p.cash >= o.cash && o.planters.every((i) => g.planters[i]?.plant && g.planters[i].stealer == null);
+    // plants given free their planters; a seed coming in needs one too; pets need room in the bag
+    const room = (g, o, other) => g.planters.filter((x) => x.unlocked && !x.plant).length + o.planters.length >= other.planters.length + (other.seed ? 1 : 0) &&
+      o.petRoom + o.pets.length >= other.pets.length;
+    if (!ok(a, ga, oa) || !ok(b, gb, ob) || !room(ga, oa, ob) || !room(gb, ob, oa)) {
       bus.emit('trade:fail', { a, b });
       return false;
     }
-    if (!oa.planters.length && !ob.planters.length && !oa.cash && !ob.cash) return false;
+    const empty = (o) => !o.planters.length && !o.cash && !o.pets.length && !o.seed;
+    if (empty(oa) && empty(ob)) return false;
     const take = (g, o) => o.planters.map((i) => {
       const plant = g.planters[i].plant;
       g.planters[i].plant = null;
@@ -1597,10 +1871,46 @@ export class Game {
     });
     place(ga, a.slot, fromB);
     place(gb, b.slot, fromA);
+    const seedA = this._tradeSeed(a, b, oa.seed), seedB = this._tradeSeed(b, a, ob.seed);
+    const petsA = oa.pets.map((x) => ({ id: x.id, name: x.name })), petsB = ob.pets.map((x) => ({ id: x.id, name: x.name }));
+    const tid = mailId();
+    this._tradePets(a, oa.pets, petsB, tid);
+    this._tradePets(b, ob.pets, petsA, tid);
     a.cash += ob.cash - oa.cash;
     b.cash += oa.cash - ob.cash;
-    bus.emit('trade:done', { a, b, offerA: oa, offerB: ob, plantsA: fromA, plantsB: fromB });
+    const pub = (o, pets) => ({ planters: o.planters, cash: o.cash, pets, seed: o.seed });
+    bus.emit('trade:done', { a, b, offerA: pub(oa, petsA), offerB: pub(ob, petsB), plantsA: fromA, plantsB: fromB, seedA, seedB, petsA, petsB, tid });
     return true;
+  }
+
+  // the seed in `from`'s hands grows in `to`'s garden now (trade checked the room)
+  _tradeSeed(from, to, on) {
+    const c = on ? from.carrying : null;
+    if (!c) return null;
+    from.carrying = null;
+    const sp = PLANT[c.speciesId];
+    const pl = this.gardens[to.slot].planters.find((x) => x.unlocked && !x.plant);
+    pl.plant = { uid: uid(), speciesId: c.speciesId, mutation: c.mutation, growTotal: sp.grow, growLeft: sp.grow, owner: to.slot };
+    return { speciesId: c.speciesId, mutation: c.mutation };
+  }
+
+  // pets leave `p` (`gave`) and arrive (`got`, [{id, name}]): a bot's team changes here, a person gets mail
+  _tradePets(p, gave, got, tid) {
+    if (!gave.length && !got.length) return;
+    if (p.kind === 'bot') {
+      this._setBotTeam(p, [...this._botTeam(p).filter((_, k) => !gave.some((x) => x.k === k)), ...got]);
+      return;
+    }
+    p.petMail.push({ tid, give: gave.map((x) => x.uid), get: got.map((x) => ({ id: x.id, name: x.name })) });
+    if (p.petMail.length > 8) p.petMail.shift();
+  }
+
+  /** `p`'s device applied pet mail `tid` (ui/pets.js): forget it. */
+  petMailAck(p, tid) {
+    if (!p || typeof tid !== 'string' || !p.petMail.length) return false;
+    const n = p.petMail.length;
+    p.petMail = p.petMail.filter((m) => m.tid !== tid);
+    return p.petMail.length < n;
   }
 
   // ------------------------------------------------------------------ slots (who plays which garden)
@@ -1662,12 +1972,16 @@ export class Game {
       if (thief?.interact?.stealPl === pl) this._clearStealer(pl, thief);
     }
     for (const m of this.monsters) if (m.target === slot) m.target = null;
+    bossSlot(this, slot);
     const fresh = new Player(slot, p.char, false);
     for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'items', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt',
       'swingStart', 'coilUntil', 'cloakUntil', 'celebrateUntil', 'interact', 'prevInteract', 'intent', 'lastHitBy', 'stats',
-      'baseLevel', 'boostLevel', 'treadmillTier', 'boostUntil', 'boostReadyAt', 'pumpUntil', 'pumpMult', 'trainT']) p[k] = fresh[k];
+      'baseLevel', 'boostLevel', 'treadmillTier', 'boostUntil', 'boostReadyAt', 'pumpUntil', 'pumpMult', 'trainT', 'sell', 'prevSell', 'heroUntil']) p[k] = fresh[k];
     p.holdSpent = false;
+    p.sellSpent = false;
     p._jumpQ = 0;
+    p.petMail = []; // the next player in this garden never gets the last one's pet trades
+    p._stealAt = null;
     const g = this.gardens[slot];
     const blankG = this._makeGarden(slot, p);
     g.cashPile = 0;
@@ -1694,7 +2008,7 @@ export class Game {
   serializeSlot(slot) {
     const p = this.players[slot];
     const g = this.gardens[slot];
-    const plantData = (pt) => ({ speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft });
+    const plantData = (pt) => ({ speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft, size: pt.size });
     const garden = { cashPile: g.cashPile, planters: g.planters.map((pl) => ({ unlocked: pl.unlocked, plant: pl.plant ? plantData(pl.plant) : null })) };
     // our plants in a thief's hands still count as ours
     for (const q of this.players) {
@@ -1705,6 +2019,7 @@ export class Game {
       if (spot) spot.plant = plantData(c.plant);
       else garden.cashPile += Math.round(this.plantIncome(c.plant, p) * SELL_SECONDS); // no room: keep its value
     }
+    if (this.boss?.target === slot && this.boss.state !== 'leave') garden.cashPile += this.boss.slurped; // Big Chomp's tummy too
     return { v: 1, player: p.serialize(), garden };
   }
 
@@ -1718,7 +2033,7 @@ export class Game {
 
   /** Everything needed to show this world on another device or keep it running after a host change. */
   serializeFull() {
-    const plant = (pt) => pt && { uid: pt.uid, speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft, owner: pt.owner };
+    const plant = (pt) => pt && { uid: pt.uid, speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft, owner: pt.owner, size: pt.size };
     return {
       v: 1,
       time: this.time,
@@ -1741,9 +2056,12 @@ export class Game {
           cash: p.cash, speedLevel: p.speedLevel, rebirths: p.rebirths, upgradeSpend: p.upgradeSpend, items: { ...p.items }, selectedItem: p.selectedItem,
           carrying: c ? (c.kind === 'plant' ? { kind: 'plant', plant: plant(c.plant), fromSlot: c.fromSlot, fromIndex: c.fromIndex } : { ...c }) : null,
           stunUntil: p.stunUntil, invulnUntil: p.invulnUntil, bonkReadyAt: p.bonkReadyAt, swingStart: p.swingStart,
-          coilUntil: p.coilUntil, cloakUntil: p.cloakUntil, celebrateUntil: p.celebrateUntil,
+          coilUntil: p.coilUntil, cloakUntil: p.cloakUntil, celebrateUntil: p.celebrateUntil, heroUntil: p.heroUntil,
           interact: { key: it.key, t: it.t, hold: it.hold, label: it.label, verb: it.verb, rarity: it.rarity },
+          sell: { key: p.sell.key, t: p.sell.t, hold: p.sell.hold, label: p.sell.label, verb: p.sell.verb, rarity: p.sell.rarity, value: p.sell.value || 0 },
           emote: p.emote, stats: { ...p.stats },
+          petMail: copyMail(p.petMail),
+          crownUntil: p.crownUntil, // Big Chomp's top bonker
         };
       }),
       gardens: this.gardens.map((g) => ({
@@ -1760,6 +2078,8 @@ export class Game {
         uid: m.uid, x: m.x, y: m.y, z: m.z, yaw: m.yaw, vx: m.vx, vz: m.vz, state: m.state, target: m.target,
         stunUntil: m.stunUntil, attackAt: m.attackAt, wander: { ...m.wander }, wanderAt: m.wanderAt, ignore: { ...m.ignore },
       })),
+      boss: bossState(this.boss),
+      nextBossAt: this.nextBossAt,
     };
   }
 
@@ -1784,7 +2104,7 @@ export class Game {
     const plant = (d) => {
       if (!d || !PLANT[d.speciesId]) return null;
       const o = known.get(d.uid) || {};
-      Object.assign(o, { uid: d.uid, speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal', growTotal: d.growTotal, growLeft: d.growLeft, owner: d.owner });
+      Object.assign(o, { uid: d.uid, speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal', growTotal: d.growTotal, growLeft: d.growLeft, owner: d.owner, size: sizeId(d.size) });
       return o;
     };
     s.players.forEach((d, i) => {
@@ -1818,7 +2138,7 @@ export class Game {
       }
       for (const k of ['cash', 'speedLevel', 'rebirths', 'upgradeSpend', 'selectedItem', 'stunUntil', 'invulnUntil', 'bonkReadyAt', 'swingStart',
         'coilUntil', 'cloakUntil', 'celebrateUntil']) p[k] = d[k];
-      for (const k of ['boostLevel', 'treadmillTier', 'pumpUntil', 'pumpMult', 'trainT']) if (Number.isFinite(d[k])) p[k] = d[k];
+      for (const k of ['boostLevel', 'treadmillTier', 'pumpUntil', 'pumpMult', 'trainT', 'heroUntil']) if (Number.isFinite(d[k])) p[k] = d[k];
       // our own boost is simulated here as soon as we press it: don't let an older state cancel it
       if (Number.isFinite(d.boostUntil) && (!mine || d.boostUntil > p.boostUntil)) p.boostUntil = d.boostUntil;
       if (Number.isFinite(d.boostReadyAt) && (!mine || d.boostReadyAt > p.boostReadyAt)) p.boostReadyAt = d.boostReadyAt;
@@ -1828,7 +2148,11 @@ export class Game {
       p.carrying = !c ? null : c.kind === 'plant' ? { kind: 'plant', plant: plant(c.plant), fromSlot: c.fromSlot, fromIndex: c.fromIndex } : { ...c };
       if (p.carrying?.kind === 'plant' && !p.carrying.plant) p.carrying = null;
       Object.assign(p.interact, d.interact);
+      if (d.sell) Object.assign(p.sell, d.sell);
       p.emote = d.emote;
+      // pet trades waiting for their device (a promoted host keeps sending them until they're acked)
+      p.petMail = copyMail(d.petMail);
+      if (Number.isFinite(d.crownUntil)) p.crownUntil = d.crownUntil;
     });
     s.gardens.forEach((d, i) => {
       const g = this.gardens[i];
@@ -1872,6 +2196,7 @@ export class Game {
       if (!m || !d) return;
       Object.assign(m, d, { wander: { ...d.wander }, ignore: { ...d.ignore } });
     });
+    applyBoss(this, s);
     this.human = this.players.find((p) => p.isHuman) || null;
     this._recomputeNetWorth();
   }
@@ -1902,7 +2227,7 @@ export class Game {
   // ------------------------------------------------------------------ save / load
 
   serialize() {
-    const plantData = (pt) => ({ speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft });
+    const plantData = (pt) => ({ speciesId: pt.speciesId, mutation: pt.mutation, growTotal: pt.growTotal, growLeft: pt.growLeft, size: pt.size });
     const gardens = this.gardens.map((g) => ({
       cashPile: g.cashPile,
       planters: g.planters.map((pl) => ({ unlocked: pl.unlocked, plant: pl.plant ? plantData(pl.plant) : null })),
@@ -1917,7 +2242,10 @@ export class Game {
       if (spot) spot.plant = plantData(c.plant);
       else gs.cashPile += Math.round(this.plantIncome(c.plant, this.players[c.fromSlot]) * SELL_SECONDS);
     }
-    return { v: 1, humanId: this.human?.id ?? null, difficulty: this.difficultyId, players: this.players.map((p) => p.serialize()), gardens };
+    // what Big Chomp slurped so far stays in the garden (only a burp up the road takes it for good)
+    if (this.boss && this.boss.state !== 'leave') gardens[this.boss.target].cashPile += this.boss.slurped;
+    // savedAt: wall clock, for the Welcome-Back Garden (applyAway) when this save is picked up again
+    return { v: 1, humanId: this.human?.id ?? null, difficulty: this.difficultyId, players: this.players.map((p) => p.serialize()), gardens, savedAt: Date.now() };
   }
 
   restore(s) {
@@ -1953,7 +2281,7 @@ export class Game {
       }
       const growTotal = num(d.growTotal, sp.grow) > 0 ? num(d.growTotal, sp.grow) : sp.grow;
       pl.plant = { uid: uid(), speciesId: d.speciesId, mutation: MUTATIONS[d.mutation] ? d.mutation : 'normal', growTotal,
-        growLeft: clamp(num(d.growLeft, 0), 0, growTotal), owner: i };
+        growLeft: clamp(num(d.growLeft, 0), 0, growTotal), owner: i, size: sizeId(d.size) };
     }
   }
 }

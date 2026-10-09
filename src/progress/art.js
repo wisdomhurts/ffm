@@ -20,6 +20,14 @@ const CUSTOM = {
   seed: svg(`<path d="M12 4.2 C 16.8 8.4, 18.4 13, 16.6 16.9 C 15.1 20.2, 8.9 20.2, 7.4 16.9 C 5.6 13, 7.2 8.4, 12 4.2 Z" fill="#d18f4f" ${S}/>
     <path d="M10.1 9.2 C 9.1 11, 8.8 13, 9.3 14.8" fill="none" stroke="#f6cf9b" stroke-width="1.7" stroke-linecap="round"/>
     <path d="M12 4.4 C 12 2.4, 13.8 1.3, 16.4 1.5 C 16.2 3.8, 14.4 4.9, 12 4.7 Z" fill="#4fcf62" ${S}/>`),
+  // a Golden Gnome (Golden Gnome Hunt)
+  gnome: svg(`<path d="M12 1.5 C 13.7 4.5, 16.3 7.9, 18 10.6 H 6 C 7.7 7.9, 10.3 4.5, 12 1.5 Z" fill="#ffd23f" ${S}/>
+    <ellipse cx="12" cy="13.3" rx="4.7" ry="2.3" fill="#ffe9a8"/>
+    <path d="M6.6 13.6 C 7 18.4, 9.3 21.2, 12 22.4 C 14.7 21.2, 17 18.4, 17.4 13.6 C 15.6 15.2, 8.4 15.2, 6.6 13.6 Z" fill="#fff6cc" ${S}/>
+    <rect x="5.2" y="9.9" width="13.6" height="2.5" rx="1.25" fill="#f0a800" ${S}/>
+    <circle cx="10" cy="13.2" r=".85" fill="${INK}"/><circle cx="14" cy="13.2" r=".85" fill="${INK}"/>
+    <circle cx="12" cy="14.6" r="1.5" fill="#ffb347" ${S}/>
+    <path d="M19.4 2.6 l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z" fill="#fff" stroke="${INK}" stroke-width="1" stroke-linejoin="round"/>`),
   sprout: svg(`<path d="M12 21.5 V12" fill="none" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><path d="M12 21.5 V12" fill="none" stroke="#2e9c46" stroke-width="1.8" stroke-linecap="round"/>
     <path d="M12 12.5 C 12 7.5, 15 4.5, 21 4.5 C 21 9.5, 17.5 12.5, 12 12.5 Z" fill="#6fe07a" ${S}/>
     <path d="M12 14.5 C 12 10.5, 9.4 8, 3.5 8 C 3.5 12.2, 6.5 14.5, 12 14.5 Z" fill="#4fcf62" ${S}/>`),
@@ -86,6 +94,19 @@ const CUSTOM = {
     <path d="M7 3.4 H17 V9 C 17 12, 14.8 14.2, 12 14.2 C 9.2 14.2, 7 12, 7 9 Z" fill="#ffd23f" ${S}/><path d="M9.4 5.4 V9" stroke="#fff6b0" stroke-width="1.6" stroke-linecap="round"/>
     <path d="M10.5 14.2 H13.5 V17.6 H10.5 Z" fill="#f0a000" ${S}/><rect x="7" y="17.6" width="10" height="3.6" rx="1.1" fill="#8a5a2b" ${S}/>`),
   sparkle: svg(`<path d="${starPath(12, 12, 10.5, 3.2, 4, 0)}" fill="#fff" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>`),
+  // the Family Crown: four points, a gem in each family colour (Dorian, Esther, Mati, Micah)
+  crown4: svg(`<path d="M2.6 8.2 L6.6 11.6 L9.2 5.2 L12 10.4 L14.8 5.2 L17.4 11.6 L21.4 8.2 L19.6 19.4 H4.4 Z" fill="#ffc93c" ${S}/>
+    <path d="M4.4 16.4 H19.6" stroke="#d98a00" stroke-width="1.4"/><path d="M6.4 9.6 L7.4 14.8" stroke="#fff6b8" stroke-width="1.3" stroke-linecap="round"/>
+    <circle cx="6.4" cy="17.9" r="1.35" fill="#2f80ed" stroke="${INK}" stroke-width=".9"/><circle cx="10.1" cy="17.9" r="1.35" fill="#ff4f9a" stroke="${INK}" stroke-width=".9"/>
+    <circle cx="13.9" cy="17.9" r="1.35" fill="#9b5cff" stroke="${INK}" stroke-width=".9"/><circle cx="17.6" cy="17.9" r="1.35" fill="#1ec8a5" stroke="${INK}" stroke-width=".9"/>
+    <circle cx="2.6" cy="8.2" r="1.3" fill="#fff" stroke="${INK}" stroke-width="1"/><circle cx="9.2" cy="5.2" r="1.3" fill="#fff" stroke="${INK}" stroke-width="1"/>
+    <circle cx="14.8" cy="5.2" r="1.3" fill="#fff" stroke="${INK}" stroke-width="1"/><circle cx="21.4" cy="8.2" r="1.3" fill="#fff" stroke="${INK}" stroke-width="1"/>`),
+  // the Seed Almanac: a green sticker book with a sprout sticker on the cover
+  almanac: svg(`<path d="M5 3.4 H18.6 a1.6 1.6 0 0 1 1.6 1.6 V20.6 H6.6 a2.2 2.2 0 0 1 -2.2 -2.2 V4 Z" fill="#2fb84f" ${S}/>
+    <path d="M6.6 20.6 a2.2 2.2 0 0 1 0 -4.4 H20.2" fill="#fff6dc" ${S}/><path d="M7.6 3.6 V16.2" stroke="#1d7a33" stroke-width="1.4"/>
+    <rect x="9.6" y="5.8" width="8.2" height="8.2" rx="1.6" fill="#fff" stroke="${INK}" stroke-width="1.2" transform="rotate(-6 13.7 9.9)"/>
+    <path d="M13.7 12.6 V9.6" stroke="#2e9c46" stroke-width="1.4" stroke-linecap="round"/><path d="M13.7 10.2 C13.7 8.4 15 7.4 16.6 7.4 C16.6 9.1 15.4 10.2 13.7 10.2 Z" fill="#6fe07a" stroke="${INK}" stroke-width=".9"/>
+    <path d="M13.7 10.9 C13.7 9.5 12.6 8.6 11.1 8.6 C11.1 10 12.2 10.9 13.7 10.9 Z" fill="#4fcf62" stroke="${INK}" stroke-width=".9"/>`),
 };
 
 // glyph key -> [svg, tint colour for currentColor icons]

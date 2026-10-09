@@ -10,7 +10,10 @@ export class Input {
     this.latched = { jump: false, bonk: false, item: null, select: null, pause: false, interactTap: false, boost: false, gear: false };
     this.mouse = { right: false, left: false, dx: 0, dy: 0, wheel: 0, x: 0, y: 0 };
     // Touch UI writes here (see ui/touch.js).
-    this.virtual = { moveX: 0, moveY: 0, active: false, interact: false, camDX: 0, camDY: 0, pinch: 0 };
+    this.virtual = { moveX: 0, moveY: 0, active: false, interact: false, sell: false, camDX: 0, camDY: 0, pinch: 0 };
+    // optional (x, y, touch) => bool: a quick left click (or a tap, see ui/touch.js) lands here first; true = it hit
+    // something (a pet), so no bonk
+    this.onTap = null;
     this.enabled = true;
     this.lastDevice = matchMedia('(pointer: coarse)').matches ? 'touch' : 'keyboard';
     this._gpPrev = {};
@@ -60,8 +63,10 @@ export class Input {
       if (fromTouch()) return;
       if (e.button === 2) this.mouse.right = false;
       if (e.button === 0) {
-        // quick left click (no drag) = bonk; left drag = orbit camera
-        if (this.mouse.left && this.mouse.leftMoved < 6 && performance.now() - (this.mouse.leftDownAt || 0) < 350 && this.enabled) this.latched.bonk = true;
+        // quick left click (no drag) = bonk (or a pet trick, on a pet); left drag = orbit camera
+        if (this.mouse.left && this.mouse.leftMoved < 6 && performance.now() - (this.mouse.leftDownAt || 0) < 350 && this.enabled) {
+          if (!this.onTap?.(e.clientX, e.clientY, false)) this.latched.bonk = true;
+        }
         this.mouse.left = false;
       }
     });
@@ -140,6 +145,12 @@ export class Input {
     return this.enabled && (this.keys.has('KeyE') || this.virtual.interact || !!(gp && gp.buttons[1]?.pressed));
   }
 
+  // Sell has its own button (so E never sells by accident): V, the touch Sell button or D-pad down.
+  sellHeld() {
+    const gp = this.gamepad();
+    return this.enabled && (this.keys.has('KeyV') || this.virtual.sell || !!(gp && gp.buttons[13]?.pressed));
+  }
+
   // Camera orbit delta in pixels since last call.
   takeCameraDelta() {
     let dx = this.mouse.dx + this.virtual.camDX;
@@ -215,6 +226,7 @@ export class Input {
     for (const k of Object.keys(this.latched)) this.latched[k] = k === 'item' || k === 'select' ? null : false;
     this.virtual.moveX = this.virtual.moveY = 0;
     this.virtual.interact = false;
+    this.virtual.sell = false;
   }
 }
 

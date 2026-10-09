@@ -1,15 +1,16 @@
 // A family member in the match: state only (no rendering). Driven by an Intent each tick.
 import { PLAYER, speedAt, ITEMS, BASE, BOOST, TREADMILL } from '../config.js';
 import { sanitizeBaseStyle, BOT_STYLES } from './basestyle.js';
+import { sanitizePetName } from '../pets/names.js';
 
 /**
  * Intent: what a controller (human input or bot brain) wants this tick.
  * moveX/moveZ: desired world-space direction (length 0..1).
  * jump/bonk/useItem are edge-triggered (true only on the tick they are pressed).
- * interact is held (true while the button is down).
+ * interact and sell are held (true while the button is down).
  */
 export function emptyIntent() {
-  return { moveX: 0, moveZ: 0, jump: false, interact: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null, boost: false };
+  return { moveX: 0, moveZ: 0, jump: false, interact: false, sell: false, bonk: false, useItem: null, selectSlot: null, aimYaw: null, emote: null, say: null, boost: false };
 }
 
 const NO_MODS = Object.freeze({ income: 1, speed: 1, hold: 1, magnet: 0, bonkCd: 1, grow: 1 });
@@ -30,6 +31,7 @@ export class Player {
     this.pet = null; // the first active pet's species id (views, older code)
     this.pets = []; // equipped team: up to 3 species ids; only the first petSlotsFor(baseLevel) count
     this.petNames = []; // their nicknames, same order ('' = none)
+    this.petMail = []; // pet trades for this player's device: [{tid, give: [uid], get: [{id, name}]}] until acked (Game.trade)
     this.mods = NO_MODS; // pet boosts (Game._refreshMods)
     this.baseLevel = 1; // BASE levels: survive rebirth
     this.baseStyle = sanitizeBaseStyle(isHuman ? null : BOT_STYLES[char.id]); // Base Studio picks
@@ -60,12 +62,16 @@ export class Player {
     this.coilUntil = 0;
     this.cloakUntil = 0;
     this.celebrateUntil = 0;
+    this.heroUntil = 0; // Help! Family Hero: the gold HERO ribbon shows until this time
+    this.crownUntil = 0; // wears Big Chomp's crown (top bonker) until then
     this.interact = { key: null, t: 0, hold: 0, label: '' };
     this.prevInteract = false;
+    this.sell = { key: null, t: 0, hold: 0, label: '' }; // the Sell prompt (its own button: V / Sell / D-pad down)
+    this.prevSell = false;
     this.intent = null;
     this.controller = null;
     this.lastHitBy = null;
-    this.stats = { steals: 0, robbed: 0, planted: 0, bonks: 0, collected: 0, best: null, seeds: 0, eggs: 0 };
+    this.stats = { steals: 0, robbed: 0, planted: 0, bonks: 0, collected: 0, best: null, seeds: 0, eggs: 0, rescues: 0 };
   }
 
   get stunned() {
@@ -116,8 +122,10 @@ export class Player {
       baseLevel: this.baseLevel,
       boostLevel: this.boostLevel,
       treadmillTier: this.treadmillTier,
-      // a bot's team comes from egg drops; a person's team lives on their profile
+      // a bot's team comes from egg drops (and trades: a pet given to a bot keeps its nickname); a person's team
+      // lives on their profile
       pets: this.kind === 'bot' ? this.pets : undefined,
+      petNames: this.kind === 'bot' ? this.petNames : undefined,
     };
   }
 
@@ -133,6 +141,11 @@ export class Player {
     this.baseLevel = Math.max(1, Math.min(BASE.maxLevel, Math.floor(num(s.baseLevel, 1))));
     this.boostLevel = Math.min(BOOST.maxLevel, Math.floor(num(s.boostLevel, 0)));
     this.treadmillTier = Math.min(TREADMILL.tiers.length - 1, Math.floor(num(s.treadmillTier, 0)));
-    if (this.kind === 'bot' && Array.isArray(s.pets)) this.pets = s.pets.filter((id) => typeof id === 'string').slice(0, 3);
+    if (this.kind === 'bot' && Array.isArray(s.pets)) {
+      const names = Array.isArray(s.petNames) ? s.petNames : [];
+      const team = s.pets.map((id, k) => [id, names[k]]).filter(([id]) => typeof id === 'string').slice(0, 3);
+      this.pets = team.map(([id]) => id);
+      this.petNames = team.map(([, name]) => sanitizePetName(name));
+    }
   }
 }

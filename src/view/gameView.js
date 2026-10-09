@@ -13,6 +13,10 @@ import { createDropView } from '../pets/dropView.js';
 import { EGG } from '../pets/catalog.js';
 import { TREADMILL } from '../config.js';
 import { beltRect } from '../gameplay/layout.js';
+import { sizeOf, shownSize, sizeChip, heroRibbon, addTitanBeam } from './sizes.js';
+import { SIZES } from '../config.js';
+import { createBossBinding } from './bossView.js';
+import { createBlobShadows } from '../fx/blobShadows.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -25,6 +29,10 @@ export function mutationTag(mut) {
   const m = MUTATIONS[mut];
   return m.name ? `<span class="mut mut-${m.id}">${m.name}</span>` : '';
 }
+
+// pickPet scratch (no allocations per click or hover)
+const PICK = { ray: new THREE.Raycaster(), ndc: new THREE.Vector2(), c: new THREE.Vector3(), d: new THREE.Vector3() };
+const CHEERS = { backflip: 'Flip!', spin: 'Wheee!', jump: 'Boing!', dance: 'Dance!', roll: 'Roll!', loop: 'Loop!', barrel: 'Woosh!', spinrise: 'Wheee!', dive: 'Zoom!' };
 
 export class GameView {
   constructor({ engine, game, world, labels, fx }) {
@@ -64,7 +72,11 @@ export class GameView {
       const v = createMonster(m.type);
       this.root.add(v.object3d);
       this.monsterViews.push(v);
+      v.blobR = blobRadius(v.object3d);
     });
+    this.bossView = createBossBinding(this); // Big Chomp, the world boss
+    // soft contact shadows under players and monsters (one draw call; pets have their own)
+    this.blobs = createBlobShadows(this.root, { strong: !this.engine.quality?.shadows });
     this.unsub.push(bus.on('face:changed', ({ id }) => {
       for (const p of this.game.players) if (p.faceKey === id) this._loadFace(p.slot);
     }));
@@ -74,6 +86,57 @@ export class GameView {
     // base extras: the Guard Gnome swings its noodle, trampolines squash
     this.unsub.push(bus.on('guard:bonk', ({ garden }) => this.world.gardens?.[garden?.slot]?.guard?.swing?.()));
     this.unsub.push(bus.on('base:bounce', ({ garden, spot }) => this.world.gardens?.[garden?.slot]?.decor?.[spot]?.userData?.bounce?.()));
+    // someone clicked a pet: everyone sees it do the trick
+    this.unsub.push(bus.on('pet:trick', (e) => this._petTrick(e)));
+  }
+
+  /**
+   * The pet under a screen point (client pixels), own or anyone else's: {slot, k} or null. A ray against a
+   * sphere round each visible pet, nearest hit first. `touch`: a fingertip, so the spheres are a bit bigger.
+   */
+  pickPet(x, y, touch = false) {
+    const r = this.engine.renderer.domElement.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    PICK.ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
+    PICK.ray.setFromCamera(PICK.ndc, this.engine.camera);
+    const ray = PICK.ray.ray;
+    let best = null;
+    let bestT = 160; // studs: further pets are specks
+    for (let slot = 0; slot < this.petViews.length; slot++) {
+      const recs = this.petViews[slot];
+      if (!recs || !this.game.players[slot]?.present) continue;
+      for (let k = 0; k < recs.length; k++) {
+        const rec = recs[k];
+        if (!rec || !rec.view.object3d.visible || !rec.view.center) continue;
+        const c = rec.view.center(PICK.c);
+        const t = PICK.d.subVectors(c, ray.origin).dot(ray.direction);
+        if (t < 0.5 || t > bestT) continue;
+        // far pets get a little extra so they stay clickable (a fingertip gets more)
+        const rad = rec.view.radius * (touch ? 1.3 : 1) + t * (touch ? 0.03 : 0.01);
+        if (ray.distanceSqToPoint(c) > rad * rad) continue;
+        bestT = t;
+        best = { slot, k };
+      }
+    }
+    return best;
+  }
+
+  _petTrick({ owner, k, trick, player }) {
+    const rec = this.petViews[owner]?.[k];
+    if (!rec || !rec.view.object3d.visible || !rec.view.trick?.(trick)) return;
+    const c = rec.view.center(PICK.c);
+    const cam = this.engine.camera.position;
+    const d = Math.hypot(c.x - cam.x, c.z - cam.z);
+    if (d > 90 || !this.fx) return;
+    const near = d < 40 ? 1 : 0.6;
+    const at = { x: c.x, y: c.y + 0.4, z: c.z };
+    this.fx.burst('sparkle', at, { count: 10, scale: 0.6, lod: near, colors: ['#fff6a8', '#ff9ed8', '#9ee8ff', '#ffffff'] });
+    this.fx.burst('hearts', { x: c.x, y: c.y + 0.8, z: c.z }, { count: 3, scale: 0.55, lod: near });
+    // a little cheer over the pet, for whoever clicked it and the pet's owner
+    const me = this.game.human;
+    if (me && (player === me || this.game.players[owner] === me)) {
+      this.fx.floatText(CHEERS[trick] || 'Wheee!', { x: c.x, y: c.y + rec.view.radius + 1.6, z: c.z }, { style: 'comic', size: 's', duration: 1.1, rise: 1.6 });
+    }
   }
 
   _makeAvatar(i) {
@@ -119,6 +182,10 @@ export class GameView {
     const human = g.human;
     // labels are sized by distance to the player (or the camera in attract mode)
     const focus = human ? human.pos : camera.position;
+    if (this.blobs) {
+      this.blobs.strong = !this.engine.renderer.shadowMap.enabled; // the engine may drop shadows on slow devices
+      this.blobs.begin();
+    }
 
     // players
     g.players.forEach((p, i) => {
@@ -134,13 +201,13 @@ export class GameView {
       o.position.set(p.pos.x, p.pos.y, p.pos.z);
       o.rotation.y = p.yaw;
       const c = p.carrying;
-      const key = c ? (c.kind === 'seed' ? `s:${c.speciesId}:${c.mutation}` : `p:${c.plant.uid}:${c.plant.mutation}`) : null;
+      const key = c ? (c.kind === 'seed' ? `s:${c.speciesId}:${c.mutation}` : `p:${c.plant.uid}:${c.plant.mutation}:${sizeOf(c.plant)}`) : null;
       if (key !== this.carryKeys[i]) {
         this.carryKeys[i] = key;
         if (this.carryViews?.[i]) this.carryViews[i] = null;
         let view = null;
         if (c?.kind === 'seed') view = createSeedView(c.speciesId, c.mutation);
-        else if (c?.kind === 'plant') view = createCarriedPlantView(c.plant.speciesId, c.plant.mutation);
+        else if (c?.kind === 'plant') view = createCarriedPlantView(c.plant.speciesId, c.plant.mutation, { size: sizeOf(c.plant) });
         (this.carryViews ||= [])[i] = view;
         // the pot on the local player's head draws after the x-ray so the head's outline never shows through it
         if (view && p === human) view.object3d.traverse((o) => { if (o.isMesh && !o.material.transparent) o.renderOrder += 31; });
@@ -161,14 +228,15 @@ export class GameView {
         invisible,
         isLocal: p === human,
         coil: now < p.coilUntil || now < p.boostUntil,
-        interacting: p.interact?.t > 0 ? p.interact.verb : null,
+        interacting: p.interact?.t > 0 ? p.interact.verb : p.sell?.t > 0 ? 'Sell' : null,
         emote: p.emote && now < p.emote.until ? p.emote.id : null,
         emoteT: p.emote ? now - (p.emote.since ?? now) : 0,
       });
       if (p === human && this.xray) this.xray.setVisible(invisible >= 1);
+      this._blobUnder(p.pos.x, p.pos.y, p.pos.z, (p.look || p.char.look)?.build === 'kid' ? 1.45 : 1.7, invisible, camera, p.onGround);
       this._updatePet(i, p, dt, time, now, invisible);
       if (invisible > 0.05) {
-        const tag = p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`;
+        const tag = heroRibbon(p, now) + (p === human ? '' : `<div class="nt-name" style="--c:${p.char.color}">${esc(p.name)}${p.rebirths ? ` <span class="nt-rb">★${p.rebirths}</span>` : ''}</div>`);
         let carry = '';
         if (c && p !== human) {
           const sid = c.kind === 'seed' ? c.speciesId : c.plant.speciesId;
@@ -176,7 +244,8 @@ export class GameView {
           carry = `<div class="nt-carry">${c.kind === 'plant' ? 'STOLEN ' : ''}${mutationTag(mut)} <b style="color:${rarityColor(PLANT[sid].rarity)}">${esc(PLANT[sid].name)}</b></div>`;
         }
         const top = av.headTop.position.y * av.object3d.scale.y;
-        if (tag || carry) L.set('pl' + i, { x: p.pos.x, y: p.pos.y + top + (c ? 3.9 : 1.4), z: p.pos.z }, tag + carry, { cls: 'nametag' + (c?.kind === 'plant' ? ' thief' : ''), maxDist: 110 });
+        const lift = c?.kind === 'plant' ? (SIZES[sizeOf(c.plant)].scale - 1) * 1.6 : 0; // a giant pot is taller
+        if (tag || carry) L.set('pl' + i, { x: p.pos.x, y: p.pos.y + top + (c ? 3.9 + lift : 1.4), z: p.pos.z }, tag + carry, { cls: 'nametag' + (c?.kind === 'plant' ? ' thief' : ''), maxDist: 110 });
       }
     });
 
@@ -203,14 +272,16 @@ export class GameView {
         const k = gd.slot + ':' + pl.index;
         signs?.planters?.[pl.index]?.setUnlocked(pl.unlocked);
         const plant = pl.plant;
-        const key = plant ? plant.uid + ':' + plant.mutation : null;
+        const size = plant ? shownSize(plant, now) : 'normal'; // Giant Harvests (normal through the drumroll)
+        const key = plant ? plant.uid + ':' + plant.mutation + ':' + size : null;
         let rec = this.plantViews.get(k);
         if (!rec || rec.key !== key) {
           if (rec?.view) this.root.remove(rec.view.object3d);
           rec = { key, view: null };
           if (plant) {
-            rec.view = createPlantView(plant.speciesId, plant.mutation);
+            rec.view = createPlantView(plant.speciesId, plant.mutation, { size });
             rec.view.object3d.position.set(pl.x, 1.2, pl.z);
+            if (SIZES[size].beam) addTitanBeam(rec.view, plant.mutation);
             this.root.add(rec.view.object3d);
           }
           this.plantViews.set(k, rec);
@@ -236,11 +307,11 @@ export class GameView {
           const stealing = pl.stealer != null ? '<div class="pl-steal">BEING STOLEN!</div>' : '';
           if (k === nearKey || stealing) {
             L.set('pt' + k, { x: pl.x, y: labelY, z: pl.z },
-              `${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${stealing}`,
+              `${sizeChip(size)}${mutationTag(plant.mutation)}<div class="pl-name" style="color:${rarityColor(sp.rarity)}">${esc(sp.name)}</div>${rarityTag(sp.rarity)}${body}${stealing}`,
               { cls: 'plantlbl' + (grown ? ' grown' : ''), maxDist: 70 });
           } else if (fd < 46) {
             const chip = grown
-              ? `<div class="pl-inc" style="--rc:${rarityColor(sp.rarity)}">$${fmt(inc)}/s</div>`
+              ? `${sizeChip(size)}<div class="pl-inc" style="--rc:${rarityColor(sp.rarity)}">$${fmt(inc)}/s</div>`
               : `<div class="pl-bar"><i style="width:${(p01 * 100).toFixed(0)}%"></i></div>`;
             L.set('pt' + k, { x: pl.x, y: labelY - 0.6, z: pl.z }, chip, { cls: 'plantlbl compact' + (grown ? ' grown' : ''), maxDist: 70 });
           }
@@ -351,8 +422,21 @@ export class GameView {
       v.object3d.position.set(m.x, m.y, m.z);
       v.object3d.rotation.y = m.yaw;
       v.update(dt, { time, speed: Math.hypot(m.vx, m.vz), state: now < m.stunUntil ? 'stunned' : m.state, attackAge: now - m.attackAt });
+      this._blobUnder(m.x, m.y, m.z, v.blobR || 1.4, 1, camera, true);
       if (m.state === 'chase') L.set('mo' + i, { x: m.x, y: 7, z: m.z }, '<div class="mo-alert">!</div>', { cls: 'monlbl', maxDist: 80 });
     });
+    this.bossView.update(dt, time, camera);
+    this.blobs?.end();
+  }
+
+  /** Contact shadow on the ground under a character (shrinks and fades as it jumps). */
+  _blobUnder(x, y, z, r, alpha, camera, onGround) {
+    if (!this.blobs || alpha <= 0.05) return;
+    const dx = x - camera.position.x, dz = z - camera.position.z;
+    if (dx * dx + dz * dz > 140 * 140) return;
+    const gy = onGround ? y : this.game.physics?.groundHeight?.(x, z, 0.5, y + 0.1) ?? 0;
+    const h = Math.max(0, y - gy);
+    this.blobs.add(x, gy, z, r * Math.max(0.55, 1 - h * 0.07), alpha * Math.max(0.2, 1 - h * 0.12));
   }
 
   _updatePet(i, p, dt, time, now, invisible) {
@@ -469,8 +553,10 @@ export class GameView {
       if (o.geometry && !o.geometry.userData?.shared && !o.userData.xray) o.geometry.dispose();
     });
     this.xray?.dispose();
+    this.blobs?.dispose();
     this.avatars.forEach((a) => a.dispose?.());
     this.monsterViews.forEach((m) => m.dispose?.());
+    this.bossView.dispose();
     this.petViews.forEach((list) => list?.forEach((r) => r?.view.dispose()));
     this.dropViews.forEach((v) => v.dispose());
   }
@@ -531,6 +617,13 @@ function addXray(root, color) {
       mat.dispose();
     },
   };
+}
+
+// Ground footprint of a monster model (for its contact shadow).
+function blobRadius(obj) {
+  const b = new THREE.Box3().setFromObject(obj);
+  if (b.isEmpty()) return 1.4;
+  return Math.max(1.2, Math.min(3.6, Math.max(b.max.x - b.min.x, b.max.z - b.min.z) * 0.55));
 }
 
 export function rarityColor(id) {

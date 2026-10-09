@@ -339,10 +339,12 @@ vec3 plantHue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0
 `;
 
 // Adds per-vertex glow (aGlow), rainbow hue cycling, and a soft (or rainbow) rim light to a built-in material.
+// shine: 'gold' (a glint sweeps up the plant), 'diamond' (single facets twinkle), 'rainbow' (prismatic glitter).
 // All variants are expressed through defines (part of three's program key), so the patched programs are shared.
-function patch(mat, { rainbow = false, rim = 0, rimRainbow = false, glowPulse = true } = {}) {
+function patch(mat, { rainbow = false, rim = 0, rimRainbow = false, glowPulse = true, shine = null } = {}) {
   mat.defines = mat.defines || {};
   if (rainbow) mat.defines.PLANT_RAINBOW = '';
+  if (shine) mat.defines['PLANT_SHINE_' + shine.toUpperCase()] = '';
   if (rim > 0 || rimRainbow) mat.defines.PLANT_RIM = rim.toFixed(3);
   if (rimRainbow) mat.defines.PLANT_RIM_RAINBOW = (rimRainbow === true ? 1.6 : rimRainbow).toFixed(3);
   if (glowPulse) mat.defines.PLANT_PULSE = '';
@@ -396,6 +398,27 @@ totalEmissiveRadiance += plantRb * plantBand * 0.3;
   totalEmissiveRadiance += (diffuseColor.rgb * 0.7 + vec3(0.05)) * rim * PLANT_RIM;
   #endif
 }
+#endif
+#ifdef PLANT_SHINE_GOLD
+{
+  // a bright band of light sweeps up and across the gold every few seconds (each plant on its own beat)
+  float sweep = fract(uTime * 0.28 + (vWPos.x + vWPos.z) * 0.015) * 3.6 - 0.8;
+  float band = smoothstep(0.06, 0.0, abs(vWPos.y * 0.16 + (vWPos.x - vWPos.z) * 0.05 - sweep));
+  totalEmissiveRadiance += vec3(1.0, 0.86, 0.52) * band * 0.95 * (1.0 - plantKeep);
+}
+#endif
+#if defined( PLANT_SHINE_DIAMOND ) || defined( PLANT_SHINE_RAINBOW )
+{
+  // single facets catch the light: hashed by their world-space facet normal, so it holds still as the camera moves
+  vec3 fN = normalize(cross(dFdx(vWPos), dFdy(vWPos)));
+  float fh = fract(sin(dot(floor(fN * 6.0) + floor(vWPos * 0.7), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  float tw = pow(max(0.0, sin(uTime * (1.4 + fh * 2.4) + fh * 40.0)), 10.0) * step(0.35, fh) * (1.0 - plantKeep);
+  #ifdef PLANT_SHINE_RAINBOW
+  totalEmissiveRadiance += plantHue(fract(fh * 3.0 + uTime * 0.1)) * tw * 0.6;
+  #else
+  totalEmissiveRadiance += vec3(0.85, 0.97, 1.0) * tw * 1.5;
+  #endif
+}
 #endif`);
   };
   mat.customProgramCacheKey = () => 'plantPatch1';
@@ -442,16 +465,17 @@ export function plantMat(kind, mutation = 'normal', secret = false) {
       return patch(new THREE.MeshStandardMaterial({
         vertexColors: true, metalness: 0.95, roughness: 0.24, envMap: envTex(), envMapIntensity: 1.35,
         side: THREE.DoubleSide, emissive: 0x3a2400, emissiveIntensity: 0.35,
-      }), { rim: 0.35, rimRainbow });
+      }), { rim: 0.35, rimRainbow, shine: 'gold' });
     }
     if (mutation === 'diamond') {
       return patch(new THREE.MeshStandardMaterial({
         vertexColors: true, metalness: 0.35, roughness: 0.05, envMap: envTex(), envMapIntensity: 1.4, flatShading: true,
         side: THREE.DoubleSide, emissive: 0x0b3a55, emissiveIntensity: 0.35,
-      }), { rim: 0.8, rimRainbow });
+      }), { rim: 0.8, rimRainbow, shine: 'diamond' });
     }
     return patch(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), {
       rainbow: mutation === 'rainbow', rim: 0.28, rimRainbow: rimRainbow || (mutation === 'rainbow' && 1.1),
+      shine: mutation === 'rainbow' ? 'rainbow' : null,
     });
   });
 }

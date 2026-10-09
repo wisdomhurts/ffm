@@ -306,19 +306,19 @@ export function openLobby(app) {
 
   // ---- make a room
   const make = h('div', { class: 'lb-make' },
-    btn([h('span', { class: 'lbm' }, h('span', { class: 'bi', html: ICON.globe }), h('span', { text: 'Public room' })), h('small', { text: 'Anyone playing online can join.' })],
+    btn([h('span', { class: 'lbm' }, h('span', { class: 'bi', html: ICON.globe }), h('span', { text: 'Public room' })), h('small', { text: 'Anyone playing online can join. People only.' })],
       'btn-blue lb-mk lb-act', () => run(() => on.createRoom({ private: false }))),
     btn([h('span', { class: 'lbm' }, h('span', { class: 'bi', html: ICON.lock }), h('span', { text: 'Private room' })), h('small', { text: 'Only friends with your secret code.' })],
       'btn-purple lb-mk lb-act', () => run(() => on.createRoom({ private: true }))));
 
-  // ---- computer players in rooms you make
+  // ---- computer players in private rooms you make (public rooms are people only)
   const bots = botsSeg(() => Math.round(settings.onlineBots ?? 3), (v) => {
     menus.click();
     setSetting('onlineBots', v);
   });
   const botsRow = h('div', { class: 'lb-face lb-bots lb-card' },
-    h('span', { class: 'set-l' }, h('span', { class: 'set-name', text: 'Computer players' }),
-      h('span', { class: 'set-note', text: 'In rooms you make: how many empty gardens get a family bot. None = just you and your friends.' })),
+    h('span', { class: 'set-l' }, h('span', { class: 'set-name', text: 'Computer players (private rooms)' }),
+      h('span', { class: 'set-note', text: 'In private rooms you make: how many empty gardens get a family bot. Public rooms are people only.' })),
     bots.el);
 
   // ---- join with a code
@@ -501,7 +501,7 @@ export function mountRoomPanel(app, hudRoot, anchors = {}) {
   const codeRow = room.private ? h('div', { class: 'rc-code' }, h('span', { class: 'rc-cl', text: 'Room code' }), h('b', { text: room.code }), copyBtn) : null;
   const listEl = h('div', { role: 'list' });
   const note = h('div', { class: 'rc-note' });
-  // the host can change how many computer players the room has at any time
+  // the host of a private room can change how many computer players it has at any time (public rooms have none)
   const botsCtl = botsSeg(() => on.maxBots, (v) => {
     menus.click();
     if (on.setBots(v)) toast(v === 0 ? 'No computer players: empty gardens wait for friends.' : `Computer players: ${v >= 3 ? 'all empty gardens' : v}`, ICON.family);
@@ -593,9 +593,10 @@ export function mountRoomPanel(app, hudRoot, anchors = {}) {
     listEl.replaceChildren(...rows);
     const free = 4 - ms.length;
     const nb = on.maxBots;
-    botsRow.hidden = !on.isHost;
+    botsRow.hidden = !on.isHost || !room.private;
     botsCtl.paint();
-    const bots = nb <= 0 ? 'No computer players: empty gardens wait for friends.' : nb >= 3 ? 'Computer players look after empty gardens.' : `Up to ${nb} computer player${nb === 1 ? '' : 's'}.`;
+    const bots = !room.private ? 'Public rooms are people only: empty gardens wait for players.'
+      : nb <= 0 ? 'No computer players: empty gardens wait for friends.' : nb >= 3 ? 'Computer players look after empty gardens.' : `Up to ${nb} computer player${nb === 1 ? '' : 's'}.`;
     setText(note, `${room.private ? 'Share the code with friends. ' : ''}${free > 0 ? `${free} more can join. ` : ''}${bots}`);
   }
   paint();

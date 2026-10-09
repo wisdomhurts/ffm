@@ -74,6 +74,10 @@ html.menu-screen .labels-layer{visibility:hidden}
 .rar-celestial{color:#8ff7ff;text-shadow:0 0 7px rgba(111,243,255,.75),0 1px 0 rgba(0,0,0,.45)}
 .rar-cosmic{color:#ff86ec;text-shadow:0 0 7px rgba(255,92,225,.75),0 1px 0 rgba(0,0,0,.45)}
 .rar-divine{color:#fff29a;text-shadow:0 0 9px rgba(255,231,94,.95),0 1px 0 rgba(0,0,0,.45)}
+.rar-prismatic{color:#8dffd6;text-shadow:0 0 8px rgba(61,255,180,.85),0 0 2px rgba(180,140,255,.9),0 1px 0 rgba(0,0,0,.45)}
+.rar-eternal{color:#ffa486;text-shadow:0 0 9px rgba(255,122,89,.9),0 1px 0 rgba(0,0,0,.45)}
+.rar-infinity{color:transparent;text-shadow:none;background-image:linear-gradient(90deg,#b6adff,#ffb0ea,#9ff2ff,#c9ffb8,#b6adff);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
+  filter:drop-shadow(0 0 4px rgba(138,125,255,.95)) drop-shadow(0 1px 0 rgba(0,0,0,.5));animation:rainbowPan 3.2s linear infinite}
 .rar-secret{color:transparent;text-shadow:none;padding:3px 7px 3px;border-radius:6px;border:1.5px solid rgba(255,255,255,.35);
   background-image:var(--rainbow),linear-gradient(#050507,#050507);background-size:200% 100%,100% 100%;
   -webkit-background-clip:text,padding-box;background-clip:text,padding-box;animation:rainbowPan 2s linear infinite}
@@ -411,16 +415,6 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .tut-copy b{display:block;font:var(--fdw) 16px/1.1 var(--fd);letter-spacing:.02em}
 .tut-text{display:block;font:700 12.5px/1.3 var(--fb);color:#e2e7ff;margin-top:2px}
 .tut-dist{font:900 9.5px/1 var(--fb);color:#ffe066;white-space:nowrap}
-.tut-list{list-style:none;margin:8px 0 0;padding:0 2px;display:grid;gap:4px}
-.tut-step{display:flex;align-items:center;gap:7px;font:800 12.5px/1.1 var(--fb);color:var(--txt3)}
-.tut-box{width:17px;height:17px;flex:none;border-radius:5px;border:2px solid #5a67a8;display:grid;place-items:center;padding:1px;color:#fff}
-.tut-box svg{display:none!important}
-.tut-step.done{color:#7dffa0}
-.tut-step.done .tut-box{background:var(--green);border-color:var(--ink)}
-.tut-step.done .tut-box svg{display:block!important}
-.tut-step.cur{color:#fff}
-.tut-step.cur .tut-box{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,210,63,.35)}
-.tut-n{display:none}
 
 /* next goal chip (after the tutorial) */
 .nextgoal{position:relative;display:flex;align-items:center;gap:8px;max-width:272px;padding:7px 12px 10px 7px;border-radius:16px;border:3px solid var(--ink);overflow:hidden;
@@ -579,6 +573,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .set-name{font:var(--fdw) 18px/1 var(--fd);letter-spacing:.02em}
 .set-note{font:700 12px/1.2 var(--fb);color:var(--txt3)}
 .set-note.warn{color:#ffe066}
+.set-sec{margin:10px 2px 0;font:900 12px/1 var(--fb);letter-spacing:.14em;text-transform:uppercase;color:var(--txt3)}
 .set-slider{display:flex;align-items:center;gap:10px;margin-left:auto}
 .set-v{min-width:46px;text-align:right;font:900 14px/1 var(--fb)}
 #ui input[type=range]{-webkit-appearance:none;appearance:none;width:210px;height:32px;margin:0;background:transparent;cursor:pointer;pointer-events:auto;touch-action:none;--f:50%}
@@ -850,12 +845,11 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .tut{position:fixed;left:var(--sl);right:var(--sr);top:calc(var(--st) + 150px);display:flex;align-items:center;gap:8px;width:auto;max-width:none;padding:5px 8px 5px 6px;border-radius:15px}
   /* the distance sits under the arrow and the count over Skip, so the instruction gets the width */
   .tut-head{order:2;flex-direction:column;align-items:flex-end;gap:5px}
-  .tut-kicker,.tut-list{display:none}
+  .tut-kicker{display:none}
   .tut-text{font-size:11.5px;line-height:1.25;margin-top:1px;white-space:normal;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
   .tut-nav{gap:2px}
   .tut-now{flex:1;min-width:0;margin:0;padding:0;gap:7px;background:none}
   .tut-skip{padding:4px 6px;font-size:10px}
-  .tut-num{display:none}
   .tut-copy b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tut-arrow{width:28px;height:28px;padding:4px}
   .tut-text{font-size:11.5px}
@@ -952,7 +946,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .tut{display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"nav title skip" "nav text text";align-items:center;column-gap:6px;row-gap:2px;
     width:236px;max-width:236px;padding:5px 6px 6px}
   .tut-head,.tut-now,.tut-copy{display:contents}
-  .tut-kicker,.tut-list{display:none}
+  .tut-kicker{display:none}
   .tut-nav{grid-area:nav;gap:2px}
   .tut-arrow{width:26px;height:26px;padding:4px}
   .tut-copy b{grid-area:title;align-self:end;font-size:14px}
@@ -1132,7 +1126,7 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
   .a-ic{width:30px;height:30px}
 }
 @media (max-height:500px) and (orientation:landscape){
-  .tut-num,.tut-count{display:none}
+  .tut-count{display:none}
   .tut-copy b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .tut-dist{white-space:normal;text-align:center;width:min-content;line-height:1.1}
   .is-touch .tut-skip{padding:4px 6px;font-size:11px}
@@ -1379,6 +1373,9 @@ kbd{display:inline-block;font:900 11px/1 var(--fb);color:var(--ink);background:#
 .pq:hover .pq-ic{animation:wiggle .5s ease-in-out}
 .pause-util .btn{flex-direction:column;gap:3px;min-height:0;padding:7px 4px 9px;font-size:14px;border-radius:15px;white-space:nowrap}
 .pause-util .btn .bi{width:20px;height:20px}
+/* short portrait phones: the pause menu fits down to Save & Quit (ui/soundControls.js packs the sound switches) */
+@media (max-width:640px) and (max-height:760px) and (orientation:portrait){.pause-me{display:none}}
+@media (max-width:640px) and (max-height:620px) and (orientation:portrait){.pause-panel{gap:10px}.pause-btns{gap:8px}.pq{flex-direction:row;gap:7px;padding:4px 4px 6px;font-size:14px}.pq-ic{width:30px;height:30px}}
 
 /* shop stands built by feature modules (pets / wardrobe) reuse the shop header classes */
 .shop-pets .sh-ic{background:linear-gradient(180deg,#ffc56b,#ff8a1c)}

@@ -6,6 +6,7 @@ import { isTouch } from './device.js';
 import { iosNeedsHomeScreen, IOS_TIP } from './fullscreen.js';
 
 const act = () => (isTouch() ? 'Action' : 'E');
+const sell = () => (isTouch() ? 'the gold Sell button' : 'V');
 
 const LOOP = () => [
   [ICON.sprout, 'Grab a seed', 'Run up the Seed Road. Further = rarer.'],
@@ -17,9 +18,9 @@ const LOOP = () => [
 ];
 
 const CONTROLS = [
-  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['Shift', 'Boost'], ['X', 'Speed gear'], ['E', 'Grab (hold to Steal / Sell)'], ['Click / F', 'Bonk with the noodle'], ['1-5', 'Use items'], ['G', 'Emotes'], ['T', 'Quick chat'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['Esc', 'Menu']]],
-  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Bonk', 'Swing the noodle'], ['Jump', 'Jump'], ['Lightning', 'Boost'], ['Gear chip', 'Speed gear'], ['Hotbar', 'Tap to use items'], ['Smiley', 'Emotes + quick chat']]],
-  [ICON.gamepad, 'Gamepad', [['Left stick', 'Move'], ['Right stick', 'Camera'], ['A', 'Jump'], ['B', 'Grab / hold to Steal'], ['X', 'Bonk'], ['RT', 'Boost'], ['LT', 'Speed gear'], ['Y', 'Use item'], ['LB / RB', 'Pick item'], ['Start', 'Menu']]],
+  [ICON.keyboard, 'Keyboard + mouse', [['WASD', 'Move'], ['Space', 'Jump'], ['Shift', 'Boost'], ['X', 'Speed gear'], ['E', 'Grab (hold to Steal)'], ['V', 'Hold to Sell a grown plant'], ['Click / F', 'Bonk with the noodle'], ['Click a pet', 'Pet trick!'], ['1-5', 'Use items'], ['G', 'Emotes'], ['T', 'Quick chat'], ['Enter', 'Type a message'], ['Right-drag', 'Turn camera'], ['Wheel', 'Zoom'], ['M', 'Music on/off'], ['Esc', 'Menu']]],
+  [ICON.touch, 'Touch', [['Left thumb', 'Move (joystick)'], ['Right side drag', 'Turn camera'], ['Pinch', 'Zoom'], ['Action', 'Grab / hold to Steal'], ['Sell', 'Hold to sell a grown plant'], ['Bonk', 'Swing the noodle'], ['Tap a pet', 'Pet trick!'], ['Jump', 'Jump'], ['Lightning', 'Boost'], ['Gear chip', 'Speed gear'], ['Hotbar', 'Tap to use items'], ['Smiley', 'Emotes + quick chat'], ['Chat button', 'Type a message']]],
+  [ICON.gamepad, 'Gamepad', [['Left stick', 'Move'], ['Right stick', 'Camera'], ['A', 'Jump'], ['B', 'Grab / hold to Steal'], ['D-pad down', 'Hold to Sell'], ['X', 'Bonk'], ['RT', 'Boost'], ['LT', 'Speed gear'], ['Y', 'Use item'], ['LB / RB', 'Pick item'], ['Start', 'Menu']]],
 ];
 
 // The second-wave features, one card each (kept short: kids skim)
@@ -30,7 +31,7 @@ const FEATURES = () => [
   ['speed', ICON.boost, 'Boost & Treadmills', `Boost gives a burst of speed (upgrade it at the Boost Lab). Run on the Warm-Up treadmill without falling off to get Pumped: up to +${Math.round(TREADMILL.tiers[TREADMILL.tiers.length - 1].bonus * 100)}% speed with the best treadmill. Super fast? Switch gears to go slow and steady.`, isTouch() ? [] : [['Shift', 'Boost'], ['X', 'Gear']]],
   ['emotes', ICON.smile, 'Emotes & Quick Chat', isTouch() ? 'Tap the smiley button to wave, cheer or dance, or to send a quick message. The family might answer back!' : 'Wave, cheer or dance, or send a quick message. The family might answer back!', isTouch() ? [] : [['G', 'Emotes'], ['T', 'Quick chat']]],
   ['quests', TILE_ICONS.quests, 'Quests & Badges', 'Three new quests every day. Finish them for cash and stars, then spend your stars in the Wardrobe. Badges are for big moments, like your first steal.', []],
-  ['online', ICON.globe, 'Playing Online', 'Tap PLAY ONLINE to hop into a room with up to 4 players. Make a private room and share its 5-letter code with friends. Family bots fill empty gardens, and online games never pause!', []],
+  ['online', ICON.globe, 'Playing Online', 'Tap PLAY ONLINE to hop into a room with up to 4 players. Make a private room and share its 5-letter code with friends (family bots can fill its empty gardens; public rooms are people only). Online games never pause!', []],
   ['trade', ICON.swap, 'Trading & Gifts', 'Online, walk up to another player to give them a plant or offer a trade. You both pick what to swap, press Ready, then Accept. No take-backs!', []],
 ];
 
@@ -41,7 +42,8 @@ const TIPS = () => [
   `You start with ${PLANTERS.startUnlocked} planters. Walk up to a locked one to unlock more.`,
   `Need more room? The back of your garden is ${LOTS.count} FOR SALE lots. Walk up to one to buy it: +${LOTS.planters} planters each.`,
   'There is no top Speed level. Keep training to outrun the monsters of the far worlds: Frostfall, Candy Canyon and Cloud Kingdom.',
-  `Garden full? Hold ${act()} on a grown plant to sell it for 90 seconds of income.`,
+  `Garden full? Hold ${sell()} by a grown plant to sell it for 90 seconds of income.`,
+  'Click or tap a pet to make it do a trick. Everyone sees it!',
   'Rebirth at the altar for a permanent income boost and a crown star. Your base level, Boost, treadmill and pets stay with you.',
   `A Guard Gnome (Base Lv ${BASE.guardAt}) bonks thieves in your garden, even while you're away.`,
   `The Boost Lab sells ${BOOST.maxLevel} Boost levels: each one is stronger, longer and recharges faster.`,

@@ -6,15 +6,17 @@ import { BotController } from '../../src/ai/bot.js';
 import { getProfile, createProfile, updateProfile } from '../../src/core/profiles.js';
 import { createOnline } from '../../src/net/session.js';
 import { createTransport, MemoryHub } from '../../src/net/transport.js';
+import { postTyped } from '../../src/social/chat.js';
 
 export { MemoryHub };
 
-/** Scripted "gamepad": set moveX/moveZ/hold, press('jump'|'bonk'|..) for one-shot edges. */
+/** Scripted "gamepad": set moveX/moveZ/hold (interact) / sell, press('jump'|'bonk'|..) for one-shot edges. */
 export class Pad {
   constructor() {
     this.moveX = 0;
     this.moveZ = 0;
     this.hold = false;
+    this.sell = false;
     this.edges = {};
     this._queued = null;
   }
@@ -29,6 +31,7 @@ export class Pad {
     it.moveX = this.moveX;
     it.moveZ = this.moveZ;
     it.interact = this.hold;
+    it.sell = this.sell;
     Object.assign(it, this.edges);
     this.edges = {};
     if (this._queued) {
@@ -96,14 +99,20 @@ export class StubApp {
       case 'setPet': g.setPet(p, args[0] ?? null); return true;
       case 'setLook': g.setLook(p, args[0]); return true;
       case 'gift': return g.giftPlant(p, g.players[args[0]], args[1]);
+      case 'petTrick': return !!g.petTrick(p, args[0], args[1]);
       case 'emote':
       case 'say':
         this.humanCtrl?.queue(name, args[0]);
         return true;
+      case 'chat':
+        return this.online?.room ? this.online.act(name, args) : postTyped(g, p, args[0]);
       case 'addCash':
         if (Number.isFinite(args[0]) && args[0] > 0) p.cash += Math.floor(args[0]);
         return true;
+      case 'petMailAck':
+        return this.online?.room ? this.online.act(name, args) : g.petMailAck(p, args[0]);
       default:
+        if (String(name).startsWith('trade') && !this.online?.room) return this.trades?.handle(p, name, args) ?? false;
         return this.online?.act?.(name, args);
     }
   }

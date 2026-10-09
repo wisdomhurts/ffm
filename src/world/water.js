@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { fogShader } from './kit.js';
 import { noiseTexture } from './textures.js';
+import { LOOK } from '../core/shaderfx.js';
 
 const VERT = `
   varying vec3 vW;
@@ -21,11 +22,16 @@ const OUT = `
 /**
  * Ocean with turquoise shallows and animated foam at the island's shoreline.
  * island: {cx, cz, hx, hz} sharp rectangle; shoreD: distance from it where the water line sits;
- * mainlandZ: straight shoreline (cliff) to the north.
+ * mainlandZ: straight shoreline (cliff) to the north. hq (medium/high): ripple normals, a Fresnel sky
+ * reflection and a sun glint path.
  */
-export function oceanMaterial({ cx, cz, hx, hz, shoreD, mainlandZ }) {
+export function oceanMaterial({ cx, cz, hx, hz, shoreD, mainlandZ, hq = false }) {
   return fogShader({
+    defines: hq ? { OCEAN_HQ: '' } : {},
     uniforms: {
+      uSky: LOOK.skyColor,
+      uSunDir: LOOK.sunDir,
+      uSunCol: LOOK.sunColor,
       uDeep: { value: new THREE.Color('#0f5fb8') },
       uMid: { value: new THREE.Color('#1c9fd8') },
       uShallow: { value: new THREE.Color('#46e0d2') },
@@ -37,7 +43,7 @@ export function oceanMaterial({ cx, cz, hx, hz, shoreD, mainlandZ }) {
     },
     vertex: VERT,
     fragment: `
-      uniform vec3 uDeep, uMid, uShallow, uFoam;
+      uniform vec3 uDeep, uMid, uShallow, uFoam, uSky, uSunDir, uSunCol;
       uniform vec4 uIsland; uniform float uShore, uMainZ;
       uniform sampler2D uNoise;
       varying vec3 vW;
@@ -58,6 +64,21 @@ export function oceanMaterial({ cx, cz, hx, hz, shoreD, mainlandZ }) {
         // sun sparkles on the crests
         float crest = smoothstep(0.66, 0.76, w + 0.06 * sin(p.x * 0.4 + t * 1.3) * sin(p.y * 0.35 - t));
         col = mix(col, vec3(0.92, 1.0, 1.0), crest * 0.22);
+        #ifdef OCEAN_HQ
+        {
+          // ripple normals from two more taps of the same noise, then sky reflection (Fresnel) and the sun's glint path
+          vec2 uvR = p * 0.0075 + vec2(-t * 0.004, t * 0.0033);
+          float dx = texture2D(uNoise, uvR + vec2(0.012, 0.0)).g - n2;
+          float dz = texture2D(uNoise, uvR + vec2(0.0, 0.012)).g - n2;
+          vec3 N = normalize(vec3(-dx * 3.5, 1.0, -dz * 3.5));
+          vec3 V = normalize(cameraPosition - vW);
+          float fres = pow(1.0 - max(dot(N, V), 0.0), 5.0);
+          // the sky tints the far water a little (keeping the sea's own deep blue), shimmering with the ripples
+          col = mix(col, uSky * 0.7 + col * 0.3, fres * 0.2);
+          float glint = pow(max(dot(reflect(-V, N), uSunDir), 0.0), 220.0);
+          col += uSunCol * glint * 1.3 * (1.0 - fres * 0.5);
+        }
+        #endif
         // shoreline foam: a solid lip plus rolling bands
         float lip = 1.0 - smoothstep(0.0, 1.6 + n2, d);
         float band = smoothstep(0.35, 0.0, abs(d - 2.2 - 1.6 * sin(t * 0.9 + n * 5.0))) * (1.0 - smoothstep(0.0, 6.0, d));
