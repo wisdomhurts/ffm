@@ -68,6 +68,7 @@ export function attachAway(app) {
     injectAwayStyles();
     if (!app.menus?.openModal) return;
     game.paused = true; // the family waits while you read
+    app.touch?.setVisible?.(false);
     let done = false;
     const go = () => {
       if (done) return;
@@ -92,7 +93,10 @@ export function attachAway(app) {
     const m = app.menus.openModal(el, {
       cls: 'away-card', label: 'While you were away', onClose: () => {
         if (app.game !== game) return;
-        if (app.state === 'playing') game.paused = false;
+        if (app.state === 'playing') {
+          game.paused = false;
+          app.touch?.setVisible?.(true);
+        }
         pointAtPad(app, game);
       },
     });
