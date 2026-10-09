@@ -3,7 +3,7 @@
 // a big burp when it gives up and a pop when it bursts. Cheap on phones: its body segments are ONE instanced
 // mesh and the head a few merged vertex-coloured meshes on the monsters' shader program; bossWarmup() hands
 // main.js's shader warm-up the one new variant (instanced, with instance colours).
-// Contract: createBoss() -> {object3d, head, update(dt, s), hit(), pop(), burp(), done, dispose()}
+// Contract: createBoss() -> {object3d, head, update(dt, s), hit(mine), pop(), burp(), done, dispose()}
 //   s = {x, z, yaw, state: 'crawl'|'munch'|'leave', hp01, gone}: x/z/yaw are game.boss's centre and heading; the
 //   head sits BOSS.body.front ahead of it and the body chains behind the head in world space (object3d stays at
 //   the origin). `gone`: the boss left the world (it shrinks away). `done` turns true once it has popped or shrunk.
@@ -178,10 +178,10 @@ export function createBoss() {
     object3d: root,
     head,
     done: false,
-    /** Ow! A squash, wide eyes and a white flash. */
-    hit() {
+    /** Ow! A squash, wide eyes and a white flash (a big one for your own hits: `mine`). */
+    hit(mine = false) {
       hitT = 1;
-      flash = 1;
+      flash = Math.max(flash, mine ? 1 : 0.3);
       antV += 6;
       for (const e of eyes) {
         e.vx += (Math.random() - 0.5) * 9;

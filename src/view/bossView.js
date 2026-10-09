@@ -39,7 +39,7 @@ export function createBossBinding(gv) {
   const offs = [
     bus.on('boss:hit', ({ by, n }) => {
       if (!view || !ours(by)) return;
-      view.cat.hit();
+      view.cat.hit(by === game.human);
       if (!fx || !closeBy(S.x, S.z, 160)) return;
       bossNearest(S, by.pos.x, by.pos.z, near);
       fx.burst('impact', at(near.x, 3.4, near.z), { scale: 1.25, color: '#e4ffb8' });
