@@ -192,10 +192,22 @@ export function balloonOnBoss(game, ball) {
   return !!b && b.state !== 'leave' && ball.y < BOSS.body.radius * 2.6 && bodyDist(b, ball.x, ball.z) < BOSS.body.radius + 1;
 }
 
+/** Is p standing by its body, in noodle reach? A balloon flying at it passes empty-handed teammates there by
+ *  (Game._updateProjectiles), so it reaches the body instead of popping on the family bonking it. */
+export function besideBoss(game, p) {
+  const b = game.boss;
+  return !!b && b.state !== 'leave' && p.pos.y <= 9 && bodyDist(b, p.pos.x, p.pos.z) <= PLAYER.bonk.range + BOSS.reach;
+}
+
+/** Would a balloon popping at `ball` splash its body? Then, like a swing at it, it spares empty-handed teammates. */
+export function splashOnBoss(game, ball) {
+  const b = game.boss;
+  return !!b && b.state !== 'leave' && bodyDist(b, ball.x, ball.z) <= ITEM.balloon.radius + BOSS.body.radius * 0.5;
+}
+
 /** A balloon popped at `ball` (from Game._updateProjectiles): a splash on its body is BOSS.splashHits hits. */
 export function splashBoss(game, ball, owner) {
-  const b = game.boss;
-  if (!b || !owner || b.state === 'leave' || bodyDist(b, ball.x, ball.z) > ITEM.balloon.radius + BOSS.body.radius * 0.5) return false;
+  if (!owner || !splashOnBoss(game, ball)) return false;
   return hitBoss(game, owner, BOSS.splashHits, 'balloon') > 0;
 }
 

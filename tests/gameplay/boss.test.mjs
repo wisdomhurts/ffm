@@ -183,6 +183,40 @@ test('a water balloon splash on its body is 3 hits', () => {
   assert.equal(b.hits[me.slot], BOSS.splashHits);
 });
 
+test('a balloon at Big Chomp flies past empty-handed teammates and spares them (a thief with a plant still gets soaked)', () => {
+  const { game, me } = setup();
+  const b = parked(game, 1);
+  me.items.balloon = 2;
+  const fx = Math.sin(b.yaw), fz = Math.cos(b.yaw);
+  const hx = b.x + fx * BOSS.body.front, hz = b.z + fz * BOSS.body.front;
+  const side = BOSS.body.radius + 2; // where the bots stand to bonk it (ai/goals.js BossGoal)
+  const pal = game.players[1], pal2 = game.players[2], thief = game.players[3];
+  // two teammates bonking its head, right in the balloon's path; the thrower 15 studs behind them
+  place(pal, hx - fz * side, hz + fx * side);
+  place(pal2, hx - fz * side + fx * 1.5, hz + fx * side + fz * 1.5);
+  place(thief, 0, -40);
+  place(me, hx - fz * 15, hz + fx * 15);
+  me.yaw = Math.atan2(hx - me.pos.x, hz - me.pos.z);
+  const hits = seen('player:hit');
+  run(game, me, 1 / 60, { useItem: 'balloon' });
+  run(game, null, 2);
+  assert.equal(hits.length, 0, 'no teammate is stunned');
+  assert.equal(b.hits[me.slot], BOSS.splashHits, 'it reaches the body: 3 hits');
+  // a thief carrying a plant past it still gets soaked
+  const plant = { uid: 9101, speciesId: PLANTS[2].id, mutation: 'normal', growTotal: 10, growLeft: 0, owner: 0 };
+  game.gardens[0].planters[0].unlocked = true;
+  thief.carrying = { kind: 'plant', plant, fromSlot: 0, fromIndex: 0 };
+  place(thief, hx - fz * side, hz + fx * side);
+  place(pal, hx - fz * side + fx * 1.5, hz + fx * side + fz * 1.5);
+  place(pal2, 0, -40);
+  place(me, hx - fz * 15, hz + fx * 15);
+  me.yaw = Math.atan2(hx - me.pos.x, hz - me.pos.z);
+  run(game, me, 1 / 60, { useItem: 'balloon' });
+  run(game, null, 2);
+  assert.deepEqual(hits.map((e) => e.target.slot), [thief.slot], 'only the thief is hit (not the teammate next to him)');
+  assert.equal(thief.carrying, null, 'and drops the plant');
+});
+
 test('it slurps 2%/s of the cash pile up to 25%, never banked cash; a burst refunds it', () => {
   const { game, me } = setup();
   const g = game.gardens[0];

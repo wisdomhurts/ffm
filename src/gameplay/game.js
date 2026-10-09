@@ -16,7 +16,7 @@ import { sanitizePetName } from '../pets/names.js';
 import { sanitizeBaseStyle, sameBaseStyle, effectiveBaseStyle, DECOR, BOT_STYLES } from './basestyle.js';
 import { EMOTE, PHRASE } from '../social/catalog.js';
 import { sanitizeLook, sameLook } from '../characters/cosmetics.js';
-import { initBoss, spawnBoss, updateBoss, bonkBoss, hitBoss, balloonOnBoss, splashBoss, bossSlot, bossState, applyBoss } from './boss.js';
+import { initBoss, spawnBoss, updateBoss, bonkBoss, hitBoss, balloonOnBoss, besideBoss, splashOnBoss, splashBoss, bossSlot, bossState, applyBoss } from './boss.js';
 
 /** A profile's equipped pet team as [{id, name}] (name: the nickname, '' if none). profile.pets.team = [uid...],
  *  older saves: equipped uid; online profile summaries send `pets: [id...]` + `petNames: [...]` or `pet: id`. */
@@ -1167,6 +1167,7 @@ export class Game {
       if (!pop) {
         for (const q of this.players) {
           if (q.slot === b.owner) continue;
+          if (this.boss && !q.carrying && besideBoss(this, q)) continue; // flies past the family bonking Big Chomp
           if ((q.pos.x - b.x) ** 2 + (q.pos.z - b.z) ** 2 < 2.4 ** 2 && b.y > q.pos.y - 0.5 && b.y < q.pos.y + WORLD.playerHeight + 2.5) {
             pop = true;
             break;
@@ -1177,8 +1178,11 @@ export class Game {
       this.projectiles.splice(i, 1);
       const owner = this.players[b.owner];
       const R = ITEM.balloon.radius;
+      const onBoss = splashOnBoss(this, b); // a splash on Big Chomp (gameplay/boss.js)
       for (const q of this.players) {
         if (q.slot === b.owner || this.time < q.invulnUntil) continue;
+        // like a swing at Big Chomp: a splash on it, or by the family bonking it, spares empty-handed teammates
+        if (this.boss && !q.carrying && (onBoss || besideBoss(this, q))) continue;
         const dx = q.pos.x - b.x, dz = q.pos.z - b.z;
         const d = Math.hypot(dx, dz);
         if (d < R && Math.abs(q.pos.y - b.y) < 7) this.hitPlayer(q, owner, { x: dx / (d || 1), z: dz / (d || 1) }, ITEM.balloon.stun, 'balloon');

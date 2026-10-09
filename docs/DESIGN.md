@@ -180,7 +180,8 @@ up, spikes out, when it spots you) and the Comet Dragon (a long noodle of a drag
 * Hit points: 40 + 20 per player in the world. A noodle bonk within reach of its body (bonk range + 3 studs) is
   1 hit, a water balloon splash on it 3. On Chill a bot's hit counts half (on its hit points and on the bot's share).
   Teamwork: a swing that lands on it doesn't bonk empty-handed players standing by (someone carrying loot still
-  gets bonked, so a thief can't hide behind it).
+  gets bonked, so a thief can't hide behind it). Water balloons too: one flies past empty-handed players within
+  reach of its body, and a splash on it or by them doesn't soak them (loot carriers still get soaked).
 * Burst: the slurp goes back to the pile; 12–20 seeds from the deepest biome any player has reached, all Gold /
   Diamond / Rainbow (60/30/10), lie around for 45 s (no pod to go back to); a pot of 60 s of everyone's income
   is split by hits (the remainder to the top bonker); the top bonker wears a crown for 60 s (ties go to a person).
