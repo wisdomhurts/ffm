@@ -1,0 +1,139 @@
+{
+  "day_cycle": {
+    "day_seconds": 230,
+    "dusk_seconds": 40,
+    "night_seconds": 150,
+    "dawn_seconds": 30,
+    "start_phase_progress": 0.0,
+    "dusk_warning_seconds": 30
+  },
+  "player": {
+    "walk_speed": 5.0,
+    "sprint_speed": 8.2,
+    "acceleration": 30.0,
+    "air_control": 0.35,
+    "jump_velocity": 5.6,
+    "gravity": 18.0,
+    "turn_speed": 12.0,
+    "interact_radius": 2.6,
+    "pickup_radius": 2.2,
+    "auto_pickup_radius": 2.0,
+    "invulnerable_after_hit": 0.45
+  },
+  "survival": {
+    "max_health": 100,
+    "max_hunger": 100,
+    "max_warmth": 100,
+    "start_hunger": 85,
+    "hunger_decay": 0.11,
+    "hunger_sprint_mult": 1.6,
+    "starve_damage": 1.4,
+    "warm_rate": 9.0,
+    "cool_rate": 1.6,
+    "freezing_threshold": 18,
+    "freeze_damage": 1.0,
+    "frozen_damage": 2.6,
+    "regen_rate": 0.55,
+    "regen_hunger_min": 40,
+    "regen_warmth_min": 45,
+    "ambient": {"day": 78, "dusk": 52, "night": 8, "dawn": 40},
+    "rain_ambient_penalty": 18,
+    "rain_cool_mult": 1.5,
+    "tent_rest_regen_mult": 2.0
+  },
+  "fire": {
+    "start_fuel_fraction": 0.85,
+    "low_fraction": 0.3,
+    "rain_burn_mult": 1.25,
+    "min_radius_fraction": 0.45,
+    "light_fear_edge": 0.35,
+    "relight_needs": "kindling",
+    "cook_seconds": 14,
+    "rack_slots": 3
+  },
+  "camp": {
+    "start_storage": {"wood": 4, "kindling": 3, "berries": 3},
+    "storage_slots": 16,
+    "safe_kindling_respawn": 4
+  },
+  "start_inventory": [
+    {"id": "rusty_axe", "count": 1},
+    {"id": "wooden_bat", "count": 1}
+  ],
+  "start_sack": "old_sack",
+  "start_coins": 5,
+  "trees": {
+    "regular_hp": 5,
+    "giant_hp": 24,
+    "regrow_days": 2,
+    "stump_seconds_visible": 9999
+  },
+  "gatherables": {
+    "stone_pile_amount": [2, 3],
+    "coal_vein_amount": [2, 3],
+    "berry_bush_amount": [2, 4],
+    "mushroom_amount": [1, 1],
+    "twigs_amount": [2, 3],
+    "gather_seconds": 1.0,
+    "respawn_days": 2
+  },
+  "spawning": {
+    "stalker_base": 2,
+    "stalker_per_night": 0.6,
+    "stalker_max": 9,
+    "watcher_base": 1,
+    "watcher_per_night": 0.25,
+    "watcher_max": 4,
+    "spawn_min_dist": 34,
+    "spawn_max_dist": 62,
+    "despawn_dist": 110,
+    "fire_out_aggression_mult": 1.6,
+    "fire_out_extra_stalkers": 2,
+    "wolf_packs": 4,
+    "wolves_per_pack": [2, 3],
+    "bunnies": 22,
+    "deer": 6,
+    "birds_flocks": 8
+  },
+  "difficulty": {
+    "enemy_hp_growth": 0.06,
+    "enemy_damage_growth": 0.04,
+    "cold_growth": 0.03,
+    "max_mult": 2.2
+  },
+  "boss": {
+    "first_night": 12,
+    "repeat_every": 4,
+    "warning_seconds": 25
+  },
+  "flashlight": {
+    "drain_per_second": 1.0,
+    "range": 22,
+    "angle_deg": 28,
+    "fear_strength": 0.9
+  },
+  "torch": {
+    "light_radius": 6.5,
+    "fear_strength": 0.6
+  },
+  "chests": {
+    "common_count": 26,
+    "rare_count": 9,
+    "epic_count": 3,
+    "restock_days": 3,
+    "near_camp_starter": true
+  },
+  "taming": {
+    "max_pets": 1,
+    "needs_calm": true,
+    "bones_needed": 1,
+    "pet_names": ["Biscuit", "Maple", "Ziggy", "Pepper", "Juniper", "Scout", "Pancake", "Comet", "Willow", "Bramble"],
+    "personalities": ["playful", "brave", "sleepy", "curious"]
+  },
+  "world": {
+    "size": 640,
+    "playable_half": 290,
+    "water_level": -1.6,
+    "seed_default": 20261010
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "rosie": {
+    "name": "Old Rosie", "title": "Retired Camp Cook", "landmark": "rosies_rest",
+    "personality": "warm", "outfit": {"skin": 2, "hair_style": "bun", "hair_color": "#e8e8ea", "shirt": "#b8455b", "jacket": "#e7d7b8", "accessory": "glasses"},
+    "greetings": ["Well, hello there, sweet pea! Hungry?", "Fire still burning? Good, good.", "Nothing beats a hot meal under the stars."],
+    "hints": ["Cooked meat fills you up three times better than raw. Use the rack over your fire!", "Bunnies hop around the meadows south of camp.", "If the fire dies, you'll need kindling to start it again. Keep some in your box!"],
+    "sells": [
+      {"id": "cooked_meat", "price": 8, "stock": 4},
+      {"id": "canned_beans", "price": 7, "stock": 5},
+      {"id": "trail_mix", "price": 5, "stock": 6},
+      {"id": "bandage", "price": 6, "stock": 5},
+      {"id": "medkit", "price": 30, "stock": 1},
+      {"id": "cloth", "price": 4, "stock": 10},
+      {"id": "kindling", "price": 2, "stock": 10}
+    ],
+    "buys": ["raw_meat", "berries", "mushroom", "bone", "cloth", "amber"]
+  },
+  "pip": {
+    "name": "Pip", "title": "Lakeside Fisher", "landmark": "pips_dock",
+    "personality": "chatty", "outfit": {"skin": 5, "hair_style": "curly", "hair_color": "#3a2618", "shirt": "#3f6fb0", "jacket": "#e3b23c", "accessory": "bucket_hat"},
+    "greetings": ["Ahoy, camper! The lake's sparkly today.", "Did you see the lighthouse? Spooky AND pretty!", "Batteries! Bones! Bits and bobs!"],
+    "hints": ["The old lighthouse is up the north-west shore. There's a flashlight in there, I'd bet my boots on it!", "Wolves go soft for a good bone. Stay calm and offer one.", "Watchers hate a bright light in the face."],
+    "sells": [
+      {"id": "battery", "price": 9, "stock": 6},
+      {"id": "bone", "price": 4, "stock": 6},
+      {"id": "torch", "price": 6, "stock": 4},
+      {"id": "revolver_rounds", "price": 5, "stock": 12},
+      {"id": "good_sack", "price": 110, "stock": 1},
+      {"id": "flashlight", "price": 140, "stock": 1}
+    ],
+    "buys": ["shadow_shard", "scrap_metal", "berries", "coal", "battery", "starstone"]
+  },
+  "bram": {
+    "name": "Bram", "title": "Ridge Prospector", "landmark": "brams_dig",
+    "personality": "gruff", "outfit": {"skin": 3, "hair_style": "short", "hair_color": "#8a4b23", "shirt": "#6b4b2a", "jacket": "#3a4a3a", "accessory": "miner_helmet", "beard": true},
+    "greetings": ["Hmph. Buying or selling?", "Coal's up on the ridge. Help yourself, if you've the legs.", "Good steel never lets you down."],
+    "hints": ["Coal burns nearly three times as long as wood.", "Only a Mega Axe can fell an Elder Tree. Worth it for the amber.", "When the forest goes quiet at night... run home."],
+    "sells": [
+      {"id": "good_axe", "price": 70, "stock": 1},
+      {"id": "mega_axe", "price": 420, "stock": 1},
+      {"id": "sword", "price": 90, "stock": 1},
+      {"id": "mega_sack", "price": 320, "stock": 1},
+      {"id": "best_sack", "price": 780, "stock": 1},
+      {"id": "revolver", "price": 550, "stock": 1},
+      {"id": "rifle", "price": 1150, "stock": 1},
+      {"id": "rifle_rounds", "price": 12, "stock": 8},
+      {"id": "coal", "price": 5, "stock": 10},
+      {"id": "scrap_metal", "price": 6, "stock": 10}
+    ],
+    "buys": ["shadow_shard", "amber", "starstone", "stone", "coal", "scrap_metal", "wood"]
+  },
+  "_rules": {"sell_ratio": 1.0, "restock_days": 2, "open_hour": 6.0, "close_hour": 19.5}
+}

@@ -1,0 +1,22 @@
+{
+  "kindling": {"result": "kindling", "count": 3, "category": "survival", "costs": {"wood": 1},
+    "desc": "Split a log into kindling for relighting the fire."},
+  "torch": {"result": "torch", "count": 2, "category": "survival", "costs": {"wood": 1, "cloth": 1, "coal": 1},
+    "desc": "Emergency light that keeps most monsters back."},
+  "bandage": {"result": "bandage", "count": 1, "category": "survival", "costs": {"cloth": 2},
+    "desc": "Restores 35 health."},
+  "map": {"result": "map", "count": 1, "category": "survival", "once": true, "costs": {"cloth": 3, "coal": 1, "wood": 1},
+    "desc": "A map linked to your campfire. Shows home, chests and landmarks."},
+  "good_axe": {"result": "good_axe", "count": 1, "category": "tools", "costs": {"wood": 6, "stone": 6, "scrap_metal": 4},
+    "desc": "Chops regular trees twice as fast."},
+  "mega_axe": {"result": "mega_axe", "count": 1, "category": "tools", "costs": {"wood": 8, "scrap_metal": 12, "coal": 6, "starstone": 1},
+    "desc": "Chops anything, even the giant Elder Trees."},
+  "sword": {"result": "sword", "count": 1, "category": "weapons", "costs": {"scrap_metal": 8, "wood": 2, "cloth": 1},
+    "desc": "Twice the punch of the wooden bat."},
+  "starsteel_sword": {"result": "starsteel_sword", "count": 1, "category": "weapons", "costs": {"sword": 1, "starstone": 2, "scrap_metal": 6},
+    "desc": "The best blade in the forest. Shadows flinch from it."},
+  "revolver_rounds": {"result": "revolver_rounds", "count": 6, "category": "weapons", "costs": {"scrap_metal": 3, "coal": 2},
+    "desc": "Six rounds for the revolver."},
+  "trail_mix": {"result": "trail_mix", "count": 2, "category": "survival", "costs": {"berries": 3, "mushroom": 1},
+    "desc": "Turns forest snacks into a filling mix."}
+}

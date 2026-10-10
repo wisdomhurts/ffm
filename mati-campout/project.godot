@@ -1,0 +1,78 @@
+; Engine configuration file.
+; MATI's Campout — Godot 4.7 project.
+
+config_version=5
+
+[application]
+
+config/name="MATI's Campout"
+config/description="Keep the fire alive. Survive the night."
+config/version="0.1.0"
+run/main_scene="res://main/main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.03, 0.04, 0.07, 1)
+boot_splash/show_image=false
+config/use_custom_user_dir=true
+config/custom_user_dir_name="MATIsCampout"
+
+[audio]
+
+buses/default_bus_layout=""
+
+[autoload]
+
+Events="*res://autoload/events.gd"
+DB="*res://autoload/db.gd"
+Settings="*res://autoload/settings.gd"
+Controls="*res://autoload/controls.gd"
+Profile="*res://autoload/profile.gd"
+GameState="*res://autoload/game_state.gd"
+Lights="*res://autoload/light_registry.gd"
+Audio="*res://autoload/audio_director.gd"
+Dev="*res://autoload/dev.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/window_width_override=1600
+window/size/window_height_override=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[editor]
+
+export/convert_text_resources_to_binary=true
+
+[filesystem]
+
+import/blender/enabled=false
+import/fbx2gltf/enabled=false
+
+[gui]
+
+theme/default_theme_antialiasing=true
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=false
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+common/physics_ticks_per_second=60
+common/physics_interpolation=true
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/positional_shadow/soft_shadow_filter_quality=3
+lights_and_shadows/positional_shadow/atlas_size=4096
+environment/volumetric_fog/volume_size=96
+environment/volumetric_fog/volume_depth=96
+environment/defaults/default_clear_color=Color(0.03, 0.04, 0.07, 1)
+anti_aliasing/quality/screen_space_aa=1
+textures/default_filters/anisotropic_filtering_level=3
