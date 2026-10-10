@@ -175,6 +175,28 @@ Item `kind` drives what **Use** (left click / RT) does:
 from inventory), `food` (eat), `medical` (heal), `light` (flashlight toggles,
 torch lights), `resource`/`ammo` (nothing; E on the fire feeds fuel).
 
+### Player public API (`actors/player/player.gd`, class `Player`)
+Used by the HUD, AI, smoke test and screenshot tour — keep these:
+```
+teleport(pos: Vector3) -> void
+look_at_point(p: Vector3) -> void        # turn body + camera to face p
+use_item() -> void                       # same as one press of Use
+interact_nearest() -> bool               # same as pressing E
+get_interact_target() -> Node3D          # current prompt target or null
+is_sheltered() -> bool                   # inside the tent
+is_resting() -> bool
+take_damage(amount, source, kind)        # damageable contract, team "player"
+var camera: Camera3D                     # the active gameplay camera
+```
+The player computes the survival environment every physics frame (fire heat
+via `GameState.campfire.heat_at(pos)`, ambient from the time of day and
+weather, tent shelter) and ticks `GameState.survival`.
+
+### Monsters & creatures
+Monsters join groups `"monster"` and `"damageable"`; wildlife joins
+`"wildlife"` and `"damageable"`. The spawner owns night monsters and despawns
+them at dawn (they flee into the trees and fade).
+
 ### Audio ids
 `Audio.play(id, pos)` ids (missing ids are ignored silently):
 `chop`, `tree_fall`, `wood_pickup`, `stone_pickup`, `pickup`, `coin`, `swing`,
