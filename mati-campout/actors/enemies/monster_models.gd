@@ -124,16 +124,16 @@ func _build(quality: String) -> void:
 	body.skeleton = NodePath("..")
 	body.custom_aabb = AABB(Vector3(-1.6, -0.6, -2.2), Vector3(3.2, 4.8, 4.0))
 	_quality = quality
-	_shadow_on = quality != "low"
+	_shadow_on = quality != "low" and quality != "phone"
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if _shadow_on else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	body.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	body.set_instance_shader_parameter("seed", _seed)
+	ShaderCompat.set_param(body, "seed", _seed)
 	_head_pos = bones[_bi["head"]][2]
 	head_height = _head_pos.y
 	eye_height = float(data["eyes_y"])
 	_tilt_timer = _rng.randf_range(0.5, 2.0)
 	_gait = _rng.randf()
-	if quality != "low":
+	if quality != "low" and quality != "phone":
 		_build_wisps(quality)
 	_apply_params()
 
@@ -210,9 +210,9 @@ func _ready() -> void:
 func _on_setting(key: String) -> void:
 	if key == "quality" and body:
 		_quality = Settings.quality()
-		_set_shadow(_quality != "low")
+		_set_shadow(_quality != "low" and _quality != "phone")
 		if wisps:
-			wisps.visible = _quality != "low"
+			wisps.visible = _quality != "low" and _quality != "phone"
 
 
 func _set_shadow(on: bool) -> void:
@@ -231,7 +231,7 @@ func _process(delta: float) -> void:
 	if cam:
 		var d := cam.global_position.distance_to(global_position)
 		var every := 1 if d < 35.0 else (2 if d < 60.0 else 4)
-		_set_shadow(d < SHADOW_DIST and _quality != "low")
+		_set_shadow(d < SHADOW_DIST and _quality != "low" and _quality != "phone")
 		_lod_frame += 1
 		if _lod_frame < every:
 			return
@@ -258,11 +258,11 @@ func _apply_params() -> void:
 	var v := Vector3(dissolve, flash, 0.0)
 	if not v.is_equal_approx(_last_params):
 		_last_params = v
-		body.set_instance_shader_parameter("dissolve", dissolve)
-		body.set_instance_shader_parameter("flash", flash)
+		ShaderCompat.set_param(body, "dissolve", dissolve)
+		ShaderCompat.set_param(body, "flash", flash)
 	if not is_equal_approx(eye_flare, _last_flare):
 		_last_flare = eye_flare
-		body.set_instance_shader_parameter("eye_flare", eye_flare)
+		ShaderCompat.set_param(body, "eye_flare", eye_flare)
 	if wisps:
 		wisps.emitting = dissolve < 0.65 and is_visible_in_tree()
 
@@ -440,7 +440,7 @@ static func _kind_data(p_kind: String) -> Dictionary:
 
 static func _body_material(p_kind: String) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = BODY_SHADER
+	m.shader = ShaderCompat.shader(BODY_SHADER)
 	if p_kind == "watcher":
 		m.set_shader_parameter("body_color", Color(0.045, 0.045, 0.07))
 		m.set_shader_parameter("sss_color", Color(0.3, 0.2, 0.55))
@@ -452,7 +452,7 @@ static func _body_material(p_kind: String) -> ShaderMaterial:
 
 static func _eye_material(p_kind: String) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = EYES_SHADER
+	m.shader = ShaderCompat.shader(EYES_SHADER)
 	if p_kind == "watcher":
 		m.set_shader_parameter("eye_color", Color(0.72, 0.84, 1.0))
 		m.set_shader_parameter("core_color", Color(0.95, 0.97, 1.0))

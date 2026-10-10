@@ -1336,4 +1336,4 @@ func _apply_pose(P: Dictionary) -> void:
 		_flash_applied = f
 		for p in _parts:
 			if is_instance_valid(p):
-				(p as GeometryInstance3D).set_instance_shader_parameter("hit_flash", f)
+				ShaderCompat.set_param((p as GeometryInstance3D), "hit_flash", f)

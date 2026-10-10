@@ -41,11 +41,11 @@ const LAYER_FELLED := 60
 
 ## Visibility ranges per quality: [near_end, far_end] (0 = unlimited).
 const RANGES := {
-	"tree": {"high": [85.0, 280.0], "medium": [70.0, 200.0], "low": [55.0, 140.0]},
-	"elder": {"high": [170.0, 0.0], "medium": [140.0, 0.0], "low": [110.0, 420.0]},
-	"bush": {"high": [115.0, 0.0], "medium": [90.0, 0.0], "low": [65.0, 0.0]},
-	"log": {"high": [120.0, 0.0], "medium": [95.0, 0.0], "low": [70.0, 0.0]},
-	"decor": {"high": [90.0, 0.0], "medium": [75.0, 0.0], "low": [55.0, 0.0]},
+	"tree": {"high": [85.0, 280.0], "medium": [70.0, 200.0], "low": [55.0, 140.0], "phone": [42.0, 110.0]},
+	"elder": {"high": [170.0, 0.0], "medium": [140.0, 0.0], "low": [110.0, 420.0], "phone": [80.0, 360.0]},
+	"bush": {"high": [115.0, 0.0], "medium": [90.0, 0.0], "low": [65.0, 0.0], "phone": [45.0, 90.0]},
+	"log": {"high": [120.0, 0.0], "medium": [95.0, 0.0], "low": [70.0, 0.0], "phone": [50.0, 100.0]},
+	"decor": {"high": [90.0, 0.0], "medium": [75.0, 0.0], "low": [55.0, 0.0], "phone": [38.0, 70.0]},
 }
 
 var gen: WorldGen
@@ -700,8 +700,10 @@ func _new_mmi(mesh: Mesh, xforms: Array[Transform3D], customs: PackedColorArray,
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
+	ShaderCompat.prepare_multimesh(mm)
 	mm.mesh = mesh
 	mm.instance_count = xforms.size()
+	ShaderCompat.fill_colors(mm)
 	for i in xforms.size():
 		mm.set_instance_transform(i, xforms[i])
 		mm.set_instance_custom_data(i, customs[i])
@@ -797,6 +799,7 @@ static func range_for(kind: String) -> Array:
 func _apply_quality() -> void:
 	var high := Settings.quality() == "high"
 	var med := Settings.quality() == "medium"
+	var phone := Settings.quality() == "phone"
 	for ci in _chunks:
 		var ch: VegChunk = _chunks[ci]
 		for key in ch.layers:
@@ -806,7 +809,7 @@ func _apply_quality() -> void:
 			var far_end: float = r[1]
 			if l.near:
 				_set_range(l.near, 0.0, near_end, l.far != null)
-				l.near.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if (high or med or l.kind != "decor") else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				l.near.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if (high or med or l.kind != "decor") and not phone else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				if l.shadow:
 					# Detailed trees take their shadows from the cheap proxy.
 					l.near.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -967,8 +970,8 @@ func _make_tree_node(id: int) -> TreeAnim:
 	a.mesh.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	a.pivot.add_child(a.mesh)
 	var c := _custom[id]
-	a.mesh.set_instance_shader_parameter("use_custom_override", 1.0)
-	a.mesh.set_instance_shader_parameter("custom_override", Vector4(c.r, c.g, c.b, c.a))
+	ShaderCompat.set_param(a.mesh, "use_custom_override", 1.0)
+	ShaderCompat.set_param(a.mesh, "custom_override", Vector4(c.r, c.g, c.b, c.a))
 	_set_instance_visible(id, false)
 	return a
 
@@ -1302,8 +1305,8 @@ func _show_sapling(id: int, on: bool) -> void:
 	mi.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(mi)
 	var c := _custom[id]
-	mi.set_instance_shader_parameter("use_custom_override", 1.0)
-	mi.set_instance_shader_parameter("custom_override", Vector4(c.r, c.g, c.b, 0.0))
+	ShaderCompat.set_param(mi, "use_custom_override", 1.0)
+	ShaderCompat.set_param(mi, "custom_override", Vector4(c.r, c.g, c.b, 0.0))
 	mi.global_transform = Transform3D(Basis(Vector3.UP, _basis[id].get_euler().y).scaled(Vector3.ONE * 1.1), _pos[id])
 	mi.visibility_range_end = 90.0
 	_saplings[id] = mi

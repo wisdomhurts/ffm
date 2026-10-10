@@ -9,8 +9,9 @@ var highlight_rank := 0
 
 
 func _ready() -> void:
-	build_frame("Local Leaderboard (this computer)", Vector2(1240, 820), "ui_trophy", 0.6)
-	var sub := UIKit.label("Your best campouts on this computer. Scores are saved here only, never online.", "DimLabel")
+	var dw := Platform.device_word()
+	build_frame("Local Leaderboard (this %s)" % dw, Vector2(1240, 820), "ui_trophy", 0.6)
+	var sub := UIKit.label("Your best campouts on this %s. Scores are saved here only, never online." % dw, "DimLabel")
 	body.add_child(sub)
 	var table := PanelContainer.new()
 	table.theme_type_variation = "CardPanel"
@@ -18,7 +19,8 @@ func _ready() -> void:
 	body.add_child(table)
 	var rows := UIKit.vbox(4)
 	table.add_child(rows)
-	var entries: Array = Profile.leaderboard.top(10)
+	# Short (phone) screens list the top 5 so the text can stay bigger.
+	var entries: Array = Profile.leaderboard.top(10 if avail_size().y >= 900.0 else 5)
 	rows.add_child(_row(["#", "Camper", "Nights", "Enemies", "Trees", "Date"], true, 0))
 	var sep := HSeparator.new()
 	rows.add_child(sep)

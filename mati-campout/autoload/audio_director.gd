@@ -594,7 +594,7 @@ func _apply_quality() -> void:
 	var sfx := AudioServer.get_bus_index("SFX")
 	for i in AudioServer.get_bus_effect_count(sfx):
 		if AudioServer.get_bus_effect(sfx, i) is AudioEffectReverb:
-			AudioServer.set_bus_effect_enabled(sfx, i, Settings.quality() != "low")
+			AudioServer.set_bus_effect_enabled(sfx, i, not Settings.is_low_quality())
 
 
 func _connect_events() -> void:
@@ -758,7 +758,7 @@ func _voice_busy(v: Node) -> bool:
 
 
 func _grab_3d(prio: int) -> AudioStreamPlayer3D:
-	var cap := POOL_3D if Settings.quality() != "low" else 16
+	var cap := POOL_3D if not Settings.is_low_quality() else 16
 	var best: AudioStreamPlayer3D = null
 	var best_score := INF
 	for i in mini(cap, _pool3d.size()):

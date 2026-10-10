@@ -86,3 +86,10 @@ signal boss_retreated()
 signal run_started(seed: int)
 signal run_ended(summary: Dictionary)
 signal game_paused(paused: bool)
+
+# --- Platform -----------------------------------------------------------------------
+## Touch controls switched on (a touch) or off (keyboard / mouse / gamepad input).
+signal input_mode_changed(touch: bool)
+## The app was hidden / shown (tab switch, phone app switch) or rotated to
+## portrait. paused = true while the device guard holds the game paused.
+signal device_paused(paused: bool, reason: String)

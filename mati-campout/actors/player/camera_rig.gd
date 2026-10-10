@@ -2,7 +2,10 @@ class_name CameraRig
 extends Node3D
 ## Smooth third-person orbit camera with a slight over-the-shoulder framing.
 ##
-## Mouse and right stick (look_* actions) orbit; Settings mouse_sensitivity,
+## Mouse and right stick (look_* actions) orbit; touch drags arrive through
+## add_look_input(delta) (radians, from ui/touch_controls.gd) and
+## assist_yaw(target) eases the view toward a target (touch aim assist).
+## Settings mouse_sensitivity,
 ## controller_sensitivity, invert_y, fov, camera_distance and camera_shake
 ## are read live. A SpringArm3D (world layer 1) pulls the camera in front of
 ## terrain and buildings; the camera is also kept above the terrain height.
@@ -35,6 +38,12 @@ var _fov_kick := 0.0
 var _snap := true
 var _stick := Vector2.ZERO
 var _death_t := 0.0
+var _assist_yaw := 0.0
+var _assist_t := 0.0
+var _was_captured := false
+var _captured_at := 0
+var _captured_frame := 0
+const CAPTURE_SETTLE_MS := 300
 
 
 func _init() -> void:
@@ -106,11 +115,37 @@ func flat_forward() -> Vector3:
 	return Vector3(-sin(yaw), 0.0, -cos(yaw))
 
 
+## Orbit by a touch drag: delta.x turns (radians, + = right), delta.y tilts
+## (radians, + = down). Settings invert_y applies; sensitivity is applied by
+## the caller (touch controls scale by their own setting).
+func add_look_input(delta: Vector2) -> void:
+	if not input_enabled or dead:
+		return
+	var inv := -1.0 if bool(Settings.get_value("invert_y")) else 1.0
+	yaw -= delta.x
+	pitch = clampf(pitch - delta.y * inv, PITCH_MIN, PITCH_MAX)
+	_assist_t = 0.0
+
+
+## Ease the view toward a yaw over `seconds` (touch aim assist). A look
+## drag cancels it.
+func assist_yaw(target_yaw: float, seconds: float = 0.18) -> void:
+	_assist_yaw = target_yaw
+	_assist_t = maxf(seconds, 0.01)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not input_enabled or dead:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
+		_track_capture()
+		# Browsers can report one huge jump right after pointer lock starts
+		# (the cursor "warps"); ignore big moves in the first moments.
+		var settling := Time.get_ticks_msec() - _captured_at < CAPTURE_SETTLE_MS \
+			or Engine.get_process_frames() - _captured_frame <= 3
+		if settling and mm.relative.length() > 60.0:
+			return
 		var sens := float(Settings.get_value("mouse_sensitivity"))
 		var inv := -1.0 if bool(Settings.get_value("invert_y")) else 1.0
 		yaw -= mm.relative.x * MOUSE_SCALE * sens
@@ -118,7 +153,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	_track_capture()
 	_update(delta)
+
+
+func _track_capture() -> void:
+	var cap := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	if cap and not _was_captured:
+		_captured_at = Time.get_ticks_msec()
+		_captured_frame = Engine.get_process_frames()
+	_was_captured = cap
 
 
 func _update(delta: float) -> void:
@@ -148,6 +192,10 @@ func _update(delta: float) -> void:
 		pitch -= _stick.y * STICK_SPEED * 0.65 * sens * inv * delta
 	else:
 		_stick = Vector2.ZERO
+	if _assist_t > 0.0 and not dead:
+		var k := clampf(delta / _assist_t, 0.0, 1.0)
+		yaw = lerp_angle(yaw, _assist_yaw, k)
+		_assist_t -= delta
 	if dead:
 		# Slowly rise and drift around the fallen hero.
 		_death_t += delta

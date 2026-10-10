@@ -145,7 +145,7 @@ static func _shader_mat(key: String, path: String) -> ShaderMaterial:
 	if _materials.has(key):
 		return _materials[key]
 	var m := ShaderMaterial.new()
-	m.shader = load(path)
+	m.shader = ShaderCompat.shader(path)
 	_materials[key] = m
 	return m
 

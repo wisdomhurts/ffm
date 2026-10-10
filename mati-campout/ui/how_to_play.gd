@@ -12,6 +12,19 @@ const STEPS := [
 	["ui_star", "Survive as many nights as you can", "Every sunrise is a win. Can you beat your best?"],
 ]
 
+## Touch screens: [glyph, text] for the on-screen controls.
+const TOUCH_CONTROLS := [
+	["Stick", "Move: put your left thumb down and slide"],
+	["Drag", "Look around: drag on the right side"],
+	["USE", "Chop, hit, eat (the big button)"],
+	["JUMP", "Jump"],
+	["RUN", "Run (tap again to walk)"],
+	["Tap", "The glowing button: add wood, open chests"],
+	["Slot", "Tap a slot to pick an item"],
+	["Bag", "Tap the bag to see the whole sack"],
+	["II", "Pause"],
+]
+
 const CONTROLS := [
 	["move_forward", "WASD", "Move"],
 	["sprint", "", "Run"],
@@ -48,7 +61,7 @@ func _ready() -> void:
 		v.add_child(t)
 		var d := str(s[2])
 		if "%s" in d:
-			d = d % Controls.prompt("interact")
+			d = d.replace("press %s", "tap the glowing button") if Platform.is_touch() and not Controls.using_gamepad else d % Controls.prompt("interact")
 		v.add_child(UIKit.wrap_label(d, "DimLabel", 560))
 		row.add_child(v)
 		left.add_child(row)
@@ -58,7 +71,20 @@ func _ready() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cols.add_child(right)
 	right.add_child(UIKit.label("Controls", "SubHeaderLabel"))
-	for c in CONTROLS:
+	if Platform.is_touch() and not Controls.using_gamepad:
+		for c in TOUCH_CONTROLS:
+			var trow := UIKit.hbox(14)
+			var tcap := UIKit.hbox(0)
+			tcap.custom_minimum_size.x = 120
+			tcap.alignment = BoxContainer.ALIGNMENT_END
+			tcap.add_child(KeyCap.new("", str(c[0]), 38))
+			trow.add_child(tcap)
+			var tl := UIKit.wrap_label(str(c[1]), "", 360)
+			tl.add_theme_font_size_override("font_size", 23)
+			tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			trow.add_child(tl)
+			right.add_child(trow)
+	for c in ([] if Platform.is_touch() and not Controls.using_gamepad else CONTROLS):
 		var row2 := UIKit.hbox(14)
 		var cap_box := UIKit.hbox(0)
 		cap_box.custom_minimum_size.x = 170

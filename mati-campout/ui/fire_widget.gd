@@ -63,7 +63,7 @@ func _process(delta: float) -> void:
 	var sz := COMPACT.lerp(FULL, e)
 	size = Vector2(sz.x, sz.y + 96.0 * _compass)
 	var vp := get_parent_area_size()
-	position = Vector2((vp.x - sz.x) * 0.5, 22.0)
+	position = Vector2((vp.x - sz.x * scale.x) * 0.5, 22.0)
 	queue_redraw()
 
 

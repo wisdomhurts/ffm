@@ -91,7 +91,7 @@ static func sprite_material(kind: String) -> ShaderMaterial:
 	if _sprite_mats.has(kind):
 		return _sprite_mats[kind]
 	var m := ShaderMaterial.new()
-	m.shader = load(FLAME_SHADER)
+	m.shader = ShaderCompat.shader(FLAME_SHADER)
 	match kind:
 		"flame":
 			m.set_shader_parameter("mode", 0)

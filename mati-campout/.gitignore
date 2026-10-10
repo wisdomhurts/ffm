@@ -7,3 +7,6 @@ builds/
 *.tmp
 # Test & QA output
 tests/output/
+# Exported builds (binaries are published separately)
+build/
+web/site/play/

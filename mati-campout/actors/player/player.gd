@@ -9,6 +9,8 @@ extends CharacterBody3D
 ##   is_sheltered(), is_resting(), is_alive(), take_damage(amount, source, kind),
 ##   is_aiming_gun(), toggle_flashlight(), drop_selected(n),
 ##   get_flashlight_charge() -> 0..1, is_flashlight_on(), get_torch_fraction() -> 0..1
+##   add_look_input(delta) (touch camera drag, radians), aim_assist() -> bool
+##   (touch: turn toward the nearest tree/creature in front before Use)
 ##   var camera: Camera3D, var resting: bool (set by the tent), var team = "player"
 ##
 ## Physics: layer 2 (player), mask 1 (world) + 4 (trees).
@@ -76,6 +78,11 @@ var _throttle: Dictionary = {}
 var _tree_evt: Dictionary = {"hit": false, "chop": false}
 var _rng := RandomNumberGenerator.new()
 var _headless := false
+## Set by the touch controls while their RUN toggle is on.
+var touch_sprint := false
+## Touch aim assist: the swing direction for the next Use (cleared after it).
+var _assist_dir := Vector3.ZERO
+var _assist_t := 0.0
 var _time := 0.0
 # Movement tunables (balance.player), cached at setup.
 var _walk := 5.0
@@ -253,6 +260,75 @@ func interact_nearest() -> bool:
 	return true
 
 
+## Touch camera drag (radians): forwarded to the camera rig.
+func add_look_input(delta: Vector2) -> void:
+	if rig:
+		rig.add_look_input(delta)
+
+
+## Touch aim assist: if a choppable tree (when holding an axe) or a creature
+## (axe or melee weapon) is within reach and roughly in front of the camera,
+## ease the camera toward it and aim the next swing at it. Returns true when
+## it found a target. Aiming with a thumb is hard; this keeps chopping and
+## whacking forgiving for kids.
+func aim_assist(max_angle_deg: float = 60.0) -> bool:
+	if not GameState.is_playing() or GameState.survival.dead or rig == null:
+		return false
+	var id := GameState.selected_item_id()
+	var kind := DB.item_kind(id)
+	var def := DB.item(id)
+	var melee := kind == "weapon" and str(def.get("weapon", "")) == "melee"
+	if kind != "tool" and not melee:
+		return false
+	var reach := float(def.get("reach", 2.4))
+	var origin := global_position
+	var look := rig.flat_forward()
+	var half := deg_to_rad(max_angle_deg)
+	var best := Vector3.INF
+	var best_score := INF
+	# Creatures first (both axes and weapons hit them).
+	for n in get_tree().get_nodes_in_group("damageable"):
+		if n == self or not (n is Node3D) or not is_instance_valid(n):
+			continue
+		var tm := str(n.get("team"))
+		if tm != "monster" and tm != "wildlife":
+			continue
+		if n.has_method("is_alive") and not bool(n.call("is_alive")):
+			continue
+		var tp := (n as Node3D).global_position
+		var to := Vector3(tp.x - origin.x, 0.0, tp.z - origin.z)
+		var d := to.length()
+		if d - _num(n, "hit_radius", 0.5) > reach + 1.2 or absf(tp.y - origin.y) > 2.5 or d < 0.05:
+			continue
+		var ang := look.angle_to(to / d)
+		if ang > half:
+			continue
+		var score := d + ang * 2.0
+		if score < best_score:
+			best_score = score
+			best = tp
+	if best == Vector3.INF and kind == "tool":
+		var veg: Node = GameState.vegetation
+		if veg and is_instance_valid(veg) and veg.has_method("find_tree"):
+			var tid := int(veg.call("find_tree", origin + look * (reach * 0.5), reach + 1.0))
+			if tid >= 0:
+				var info := _tree_info(veg, tid)
+				if bool(info.get("alive", true)):
+					var tp: Vector3 = info.get("pos", origin)
+					var to := Vector3(tp.x - origin.x, 0.0, tp.z - origin.z)
+					var d := to.length()
+					var big := 2.6 if str(info.get("kind", "")) == "giant" else 0.0
+					if d > 0.05 and d < reach + 1.4 + big and look.angle_to(to / d) <= half:
+						best = tp
+	if best == Vector3.INF:
+		return false
+	var dir := Vector3(best.x - origin.x, 0.0, best.z - origin.z).normalized()
+	_assist_dir = dir
+	_assist_t = 0.5
+	rig.assist_yaw(atan2(-dir.x, -dir.z))
+	return true
+
+
 ## Same as one press of Use.
 func use_item() -> void:
 	if not GameState.is_playing() or GameState.survival.dead:
@@ -426,6 +502,8 @@ func _physics_process(delta: float) -> void:
 		_sprint_on = can_act and Input.is_action_pressed("sprint")
 	elif mv.length() < 0.1:
 		_sprint_on = false
+	if touch_sprint and can_act:
+		_sprint_on = true
 	_sprinting = _sprint_on and mv.length() > 0.3
 	var speed := _sprint if _sprinting else _walk
 	var dir := Vector3(mv.x, 0.0, mv.y).rotated(Vector3.UP, rig.yaw)
@@ -482,6 +560,7 @@ func _physics_process(delta: float) -> void:
 
 	# --- Timers, use, interaction
 	_use_cd -= delta
+	_assist_t -= delta
 	_invuln -= delta
 	if can_act and _use_cd <= 0.0 and Input.is_action_pressed("use"):
 		var kind := DB.item_kind(GameState.selected_item_id())
@@ -529,7 +608,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not GameState.is_playing() or GameState.ui_blocking or GameState.survival.dead:
 		return
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed and not _headless \
-			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not Platform.is_touch() \
+			and event.device != InputEvent.DEVICE_ID_EMULATION:
 		_capture_mouse()
 		get_viewport().set_input_as_handled()
 		return
@@ -567,8 +647,12 @@ func _forward() -> Vector3:
 	return Vector3(-sin(_model_yaw), 0.0, -cos(_model_yaw))
 
 
-## Camera forward on the ground plane (where attacks go).
+## Camera forward on the ground plane (where attacks go), or the touch aim
+## assist's target direction right after aim_assist().
 func _aim_flat_dir() -> Vector3:
+	if _assist_t > 0.0 and _assist_dir != Vector3.ZERO:
+		_assist_t = 0.0
+		return _assist_dir
 	return rig.flat_forward() if rig else _forward()
 
 
@@ -1066,7 +1150,7 @@ func _apply_flash_visual() -> void:
 	var beam := _beam()
 	if held and is_instance_valid(held) and beam:
 		ItemModels.set_lit(held, _flash_on)
-		beam.shadow_enabled = Settings.quality() != "low"
+		beam.shadow_enabled = not Settings.is_low_quality()
 		if _flash_source == null or not is_instance_valid(_flash_source) or _flash_source.get_parent() != beam:
 			_flash_source = HeldLightSource.new()
 			_flash_source.name = "FearCone"
@@ -1324,7 +1408,7 @@ static func _kind_of(n: Object) -> String:
 func _capture_mouse() -> void:
 	if _headless or not GameState.is_playing() and GameState.state != GameState.RunState.LOADING:
 		return
-	if GameState.ui_blocking:
+	if GameState.ui_blocking or Platform.is_touch():
 		return
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 

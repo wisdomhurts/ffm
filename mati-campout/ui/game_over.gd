@@ -43,6 +43,9 @@ func _ready() -> void:
 	ui = ScaledRoot.new(true)
 	add_child(ui)
 	_build()
+	ui.relayout.connect(_fit_content)
+	_content.minimum_size_changed.connect(_fit_content.call_deferred)
+	_fit_content.call_deferred()
 	ui.modulate.a = 0.0
 	vig.modulate.a = 0.0
 	var tw := create_tween().set_parallel(true)
@@ -93,6 +96,7 @@ func _build() -> void:
 	_content = UIKit.vbox(8)
 	_content.alignment = BoxContainer.ALIGNMENT_CENTER
 	cc.add_child(_content)
+	cc.sort_children.connect(_fit_content)
 
 	var title := UIKit.label("The night got you...", "TitleLabel")
 	title.add_theme_font_size_override("font_size", 76)
@@ -125,9 +129,9 @@ func _build() -> void:
 		_content.add_child(UIKit.center(nb))
 	var rank_txt := ""
 	if rank > 0:
-		rank_txt = "Rank #%d on this computer's leaderboard" % rank
+		rank_txt = "Rank #%d on this %s's leaderboard" % [rank, Platform.device_word()]
 	else:
-		rank_txt = "Not in this computer's top 10 this time. Keep trying!"
+		rank_txt = "Not in this %s's top 10 this time. Keep trying!" % Platform.device_word()
 	var best := int(summary.get("best", Profile.best_nights()))
 	var rl := UIKit.label("%s   -   Best: %d night%s" % [rank_txt, best, "" if best == 1 else "s"], "DimLabel")
 	rl.add_theme_font_size_override("font_size", 24)
@@ -173,6 +177,22 @@ func _build() -> void:
 	buttons.add_child(tb)
 	_content.add_child(buttons)
 	_retry.grab_focus.call_deferred()
+
+
+## Shrink the whole summary to fit short (phone) screens.
+func _fit_content() -> void:
+	if _content == null or ui == null:
+		return
+	var need := _content.get_combined_minimum_size()
+	var avail := ui.size - Vector2(40.0, 24.0)
+	var k := 1.0
+	if need.x > 1.0 and need.y > 1.0:
+		k = clampf(minf(avail.x / need.x, avail.y / need.y), 0.45, 1.0)
+	_content.pivot_offset = need * 0.5
+	_content.scale = Vector2(k, k)
+	# A CenterContainer grows to fit a child taller than the screen and then
+	# pins it to the top: centre it on the screen ourselves.
+	_content.position = (ui.size - need) * 0.5
 
 
 func _stat_card(icon_id: String, label: String, value: String) -> Control:

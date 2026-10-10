@@ -222,12 +222,12 @@ func _build_visual() -> void:
 	_visual.add_child(holder)
 	_rest_h = aabb.size.y * s * 0.5 + 0.14
 	var glow_col := Color(1.0, 0.72, 0.3) if _important else Color(1.0, 0.92, 0.75)
-	var shadows := Settings.quality() != "low"
+	var shadows := not Settings.is_low_quality()
 	for n in _model.find_children("*", "GeometryInstance3D", true, false):
 		var gi := n as GeometryInstance3D
 		if gi is MeshInstance3D and (gi as MeshInstance3D).mesh is ArrayMesh:
-			gi.set_instance_shader_parameter("glow", 0.55 if _important else 0.3)
-			gi.set_instance_shader_parameter("glow_color", glow_col)
+			ShaderCompat.set_param(gi, "glow", 0.55 if _important else 0.3)
+			ShaderCompat.set_param(gi, "glow_color", glow_col)
 			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	ItemModels.set_lit(_model, false)
 	var disc := 1.15 if _important else 0.8
@@ -258,7 +258,7 @@ func _process(delta: float) -> void:
 		_despawn_t += delta
 		var k := clampf(1.0 - _despawn_t, 0.0, 1.0)
 		_visual.scale = Vector3.ONE * k
-		_glow.set_instance_shader_parameter("fade", k)
+		ShaderCompat.set_param(_glow, "fade", k)
 		if _despawn_t >= 1.0:
 			queue_free()
 		return
@@ -288,7 +288,7 @@ func _process(delta: float) -> void:
 		_visual.scale = Vector3.ONE * lerpf(0.3, 1.0, _ease_out(_pop)) * sc
 		_visual.position.y = _rest_h + sin(_age * 2.3 + _phase) * 0.05
 		_visual.rotation.y += delta * 1.3
-		_glow.set_instance_shader_parameter("fade", 0.75 + 0.25 * sin(_age * 2.3 + _phase))
+		ShaderCompat.set_param(_glow, "fade", 0.75 + 0.25 * sin(_age * 2.3 + _phase))
 	_check_t -= delta
 	if _check_t <= 0.0:
 		_check_t = 0.1

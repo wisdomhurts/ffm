@@ -7,6 +7,8 @@ extends Control
 ## collapsed, a "+N" badge on the sack shows how many stacks are tucked away.
 ## Click selects, drag-and-drop swaps, and the selected item's name fades in
 ## above the bar. Shakes and flashes red when the sack is full.
+## Touch mode (Platform.is_touch()): a slightly more compact bar whose slots
+## are always tappable, and tapping the sack badge opens the extra rows.
 
 const MAIN_SLOTS := 7
 const SLOT := 92.0
@@ -32,6 +34,8 @@ var _built_capacity := -1
 var _last_counts: Dictionary = {}
 var _extra_t := 0.0
 var _interactive := false
+## Smaller tiles for touch screens (set_compact()).
+var compact := false
 
 
 func _ready() -> void:
@@ -42,8 +46,6 @@ func _ready() -> void:
 	extra_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	extra_grid = GridContainer.new()
 	extra_grid.columns = MAIN_SLOTS
-	extra_grid.add_theme_constant_override("h_separation", int(EXTRA_GAP))
-	extra_grid.add_theme_constant_override("v_separation", int(EXTRA_GAP))
 	extra_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	extra_panel.add_child(extra_grid)
 	add_child(extra_panel)
@@ -54,6 +56,7 @@ func _ready() -> void:
 	var row := UIKit.hbox(int(GAP))
 	main_row = UIKit.hbox(int(GAP))
 	row.add_child(main_row)
+	_row = row
 	var sep := VSeparator.new()
 	sep.add_theme_constant_override("separation", 10)
 	var vline := StyleBoxLine.new()
@@ -66,6 +69,9 @@ func _ready() -> void:
 	sack_badge = _SackBadge.new()
 	sack_badge.custom_minimum_size = Vector2(108, SLOT)
 	(sack_badge as _SackBadge).bar = self
+	(sack_badge as _SackBadge).tapped.connect(func() -> void:
+		Audio.play_ui("ui_click")
+		toggle_expanded())
 	row.add_child(sack_badge)
 	main_panel.add_child(row)
 	add_child(main_panel)
@@ -84,6 +90,25 @@ func _ready() -> void:
 	Events.selected_slot_changed.connect(_on_selected)
 	Events.inventory_full.connect(_on_full)
 	Events.sack_upgraded.connect(func(_id: String, _cap: int) -> void: _rebuild())
+	_rebuild()
+
+
+var _row: HBoxContainer
+
+
+func slot_size() -> float:
+	return 80.0 if compact else SLOT
+
+
+func extra_slot_size() -> float:
+	return 72.0 if compact else EXTRA_SLOT
+
+
+## Touch layout: smaller tiles, always tappable, tappable sack badge.
+func set_compact(on: bool) -> void:
+	if on == compact:
+		return
+	compact = on
 	_rebuild()
 
 
@@ -146,9 +171,17 @@ func _rebuild() -> void:
 		extra_grid.remove_child(c)
 		c.queue_free()
 	slots.clear()
+	var gap := 8 if compact else int(GAP)
+	var egap := 8 if compact else int(EXTRA_GAP)
+	main_row.add_theme_constant_override("separation", gap)
+	_row.add_theme_constant_override("separation", gap)
+	extra_grid.add_theme_constant_override("h_separation", egap)
+	extra_grid.add_theme_constant_override("v_separation", egap)
+	sack_badge.custom_minimum_size = Vector2(92.0 if compact else 108.0, slot_size())
+	sack_badge.mouse_filter = Control.MOUSE_FILTER_STOP if compact else Control.MOUSE_FILTER_IGNORE
 	for i in inv.capacity:
 		var main := i < MAIN_SLOTS
-		var s := ItemSlot.new(inv, i, SLOT if main else EXTRA_SLOT)
+		var s := ItemSlot.new(inv, i, slot_size() if main else extra_slot_size())
 		if main:
 			s.key_label = str(i + 1)
 			main_row.add_child(s)
@@ -212,6 +245,22 @@ func _use_hint(id: String) -> String:
 	if id == "":
 		return ""
 	var use := Controls.prompt("use")
+	if Platform.is_touch() and not Controls.using_gamepad:
+		match DB.item_kind(id):
+			"tool":
+				return "Tap CHOP near a tree"
+			"weapon":
+				return "Tap HIT to attack" if str(DB.item(id).get("weapon", "")) != "gun" else "Tap SHOOT"
+			"food":
+				return "Tap EAT"
+			"medical":
+				return "Tap HEAL"
+			"light":
+				return "Tap LIGHT to switch on"
+			"resource":
+				if DB.fuel_value(id) > 0.0:
+					return "Take it to the campfire"
+		return ""
 	match DB.item_kind(id):
 		"tool":
 			return "%s to chop" % use
@@ -278,12 +327,26 @@ func _process(delta: float) -> void:
 
 
 ## Draws the sack icon with used/capacity and the "+N" hidden-stack badge.
+## In touch mode a tap on it toggles the extra sack rows.
 class _SackBadge:
 	extends Control
+	signal tapped
 	var bar: Hotbar
 
 	func _init() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventScreenTouch:
+			if (event as InputEventScreenTouch).pressed:
+				tapped.emit()
+			accept_event()
+		elif event is InputEventMouseButton:
+			# Real mouse clicks only (touches arrive above as screen touches).
+			var mb := event as InputEventMouseButton
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and mb.device != InputEvent.DEVICE_ID_EMULATION:
+				tapped.emit()
+			accept_event()
 
 	func _draw() -> void:
 		var inv := GameState.inventory

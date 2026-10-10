@@ -80,10 +80,10 @@ static func burst(pos: Vector3, color: Color = Color(1.0, 0.85, 0.45), strength:
 	var fx := _make(pos, 0.55)
 	if fx == null:
 		return null
-	var count := 10 if Settings.quality() == "low" else 18
+	var count := 10 if Settings.is_low_quality() else 18
 	fx._add_sparks(int(count * clampf(strength, 0.4, 1.6)), color, 3.2 * strength, 0.45)
 	fx._add_flash(color.lerp(Color.WHITE, 0.5), 0.55 * clampf(strength, 0.5, 1.6))
-	if Settings.quality() != "low":
+	if not Settings.is_low_quality():
 		fx._add_light(color, 2.2 * strength, 3.0)
 	return fx
 
@@ -110,7 +110,7 @@ static func muzzle(pos: Vector3, dir: Vector3) -> HitFx:
 func _add_sparks(n: int, color: Color, speed: float, life: float, gravity: float = 6.0, dir: Vector3 = Vector3.ZERO) -> void:
 	var p := CPUParticles3D.new()
 	p.mesh = _mesh()
-	p.amount = maxi(n, 1)
+	p.amount = maxi(QualityPresets.particle_count(n), 1)
 	p.lifetime = life
 	p.one_shot = true
 	p.explosiveness = 1.0
@@ -146,7 +146,7 @@ func _add_sparks(n: int, color: Color, speed: float, life: float, gravity: float
 func _add_flash(_color: Color, size: float) -> void:
 	_flash = ItemModels.make_sprite("flash", Vector2(size, size), "Flash")
 	_flash_size = size
-	_flash.set_instance_shader_parameter("seed", randf() * 10.0)
+	ShaderCompat.set_param(_flash, "seed", randf() * 10.0)
 	add_child(_flash)
 
 
@@ -171,7 +171,7 @@ func _process(delta: float) -> void:
 		var ft := clampf(_age / 0.12, 0.0, 1.0)
 		var s := _flash_size * (0.6 + 0.6 * ft)
 		_flash.scale = Vector3(s, s, 1.0)
-		_flash.set_instance_shader_parameter("fade", 1.0 - ft)
+		ShaderCompat.set_param(_flash, "fade", 1.0 - ft)
 		if ft >= 1.0:
 			_flash.visible = false
 	if _light:

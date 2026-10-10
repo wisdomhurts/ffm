@@ -13,7 +13,7 @@ const SEED_ROCKS := 7207
 const COLLIDE_SCALE := 0.85
 ## Rocks smaller than this are only drawn up close.
 const FAR_MIN_SCALE := 0.6
-const RANGES := {"high": [90.0, 260.0], "medium": [72.0, 190.0], "low": [55.0, 130.0]}
+const RANGES := {"high": [90.0, 260.0], "medium": [72.0, 190.0], "low": [55.0, 130.0], "phone": [40.0, 100.0]}
 
 var veg: Vegetation
 var gen: WorldGen
@@ -166,8 +166,10 @@ func _mmi(mesh: Mesh, xs: Array, cs: PackedColorArray, parent: Node3D, _min_scal
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
+	ShaderCompat.prepare_multimesh(mm)
 	mm.mesh = mesh
 	mm.instance_count = xs.size()
+	ShaderCompat.fill_colors(mm)
 	for i in xs.size():
 		mm.set_instance_transform(i, xs[i])
 		mm.set_instance_custom_data(i, cs[i])

@@ -33,7 +33,7 @@ static func spawn(pos: Vector3, p_size: float = 1.0, parent: Node = null) -> Sha
 
 
 func _ready() -> void:
-	if Settings.quality() == "low" and size < 0.8:
+	if Settings.is_low_quality() and size < 0.8:
 		# Low quality: only the big defeat puffs.
 		_life = 0.0
 		return
