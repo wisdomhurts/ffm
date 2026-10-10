@@ -33,6 +33,19 @@ const SHOTS := {
 	"rain_day": {"hour": 14.0, "fire": 0.9, "rain": true, "cam": Vector3(9, 4.2, 11), "look": Vector3(0, 1.0, 0)},
 	"hud_day": {"hour": 10.5, "fire": 0.7, "hud": true},
 	"hud_night": {"hour": 22.0, "fire": 0.25, "hud": true},
+	# Player / character shots. player_view puts the player at pos facing yaw;
+	# cam and look are offsets in the player's frame (-Z = in front of them);
+	# pose goes to Player.debug_pose() ({item, speed, phase, action, u, torch, aim}).
+	"player_close": {"hour": 17.4, "fire": 0.9, "player_view": {"pos": Vector3(5, 0, 7), "yaw": 2.4,
+		"cam": Vector3(0.7, 1.4, -2.9), "look": Vector3(0.05, 1.05, 0)}, "pose": {"item": "rusty_axe"}},
+	"player_walk": {"hour": 11.0, "fire": 0.9, "player_view": {"pos": Vector3(5, 0, 7), "yaw": 2.4,
+		"cam": Vector3(-3.4, 1.1, -0.9), "look": Vector3(0, 0.9, 0)}, "pose": {"item": "rusty_axe", "speed": 5.0, "phase": 0.25}},
+	"player_run": {"hour": 11.0, "fire": 0.9, "player_view": {"pos": Vector3(5, 0, 7), "yaw": 2.4,
+		"cam": Vector3(-3.4, 1.1, -0.9), "look": Vector3(0, 0.9, 0)}, "pose": {"item": "wooden_bat", "speed": 8.2, "phase": 0.25}},
+	"player_chop": {"hour": 15.0, "fire": 0.9, "player_view": {"pos": Vector3(5, 0, 7), "yaw": 2.4,
+		"cam": Vector3(-2.6, 1.3, -2.2), "look": Vector3(0, 1.2, 0)}, "pose": {"item": "good_axe", "action": "chop", "u": 0.32}},
+	"player_night": {"hour": 22.5, "fire": 0.9, "player_view": {"pos": Vector3(16, 0, 12), "yaw": 2.4,
+		"cam": Vector3(0.9, 1.5, -3.2), "look": Vector3(0, 1.0, 0)}, "pose": {"item": "flashlight", "torch": true, "lit": true}},
 }
 
 
@@ -60,6 +73,30 @@ func _run() -> void:
 	get_tree().quit(0)
 
 
+var _pv_cam: Camera3D = null
+
+
+## Place the player and frame a camera relative to them (player_view shots).
+func _player_view(s: Dictionary) -> void:
+	var pv: Dictionary = s["player_view"]
+	var pl: Node3D = GameState.player
+	var ppos: Vector3 = GameState.world_gen.ground(pv.get("pos", Vector3(5, 0, 7)), 0.02)
+	pl.call("teleport", ppos)
+	var yaw := float(pv.get("yaw", 0.0))
+	var pose: Dictionary = (s.get("pose", {}) as Dictionary).duplicate()
+	pose["yaw"] = yaw
+	if pl.has_method("debug_pose"):
+		pl.call("debug_pose", pose)
+	var b := Basis(Vector3.UP, yaw)
+	if _pv_cam == null:
+		_pv_cam = Camera3D.new()
+		add_child(_pv_cam)
+	_pv_cam.fov = float(pv.get("fov", 50.0))
+	_pv_cam.global_position = ppos + b * (pv.get("cam", Vector3(0, 1.4, -3)) as Vector3)
+	_pv_cam.look_at(ppos + b * (pv.get("look", Vector3(0, 1.0, 0)) as Vector3))
+	_pv_cam.current = true
+
+
 func _shoot(shot_name: String, s: Dictionary) -> void:
 	_set_hour(float(s.get("hour", 12.0)))
 	var f := float(s.get("fire", 0.9))
@@ -77,7 +114,17 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 	var hud: Node = GameState.game.get("hud") if GameState.game else null
 	if hud is CanvasLayer:
 		(hud as CanvasLayer).visible = hud_visible
-	if s.has("cam"):
+	var pl: Node3D = GameState.player
+	if pl and pl.has_method("debug_clear"):
+		pl.call("debug_clear")
+	if _pv_cam and not s.has("player_view"):
+		_pv_cam.current = false
+		var pc: Variant = pl.get("camera") if pl else null
+		if pc is Camera3D:
+			(pc as Camera3D).current = true
+	if s.has("player_view") and pl:
+		_player_view(s)
+	elif s.has("cam"):
 		var origin := Vector3.ZERO
 		if s.has("landmark"):
 			origin = GameState.world_gen.landmark_pos(str(s["landmark"]))
