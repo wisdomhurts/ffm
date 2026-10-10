@@ -122,6 +122,25 @@ const SHOTS := {
 	"tent_l6": {"hour": 15.0, "fire": 0.9, "tent_level": 6, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
 	"tent_l7": {"hour": 15.0, "fire": 0.9, "tent_level": 7, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
 	"tent_l8": {"hour": 21.5, "fire": 0.9, "tent_level": 8, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.8, 1.4, -4.8), "player_at": Vector3(-8, 0, 8)},
+	# Gatherables (generic options: "landmark": "@gather:<kind>" anchors on the
+	# node of that kind nearest the camp, or nearest "gather_near" (landmark id);
+	# "gather_pose": 0..1 freezes it mid-gather; "gallery": true lines up one
+	# node of every kind at "gallery_at").
+	"gather_close": {"hour": 10.5, "fire": 0.9, "landmark": "@gather:stone_pile", "cam": Vector3(1.9, 1.25, 1.7), "look": Vector3(0, 0.3, 0), "gather_pose": 0.55, "hide_player": true},
+	"gather_berries": {"hour": 16.3, "fire": 0.9, "landmark": "@gather:berry_bush", "cam": Vector3(1.9, 1.0, 1.7), "look": Vector3(0, 0.45, 0), "hide_player": true},
+	"ridge_coal": {"hour": 14.5, "fire": 0.9, "landmark": "@gather:coal_vein", "gather_near": "brams_dig", "cam": Vector3(2.6, 1.5, 2.2), "look": Vector3(0, 0.45, 0), "hide_player": true},
+	"gather_mushrooms": {"hour": 11.5, "fire": 0.9, "landmark": "@gather:mushrooms", "gather_near": "hollow", "cam": Vector3(1.0, 0.75, 0.9), "look": Vector3(0, 0.12, 0), "hide_player": true},
+	"gather_ruins": {"hour": 15.0, "fire": 0.9, "landmark": "@gather:cloth", "gather_near": "abandoned_camp", "cam": Vector3(2.6, 1.6, 2.4), "look": Vector3(0, 0.2, 0), "hide_player": true},
+	"gather_dusk": {"hour": 18.6, "fire": 0.9, "landmark": "@gather:berry_bush", "cam": Vector3(4.2, 1.5, 3.6), "look": Vector3(0, 0.4, 0), "hide_player": true},
+	"gather_hud": {"hour": 10.5, "fire": 0.9, "hud": true, "player_at_gather": "stone_pile", "gather_pose": 0.45},
+	# Same view with and without gatherables: compare the SHOT stats draw counts.
+	"gather_perf": {"hour": 13.0, "fire": 0.9, "cam": Vector3(14, 2.2, -16), "look": Vector3(40, 1.0, -60)},
+	"gather_perf_off": {"hour": 13.0, "fire": 0.9, "cam": Vector3(14, 2.2, -16), "look": Vector3(40, 1.0, -60), "hide_gatherables": true},
+	"gather_gallery": {"hour": 10.0, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(-3.8, 1.35, 15.4), "look": Vector3(-3.8, 0.3, 12.5), "hide_player": true},
+	"gather_gallery_b": {"hour": 10.0, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(3.8, 1.35, 15.4), "look": Vector3(3.8, 0.2, 12.5), "hide_player": true},
+	"gather_variants_cloth": {"hour": 11.0, "fire": 0.9, "gallery": true, "gallery_kind": "cloth", "gallery_at": Vector3(0, 0, -11), "gallery_spacing": 1.5, "cam": Vector3(0, 2.0, -6.6), "look": Vector3(0, 0.1, -11), "hide_player": true},
+	"gather_variants_stone": {"hour": 11.0, "fire": 0.9, "gallery": true, "gallery_kind": "stone_pile", "gallery_at": Vector3(-12, 0, 0), "gallery_spacing": 2.0, "cam": Vector3(-12, 2.6, 5.4), "look": Vector3(-12, 0.2, 0), "hide_player": true},
+	"gather_gallery_dusk": {"hour": 18.9, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(0, 2.2, 18.8), "look": Vector3(0, 0.25, 12.5), "hide_player": true},
 }
 
 var _screen_node: Node = null
@@ -207,14 +226,23 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 		_player_view(s)
 	elif s.has("cam"):
 		var origin := Vector3.ZERO
-		if s.has("landmark"):
+		if s.has("gallery"):
+			_gather_gallery(s)
+		if s.has("landmark") and str(s["landmark"]).begins_with("@gather:"):
+			origin = _gather_anchor(s)
+		elif s.has("landmark"):
 			origin = GameState.world_gen.landmark_pos(str(s["landmark"]))
 			if str(s["landmark"]) == "@tree" and GameState.vegetation:
 				# The standing tree nearest the camp (first wood).
 				var tid := int(GameState.vegetation.call("find_tree", Vector3.ZERO, 80.0))
 				if tid >= 0:
 					origin = (GameState.vegetation.call("tree_info", tid) as Dictionary).get("pos", Vector3.ZERO)
-		var cpos: Vector3 = origin + (s["cam"] as Vector3)
+		var cam_off: Vector3 = s["cam"]
+		if s.has("landmark") and str(s["landmark"]).begins_with("@gather:"):
+			cam_off = _gather_cam_offset(origin, cam_off)
+			# The landmark branch below adds origin.y twice; keep cam relative to the node.
+			cam_off.y -= origin.y
+		var cpos: Vector3 = origin + cam_off
 		var ground_h := GameState.world_gen.height_at(cpos.x, cpos.z)
 		cpos.y = maxf(cpos.y + ground_h, ground_h + 1.0) if not s.has("landmark") else maxf(cpos.y + origin.y, ground_h + 1.0)
 		var look: Vector3 = origin + (s["look"] as Vector3)
@@ -239,6 +267,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 		if GameState.player and GameState.player.has_method("teleport"):
 			GameState.player.call("teleport", GameState.world_gen.ground(Vector3(4, 0, 6), 0.1))
 	_apply_ui_options(s, hud)
+	_apply_gather_pose(s)
 	var player_3d := GameState.player as Node3D
 	if player_3d and s.get("hide_player", false):
 		player_3d.visible = false
@@ -257,6 +286,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 	print("SHOT saved ", ProjectSettings.globalize_path(path))
 	_cleanup_ui_options(hud)
 	_print_render_stats(shot_name)
+	_release_gather()
 	if player_3d and is_instance_valid(player_3d):
 		player_3d.visible = true
 	if hud is CanvasLayer:
@@ -483,3 +513,99 @@ func _sit_player() -> void:
 		pl.call("look_at_point", GameState.campfire.global_position + Vector3(0, 0.5, 0))
 	if "resting" in pl:
 		pl.set("resting", true)
+
+
+# --- Gatherables options ------------------------------------------------------------
+
+var _gather_id := -1
+var _galleries: Dictionary = {}
+
+
+func _gatherables() -> Node:
+	var g: Variant = GameState.game.get("gatherables") if GameState.game else null
+	if g is Node and (g as Node).has_method("nearest"):
+		return g as Node
+	return null
+
+
+## "landmark": "@gather:<kind>": the node of that kind nearest the camp (or
+## nearest the "gather_near" landmark) becomes the shot origin.
+func _gather_anchor(s: Dictionary) -> Vector3:
+	_gather_id = -1
+	var g := _gatherables()
+	if g == null:
+		return Vector3.ZERO
+	var near := Vector3.ZERO
+	if s.has("gather_near"):
+		near = GameState.world_gen.landmark_pos(str(s["gather_near"]))
+	var kind := str(s["landmark"]).trim_prefix("@gather:")
+	_gather_id = int(g.call("nearest", near, kind))
+	if _gather_id < 0:
+		print("SHOT no gatherable of kind ", kind)
+		return Vector3.ZERO
+	var info: Dictionary = g.call("node_info", _gather_id)
+	print("SHOT gatherable %s #%d at %s" % [kind, _gather_id, str(info.get("pos"))])
+	return info.get("pos", Vector3.ZERO)
+
+
+## Turn the camera offset around the node to the side whose ground is level
+## with it (no camera inside a slope) and free of trunks.
+func _gather_cam_offset(origin: Vector3, off: Vector3) -> Vector3:
+	var best := off
+	var best_score := INF
+	var veg: Node = GameState.vegetation
+	for i in 8:
+		var o := off.rotated(Vector3.UP, float(i) * PI * 0.25)
+		var p := origin + o
+		var score := absf(GameState.world_gen.height_at(p.x, p.z) - origin.y) + float(i) * 0.01
+		if veg and veg.has_method("is_clear") and not bool(veg.call("is_clear", p, 1.0)):
+			score += 5.0
+		var mid := origin + o * 0.5
+		if veg and veg.has_method("is_clear") and not bool(veg.call("is_clear", mid, 0.6)):
+			score += 5.0
+		if score < best_score:
+			best_score = score
+			best = o
+	return best
+
+
+## "gallery": true - one node of every kind in a row at "gallery_at".
+func _gather_gallery(s: Dictionary) -> void:
+	var g := _gatherables()
+	if g == null or not g.has_method("debug_gallery"):
+		return
+	var at: Vector3 = s.get("gallery_at", Vector3(0, 0, 12))
+	if _galleries.has(at):
+		return
+	_galleries[at] = true
+	g.call("debug_gallery", GameState.world_gen.ground(at), float(s.get("gallery_spacing", 1.9)), str(s.get("gallery_kind", "")))
+
+
+## "gather_pose": 0..1 shows the anchored node mid-gather (ring + parts popping).
+## "player_at_gather": <kind> parks the player next to the node of that kind
+## nearest the camp, facing it (use with "hud": true to see the prompt).
+func _apply_gather_pose(s: Dictionary) -> void:
+	var g := _gatherables()
+	if g == null:
+		return
+	if g is Node3D:
+		(g as Node3D).visible = not bool(s.get("hide_gatherables", false))
+	if s.has("player_at_gather") and GameState.player:
+		_gather_id = int(g.call("nearest", Vector3.ZERO, str(s["player_at_gather"])))
+		if _gather_id >= 0:
+			var info: Dictionary = g.call("node_info", _gather_id)
+			var pos: Vector3 = info["pos"]
+			var away := Vector3(-pos.x, 0.0, -pos.z).normalized()
+			var stand := pos + away * (float(info["radius"]) + 1.0)
+			GameState.player.call("teleport", GameState.world_gen.ground(stand, 0.1))
+			GameState.player.call("look_at_point", pos)
+	if s.has("gather_pose") and _gather_id >= 0:
+		g.call("debug_pose", _gather_id, float(s["gather_pose"]))
+
+
+func _release_gather() -> void:
+	var g := _gatherables()
+	if g and g.has_method("debug_release"):
+		g.call("debug_release")
+	if g is Node3D:
+		(g as Node3D).visible = true
