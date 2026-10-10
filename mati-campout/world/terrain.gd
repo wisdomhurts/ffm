@@ -68,7 +68,8 @@ func setup(game: Game) -> void:
 	water = Water.new()
 	water.name = "Water"
 	add_child(water)
-	await water.setup(game, self)
+	water.setup(game, self)
+	await get_tree().process_frame
 	if not is_inside_tree():
 		return
 	bridges = Bridges.new()

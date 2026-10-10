@@ -350,10 +350,12 @@ and outer-ring meshes), `world/terrain_map.gd` (TerrainMap: painted map),
   (`water.gdshader`): depth colour (turquoise shallows to deep blue-green),
   refraction, lacy shoreline foam, soft waterline, 3 scrolling normal layers
   + rain ripples, fresnel, sun/moon glints, screen-space reflections of the
-  shore and mountains (`SSR_STEPS[quality]` 24/14/0). Water depth comes from
-  terrain heightmap textures, so it works even where the depth buffer is
-  missing; the depth buffer only adds foam around things standing in the
-  water and the reflections. Stream: a ribbon along `stream`
+  shore and mountains (`SSR_STEPS[quality]` 24/14/0) with a depth-free
+  fallback (`far_reflect`: mirror the screen colour in the reflected
+  direction as if far away; exact for sky and mountains). Water depth comes
+  from terrain heightmap textures, so it works even where the depth buffer
+  is missing; the depth buffer only adds foam around things standing in the
+  water and the precise reflections. Stream: a ribbon along `stream`
   (`water_stream.gdshader`): flow-scrolled ripples, rapids foam streaks on
   the steep upper reach, clear shallow edges. Transparent sort:
   `render_priority` lake -2, stream -1 (draw before other transparents).
@@ -381,8 +383,8 @@ and outer-ring meshes), `world/terrain_map.gd` (TerrainMap: painted map),
 - **Notes for other systems.** Keep the gameplay camera's `far` >= 2500 m
   (the far shore and ranges are 1.4-1.8 km out). MSAA makes the depth
   texture read as empty in transparent shaders on 4.7 (verified): the water
-  stays correct, but its screen-space reflections only work without MSAA
-  (TAA/FXAA/SMAA are fine). The lake is 6 m deep: the player system should
+  stays correct and uses the far-reflection fallback, but the precise
+  reflections of nearby shore objects need MSAA off (TAA/FXAA/SMAA are fine). The lake is 6 m deep: the player system should
   wade/swim or push back using `water_height_at`. The outer-ring firs start
   ~1 m past the map edge on the high walls and ~16 m past it on low ground.
 - Build cost: ~2.3 s headless on top of WorldGen (masks 0.9 s, chunks

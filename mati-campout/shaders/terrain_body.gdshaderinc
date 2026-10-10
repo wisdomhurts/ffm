@@ -161,7 +161,7 @@ void fragment() {
 	float trail = smoothstep(0.42, 0.66, m_path + (nf - 0.5) * 0.32 + (nm - 0.5) * 0.14);
 	vec3 dirt = mix(dirt_col, dirt_light, smoothstep(0.55, 1.0, m_path) * 0.55 + n_mid.g * 0.25);
 	dirt *= mix(0.88, 1.1, n_fine.b);
-	dirt = mix(dirt, pebble_col * 0.72, smoothstep(0.12, 0.05, n_micro.g) * near_k * 0.5);
+	dirt = mix(dirt, pebble_col * 0.62, smoothstep(0.1, 0.045, n_micro.g) * near_k * 0.45);
 	col = mix(col, dirt, trail);
 
 	// --- Camp: packed earth, dusty near the fire ------------------------------------

@@ -32,6 +32,8 @@ uniform float refraction = 0.035;
 uniform float foam_width = 0.7;
 uniform float reflect_strength = 1.0;
 uniform int ssr_steps = 24;
+// Strength of the depth-free "far" reflection fallback (0 = engine sky only).
+uniform float far_reflect = 0.9;
 uniform float roughness = 0.035;
 // Terrain heightmaps (see tc_ground).
 uniform sampler2D height_inner : filter_linear, repeat_disable;
@@ -162,6 +164,24 @@ void fragment() {
 					refl_mask = e.x * e.y;
 				}
 				break;
+			}
+		}
+	}
+
+	// Without a depth buffer (or where the march missed), mirror what the
+	// camera sees in the reflected direction as if it were far away: exact
+	// for the sky and the mountains, close enough for the shore forest.
+	if (refl_mask < 0.01 && far_reflect > 0.0) {
+		vec3 Rw = reflect(vdir, normalize(vec3(wn.x * 0.5, 1.0, wn.y * 0.5)));
+		if (Rw.y > 0.002) {
+			vec4 cf = PROJECTION_MATRIX * (VIEW_MATRIX * vec4(CAMERA_POSITION_WORLD + Rw * 3000.0, 1.0));
+			if (cf.w > 0.0) {
+				vec2 fuv = cf.xy / cf.w * 0.5 + 0.5;
+				vec2 e = smoothstep(vec2(0.0), vec2(0.06), fuv) * smoothstep(vec2(1.0), vec2(0.94), fuv);
+				if (e.x * e.y > 0.0) {
+					refl = textureLod(screen_tex, fuv, 0.0).rgb;
+					refl_mask = e.x * e.y * far_reflect;
+				}
 			}
 		}
 	}

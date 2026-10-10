@@ -40,6 +40,7 @@ const SHOTS := {
 	"aerial_day": {"hour": 15.5, "fire": 0.9, "cam": Vector3(120, 170, 300), "look": Vector3(-20, 0.0, -40)},
 	"ground_close": {"hour": 10.0, "fire": 0.9, "cam": Vector3(15, 1.7, -33), "look": Vector3(20, 0.0, -42)},
 	"ridge_close": {"hour": 11.0, "fire": 0.9, "landmark": "ridge", "cam": Vector3(-30, 4, 22), "look": Vector3(0, 6, 0)},
+	"stream_mouth": {"hour": 16.0, "fire": 0.9, "cam": Vector3(-70, 3.5, -8), "look": Vector3(-110, -1.0, -22)},
 	"rain_day": {"hour": 14.0, "fire": 0.9, "rain": true, "cam": Vector3(9, 4.2, 11), "look": Vector3(0, 1.0, 0)},
 	"hud_day": {"hour": 10.5, "fire": 0.7, "hud": true},
 	"hud_night": {"hour": 22.0, "fire": 0.25, "hud": true},
