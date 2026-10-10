@@ -333,7 +333,93 @@ tablets** (iOS Safari, Android Chrome) in landscape. Details and gotchas:
 
 ### Terrain & water
 
-_(pending)_
+Files: `world/terrain.gd` (Terrain: build order, collision, bounds, quality,
+queries, map), `world/terrain_masks.gd` (TerrainMasks: per-grid normals,
+cavity and surface masks), `world/terrain_mesher.gd` (TerrainMesher: chunk
+and outer-ring meshes), `world/terrain_map.gd` (TerrainMap: painted map),
+`world/water.gd` (Water: lake + stream), `world/bridges.gd` (Bridges),
+`world/backdrop.gd` (Backdrop: mountains, far forest, haze),
+`shaders/terrain*.gdshader` + `terrain_body.gdshaderinc` +
+`terrain_common.gdshaderinc` (shared noise/haze/heightmap helpers),
+`shaders/water*.gdshader`, `shaders/backdrop*.gdshader`.
+
+- **WorldGen (tuned this round, API kept).** `height_at()` now interpolates
+  the same two triangles per 2 m cell as the mesh and the collision (split
+  along (x+1, z)-(x, z+1), the way the Jolt `HeightMapShape3D` triangulates),
+  so anything snapped to it sits exactly on the visible, walkable ground
+  (verified by raycasts: 0.00004 m). Inland ground never dips below
+  `INLAND_FLOOR` (no stray ponds; `is_water` is only the lake and the stream
+  mouth). The stream is a dense meandering polyline (`stream`, ~3 m spacing)
+  in a shallow valley whose floor (`stream_profile`) only ever runs downhill;
+  the channel banks are linear across the waterline so the 2 m triangles
+  reproduce the water's edge. Water surface = `stream_surface_at_index(i)` /
+  `stream_water_height(x, z)` (flat across, ~2.2 m from the centre line;
+  `stream_width` 3.9 = bank top, `stream_depth` 1.0). New:
+  `outer_height(x, z)` (the world beyond the square out to ~2 km: forested
+  hills N/E/S, the lake bay W, `far_shore_x(z)` ~1.4 km out),
+  `outer_lake_mask`. `path_factor`/`stream_factor` use 16 m segment buckets
+  (same results, ~10x faster). Wall feet/spurs vary so the map edges read as
+  wooded hills with outcrops.
+- **Meshes.** 10x10 chunks of 64 m: a 2 m mesh up to `NEAR_RANGE[quality]`
+  (175/135/95 m) and a 4 m mesh beyond (visibility ranges, 8 m margin),
+  both with double-sided skirts so LOD seams never crack. Outer ring: 8 m
+  cells to 640 m (`terrain_outer.gdshader`, engine fog) and 32 m cells to
+  2 km (`terrain_far.gdshader`, own haze). Vertex data:
+  `COLOR = (path, forest floor, meadow, camp ground)`,
+  `CUSTOM0 = (rock, sand, wet soil, cavity AO)`; the shader adds noise from a
+  256 px RGBA noise atlas + a 512 px detail normal map (both built in code,
+  cached static: `Terrain.noise_textures()`), triplanar blocky rock with
+  derivative bump, pebbly beaches, lake bed, rain wetness/puddle gloss
+  (`wetness`), a little dew sheen at night (`night_factor`).
+- **Collision.** `TerrainBody` (layer 1): one `HeightMapShape3D` (321x321,
+  scaled by 2). `Bounds` (layer 1): four 600 m tall invisible walls whose
+  inner faces are at +-`PLAYABLE_HALF` (290 m).
+- **Water.** Lake: one plane at `WATER_LEVEL` from x = -1950 to -30
+  (`water.gdshader`): depth colour (turquoise shallows to deep blue-green),
+  refraction, lacy shoreline foam, soft waterline, 3 scrolling normal layers
+  + rain ripples, fresnel, sun/moon glints, screen-space reflections of the
+  shore and mountains (`SSR_STEPS[quality]` 24/14/0) with a depth-free
+  fallback (`far_reflect`: mirror the screen colour in the reflected
+  direction as if far away; exact for sky and mountains). Water depth comes
+  from terrain heightmap textures, so it works even where the depth buffer
+  is missing; the depth buffer only adds foam around things standing in the
+  water and the precise reflections. Stream: a ribbon along `stream`
+  (`water_stream.gdshader`): flow-scrolled ripples, rapids foam streaks on
+  the steep upper reach, clear shallow edges. Transparent sort:
+  `render_priority` lake -2, stream -1 (draw before other transparents).
+  4 `"stream"` audio loops along it (`Water.emitters`). Compatibility
+  renderer: `water_simple.gdshader` (alpha + fresnel, no screen reads).
+- **Bridges.** `Bridges.find_crossings(gen)` (trail x stream intersections,
+  3 with the default layout); each bridge: arched plank deck, stringers,
+  posts, two rails, sill logs; collision = 8 tilted deck boxes that ramp into
+  the banks + rail walls (layer 1). `deck_height_at(x, z)`.
+- **Backdrop.** Three mountain rings (r 730/1090/1560 m; the inner two leave
+  the lake opening in the west, the outer one becomes low hills behind the
+  far shore), snow caps with rocky gullies, ~5k instanced low-poly firs on
+  the outer ring and far shore (`TREE_SHARE[quality]` 35/65/100 % via
+  `visible_instance_count`). No shadows; 3 + <=16 draw calls. Far materials
+  disable engine fog and use their own capped haze, matched every 0.1 s to
+  the active `Environment` (fog colour, density, sun scatter); add more with
+  `backdrop.add_haze_material(mat)`.
+- **Queries for other systems** (on `game.terrain`):
+  `surface_at(pos) -> "wood"|"water"|"sand"|"stone"|"dirt"|"grass"` (for
+  footstep sounds), `water_height_at(x, z) -> float` (-INF when dry),
+  `bridge_at(x, z) -> float` (deck top or -INF), `masks` (TerrainMasks, the
+  per-grid masks), `get_map_image(px) -> Image` (painted map, north up,
+  pixel = `WorldGen.world_to_map_uv(p) * px`, cached per size; first call
+  ~0.2 s for 512 px, so call it once while loading).
+- **Notes for other systems.** Keep the gameplay camera's `far` >= 2500 m
+  (the far shore and ranges are 1.4-1.8 km out). MSAA makes the depth
+  texture read as empty in transparent shaders on 4.7 (verified): the water
+  stays correct and uses the far-reflection fallback, but the precise
+  reflections of nearby shore objects need MSAA off (TAA/FXAA/SMAA are fine). The lake is 6 m deep: the player system should
+  wade/swim or push back using `water_height_at`. The outer-ring firs start
+  ~1 m past the map edge on the high walls and ~16 m past it on low ground.
+- Build cost: ~2.3 s headless on top of WorldGen (masks 0.9 s, chunks
+  0.5 s, outer 0.45 s, backdrop 0.4 s), with yields between steps.
+- Tests: `tests/unit/test_terrain.gd` (height/triangle agreement, chunk
+  vertices on the ground, masks, stream downhill and inside its banks, no
+  ponds, outer ring seams and far shore, bridges, map image).
 
 
 ### Vegetation & trees

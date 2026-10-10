@@ -15,6 +15,17 @@ const CELL := 2.0                      # height cache resolution (metres)
 const GRID := int(HALF * 2.0 / CELL) + 1
 const WATER_LEVEL := -1.6
 const LAKE_FLOOR := -7.5
+## The world beyond the terrain square (outer ring, open lake, far shore) is
+## described by outer_height() out to this half-size.
+const OUTER_HALF := 1800.0
+## Rough x of the far shore across Moonmirror Lake (west).
+const FAR_SHORE_X := -1380.0
+## Half-width of the shallow valley the stream runs in.
+const STREAM_VALLEY := 10.0
+## Inland ground never dips below this (no accidental ponds away from the lake).
+const INLAND_FLOOR := WATER_LEVEL + 1.0
+const _BUCKET := 16.0
+const _BUCKETS := int(HALF * 2.0 / _BUCKET)
 
 var seed: int = 0
 var heights := PackedFloat32Array()
@@ -29,10 +40,26 @@ var _n_meadow := FastNoiseLite.new()
 var landmarks: Dictionary = {}
 ## Array of PackedVector2Array polylines (x, z) for walking trails.
 var paths: Array = []
-## Stream polyline (x, z) from the ridge spring to the lake.
+## Stream polyline (x, z) from the ridge spring to the lake (dense, ~3 m
+## spacing, gently meandering).
 var stream: PackedVector2Array = PackedVector2Array()
-var stream_width := 3.2
-var stream_depth := 1.3
+## Channel half-width (top of the banks) and depth below the valley floor.
+## The water's edge is ~2.2 m from the centre line.
+var stream_width := 3.9
+var stream_depth := 1.0
+## Half-width of the flat channel bed.
+const STREAM_BED := 0.4
+## Bank (valley floor) height of the stream per `stream` point; descends
+## monotonically from the spring to the lake. The water surface is
+## STREAM_SURFACE_DROP below it.
+var stream_profile := PackedFloat32Array()
+const STREAM_SURFACE_DROP := 0.5
+# Spatial buckets (16 m) of polyline segments for fast near-queries.
+var _path_seg_a := PackedVector2Array()
+var _path_seg_b := PackedVector2Array()
+var _path_buckets: Array = []
+var _stream_buckets: Array = []
+var _stream_ctrl := PackedVector2Array()
 
 var _ridge_a := Vector2(40, -195)
 var _ridge_b := Vector2(175, -140)
@@ -44,6 +71,8 @@ func _init(p_seed: int = 20261010) -> void:
 	seed = p_seed
 	_setup_noise()
 	_setup_layout()
+	_build_indices()
+	_build_stream_profile()
 	_build_height_cache()
 
 
@@ -99,10 +128,11 @@ func _setup_layout() -> void:
 	_lm("hollow", j.call(-120.0), j.call(150.0), 16.0, "Fern Hollow", "hidden")
 	_lm("old_mine", j.call(165.0), -95.0, 12.0, "Old Mine", "hidden")
 
-	stream = PackedVector2Array([
+	_stream_ctrl = PackedVector2Array([
 		Vector2(112, -150), Vector2(85, -118), Vector2(55, -92), Vector2(22, -62),
 		Vector2(-12, -48), Vector2(-48, -40), Vector2(-80, -28), Vector2(-112, -16),
 	])
+	stream = _smooth_polyline(_stream_ctrl, 3.0, 2.2)
 
 	var camp := Vector2.ZERO
 	paths = [
@@ -139,6 +169,159 @@ func _trail(points: Array) -> PackedVector2Array:
 	return out
 
 
+## Catmull-Rom through the control points (~`step` m spacing) plus a soft
+## noise meander that fades out at both ends.
+func _smooth_polyline(ctrl: PackedVector2Array, step: float, meander: float) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	var n := ctrl.size()
+	for i in n - 1:
+		var p0 := ctrl[maxi(i - 1, 0)]
+		var p1 := ctrl[i]
+		var p2 := ctrl[i + 1]
+		var p3 := ctrl[mini(i + 2, n - 1)]
+		var steps := maxi(int(p1.distance_to(p2) / step), 1)
+		for s in steps:
+			pts.append(p1.cubic_interpolate(p2, p0, p3, float(s) / steps))
+	pts.append(ctrl[n - 1])
+	var out := PackedVector2Array()
+	out.resize(pts.size())
+	for i in pts.size():
+		var a := pts[maxi(i - 1, 0)]
+		var b := pts[mini(i + 1, pts.size() - 1)]
+		var side := (b - a).orthogonal().normalized()
+		var env := sin(PI * float(i) / maxf(pts.size() - 1.0, 1.0))
+		out[i] = pts[i] + side * _n_shore.get_noise_2d(pts[i].x * 2.3 + 40.0, pts[i].y * 2.3) * meander * env
+	return out
+
+
+## Spatial buckets for path and stream segments (exact near-queries, fast).
+func _build_indices() -> void:
+	_path_seg_a.clear()
+	_path_seg_b.clear()
+	for poly in paths:
+		var pl: PackedVector2Array = poly
+		for i in pl.size() - 1:
+			_path_seg_a.append(pl[i])
+			_path_seg_b.append(pl[i + 1])
+	_path_buckets = _bucket_segments(_path_seg_a, _path_seg_b, 3.0)
+	var sa := PackedVector2Array()
+	var sb := PackedVector2Array()
+	for i in stream.size() - 1:
+		sa.append(stream[i])
+		sb.append(stream[i + 1])
+	_stream_buckets = _bucket_segments(sa, sb, STREAM_VALLEY + 1.0)
+
+
+func _bucket_segments(seg_a: PackedVector2Array, seg_b: PackedVector2Array, margin: float) -> Array:
+	var buckets: Array = []
+	buckets.resize(_BUCKETS * _BUCKETS)
+	for i in buckets.size():
+		buckets[i] = PackedInt32Array()
+	for s in seg_a.size():
+		var a := seg_a[s]
+		var b := seg_b[s]
+		var x0 := clampi(int(floor((minf(a.x, b.x) - margin + HALF) / _BUCKET)), 0, _BUCKETS - 1)
+		var x1 := clampi(int(floor((maxf(a.x, b.x) + margin + HALF) / _BUCKET)), 0, _BUCKETS - 1)
+		var z0 := clampi(int(floor((minf(a.y, b.y) - margin + HALF) / _BUCKET)), 0, _BUCKETS - 1)
+		var z1 := clampi(int(floor((maxf(a.y, b.y) + margin + HALF) / _BUCKET)), 0, _BUCKETS - 1)
+		for bz in range(z0, z1 + 1):
+			for bx in range(x0, x1 + 1):
+				var arr: PackedInt32Array = buckets[bz * _BUCKETS + bx]
+				arr.append(s)
+				buckets[bz * _BUCKETS + bx] = arr
+	return buckets
+
+
+## Index into the bucket grid, or -1 outside the terrain square.
+func _bucket_of(x: float, z: float) -> int:
+	if absf(x) >= HALF or absf(z) >= HALF:
+		return -1
+	var bx := int((x + HALF) / _BUCKET)
+	var bz := int((z + HALF) / _BUCKET)
+	return clampi(bz, 0, _BUCKETS - 1) * _BUCKETS + clampi(bx, 0, _BUCKETS - 1)
+
+
+## Nearest point on the stream: Vector3(distance, segment index, t along it).
+func _stream_nearest(x: float, z: float, max_d: float) -> Vector3:
+	var p := Vector2(x, z)
+	var segs := PackedInt32Array()
+	var bi := _bucket_of(x, z)
+	if bi >= 0:
+		segs = _stream_buckets[bi]
+		if segs.is_empty():
+			return Vector3(1e9, 0.0, 0.0)
+	else:
+		if max_d < 1e6:
+			return Vector3(1e9, 0.0, 0.0)
+		for i in stream.size() - 1:
+			segs.append(i)
+	var best := Vector3(1e9, 0.0, 0.0)
+	for s in segs:
+		var a := stream[s]
+		var ab := stream[s + 1] - a
+		var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+		var d := p.distance_to(a + ab * t)
+		if d < best.x:
+			best = Vector3(d, float(s), t)
+	return best
+
+
+## Valley-floor height of the stream at a nearest-point query result.
+func _profile_at(q: Vector3) -> float:
+	var s := int(q.y)
+	if stream_profile.size() < 2:
+		return 0.0
+	s = clampi(s, 0, stream_profile.size() - 2)
+	return lerpf(stream_profile[s], stream_profile[s + 1], q.z)
+
+
+## The stream runs in a shallow valley whose floor descends monotonically from
+## the spring to the lake, so the water always flows downhill.
+func _build_stream_profile() -> void:
+	var n := stream.size()
+	var raw := PackedFloat32Array()
+	raw.resize(n)
+	for i in n:
+		raw[i] = _base_height(stream[i].x, stream[i].y)
+	# Smooth the natural ground along the stream.
+	var sm := PackedFloat32Array()
+	sm.resize(n)
+	for i in n:
+		var acc := 0.0
+		var wsum := 0.0
+		for k in range(-4, 5):
+			var j := clampi(i + k, 0, n - 1)
+			var w := 1.0 - absf(k) / 5.0
+			acc += raw[j] * w
+			wsum += w
+		sm[i] = acc / wsum
+	# Where the stream reaches the lake.
+	var mouth := n - 1
+	for i in n:
+		if lake_mask(stream[i].x, stream[i].y) > 0.22:
+			mouth = i
+			break
+	stream_profile.resize(n)
+	var cur := sm[0]
+	var dist_to_mouth := PackedFloat32Array()
+	dist_to_mouth.resize(n)
+	var acc_d := 0.0
+	for i in range(n - 1, -1, -1):
+		if i < n - 1:
+			acc_d += stream[i].distance_to(stream[i + 1])
+		dist_to_mouth[i] = acc_d
+	var mouth_d := dist_to_mouth[mouth]
+	for i in n:
+		var seg_len := 0.0 if i == 0 else stream[i].distance_to(stream[i - 1])
+		# Never uphill; always a slight fall so the water reads as flowing.
+		cur = minf(sm[i], cur - seg_len * 0.004)
+		cur = maxf(cur, INLAND_FLOOR + 0.25)
+		# Ease down to the lake over the last 40 m before the mouth.
+		var to_mouth := dist_to_mouth[i] - mouth_d
+		var ease := smoothstep(40.0, 0.0, to_mouth)
+		stream_profile[i] = lerpf(cur, WATER_LEVEL + 0.25, ease) if i <= mouth else WATER_LEVEL + 0.25 - (dist_to_mouth[mouth] - dist_to_mouth[i]) * 0.06
+
+
 # --- Height ---------------------------------------------------------------------
 
 func _build_height_cache() -> void:
@@ -150,7 +333,10 @@ func _build_height_cache() -> void:
 			heights[iz * GRID + ix] = compute_height(x, z)
 
 
-## Interpolated height from the cache (fast; use this at runtime).
+## Interpolated height from the cache (fast; use this at runtime). Uses the
+## same two triangles per 2 m cell as the terrain mesh and the collision
+## heightmap (split along the (x+1, z)-(x, z+1) diagonal), so anything snapped
+## to it sits exactly on the visible, walkable ground.
 func height_at(x: float, z: float) -> float:
 	var fx := clampf((x + HALF) / CELL, 0.0, GRID - 1.001)
 	var fz := clampf((z + HALF) / CELL, 0.0, GRID - 1.001)
@@ -159,11 +345,11 @@ func height_at(x: float, z: float) -> float:
 	var tx := fx - ix
 	var tz := fz - iz
 	var i := iz * GRID + ix
-	var h00 := heights[i]
-	var h10 := heights[i + 1]
-	var h01 := heights[i + GRID]
+	if tx + tz <= 1.0:
+		var h00 := heights[i]
+		return h00 + (heights[i + 1] - h00) * tx + (heights[i + GRID] - h00) * tz
 	var h11 := heights[i + GRID + 1]
-	return lerpf(lerpf(h00, h10, tx), lerpf(h01, h11, tx), tz)
+	return h11 + (heights[i + GRID] - h11) * (1.0 - tx) + (heights[i + 1] - h11) * (1.0 - tz)
 
 
 func height_at_v(p: Vector3) -> float:
@@ -191,6 +377,23 @@ func slope_at(x: float, z: float) -> float:
 
 ## The un-cached height function (slow; used to build the cache).
 func compute_height(x: float, z: float) -> float:
+	var h := _base_height(x, z)
+	# Stream: a shallow valley around a channel that always runs downhill.
+	var q := _stream_nearest(x, z, STREAM_VALLEY)
+	if q.x < STREAM_VALLEY:
+		var prof := _profile_at(q)
+		var in_lake := smoothstep(0.08, 0.3, lake_mask(x, z))
+		var valley := smoothstep(STREAM_VALLEY, stream_width, q.x) * (1.0 - in_lake)
+		h = lerpf(h, prof, valley)
+		# Channel: a flat bed and banks that are *linear* across the waterline,
+		# so the 2 m terrain triangles reproduce the water's edge exactly.
+		var ch := clampf((stream_width - q.x) / (stream_width - STREAM_BED), 0.0, 1.0)
+		h -= ch * stream_depth * (1.0 - in_lake * 0.5)
+	return h
+
+
+## Height without the stream (used for the stream profile itself).
+func _base_height(x: float, z: float) -> float:
 	var p := Vector2(x, z)
 	var h := _n_base.get_noise_2d(x, z) * 6.0 + _n_detail.get_noise_2d(x, z) * 0.9
 	# Gentle bowl toward the camp so it sits in a sheltered clearing.
@@ -203,10 +406,14 @@ func compute_height(x: float, z: float) -> float:
 	h += ridge_shape * (14.0 + ridged * 16.0)
 
 	# Distant walls (north, east, south edges) so the map feels enclosed.
+	# The foot of the walls wanders and their faces have spurs and gullies, so
+	# they read as wooded hillsides with rocky outcrops, not a uniform rampart.
 	var edge := maxf(maxf(absf(x), absf(z)), 0.0)
-	var wall := smoothstep(262.0, 320.0, edge)
+	var foot := 254.0 + _n_forest.get_noise_2d(x * 0.45 + 300.0, z * 0.45) * 16.0
+	var wall := smoothstep(foot, 322.0, edge)
 	if x > -230.0:
-		h += wall * wall * (38.0 + _n_ridge.get_noise_2d(x * 0.6, z * 0.6) * 10.0)
+		var spurs := 0.72 + 0.28 * _n_meadow.get_noise_2d(x * 1.6, z * 1.6)
+		h += wall * wall * (38.0 + _n_ridge.get_noise_2d(x * 0.6, z * 0.6) * 10.0) * spurs
 
 	# Camp clearing: flat and level.
 	var camp_d := p.length()
@@ -239,11 +446,58 @@ func compute_height(x: float, z: float) -> float:
 		var tip := smoothstep(16.0, 4.0, p.distance_to(_peninsula_b))
 		h = lerpf(h, 3.4, tip)
 
-	# Stream bed.
-	var sf := stream_factor(x, z)
-	if sf > 0.0:
-		h -= sf * stream_depth
+	# Inland ground stays above the water line (soft floor), so the only
+	# water away from the lake is the stream.
+	var inland := 1.0 - smoothstep(0.02, 0.25, lake)
+	if inland > 0.0:
+		var u := (h - INLAND_FLOOR) * 2.0
+		var soft := INLAND_FLOOR + (u if u > 12.0 else log(1.0 + exp(u))) * 0.5
+		h = lerpf(h, soft, inland)
 	return h
+
+
+# --- Beyond the map ------------------------------------------------------------------
+
+## Height anywhere out to OUTER_HALF. Inside the terrain square this is the
+## cached terrain; beyond it rolling forested hills rise to the north, east and
+## south, and Moonmirror Lake opens west into a wide bay ending at a far shore
+## of low hills. Continuous with the terrain at the square's edge.
+func outer_height(x: float, z: float) -> float:
+	if absf(x) <= HALF and absf(z) <= HALF:
+		return height_at(x, z)
+	var natural := compute_height(x, z)
+	var d := maxf(absf(x), absf(z)) - HALF
+	var w := smoothstep(0.0, 140.0, d)
+	var n1 := _n_base.get_noise_2d(x * 0.3 + 500.0, z * 0.3)
+	var n2 := _n_detail.get_noise_2d(x * 0.11, z * 0.11)
+	var hills := smoothstep(0.0, 650.0, d) * (58.0 + n1 * 48.0) + n2 * 7.0 * smoothstep(0.0, 200.0, d)
+	var lake_o := outer_lake_mask(x, z)
+	var floor_h := lerpf(LAKE_FLOOR, -18.0, smoothstep(0.0, 500.0, d))
+	# Land beyond the far shore: the in-map lake band would otherwise continue.
+	var land := natural + hills
+	if x < -HALF:
+		land = maxf(land, _n_base.get_noise_2d(x * 0.5, z * 0.5) * 12.0 + 14.0 + hills * 0.6)
+	var target := lerpf(land, floor_h, lake_o)
+	return lerpf(natural, target, w)
+
+
+## 0..1 open water of the lake beyond the west edge of the map.
+func outer_lake_mask(x: float, z: float) -> float:
+	var west := smoothstep(-200.0, -300.0, x)
+	if west <= 0.0:
+		return 0.0
+	var out := clampf((-HALF - x) / 520.0, 0.0, 1.0)
+	var half_w := lerpf(205.0, 980.0, out * out * (3.0 - 2.0 * out))
+	var wob := _n_shore.get_noise_2d(x * 0.35, z * 0.35) * 55.0
+	var across := smoothstep(half_w + 70.0, half_w - 10.0, absf(z - 10.0) + wob)
+	var shore_x := far_shore_x(z)
+	var along := smoothstep(shore_x - 30.0, shore_x + 90.0, x)
+	return clampf(across * along * west, 0.0, 1.0)
+
+
+## x of the far (west) shore of the lake at a given z.
+func far_shore_x(z: float) -> float:
+	return FAR_SHORE_X + _n_shore.get_noise_2d(z * 0.25, 13.0) * 110.0
 
 
 ## 0 outside the lake .. 1 in deep water (with a noisy shoreline).
@@ -266,17 +520,46 @@ func water_depth(x: float, z: float) -> float:
 
 ## 1 at the stream centre line, fading to 0 at stream_width.
 func stream_factor(x: float, z: float) -> float:
-	var d := _dist_to_polyline(Vector2(x, z), stream)
+	var d := _stream_nearest(x, z, stream_width).x
 	return smoothstep(stream_width, stream_width * 0.25, d)
 
 
+## Distance to the stream centre line (exact within ~11 m; beyond that it is
+## measured to the un-meandered course, within a few metres).
 func distance_to_stream(x: float, z: float) -> float:
-	return _dist_to_polyline(Vector2(x, z), stream)
+	var d := _stream_nearest(x, z, STREAM_VALLEY).x
+	if d < STREAM_VALLEY:
+		return d
+	return maxf(_dist_to_polyline(Vector2(x, z), _stream_ctrl), STREAM_VALLEY)
 
 
-## Height of the stream's water surface near (x, z).
+## Height of the stream's water surface near (x, z) (the nearest point of the
+## stream; flat across its width, descending toward the lake).
 func stream_water_height(x: float, z: float) -> float:
-	return compute_height(x, z) + stream_depth * stream_factor(x, z) - 0.55
+	var q := _stream_nearest(x, z, STREAM_VALLEY)
+	if q.x >= STREAM_VALLEY:
+		q = _stream_nearest_slow(x, z)
+	return _profile_at(q) - STREAM_SURFACE_DROP
+
+
+## Water surface height at stream point index i (for the stream ribbon).
+func stream_surface_at_index(i: int) -> float:
+	if stream_profile.is_empty():
+		return WATER_LEVEL
+	return stream_profile[clampi(i, 0, stream_profile.size() - 1)] - STREAM_SURFACE_DROP
+
+
+func _stream_nearest_slow(x: float, z: float) -> Vector3:
+	var p := Vector2(x, z)
+	var best := Vector3(1e9, 0.0, 0.0)
+	for s in stream.size() - 1:
+		var a := stream[s]
+		var ab := stream[s + 1] - a
+		var t := clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+		var d := p.distance_to(a + ab * t)
+		if d < best.x:
+			best = Vector3(d, float(s), t)
+	return best
 
 
 # --- Paths & density ---------------------------------------------------------------
@@ -285,6 +568,12 @@ func stream_water_height(x: float, z: float) -> float:
 func path_factor(x: float, z: float) -> float:
 	var p := Vector2(x, z)
 	var best := 1e9
+	var bi := _bucket_of(x, z)
+	if bi >= 0 and not _path_buckets.is_empty():
+		var segs: PackedInt32Array = _path_buckets[bi]
+		for s in segs:
+			best = minf(best, _dist_to_segment(p, _path_seg_a[s], _path_seg_b[s]))
+		return smoothstep(2.6, 0.6, best)
 	for poly in paths:
 		best = minf(best, _dist_to_polyline(p, poly))
 		if best < 0.5:
