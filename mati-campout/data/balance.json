@@ -66,7 +66,9 @@
     "regular_hp": 5,
     "giant_hp": 24,
     "regrow_days": 2,
-    "stump_seconds_visible": 9999
+    "stump_seconds_visible": 9999,
+    "regrow_clearance": 6.0,
+    "forest_density_mult": 0.97
   },
   "gatherables": {
     "stone_pile_amount": [2, 3],
