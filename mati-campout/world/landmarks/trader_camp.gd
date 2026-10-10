@@ -55,7 +55,7 @@ func _rosie() -> void:
 	zone(-3.5, -0.6, 0.9)
 	LandmarkProps.flower_pot(detail, bench_t * Transform3D(Basis.IDENTITY, Vector3(0.68, 0.47, 0.0)), 9510, Color("#e8566b"))
 	# Flower pots by the deck steps and along the front.
-	var flowers := [[-1.25, tent_z + 2.0, "#f2c84b"], [1.25, tent_z + 2.0, "#9a6bd1"], [-2.4, tent_z + 2.15, "#e8566b"], [2.45, tent_z + 2.1, "#f39b4a"]]
+	var flowers := [[-1.2, tent_z + 2.95, "#f2c84b"], [1.2, tent_z + 2.95, "#9a6bd1"], [-2.35, tent_z + 2.9, "#e8566b"], [2.4, tent_z + 2.85, "#f39b4a"]]
 	for i in flowers.size():
 		var fx: float = flowers[i][0]
 		var fz: float = flowers[i][1]

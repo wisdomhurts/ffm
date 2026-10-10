@@ -1406,7 +1406,8 @@ are shown: the emissive glass carries the glow. The lighthouse: a lens that
 blazes at night, an OmniLight in the lantern room, two opposite soft
 additive light cones (`lighthouse_beam.gdshader`, ~120 m, fog-free, brightest
 along the axis) rotating once per `beam_period` (14 s), a camera-facing lamp
-flare that flashes when a beam sweeps past the camera, and an unshadowed
+flare (it grows with distance so the lamp reads as a bright star across the
+lake) that flashes when a beam sweeps past the camera, and an unshadowed
 `SpotLight3D` on the beam (not on phone) whose pool sweeps the lake.
 
 **Discovery.** Every 0.2 s while playing, the player's XZ distance to each
@@ -1437,7 +1438,7 @@ steps).
 
 **Map markers.** A `LandmarkMarker` child at each centre, group
 `"map_marker"`: `{"kind": "landmark"|"trader", "label", "important": true,
-"discovered", "id"}`.
+"discovered", "id", "icon"}` (id and icon = the WorldGen landmark id).
 
 **Public API** (`game.landmarks`): `site(id) -> LandmarkSite`,
 `lighthouse()`, `ids()`, `is_discovered(id)`, `discovered_ids()`,
@@ -1462,10 +1463,13 @@ walked into. Bram's adit is decorative (closed by darkness).
 
 **Screenshot tour.** Options `"lm_local": true` (cam/look in the landmark's
 frame), `"lm_player": Vector3` (park the player in that frame, y = height on
-a raised floor), `"lm_discover": true`. Presets `lm_lighthouse_day`,
-`lm_lighthouse_door`, `lm_lighthouse_room`, `lm_lighthouse_top`,
-`lm_lighthouse_night`, `lm_lighthouse_beam`, `lm_lighthouse_from_camp`,
-`lm_lighthouse_from_shore`, `lm_lookout_day`, `lm_lookout_top`,
+a raised floor), `"lm_discover": true`, `"lm_beam": degrees` (hold the
+lighthouse beam that far from pointing at the camera; landmark cameras also
+swing up to ±60° around their target to avoid tree trunks). Presets
+`lm_lighthouse_day`, `lm_lighthouse_door`, `lm_lighthouse_room`,
+`lm_lighthouse_top`, `lm_lighthouse_night`, `lm_lighthouse_beam`,
+`lm_lighthouse_from_camp`, `lm_lighthouse_from_shore`,
+`lm_lighthouse_flash`, `lm_lookout_day`, `lm_lookout_top`,
 `lm_abandoned_day`, `lm_rosie_day`, `lm_rosie_night`, `lm_pip_day`,
 `lm_bram_day`, `lm_mine_day`, `lm_mine_inside`, `lm_mine_night`,
 `lm_hollow_day`, `lm_hollow_night`.

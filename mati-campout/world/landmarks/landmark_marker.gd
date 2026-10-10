@@ -2,7 +2,8 @@ class_name LandmarkMarker
 extends Node3D
 ## Map marker for one landmark (group "map_marker"), sitting at its centre.
 ## Contract: get_map_marker() -> {"kind": "landmark"|"trader", "label",
-## "important": true, "discovered"} plus "id" (the WorldGen landmark id).
+## "important": true, "discovered"} plus "id" and "icon" (both the WorldGen
+## landmark id, e.g. "lighthouse", "pips_dock").
 
 var landmark_id := ""
 var label := ""
@@ -22,4 +23,4 @@ func _ready() -> void:
 
 
 func get_map_marker() -> Dictionary:
-	return {"kind": kind, "label": label, "important": true, "discovered": discovered, "id": landmark_id}
+	return {"kind": kind, "label": label, "important": true, "discovered": discovered, "id": landmark_id, "icon": landmark_id}

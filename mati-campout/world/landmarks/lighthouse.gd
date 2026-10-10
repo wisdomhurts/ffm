@@ -26,6 +26,8 @@ var flare: MeshInstance3D = null
 var spot: SpotLight3D = null
 var lamp_light: OmniLight3D = null
 var beam_angle := 0.0
+## Screenshots: hold the beam at this pivot angle (NAN = rotate normally).
+var hold_angle := NAN
 var _beam_mat: ShaderMaterial = null
 var _flare_mat: ShaderMaterial = null
 var _night := 0.0
@@ -565,6 +567,8 @@ func update_site(delta: float, darkness: float, cam: Camera3D) -> void:
 		return
 	var period := maxf(DB.bf("landmarks.beam_period", 14.0), 2.0)
 	beam_angle = fposmod(beam_angle + delta * TAU / period, TAU)
+	if not is_nan(hold_angle):
+		beam_angle = hold_angle
 	beam_pivot.rotation.y = beam_angle
 	_beam_mat.set_shader_parameter("intensity", 0.5 * _night)
 	if spot:

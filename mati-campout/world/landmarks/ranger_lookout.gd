@@ -191,9 +191,9 @@ func _platform() -> void:
 	for s in [-0.045, 0.045]:
 		detail.cylinder(tt * Vector3(0.25 + s, 0.83, -0.05), tt * Vector3(0.25 + s, 0.83, 0.1), 0.035, 0.03, 10, true, 0.008)
 	box(Vector3(1.0, 0.8, 0.6), tt * Transform3D(Basis.IDENTITY, Vector3(0, 0.4, 0)))
-	var flame := LandmarkProps.lantern(detail, Transform3D(Basis.IDENTITY, Vector3(-0.2, ROOF - 1.05, 0.3)), true)
+	var flame := LandmarkProps.lantern(detail, Transform3D(Basis.IDENTITY, Vector3(-0.2, ROOF - 0.62, 0.3)), true)
 	detail.paint(LandmarkKit.DARK_METAL, 0.5, 0.6, 0.0, CampKit.P.IRON)
-	detail.cylinder(Vector3(-0.2, ROOF - 0.78, 0.3), Vector3(-0.2, ROOF - 0.1, 0.3), 0.006, 0.006, 4, false)
+	detail.cylinder(Vector3(-0.2, ROOF - 0.36, 0.3), Vector3(-0.2, ROOF - 0.04, 0.3), 0.006, 0.006, 4, false)
 	lantern_light(flame, 1.2, 7.5)
 	# The rare chest stands at the front, facing the stairs' arrival.
 	chest_spot(Vector3(-0.55, H, 1.25), PI, Vector3(-(HALF + LANE * 0.5), 0.0, HALF + 1.8))

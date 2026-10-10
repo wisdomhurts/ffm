@@ -162,6 +162,29 @@ func test_trader_spots_stay_clear() -> void:
 		s.free()
 
 
+func test_kit_helpers() -> void:
+	# torn_surface keeps only the cells asked for.
+	var k := LandmarkKit.new()
+	var flat := func(u: float, v: float) -> Vector3: return Vector3(u, 0.0, v)
+	k.torn_surface(flat, 4, 4, func(u: float, _v: float) -> bool: return u < 0.5)
+	var arr := k.to_arrays()
+	assert_eq((arr[Mesh.ARRAY_INDEX] as PackedInt32Array).size(), 8 * 6, "half of 16 cells kept")
+	# rail_wall: upright boxes that never reach past the ends of the line.
+	var s := LandmarkSite.new()
+	s.rail_wall(Vector3(0, 0, 0), Vector3(0, 3, 4), 0.08, 1.0)
+	var min_z := INF
+	var max_z := -INF
+	for e in s.shapes:
+		var xf: Transform3D = (e as Dictionary)["xform"]
+		var half := ((e as Dictionary)["shape"] as BoxShape3D).size * 0.5
+		assert_near(xf.basis.y.dot(Vector3.UP), 1.0, 0.001, "rail segments are upright")
+		min_z = minf(min_z, xf.origin.z - half.z)
+		max_z = maxf(max_z, xf.origin.z + half.z)
+	assert_near(min_z, 0.0, 0.001, "rail starts at a")
+	assert_near(max_z, 4.0, 0.001, "rail ends at b")
+	s.free()
+
+
 func test_lighthouse_shape() -> void:
 	var s := _build("lighthouse") as LighthouseSite
 	var top := 0.0

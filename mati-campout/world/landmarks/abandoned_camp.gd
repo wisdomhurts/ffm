@@ -23,8 +23,12 @@ func build_site() -> void:
 	_heap_tent(Vector3(4.2, 0, -3.4), -0.4)
 	_cart_and_clutter()
 	_washing_line(Vector3(5.0, 0, 0.8), Vector3(7.2, 0, 5.6))
+	_lean_to(Vector3(-8.1, 0, -5.7), 0.5)
+	_canoe(Vector3(6.6, 0, -6.4), -0.3)
+	_broken_table(Vector3(2.6, 0, 6.9), 0.35)
+	_flagpole(Vector3(1.6, 0, -7.6))
 	sign_board(Vector3(-2.6, 0, 8.4), 0.15, "Camp\nSunnyside", Color("#7a6a52"), 1.4, 1.6, Color(0.93, 0.88, 0.74))
-	chest_spot(Vector3(-0.9, gmin(-0.9, -5.0, 0.6), -5.0), 0.2, Vector3(-0.9, 0.0, -3.6))
+	chest_spot(Vector3(-0.9, gy(-0.9, -5.0), -5.0), 0.2, Vector3(-0.9, 0.0, -3.6))
 	zone(-0.9, -5.0, 0.7)
 
 
@@ -54,8 +58,8 @@ func _fire_pit() -> void:
 func _collapsed_tent(t: Transform3D) -> void:
 	var g := gmin(t.origin.x, t.origin.z, 1.6)
 	t.origin.y = g
-	var length := 2.6
-	var front_h := 1.45
+	var length := 3.3
+	var front_h := 1.8
 	var noise := FastNoiseLite.new()
 	noise.seed = 9100
 	noise.frequency = 1.0
@@ -63,14 +67,14 @@ func _collapsed_tent(t: Transform3D) -> void:
 		# Broken in the middle: the front half still slopes up to the
 		# standing pole, the rear half has dropped to the ground.
 		var x := lerpf(-length * 0.5, length * 0.5, u)
-		var h_mid := 0.92
+		var h_mid := 1.15
 		var h := lerpf(h_mid, front_h, (u - 0.5) * 2.0) if u >= 0.5 else lerpf(0.16, h_mid, pow(u * 2.0, 1.6))
 		return Vector3(x, h, 0.0)
 	for side in [-1.0, 1.0]:
 		var sd: float = side
 		var f := func(u: float, v: float) -> Vector3:
 			var r: Vector3 = ridge.call(u)
-			var w := 0.95 + 0.35 * (1.0 - u)
+			var w := 1.2 + 0.4 * (1.0 - u)
 			var edge := Vector3(r.x + (0.15 * (1.0 - u)), 0.04, sd * w)
 			var p := r.lerp(edge, v)
 			p.y -= sin(v * PI) * 0.12 * (0.5 + u)
@@ -97,8 +101,8 @@ func _collapsed_tent(t: Transform3D) -> void:
 	big.paint(Color("#8a7458"), 0.85, 0.0, 0.0, CampKit.P.PLANK_Y)
 	big.cylinder(t * Vector3(length * 0.5 + 1.3, -0.05, 0.0), t * Vector3(length * 0.5 + 1.32, 0.12, 0.0), 0.02, 0.015, 6, true)
 	var c := t.origin
-	add_shapes([LandmarkProps.box_shape(Vector3(length, 0.9, 1.8), t * Transform3D(Basis.IDENTITY, Vector3(0.3, 0.45, 0)))])
-	zone(c.x, c.z, 1.6)
+	add_shapes([LandmarkProps.box_shape(Vector3(length, 1.0, 2.2), t * Transform3D(Basis.IDENTITY, Vector3(0.3, 0.5, 0)))])
+	zone(c.x, c.z, 2.0)
 
 
 ## A dome tent fallen into a lumpy, torn heap with two bent poles.
@@ -110,8 +114,8 @@ func _heap_tent(c: Vector3, yaw_l: float) -> void:
 	var f := func(u: float, v: float) -> Vector3:
 		var a := u * TAU
 		var r := v
-		var h := 0.55 * (1.0 - r * r) + noise.get_noise_2d(cos(a) * r * 2.0, sin(a) * r * 2.0) * 0.16 * (1.0 - r)
-		return t * Vector3(cos(a) * r * 1.25, maxf(h, 0.02) + 0.02, sin(a) * r * 1.0)
+		var h := 0.78 * (1.0 - r * r) + noise.get_noise_2d(cos(a) * r * 2.0, sin(a) * r * 2.0) * 0.2 * (1.0 - r)
+		return t * Vector3(cos(a) * r * 1.7, maxf(h, 0.02) + 0.02, sin(a) * r * 1.4)
 	var keep := func(u: float, v: float) -> bool:
 		return not (noise.get_noise_2d(u * 9.0 + 20.0, v * 4.0) > 0.5 and v > 0.3)
 	var fl := func(_u: float, v: float) -> float:
@@ -126,12 +130,12 @@ func _heap_tent(c: Vector3, yaw_l: float) -> void:
 		var radii := PackedFloat32Array()
 		for k in 7:
 			var s := float(k) / 6.0
-			var r := lerpf(0.4, 1.5, s)
-			pts.append(t * Vector3(cos(a + s * 0.3) * r, 0.5 * sin(s * PI * 0.8) + 0.2 - s * 0.15, sin(a + s * 0.3) * r * 0.8))
+			var r := lerpf(0.5, 2.0, s)
+			pts.append(t * Vector3(cos(a + s * 0.3) * r, 0.7 * sin(s * PI * 0.8) + 0.25 - s * 0.2, sin(a + s * 0.3) * r * 0.8))
 			radii.append(0.012)
 		big.tube(pts, radii, 5, true)
-	add_shapes([LandmarkProps.cyl_shape(1.0, 0.6, t * Transform3D(Basis.IDENTITY, Vector3(0, 0.3, 0)))])
-	zone(c.x, c.z, 1.3)
+	add_shapes([LandmarkProps.cyl_shape(1.35, 0.8, t * Transform3D(Basis.IDENTITY, Vector3(0, 0.4, 0)))])
+	zone(c.x, c.z, 1.7)
 
 
 func _cart_and_clutter() -> void:
@@ -184,8 +188,8 @@ func _washing_line(a: Vector3, b: Vector3) -> void:
 	detail.rope(ta, tb, sag, 0.007, Color("#b8a888"), 14)
 	var line := func(s: float) -> Vector3:
 		return ta.lerp(tb, s) + Vector3(0, -sag * 4.0 * s * (1.0 - s), 0)
-	var items := [[0.16, 0.5, 0.62, "#b9a07a"], [0.34, 0.58, 0.55, "#7f9aa8"], [0.52, 0.14, 0.32, "#c98a7a"],
-		[0.6, 0.14, 0.3, "#c98a7a"], [0.76, 0.8, 0.7, "#a8b07a"]]
+	var items := [[0.14, 0.62, 0.75, "#c4ab82"], [0.33, 0.7, 0.62, "#7f9aa8"], [0.5, 0.16, 0.38, "#c98a7a"],
+		[0.57, 0.16, 0.36, "#c98a7a"], [0.76, 1.05, 0.85, "#a8b07a"]]
 	var along := (tb - ta)
 	along.y = 0.0
 	along = along.normalized()
@@ -204,3 +208,87 @@ func _washing_line(a: Vector3, b: Vector3) -> void:
 		for q in [p0, p1]:
 			var qv: Vector3 = q
 			LandmarkProps.block(detail, Transform3D(Basis.IDENTITY, qv + Vector3(0, -0.02, 0)), Vector3(0.025, 0.08, 0.03), Color("#c9b08a"), CampKit.P.PLANK_Y, 0.8)
+
+
+## A torn tarp lean-to: two leaning poles, a cross pole, a faded blue tarp
+## half fallen down.
+func _lean_to(c: Vector3, yaw_l: float) -> void:
+	var t := lxf(c.x, c.z, yaw_l, 1.4)
+	var pole := Color("#6b5a46")
+	for x in [-1.3, 1.3]:
+		big.log_piece(t * Vector3(x, -0.2, 0.9), t * Vector3(x * 0.95, 1.75, 0.55), 0.045, 9500 + int(x), true, pole)
+	big.log_piece(t * Vector3(-1.5, 1.72, 0.56), t * Vector3(1.5, 1.68, 0.56), 0.04, 9502, true, pole)
+	var noise := FastNoiseLite.new()
+	noise.seed = 9510
+	noise.frequency = 1.0
+	var f := func(u: float, v: float) -> Vector3:
+		var x := lerpf(-1.45, 1.45, u)
+		var top := Vector3(x, 1.7, 0.6)
+		var bottom := Vector3(x, 0.03, -1.2)
+		var p := top.lerp(bottom, v)
+		p.y -= sin(v * PI) * 0.18
+		# The right half has torn loose and droops.
+		p.y -= smoothstep(0.55, 1.0, u) * sin(v * PI * 0.5) * 0.5
+		p.y = maxf(p.y, 0.03)
+		return t * p
+	var keep := func(u: float, v: float) -> bool:
+		return noise.get_noise_2d(u * 6.0, v * 4.0) < 0.38
+	var fl := func(_u: float, v: float) -> float:
+		return smoothstep(0.0, 0.5, v) * 0.9
+	big_cloth.paint(Color("#5d7f95"), 0.9, 0.0, 0.0, CampKit.P.CANVAS)
+	big_cloth.torn_surface(f, 10, 6, keep, fl)
+	add_shapes([LandmarkProps.box_shape(Vector3(2.8, 1.2, 0.3), t * Transform3D(Basis.IDENTITY, Vector3(0, 0.6, 0.7)))])
+	zone(c.x, c.z, 1.6)
+
+
+## An old canoe lying upside down on two stumps.
+func _canoe(c: Vector3, yaw_l: float) -> void:
+	var t := lxf(c.x, c.z, yaw_l, 1.8)
+	for x in [-1.1, 1.1]:
+		big.log_piece(t * Vector3(x, -0.1, 0), t * Vector3(x, 0.38, 0), 0.2, 9600 + int(x * 3.0), true)
+	var length := 4.0
+	var hw := func(u: float) -> float:
+		return 0.42 * sqrt(maxf(1.0 - pow(absf(u * 2.0 - 1.0), 2.2), 0.0))
+	# Upside down: the keel on top.
+	var f := func(u: float, v: float) -> Vector3:
+		var x := (u - 0.5) * length
+		var phi := v * PI
+		var w: float = hw.call(u)
+		var rise := 0.18 * pow(absf(u * 2.0 - 1.0), 3.0)
+		return t * Vector3(x, 0.42 + sin(phi) * 0.36 - rise, -cos(phi) * w)
+	big_cloth.paint(Color("#9c4a32"), 0.75, 0.0, 0.0, CampKit.P.PAINT)
+	big_cloth.surface(f, 20, 8)
+	add_shapes([LandmarkProps.box_shape(Vector3(length, 0.8, 0.9), t * Transform3D(Basis.IDENTITY, Vector3(0, 0.4, 0)))])
+	zone(c.x, c.z, 2.1)
+
+
+## A picnic table with a broken leg, slumped onto one end.
+func _broken_table(c: Vector3, yaw_l: float) -> void:
+	var t := lxf(c.x, c.z, yaw_l, 1.1) * Transform3D(Basis(Vector3.BACK, 0.2), Vector3(0, -0.12, 0))
+	add_shapes(CampProps.picnic_table(detail, t))
+	zone(c.x, c.z, 1.3)
+
+
+## A tall flagpole with a torn, faded flag.
+func _flagpole(c: Vector3) -> void:
+	var g := gmin(c.x, c.z, 0.3)
+	var base := Vector3(c.x, g, c.z)
+	big.paint(Color("#8f8b84"), 0.5, 0.5, 0.0, MeshKit.Pat.RUST)
+	big.cylinder(base + Vector3(0, -0.3, 0), base + Vector3(0, 5.2, 0), 0.05, 0.035, 8, true)
+	big.sphere(base + Vector3(0, 5.25, 0), 0.07, 8, 5)
+	for i in 3:
+		var a := TAU * float(i) / 3.0
+		big.stone(base + Vector3(cos(a) * 0.22, 0.05, sin(a) * 0.22), Vector3(0.14, 0.1, 0.12), 9700 + i, CampKit.STONE_COLOR, a, 0.2, 8, 5)
+	var noise := FastNoiseLite.new()
+	noise.seed = 9710
+	noise.frequency = 1.0
+	var f := func(u: float, v: float) -> Vector3:
+		return base + Vector3(0.05 + u * 1.1, 4.95 - v * 0.7 - u * u * 0.12, sin(u * 3.0) * 0.06)
+	var keep := func(u: float, v: float) -> bool:
+		return not (u > 0.7 and noise.get_noise_2d(u * 8.0, v * 6.0) > 0.0)
+	var fl := func(u: float, _v: float) -> float:
+		return smoothstep(0.0, 0.3, u)
+	big_cloth.paint(Color("#b98a52"), 0.9, 0.0, 0.0, CampKit.P.FABRIC)
+	big_cloth.torn_surface(f, 8, 4, keep, fl)
+	add_shapes([LandmarkProps.cyl_shape(0.08, 5.0, Transform3D(Basis.IDENTITY, base + Vector3(0, 2.5, 0)))])
+	zone(c.x, c.z, 0.35)

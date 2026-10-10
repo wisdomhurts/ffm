@@ -56,8 +56,9 @@ static func block(k: MeshKit, t: Transform3D, size: Vector3, c: Color, pat: int,
 # --- Lights --------------------------------------------------------------------------------
 
 ## A small iron lantern (origin at its base, ~0.32 m tall). `lit` = the glass
-## glows at night. Returns the flame position.
-static func lantern(k: MeshKit, t: Transform3D, lit: bool = true, s: float = 1.0) -> Vector3:
+## glows at night; `always` = it glows by day too (indoors, in a mine).
+## Returns the flame position.
+static func lantern(k: MeshKit, t: Transform3D, lit: bool = true, s: float = 1.0, always: bool = false) -> Vector3:
 	var st := t * Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * s), Vector3.ZERO)
 	k.paint(Color("#2f3033"), 0.45, 0.7, 0.0, CampKit.P.IRON)
 	k.cylinder(st * Vector3(0, 0.0, 0), st * Vector3(0, 0.035, 0), 0.075 * s, 0.07 * s, 12, true, 0.01)
@@ -66,7 +67,9 @@ static func lantern(k: MeshKit, t: Transform3D, lit: bool = true, s: float = 1.0
 		var a := TAU * float(i) / 4.0 + PI * 0.25
 		k.cylinder(st * Vector3(cos(a) * 0.062, 0.03, sin(a) * 0.062), st * Vector3(cos(a) * 0.062, 0.205, sin(a) * 0.062), 0.006 * s, 0.006 * s, 5, false)
 	k.torus(st * Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.27, 0)), 0.05, 0.005, 12, 4, PI)
-	if lit:
+	if lit and always:
+		k.paint(Color("#ffd690"), 0.1, 0.0, 2.6, MeshKit.Pat.NONE)
+	elif lit:
 		k.paint(Color("#ffe2a8"), 0.1, 0.0, 1.0, CampKit.P.GLASS)
 	else:
 		k.paint(Color("#6d6250"), 0.3, 0.0, 0.0, CampKit.P.GLASS)

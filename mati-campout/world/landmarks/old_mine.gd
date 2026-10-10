@@ -42,7 +42,7 @@ func build_site() -> void:
 	MineBits.boards(self, pt, W, H, 11050)
 	# Lantern hanging just inside (it glows by day too: the tunnel is dark).
 	var lt := pt * Transform3D(Basis.IDENTITY, Vector3(0.55, H - 0.62, -0.9))
-	var flame := LandmarkProps.lantern(detail, lt, true)
+	var flame := LandmarkProps.lantern(detail, lt, true, 1.0, true)
 	detail.paint(LandmarkKit.DARK_METAL, 0.5, 0.6, 0.0, CampKit.P.IRON)
 	detail.cylinder(lt * Vector3(0, 0.27, 0), lt * Vector3(0, 0.5, 0), 0.006, 0.006, 4, false)
 	lantern_light(flame, 0.9, 5.0, Color(1.0, 0.7, 0.4), true, "indoor")

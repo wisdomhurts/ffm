@@ -175,6 +175,16 @@ func _run() -> void:
 		var want := Landmarks.fallback_loot(GameState.seed, "lighthouse").size()
 		check(dropped.size() == want and want > 0, "fallback lighthouse loot dropped (%d/%d pickups)" % [dropped.size(), want])
 		check("flashlight" in dropped, "fallback loot includes the flashlight")
+	# The keeper's logbook on the desk is readable.
+	var note: LandmarkNote = null
+	for n in lh.get_children():
+		if n is LandmarkNote:
+			note = n
+	check(note != null and note.is_in_group("interactable") and note.get_interact_text(player) == "Read the Keeper's Log", "the keeper's log is an interactable")
+	if note:
+		var before := _count("notify")
+		note.interact(player)
+		check(_count("notify") == before + 1 and "Keeper's log" in _texts("notify"), "reading the log shows a note")
 	# Leave and come back: still only once.
 	player.teleport(gen.ground(far, 0.1))
 	await frames(15)
