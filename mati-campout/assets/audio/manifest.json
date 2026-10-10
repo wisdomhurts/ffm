@@ -1,0 +1,1002 @@
+{
+ "assets": {
+  "amb_bird_1": {
+   "channels": 1,
+   "group": "amb_bird",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.37
+  },
+  "amb_bird_2": {
+   "channels": 1,
+   "group": "amb_bird",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.7028
+  },
+  "amb_bird_3": {
+   "channels": 1,
+   "group": "amb_bird",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.1135
+  },
+  "amb_bird_4": {
+   "channels": 1,
+   "group": "amb_bird",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.5884
+  },
+  "amb_bird_5": {
+   "channels": 1,
+   "group": "amb_bird",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.446
+  },
+  "amb_bird_6": {
+   "channels": 1,
+   "group": "amb_bird",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.3546
+  },
+  "amb_day": {
+   "channels": 2,
+   "group": "amb_day",
+   "kind": "loop",
+   "loop": true,
+   "seconds": 48.0
+  },
+  "amb_night": {
+   "channels": 2,
+   "group": "amb_night",
+   "kind": "loop",
+   "loop": true,
+   "seconds": 40.0
+  },
+  "amb_owl_1": {
+   "channels": 1,
+   "group": "amb_owl",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 4.5466
+  },
+  "amb_owl_2": {
+   "channels": 1,
+   "group": "amb_owl",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 4.083
+  },
+  "amb_twig_1": {
+   "channels": 1,
+   "group": "amb_twig",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.9822
+  },
+  "amb_twig_2": {
+   "channels": 1,
+   "group": "amb_twig",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.0695
+  },
+  "amb_woodpecker": {
+   "channels": 1,
+   "group": "amb_woodpecker",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.1571
+  },
+  "boss_pant": {
+   "channels": 1,
+   "group": "boss_pant",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.8148
+  },
+  "boss_roar": {
+   "channels": 1,
+   "group": "boss_roar",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 4.9231
+  },
+  "boss_sprint": {
+   "channels": 1,
+   "group": "boss_sprint",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 3.3308
+  },
+  "bunny_squeak": {
+   "channels": 1,
+   "group": "bunny_squeak",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.4062
+  },
+  "campfire": {
+   "channels": 1,
+   "group": "campfire",
+   "kind": "loop",
+   "loop": true,
+   "seconds": 20.0
+  },
+  "chest_open": {
+   "channels": 1,
+   "group": "chest_open",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.0574
+  },
+  "chop_1": {
+   "channels": 1,
+   "group": "chop",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.7294
+  },
+  "chop_2": {
+   "channels": 1,
+   "group": "chop",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.709
+  },
+  "chop_3": {
+   "channels": 1,
+   "group": "chop",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.6986
+  },
+  "click_empty": {
+   "channels": 1,
+   "group": "click_empty",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.0705
+  },
+  "coin": {
+   "channels": 1,
+   "group": "coin",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.701
+  },
+  "cook_sizzle": {
+   "channels": 1,
+   "group": "cook_sizzle",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.6692
+  },
+  "cooking": {
+   "channels": 1,
+   "group": "cooking",
+   "kind": "loop",
+   "loop": true,
+   "seconds": 12.0
+  },
+  "craft": {
+   "channels": 1,
+   "group": "craft",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.466
+  },
+  "dawn_chime": {
+   "channels": 2,
+   "group": "dawn_chime",
+   "kind": "sting",
+   "loop": false,
+   "seconds": 9.5
+  },
+  "death": {
+   "channels": 1,
+   "group": "death",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 3.8346
+  },
+  "deny": {
+   "channels": 1,
+   "group": "deny",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.6567
+  },
+  "eat": {
+   "channels": 1,
+   "group": "eat",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.2168
+  },
+  "fire_ignite": {
+   "channels": 1,
+   "group": "fire_ignite",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.7826
+  },
+  "fire_out": {
+   "channels": 1,
+   "group": "fire_out",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.2562
+  },
+  "fire_whoosh": {
+   "channels": 1,
+   "group": "fire_whoosh",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.9311
+  },
+  "flashlight_off": {
+   "channels": 1,
+   "group": "flashlight_off",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.0543
+  },
+  "flashlight_on": {
+   "channels": 1,
+   "group": "flashlight_on",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.0522
+  },
+  "footstep_dirt_1": {
+   "channels": 1,
+   "group": "footstep_dirt",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.1618
+  },
+  "footstep_dirt_2": {
+   "channels": 1,
+   "group": "footstep_dirt",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.16
+  },
+  "footstep_dirt_3": {
+   "channels": 1,
+   "group": "footstep_dirt",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.16
+  },
+  "footstep_dirt_4": {
+   "channels": 1,
+   "group": "footstep_dirt",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.1622
+  },
+  "footstep_grass_1": {
+   "channels": 1,
+   "group": "footstep_grass",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.135
+  },
+  "footstep_grass_2": {
+   "channels": 1,
+   "group": "footstep_grass",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.135
+  },
+  "footstep_grass_3": {
+   "channels": 1,
+   "group": "footstep_grass",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.135
+  },
+  "footstep_grass_4": {
+   "channels": 1,
+   "group": "footstep_grass",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.135
+  },
+  "footstep_stone_1": {
+   "channels": 1,
+   "group": "footstep_stone",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.322
+  },
+  "footstep_stone_2": {
+   "channels": 1,
+   "group": "footstep_stone",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.3021
+  },
+  "footstep_stone_3": {
+   "channels": 1,
+   "group": "footstep_stone",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.3187
+  },
+  "footstep_stone_4": {
+   "channels": 1,
+   "group": "footstep_stone",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.2982
+  },
+  "footstep_water_1": {
+   "channels": 1,
+   "group": "footstep_water",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.3902
+  },
+  "footstep_water_2": {
+   "channels": 1,
+   "group": "footstep_water",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.4137
+  },
+  "footstep_water_3": {
+   "channels": 1,
+   "group": "footstep_water",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.4047
+  },
+  "footstep_wood_1": {
+   "channels": 1,
+   "group": "footstep_wood",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.462
+  },
+  "footstep_wood_2": {
+   "channels": 1,
+   "group": "footstep_wood",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.485
+  },
+  "footstep_wood_3": {
+   "channels": 1,
+   "group": "footstep_wood",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.4584
+  },
+  "gunshot": {
+   "channels": 1,
+   "group": "gunshot",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.8878
+  },
+  "hit_1": {
+   "channels": 1,
+   "group": "hit",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.5273
+  },
+  "hit_2": {
+   "channels": 1,
+   "group": "hit",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.5273
+  },
+  "hit_enemy_1": {
+   "channels": 1,
+   "group": "hit_enemy",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.5955
+  },
+  "hit_enemy_2": {
+   "channels": 1,
+   "group": "hit_enemy",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.5959
+  },
+  "level_up": {
+   "channels": 2,
+   "group": "level_up",
+   "kind": "sting",
+   "loop": false,
+   "seconds": 3.1778
+  },
+  "music_boss": {
+   "channels": 2,
+   "group": "music_boss",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "music_danger": {
+   "channels": 2,
+   "group": "music_danger",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "music_day": {
+   "channels": 2,
+   "group": "music_day",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "music_dusk": {
+   "channels": 2,
+   "group": "music_dusk",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "music_fire_out": {
+   "channels": 2,
+   "group": "music_fire_out",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "music_night": {
+   "channels": 2,
+   "group": "music_night",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "music_night_warm": {
+   "channels": 2,
+   "group": "music_night_warm",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "music_title": {
+   "channels": 2,
+   "group": "music_title",
+   "kind": "music",
+   "loop": true,
+   "seconds": 80.0
+  },
+  "night_sting": {
+   "channels": 2,
+   "group": "night_sting",
+   "kind": "sting",
+   "loop": false,
+   "seconds": 9.0
+  },
+  "pickup": {
+   "channels": 1,
+   "group": "pickup",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.6908
+  },
+  "player_hurt_1": {
+   "channels": 1,
+   "group": "player_hurt",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.5801
+  },
+  "player_hurt_2": {
+   "channels": 1,
+   "group": "player_hurt",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.5537
+  },
+  "rain": {
+   "channels": 2,
+   "group": "rain",
+   "kind": "loop",
+   "loop": true,
+   "seconds": 20.0
+  },
+  "rifle_shot": {
+   "channels": 1,
+   "group": "rifle_shot",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.5205
+  },
+  "splash": {
+   "channels": 1,
+   "group": "splash",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.1376
+  },
+  "stalker_attack": {
+   "channels": 1,
+   "group": "stalker_attack",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.2723
+  },
+  "stalker_hiss_1": {
+   "channels": 1,
+   "group": "stalker_hiss",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.2682
+  },
+  "stalker_hiss_2": {
+   "channels": 1,
+   "group": "stalker_hiss",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.4933
+  },
+  "sting_fire_out": {
+   "channels": 2,
+   "group": "sting_fire_out",
+   "kind": "sting",
+   "loop": false,
+   "seconds": 8.5
+  },
+  "sting_gameover": {
+   "channels": 2,
+   "group": "sting_gameover",
+   "kind": "sting",
+   "loop": false,
+   "seconds": 12.5
+  },
+  "stone_pickup_1": {
+   "channels": 1,
+   "group": "stone_pickup",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.3413
+  },
+  "stone_pickup_2": {
+   "channels": 1,
+   "group": "stone_pickup",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.3646
+  },
+  "stream": {
+   "channels": 1,
+   "group": "stream",
+   "kind": "loop",
+   "loop": true,
+   "seconds": 16.0
+  },
+  "swing_1": {
+   "channels": 1,
+   "group": "swing",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.2248
+  },
+  "swing_2": {
+   "channels": 1,
+   "group": "swing",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.2319
+  },
+  "swing_3": {
+   "channels": 1,
+   "group": "swing",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.2526
+  },
+  "tame": {
+   "channels": 1,
+   "group": "tame",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.5962
+  },
+  "thunder_1": {
+   "channels": 2,
+   "group": "thunder",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 7.6623
+  },
+  "thunder_2": {
+   "channels": 2,
+   "group": "thunder",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 8.3537
+  },
+  "trade": {
+   "channels": 1,
+   "group": "trade",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.3733
+  },
+  "tree_fall": {
+   "channels": 1,
+   "group": "tree_fall",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 5.3564
+  },
+  "ui_click": {
+   "channels": 1,
+   "group": "ui_click",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.0598
+  },
+  "ui_close": {
+   "channels": 1,
+   "group": "ui_close",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.5796
+  },
+  "ui_hover": {
+   "channels": 1,
+   "group": "ui_hover",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.03
+  },
+  "ui_open": {
+   "channels": 1,
+   "group": "ui_open",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.6684
+  },
+  "upgrade": {
+   "channels": 1,
+   "group": "upgrade",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.6963
+  },
+  "watcher_whisper_1": {
+   "channels": 1,
+   "group": "watcher_whisper",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 3.6691
+  },
+  "watcher_whisper_2": {
+   "channels": 1,
+   "group": "watcher_whisper",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 3.8897
+  },
+  "wind": {
+   "channels": 2,
+   "group": "wind",
+   "kind": "loop",
+   "loop": true,
+   "seconds": 30.0
+  },
+  "wolf_bark_1": {
+   "channels": 1,
+   "group": "wolf_bark",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.3419
+  },
+  "wolf_bark_2": {
+   "channels": 1,
+   "group": "wolf_bark",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 1.3341
+  },
+  "wolf_growl": {
+   "channels": 1,
+   "group": "wolf_growl",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 2.1741
+  },
+  "wolf_howl_1": {
+   "channels": 1,
+   "group": "wolf_howl",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 5.8315
+  },
+  "wolf_howl_2": {
+   "channels": 1,
+   "group": "wolf_howl",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 6.0556
+  },
+  "wood_pickup_1": {
+   "channels": 1,
+   "group": "wood_pickup",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.4126
+  },
+  "wood_pickup_2": {
+   "channels": 1,
+   "group": "wood_pickup",
+   "kind": "sfx",
+   "loop": false,
+   "seconds": 0.4281
+  }
+ },
+ "generator": "tools/gen_audio.py",
+ "groups": {
+  "amb_bird": [
+   "amb_bird_1",
+   "amb_bird_2",
+   "amb_bird_3",
+   "amb_bird_4",
+   "amb_bird_5",
+   "amb_bird_6"
+  ],
+  "amb_day": [
+   "amb_day"
+  ],
+  "amb_night": [
+   "amb_night"
+  ],
+  "amb_owl": [
+   "amb_owl_1",
+   "amb_owl_2"
+  ],
+  "amb_twig": [
+   "amb_twig_1",
+   "amb_twig_2"
+  ],
+  "amb_woodpecker": [
+   "amb_woodpecker"
+  ],
+  "boss_pant": [
+   "boss_pant"
+  ],
+  "boss_roar": [
+   "boss_roar"
+  ],
+  "boss_sprint": [
+   "boss_sprint"
+  ],
+  "bunny_squeak": [
+   "bunny_squeak"
+  ],
+  "campfire": [
+   "campfire"
+  ],
+  "chest_open": [
+   "chest_open"
+  ],
+  "chop": [
+   "chop_1",
+   "chop_2",
+   "chop_3"
+  ],
+  "click_empty": [
+   "click_empty"
+  ],
+  "coin": [
+   "coin"
+  ],
+  "cook_sizzle": [
+   "cook_sizzle"
+  ],
+  "cooking": [
+   "cooking"
+  ],
+  "craft": [
+   "craft"
+  ],
+  "dawn_chime": [
+   "dawn_chime"
+  ],
+  "death": [
+   "death"
+  ],
+  "deny": [
+   "deny"
+  ],
+  "eat": [
+   "eat"
+  ],
+  "fire_ignite": [
+   "fire_ignite"
+  ],
+  "fire_out": [
+   "fire_out"
+  ],
+  "fire_whoosh": [
+   "fire_whoosh"
+  ],
+  "flashlight_off": [
+   "flashlight_off"
+  ],
+  "flashlight_on": [
+   "flashlight_on"
+  ],
+  "footstep_dirt": [
+   "footstep_dirt_1",
+   "footstep_dirt_2",
+   "footstep_dirt_3",
+   "footstep_dirt_4"
+  ],
+  "footstep_grass": [
+   "footstep_grass_1",
+   "footstep_grass_2",
+   "footstep_grass_3",
+   "footstep_grass_4"
+  ],
+  "footstep_stone": [
+   "footstep_stone_1",
+   "footstep_stone_2",
+   "footstep_stone_3",
+   "footstep_stone_4"
+  ],
+  "footstep_water": [
+   "footstep_water_1",
+   "footstep_water_2",
+   "footstep_water_3"
+  ],
+  "footstep_wood": [
+   "footstep_wood_1",
+   "footstep_wood_2",
+   "footstep_wood_3"
+  ],
+  "gunshot": [
+   "gunshot"
+  ],
+  "hit": [
+   "hit_1",
+   "hit_2"
+  ],
+  "hit_enemy": [
+   "hit_enemy_1",
+   "hit_enemy_2"
+  ],
+  "level_up": [
+   "level_up"
+  ],
+  "music_boss": [
+   "music_boss"
+  ],
+  "music_danger": [
+   "music_danger"
+  ],
+  "music_day": [
+   "music_day"
+  ],
+  "music_dusk": [
+   "music_dusk"
+  ],
+  "music_fire_out": [
+   "music_fire_out"
+  ],
+  "music_night": [
+   "music_night"
+  ],
+  "music_night_warm": [
+   "music_night_warm"
+  ],
+  "music_title": [
+   "music_title"
+  ],
+  "night_sting": [
+   "night_sting"
+  ],
+  "pickup": [
+   "pickup"
+  ],
+  "player_hurt": [
+   "player_hurt_1",
+   "player_hurt_2"
+  ],
+  "rain": [
+   "rain"
+  ],
+  "rifle_shot": [
+   "rifle_shot"
+  ],
+  "splash": [
+   "splash"
+  ],
+  "stalker_attack": [
+   "stalker_attack"
+  ],
+  "stalker_hiss": [
+   "stalker_hiss_1",
+   "stalker_hiss_2"
+  ],
+  "sting_fire_out": [
+   "sting_fire_out"
+  ],
+  "sting_gameover": [
+   "sting_gameover"
+  ],
+  "stone_pickup": [
+   "stone_pickup_1",
+   "stone_pickup_2"
+  ],
+  "stream": [
+   "stream"
+  ],
+  "swing": [
+   "swing_1",
+   "swing_2",
+   "swing_3"
+  ],
+  "tame": [
+   "tame"
+  ],
+  "thunder": [
+   "thunder_1",
+   "thunder_2"
+  ],
+  "trade": [
+   "trade"
+  ],
+  "tree_fall": [
+   "tree_fall"
+  ],
+  "ui_click": [
+   "ui_click"
+  ],
+  "ui_close": [
+   "ui_close"
+  ],
+  "ui_hover": [
+   "ui_hover"
+  ],
+  "ui_open": [
+   "ui_open"
+  ],
+  "upgrade": [
+   "upgrade"
+  ],
+  "watcher_whisper": [
+   "watcher_whisper_1",
+   "watcher_whisper_2"
+  ],
+  "wind": [
+   "wind"
+  ],
+  "wolf_bark": [
+   "wolf_bark_1",
+   "wolf_bark_2"
+  ],
+  "wolf_growl": [
+   "wolf_growl"
+  ],
+  "wolf_howl": [
+   "wolf_howl_1",
+   "wolf_howl_2"
+  ],
+  "wood_pickup": [
+   "wood_pickup_1",
+   "wood_pickup_2"
+  ]
+ },
+ "music_loop_seconds": 80.0,
+ "sample_rate": 44100,
+ "tempo": 72.0
+}

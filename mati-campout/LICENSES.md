@@ -32,7 +32,13 @@ Pillow + numpy) for MATI's Campout. No third-party images were used.
 
 ## Audio
 
-_(pending)_
+All sound effects, ambience loops, stingers and music in `assets/audio/` are
+original works generated from scratch by our own script `tools/gen_audio.py`
+(numpy synthesis: filtered noise, FM, Karplus-Strong strings, modal
+synthesis, granular textures, source-filter voices and a synthetic
+convolution reverb). No samples, recordings or third-party sound libraries
+are used. Files are encoded to Ogg Vorbis with ffmpeg/libvorbis (encoder
+only; no ffmpeg code ships with the game). Same licence as the game.
 
 
 ## Other

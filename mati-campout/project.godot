@@ -19,6 +19,7 @@ config/custom_user_dir_name="MATIsCampout"
 [audio]
 
 buses/default_bus_layout=""
+general/3d_panning_strength=0.8
 
 [autoload]
 
