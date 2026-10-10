@@ -96,6 +96,32 @@ const SHOTS := {
 	"camp_dawn": {"hour": 6.1, "fire": 0.5, "weather": "fog", "cam": Vector3(-12, 2.6, 7), "look": Vector3(30, 4.0, -6)},
 	"cloudy_day": {"hour": 12.5, "fire": 0.9, "weather": "cloudy", "cam": Vector3(9, 2.2, 11), "look": Vector3(-30, 16, -40)},
 	"storm_night": {"hour": 21.5, "fire": 0.8, "weather": "storm", "cam": Vector3(8, 3.4, 9), "look": Vector3(0, 1.0, 0)},
+	# Campsite & campfire (generic camp options: fire_level, tent_level,
+	# fire_out_age (seconds since it went out), cook {item: progress},
+	# player_sit (sit the parked player facing the fire); see _apply_camp_options).
+	"camp_overview": {"hour": 10.5, "fire": 0.9, "cam": Vector3(13, 8.5, 12), "look": Vector3(-0.8, 0.3, -0.8), "player_at": Vector3(1.9, 0, 1.2)},
+	"camp_fire_close": {"hour": 22.5, "fire": 0.95, "cam": Vector3(2.5, 1.35, 2.6), "look": Vector3(0, 0.55, 0), "player_at": Vector3(-1.75, 0, -1.6), "player_sit": true},
+	"camp_fire_macro": {"hour": 22.5, "fire": 0.95, "cam": Vector3(1.45, 0.95, 1.55), "look": Vector3(0, 0.6, 0), "player_at": Vector3(-8, 0, 8)},
+	"camp_fire_day": {"hour": 11.5, "fire": 0.95, "cam": Vector3(2.5, 1.35, 2.6), "look": Vector3(0, 0.55, 0), "player_at": Vector3(-8, 0, 8)},
+	"fire_l2": {"hour": 22.5, "fire": 0.95, "fire_level": 2, "cam": Vector3(3.0, 1.7, 3.2), "look": Vector3(0, 0.7, 0), "player_at": Vector3(-8, 0, 8)},
+	"fire_l3": {"hour": 22.5, "fire": 0.95, "fire_level": 3, "cam": Vector3(4.2, 2.3, 4.4), "look": Vector3(0, 1.3, 0), "player_at": Vector3(-8, 0, 8)},
+	"fire_smoulder": {"hour": 1.0, "fire": -1.0, "fire_out_age": 2.0, "cam": Vector3(2.5, 1.35, 2.6), "look": Vector3(0, 0.4, 0), "player_at": Vector3(-8, 0, 8)},
+	"fire_ash": {"hour": 1.0, "fire": -1.0, "fire_out_age": 40.0, "cam": Vector3(2.5, 1.35, 2.6), "look": Vector3(0, 0.4, 0), "player_at": Vector3(-8, 0, 8)},
+	"camp_cooking": {"hour": 19.3, "fire": 0.9, "cook": {"raw_meat": 0.15, "mushroom": 0.6}, "cam": Vector3(2.0, 1.55, 1.7), "look": Vector3(0.0, 0.9, 0.0), "player_at": Vector3(-8, 0, 8)},
+	"camp_crate": {"hour": 15.5, "fire": 0.9, "cam": Vector3(-2.2, 1.7, 1.4), "look": Vector3(-5.0, 0.6, -1.0), "player_at": Vector3(8, 0, 8)},
+	"camp_table": {"hour": 19.0, "fire": 0.9, "cam": Vector3(0.6, 1.7, 6.2), "look": Vector3(-3.4, 0.7, 3.4), "player_at": Vector3(8, 0, -8)},
+	"camp_sign": {"hour": 16.5, "fire": 0.9, "cam": Vector3(4.2, 1.7, 12.5), "look": Vector3(1.2, 1.5, 7.4), "player_at": Vector3(-8, 0, -8)},
+	"safe_ring": {"hour": 23.0, "fire": 0.9, "cam": Vector3(17, 13, 19), "look": Vector3(0, 0, 0), "player_at": Vector3(3, 0, 3)},
+	"tent_close": {"hour": 16.5, "fire": 0.9, "cam": Vector3(-0.2, 1.9, -0.6), "look": Vector3(4.3, 0.9, -4.3), "player_at": Vector3(-8, 0, 8)},
+	"tent_night": {"hour": 22.0, "fire": 0.9, "tent_level": 4, "cam": Vector3(-1.0, 2.2, 0.1), "look": Vector3(4.5, 1.2, -4.5), "player_at": Vector3(-8, 0, 8)},
+	"tent_l1": {"hour": 15.0, "fire": 0.9, "tent_level": 1, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
+	"tent_l2": {"hour": 15.0, "fire": 0.9, "tent_level": 2, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
+	"tent_l3": {"hour": 15.0, "fire": 0.9, "tent_level": 3, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
+	"tent_l4": {"hour": 15.0, "fire": 0.9, "tent_level": 4, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
+	"tent_l5": {"hour": 15.0, "fire": 0.9, "tent_level": 5, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
+	"tent_l6": {"hour": 15.0, "fire": 0.9, "tent_level": 6, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
+	"tent_l7": {"hour": 15.0, "fire": 0.9, "tent_level": 7, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.6, 1.2, -4.6), "player_at": Vector3(-8, 0, 8)},
+	"tent_l8": {"hour": 21.5, "fire": 0.9, "tent_level": 8, "cam": Vector3(-1.4, 2.5, 0.4), "look": Vector3(4.8, 1.4, -4.8), "player_at": Vector3(-8, 0, 8)},
 }
 
 var _screen_node: Node = null
@@ -164,6 +190,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 	var env: Node = GameState.environment
 	if env and env.has_method("set_weather"):
 		env.call("set_weather", str(s.get("weather", "rain" if s.get("rain", false) else "clear")), true)
+	_apply_camp_options(s)
 	var hud_visible := bool(s.get("hud", false))
 	var hud: Node = GameState.game.get("hud") if GameState.game else null
 	if hud is CanvasLayer:
@@ -409,3 +436,50 @@ func _apply_spawn_option(s: Dictionary) -> void:
 func _park_player(pos: Vector3) -> void:
 	if GameState.player and GameState.player.has_method("teleport"):
 		GameState.player.call("teleport", pos)
+
+
+## Generic camp options for a shot (all optional, null-safe):
+##   "fire_level": 1..3   fire structure level (reset to 1 afterwards)
+##   "tent_level": 1..8   tent level without the celebration (reset to 1)
+##   "fire_out_age": s    pretend the fire went out s seconds ago
+##   "cook": {id: p}      food on the cooking rack at progress p (0..1)
+##   "player_sit": true   sit the parked player down facing the fire
+var _camp_shot_levels := false
+
+
+func _apply_camp_options(s: Dictionary) -> void:
+	var camp: Node = GameState.camp
+	if camp == null or not is_instance_valid(camp):
+		return
+	var fire_lv := int(s.get("fire_level", 1))
+	var tent_lv := int(s.get("tent_level", 1))
+	if s.has("fire_level") or s.has("tent_level") or _camp_shot_levels:
+		_camp_shot_levels = s.has("fire_level") or s.has("tent_level")
+		var frac := GameState.fire.fraction()
+		GameState.fire.level = clampi(fire_lv, 1, GameState.fire.max_level())
+		if GameState.fire.is_lit():
+			GameState.fire.fuel = GameState.fire.max_fuel() * frac
+		var tent: Variant = camp.get("tent")
+		if tent is Node and (tent as Node).has_method("set_level"):
+			(tent as Node).call("set_level", tent_lv, false)
+	var cf: Node = GameState.campfire
+	if s.has("fire_out_age") and cf and cf.has_method("debug_set_out_time"):
+		cf.call("debug_set_out_time", float(s["fire_out_age"]))
+	var rack: Variant = camp.get("cooking_rack")
+	if rack is Node and (rack as Node).has_method("debug_clear"):
+		(rack as Node).call("debug_clear")
+		var cook: Dictionary = s.get("cook", {})
+		for id in cook:
+			(rack as Node).call("debug_fill", str(id), float(cook[id]))
+	if bool(s.get("player_sit", false)) and s.has("player_at"):
+		_sit_player.call_deferred()
+
+
+func _sit_player() -> void:
+	var pl: Node3D = GameState.player
+	if pl == null or not is_instance_valid(pl):
+		return
+	if pl.has_method("look_at_point") and GameState.campfire:
+		pl.call("look_at_point", GameState.campfire.global_position + Vector3(0, 0.5, 0))
+	if "resting" in pl:
+		pl.set("resting", true)

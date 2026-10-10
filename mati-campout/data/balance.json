@@ -49,12 +49,14 @@
     "light_fear_edge": 0.35,
     "relight_needs": "kindling",
     "cook_seconds": 14,
-    "rack_slots": 3
+    "rack_slots": 3,
+    "smoulder_seconds": 20
   },
   "camp": {
     "start_storage": {"wood": 4, "kindling": 3, "berries": 3},
     "storage_slots": 16,
-    "safe_kindling_respawn": 4
+    "safe_kindling_respawn": 4,
+    "kindling_ring": [9.0, 13.0]
   },
   "start_inventory": [
     {"id": "rusty_axe", "count": 1},
