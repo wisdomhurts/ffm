@@ -25,6 +25,9 @@ var coins: int = 0
 var tent_level: int = 1
 var camp_level: int = 1
 var time_scale: float = 1.0
+## True while a modal UI (crafting, storage, map, pause...) has focus; the
+## player ignores gameplay input while it is set.
+var ui_blocking: bool = false
 var rng := RandomNumberGenerator.new()
 
 ## Run statistics shown on the game-over screen and leaderboard.
@@ -98,6 +101,7 @@ func new_run(p_seed: int = -1) -> void:
 	tent_level = 1
 	camp_level = 1
 	time_scale = 1.0
+	ui_blocking = false
 	death_cause = ""
 	stats = {
 		"nights": 0, "trees_chopped": 0, "enemies_defeated": 0, "distance": 0.0,

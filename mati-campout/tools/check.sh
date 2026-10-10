@@ -18,6 +18,15 @@ if grep -E "SCRIPT ERROR|Parse Error|ERROR:" "$OUT/import.log" | grep -vE "$FILT
   echo "!! import reported errors"; status=1
 fi
 
+echo "== parse check"
+timeout 300 "$GODOT" --headless --path . res://tools/parse_check.tscn >"$OUT/parse.log" 2>&1
+code=$?
+grep -E "^PARSE" "$OUT/parse.log"
+if [ $code -ne 0 ]; then
+  grep -E -A3 "SCRIPT ERROR|Parse Error" "$OUT/parse.log" | head -40
+  echo "!! parse check failed (exit $code)"; status=1
+fi
+
 echo "== unit tests"
 timeout 300 "$GODOT" --headless --path . res://tests/test_runner.tscn >"$OUT/unit.log" 2>&1
 code=$?

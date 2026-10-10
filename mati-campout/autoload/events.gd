@@ -17,6 +17,8 @@ signal float_text(world_pos: Vector3, text: String, color: Color)
 ## A modal UI opened/closed (crafting, storage, trade, map, build, pause...).
 signal ui_modal_opened(modal_name: String)
 signal ui_modal_closed(modal_name: String)
+## Accessibility caption for an important sound ("[growling nearby]").
+signal caption(text: String)
 ## Ask the HUD to open a specific modal. args are modal-specific.
 signal request_modal(modal_name: String, args: Dictionary)
 

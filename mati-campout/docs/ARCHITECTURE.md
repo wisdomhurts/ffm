@@ -115,6 +115,10 @@ roughly in front, shows `"[E] text"` in the prompt, and calls `interact`.
 Texts are short and kid-friendly: `"Add Wood to fire"`, `"Open Chest"`,
 `"Relight fire (1 Kindling + 1 Wood)"`.
 
+Optional: `func get_interact_hint(player) -> String` — shown greyed out when
+`get_interact_text` is empty, to explain what is missing
+("Need Kindling: craft it at the crate").
+
 ### Damageable (group `"damageable"`)
 ```
 var team: String              # "player", "monster", "wildlife", "pet", "npc"
@@ -197,6 +201,29 @@ Monsters join groups `"monster"` and `"damageable"`; wildlife joins
 `"wildlife"` and `"damageable"`. The spawner owns night monsters and despawns
 them at dawn (they flee into the trees and fade).
 
+### Physics layers
+| Layer | Name | Who |
+|---|---|---|
+| 1 | world | terrain, rocks, buildings, camp props, bridges, invisible bounds |
+| 2 | player | the player body |
+| 3 | creatures | monsters, wildlife, NPCs, pets (if they use bodies) |
+| 4 | trees | tree trunks (removed when felled) |
+| 5 | interact | Area3D triggers (tent shelter, pickups) |
+The player collides with 1 and 4. Creatures move kinematically (no physics
+needed) and keep their own separation from the player.
+
+### Global shader uniforms (`project.godot` → `[shader_globals]`)
+`wind_strength` (float), `wind_direction` (vec2), `wetness` (0..1 rain),
+`night_factor` (0 day..1 night), `time_of_day` (hours), `player_position`
+(vec3, set by the player for grass bending), `fire_position` (vec3) and
+`fire_strength` (0..1, set by the campfire). Declare them in shaders as
+`global uniform float wind_strength;` etc. The environment controller writes
+wind/wetness/night/time.
+
+### UI blocking
+`GameState.ui_blocking` is true while a modal UI is open. The player ignores
+movement/use/interact input while it is set; the HUD owns M/B/Tab/Esc.
+
 ### Audio ids
 `Audio.play(id, pos)` ids (missing ids are ignored silently):
 `chop`, `tree_fall`, `wood_pickup`, `stone_pickup`, `pickup`, `coin`, `swing`,
@@ -234,8 +261,11 @@ fog catches the fire and moon.
 
 ## Testing
 
-- `tools/check.sh` — imports the project, runs unit tests and the smoke test
-  headless, and fails on any `SCRIPT ERROR`, parse error or `ERROR:` line.
+- `tools/check.sh` — imports the project, parse-checks every script (with
+  autoloads loaded: `res://tools/parse_check.tscn`, optional `-- --only=res://world/`),
+  runs unit tests and the smoke test headless, and fails on any `SCRIPT ERROR`,
+  parse error or `ERROR:` line. Note: `godot --check-only` does NOT know about
+  autoloads and reports false errors — use parse_check instead.
 - Unit tests: `tests/unit/test_<name>.gd`, each `extends "res://tests/test_case.gd"`
   with `func test_<thing>() -> void:` methods using `assert_eq`, `assert_true`...
 - `tools/screenshot_tour.gd` renders named shots (needs a display; in CI use
