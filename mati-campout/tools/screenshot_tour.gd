@@ -141,6 +141,30 @@ const SHOTS := {
 	"gather_variants_cloth": {"hour": 11.0, "fire": 0.9, "gallery": true, "gallery_kind": "cloth", "gallery_at": Vector3(0, 0, -11), "gallery_spacing": 1.5, "cam": Vector3(0, 2.0, -6.6), "look": Vector3(0, 0.1, -11), "hide_player": true},
 	"gather_variants_stone": {"hour": 11.0, "fire": 0.9, "gallery": true, "gallery_kind": "stone_pile", "gallery_at": Vector3(-12, 0, 0), "gallery_spacing": 2.0, "cam": Vector3(-12, 2.6, 5.4), "look": Vector3(-12, 0.2, 0), "hide_player": true},
 	"gather_gallery_dusk": {"hour": 18.9, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(0, 2.2, 18.8), "look": Vector3(0, 0.25, 12.5), "hide_player": true},
+	# Landmarks (generic options: "lm_local": true turns cam/look offsets into
+	# the landmark's own frame (+Z = toward its trail); "lm_player": Vector3
+	# parks the player at a local point (y > 0 = on a raised floor);
+	# "lm_discover": true discovers it first (banner + marker)).
+	"lm_lighthouse_day": {"hour": 14.0, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(15, 8.4, 25), "look": Vector3(0, 10.5, 0), "hide_player": true},
+	"lm_lighthouse_door": {"hour": 16.6, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(3.8, 3.6, 10.5), "look": Vector3(0, 1.8, 3.6), "lm_player": Vector3(1.2, 0.0, 7.4)},
+	"lm_lighthouse_room": {"hour": 15.0, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(1.3, 2.3, 2.45), "look": Vector3(-1.2, 1.3, -1.4), "hide_player": true},
+	"lm_lighthouse_top": {"hour": 10.5, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(9, 26, 10), "look": Vector3(0, 19.6, 0), "hide_player": true},
+	"lm_lighthouse_night": {"hour": 22.5, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(26, 7, 36), "look": Vector3(0, 14, 0), "hide_player": true},
+	"lm_lighthouse_beam": {"hour": 23.0, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(7, 2.5, 12), "look": Vector3(0, 18.5, 0), "hide_player": true},
+	"lm_lighthouse_from_camp": {"hour": 23.0, "fire": 0.9, "cam": Vector3(-14, 4.5, -6), "look": Vector3(-212, 22, -78), "hide_player": true},
+	"lm_lighthouse_from_shore": {"hour": 22.8, "fire": 0.9, "landmark": "pips_dock", "cam": Vector3(-6, 2.2, 2), "look": Vector3(-114, 18, -136), "hide_player": true},
+	"lm_lookout_day": {"hour": 13.5, "fire": 0.9, "landmark": "lookout", "lm_local": true, "cam": Vector3(10, 5.5, 13), "look": Vector3(-0.6, 4.2, 0), "hide_player": true},
+	"lm_lookout_top": {"hour": 16.0, "fire": 0.9, "landmark": "lookout", "lm_local": true, "cam": Vector3(1.6, 7.6, -1.2), "look": Vector3(-30, 3, 40), "lm_player": Vector3(0.6, 5.85, 0.4)},
+	"lm_abandoned_day": {"hour": 15.5, "fire": 0.9, "landmark": "abandoned_camp", "lm_local": true, "cam": Vector3(9, 4.2, 11), "look": Vector3(-0.5, 0.8, -1.2), "hide_player": true},
+	"lm_rosie_day": {"hour": 11.0, "fire": 0.9, "landmark": "rosies_rest", "lm_local": true, "cam": Vector3(5.5, 3.2, 8.5), "look": Vector3(0, 1.2, -3.5), "hide_player": true},
+	"lm_rosie_night": {"hour": 21.5, "fire": 0.9, "landmark": "rosies_rest", "lm_local": true, "cam": Vector3(5.5, 3.2, 8.5), "look": Vector3(0, 1.2, -3.5), "hide_player": true},
+	"lm_pip_day": {"hour": 10.0, "fire": 0.9, "landmark": "pips_dock", "lm_local": true, "cam": Vector3(7, 4.5, 6), "look": Vector3(-1, -0.5, -6), "hide_player": true},
+	"lm_bram_day": {"hour": 14.5, "fire": 0.9, "landmark": "brams_dig", "lm_local": true, "cam": Vector3(-4, 3.6, 9), "look": Vector3(0, 1.6, -5), "hide_player": true},
+	"lm_mine_day": {"hour": 12.5, "fire": 0.9, "landmark": "old_mine", "lm_local": true, "cam": Vector3(3.5, 2.8, 5.5), "look": Vector3(0, 1.6, -6), "hide_player": true},
+	"lm_mine_inside": {"hour": 12.5, "fire": 0.9, "landmark": "old_mine", "lm_local": true, "cam": Vector3(0.3, 1.7, -2.6), "look": Vector3(0, 0.6, -9), "hide_player": true},
+	"lm_mine_night": {"hour": 22.0, "fire": 0.9, "landmark": "old_mine", "lm_local": true, "cam": Vector3(3.5, 2.8, 5.5), "look": Vector3(0, 1.6, -6), "hide_player": true},
+	"lm_hollow_day": {"hour": 11.5, "fire": 0.9, "landmark": "hollow", "lm_local": true, "cam": Vector3(5, 2.6, 7.5), "look": Vector3(0, 1.2, -4), "hide_player": true},
+	"lm_hollow_night": {"hour": 22.5, "fire": 0.9, "landmark": "hollow", "lm_local": true, "cam": Vector3(5, 2.6, 7.5), "look": Vector3(0, 1.2, -4), "hide_player": true},
 }
 
 var _screen_node: Node = null
@@ -238,6 +262,13 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 				if tid >= 0:
 					origin = (GameState.vegetation.call("tree_info", tid) as Dictionary).get("pos", Vector3.ZERO)
 		var cam_off: Vector3 = s["cam"]
+		var look_off: Vector3 = s["look"]
+		if s.has("landmark") and bool(s.get("lm_local", false)):
+			var lm_yaw := _landmark_yaw(str(s["landmark"]))
+			cam_off = cam_off.rotated(Vector3.UP, lm_yaw)
+			look_off = look_off.rotated(Vector3.UP, lm_yaw)
+			# The landmark branch below adds origin.y twice; keep cam relative to it.
+			cam_off.y -= origin.y
 		if s.has("landmark") and str(s["landmark"]).begins_with("@gather:"):
 			cam_off = _gather_cam_offset(origin, cam_off)
 			# The landmark branch below adds origin.y twice; keep cam relative to the node.
@@ -245,7 +276,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 		var cpos: Vector3 = origin + cam_off
 		var ground_h := GameState.world_gen.height_at(cpos.x, cpos.z)
 		cpos.y = maxf(cpos.y + ground_h, ground_h + 1.0) if not s.has("landmark") else maxf(cpos.y + origin.y, ground_h + 1.0)
-		var look: Vector3 = origin + (s["look"] as Vector3)
+		var look: Vector3 = origin + look_off
 		if not s.has("landmark"):
 			look.y += GameState.world_gen.height_at(look.x, look.z)
 		_last_look = look
@@ -268,6 +299,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 			GameState.player.call("teleport", GameState.world_gen.ground(Vector3(4, 0, 6), 0.1))
 	_apply_ui_options(s, hud)
 	_apply_gather_pose(s)
+	_apply_landmark_options(s)
 	var player_3d := GameState.player as Node3D
 	if player_3d and s.get("hide_player", false):
 		player_3d.visible = false
@@ -609,3 +641,38 @@ func _release_gather() -> void:
 		g.call("debug_release")
 	if g is Node3D:
 		(g as Node3D).visible = true
+
+
+# --- Landmark options ------------------------------------------------------------------
+
+func _landmarks() -> Node:
+	var lm: Variant = GameState.game.get("landmarks") if GameState.game else null
+	return lm as Node if lm is Node and (lm as Node).has_method("site") else null
+
+
+## World yaw of a landmark's local frame (0 when there is no Landmarks system).
+func _landmark_yaw(id: String) -> float:
+	var lm := _landmarks()
+	var site: Variant = lm.call("site", id) if lm else null
+	return float((site as Node).get("yaw")) if site is Node else 0.0
+
+
+## "lm_player": Vector3 parks the player at a point in the landmark's frame;
+## "lm_discover": true discovers the landmark (banner, marker).
+func _apply_landmark_options(s: Dictionary) -> void:
+	var lm := _landmarks()
+	if lm == null or not s.has("landmark"):
+		return
+	var site: Variant = lm.call("site", str(s["landmark"]))
+	if not (site is Node3D):
+		return
+	if s.has("lm_player") and GameState.player:
+		var local: Vector3 = s["lm_player"]
+		var w: Vector3 = (site as Node3D).call("to_world", local)
+		if absf(local.y) < 0.001:
+			w = GameState.world_gen.ground(w, 0.05)
+		GameState.player.call("teleport", w)
+		if GameState.player.has_method("look_at_point"):
+			GameState.player.call("look_at_point", (site as Node3D).global_position + Vector3(0, 1.5, 0))
+	if bool(s.get("lm_discover", false)):
+		lm.call("discover", str(s["landmark"]))
