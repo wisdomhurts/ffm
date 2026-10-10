@@ -330,7 +330,78 @@ _(pending)_
 
 ### Player, camera, character & items
 
-_(pending)_
+**Files.** `actors/player/player.gd` (Player), `actors/player/camera_rig.gd`
+(CameraRig), `actors/character_model.gd` (CharacterModel), `items/mesh_kit.gd`
+(MeshKit: procedural mesh toolkit), `items/item_models.gd` (ItemModels),
+`items/pickup.gd` (Pickup), `items/held_light_source.gd` (HeldLightSource),
+`fx/hit_fx.gd` (HitFx), `fx/float_text_3d.gd` (FloatText3D),
+`shaders/character.gdshader`, `shaders/character_flame.gdshader`.
+Tests: `tests/unit/test_player_items.gd`; headless integration driver
+`godot --headless --path . res://tests/player_drive.tscn` (fake trees + a
+dummy monster; chopping, melee, guns, food, flashlight, torch, damage, drops,
+pickups, water, resting, death).
+
+**Player API beyond the contract.** `get_interact_text_full() -> {text, hint, key}`
+(HUD prompt; hint = greyed "what's missing"), `is_aiming_gun()` (HUD crosshair),
+`toggle_flashlight()` (F), `drop_selected(n)` (Q, hold = stack),
+`is_flashlight_on()`, `get_flashlight_charge()` (0..1, -1 = none),
+`get_torch_fraction()`, `is_alive()`, `var team = "player"`, `var resting`
+(set by the tent; moving/jumping stands up), `debug_pose(opts)` / `debug_clear()`
+(screenshots). The body never rotates; `player.model` (CharacterModel) turns.
+
+**Things the player reads from other systems (all optional, null-safe).**
+- Interactables: default radius = `balance.player.interact_radius` (2.6);
+  candidates with only a hint still become the target (greyed prompt).
+- Combat targets in group `damageable` with team `monster`/`wildlife`:
+  `take_damage(amount, source, kind)`, `is_alive()`, plus optional
+  `hit_radius` (default 0.5), `hit_height` (1.6), `apply_knockback(v)`,
+  `flash_hit()`, `enemy_id` (used for `Events.enemy_damaged` and death cause).
+  Gun hits are analytic (camera ray vs upright capsule, blocked by layers
+  1+4), so creatures need no physics bodies.
+- Trees: `find_tree`/`tree_info`/`hit_tree` at the swing's impact moment.
+  If `stats.trees_chopped` did not change during `hit_tree` the player counts
+  the felled tree; if Vegetation did not emit `Events.tree_hit/tree_chopped`
+  during the call the player emits them. The player plays `chop`; Vegetation
+  spawns chips and wood. Giant + axe without `giant` -> "Mega Axe" notice.
+- Shelter: group `shelter` nodes with `contains(pos) -> bool`, optional
+  `tent_warmth() -> float` and `rest_mult() -> float`.
+- Footstep surface: a floor collider may set meta `surface`
+  ("wood", "stone", ...) or join `wood_surface`/`stone_surface`; otherwise
+  WorldGen decides (water, path = dirt, ridge = stone, camp/shore = dirt,
+  else grass; standing >0.3 m above terrain = wood).
+
+**Pickups.** `Pickup.spawn(id, count, pos, impulse)` returns the node (or
+null); set `pickup.meta` for per-item state (flashlight charge).
+Auto-collect: kinds resource/food/ammo and `coins` within
+`balance.player.auto_pickup_radius` when Settings `auto_pickup` is on; others
+show "Pick up X". `block_auto_pickup(s)` (player drops) also waits until the
+player has walked away. Resources/food with sell < 20 fade after 600 s.
+Group `pickup`.
+
+**Lights.** Flashlight = cone `HeldLightSource` on the beam
+(`balance.flashlight` range/angle/fear_strength, drains item meta `charge`);
+lit torch (left hand, `burn_time`) = radius source (`balance.torch`), +0.15
+heat; Starsteel swing = 0.7 s radius burst.
+
+**Float text.** The Player routes `Events.float_text` to `FloatText3D.spawn`
+(world-space billboard). If the HUD draws these itself, set
+`FloatText3D.enabled = false`.
+
+**Mouse.** Captured when play starts, re-captured when `ui_blocking` turns
+false or on a click in the game view. The HUD must make the mouse visible
+when it opens a modal/pause.
+
+**CharacterModel reuse (traders, locker).** `var c := CharacterModel.new();
+c.apply_look(look); add_child(c); c.play_action("wave")`. Faces -Z, feet at
+the origin, ~1.68 m. Animates in `_physics_process` (set
+`animate_in_physics = false` for UI SubViewports if preferred). Cost: 19 mesh
+instances (face details cast no shadows), ~25k triangles, ~85 ms to build,
+~30 us/frame to animate. One shared material (vertex-packed colour, AO,
+roughness, metal, emission, pattern; instance uniforms `hit_flash`, `glow`,
+`glow_color`); `MeshKit` is reusable for other procedural props.
+
+**Screenshots.** Tour presets `player_close`, `player_walk`, `player_run`,
+`player_chop`, `player_night` (option `player_view` + `pose`).
 
 
 ### UI
