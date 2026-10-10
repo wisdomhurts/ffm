@@ -544,7 +544,7 @@ class Builder:
 				var a := TAU * float(j) / float(seg)
 				var w := 1.0 + wobble * nz.get_noise_2d(cos(a) * 1.6 + nseed, sin(a) * 1.6 + nseed * 2.0)
 				var rr := r * f * w
-				var y := h * (1.0 - f * f) - 0.05 * pow(f, 4.0)
+				var y := h * (1.0 - f * f) - 0.07 * pow(f, 3.0)
 				var nrm := Vector3(cos(a) * f * 0.35, 1.0, sin(a) * f * 0.35).normalized()
 				var col := col_c.lerp(col_e, f)
 				add(Vector3(cos(a) * rr, y, sin(a) * rr), nrm, Color(col.r, col.g, col.b, lerpf(0.85, 1.0, f)), Vector2(cos(a) * rr, sin(a) * rr))
@@ -696,66 +696,84 @@ static func _stone_pile(b: Builder, variant: int) -> void:
 	b.height = top_y
 
 
-## Dark rock outcrop with a glittering seam of coal lumps.
+## Dark rock outcrop studded with glittering coal lumps (dark veins around
+## each lump, so it still reads as a coal seam when picked clean).
 static func _coal_vein(b: Builder, variant: int) -> void:
 	var rng := b.rng
-	var rad := Vector3(rng.randf_range(0.62, 0.78), rng.randf_range(0.46, 0.6), rng.randf_range(0.5, 0.62))
+	var rad := Vector3(rng.randf_range(0.62, 0.76), rng.randf_range(0.44, 0.56), rng.randf_range(0.5, 0.62))
 	var center := Vector3(0, rad.y * 0.55, 0)
-	var seam_n := Vector3(rng.randf_range(-0.5, 0.5), 1.0, rng.randf_range(-0.6, 0.6)).normalized()
-	seam_n = (seam_n + Vector3(1, 0, 0) * rng.randf_range(0.5, 1.2)).normalized()
-	var seam_off := rng.randf_range(-0.08, 0.1)
-	var dark := _hex("#18171a")
-	b.mat = Mat.GROUND
-	b.part(Vector3.ZERO, -1.0)
-	b.bed(rad.x * 1.25, 0.04, 14, _hex("#5a5048"), _hex("#6e6455"), 0.2, float(variant) * 2.3)
-	b.mat = Mat.ROCK
+	var host_basis := Basis(Vector3.UP, rng.randf() * TAU)
+	var amp := 0.22
+	var freq := 1.35
+	var nseed := float(variant) * 5.3
+	var flat_y := -0.5
+	# Pick lump spots first (on the displaced host surface) so the host can
+	# paint dark veins around them.
+	var lumps: Array = []
+	var tries := 0
+	while lumps.size() < 11 and tries < 400:
+		tries += 1
+		var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(0.05, 1.0), rng.randf_range(-1, 1)).normalized()
+		var lp := blob_point(d, rad, amp, freq, nseed, flat_y)
+		var p := center + host_basis * (lp * 0.96)
+		var ok := true
+		for q in lumps:
+			if (q[0] as Vector3).distance_to(p) < 0.16:
+				ok = false
+				break
+		if ok:
+			lumps.append([p, (host_basis * d).normalized(), 0.35 + 0.6 * rng.randf()])
+	var dark := _hex("#141316")
 	var gv := rng.randf_range(0.28, 0.34)
 	var slate := Color(gv + 0.02, gv, gv - 0.02)
 	var col_fn := func(lp: Vector3, _d: Vector3) -> Color:
-		var sd := absf(lp.dot(seam_n) - seam_off)
-		var k := smoothstep(0.15, 0.05, sd)
-		return slate.lerp(dark, k)
-	b.blob(center, rad, Basis(Vector3.UP, rng.randf() * TAU), 2, 0.24, 1.35, float(variant) * 5.3, slate, 0.45, -0.5, col_fn)
+		var wp := center + host_basis * lp
+		var k := 0.0
+		for q in lumps:
+			var dd := (q[0] as Vector3).distance_to(wp)
+			k = maxf(k, smoothstep(0.24, 0.08, dd))
+		return slate.lerp(dark, k * 0.92)
+	b.mat = Mat.GROUND
+	b.part(Vector3.ZERO, -1.0)
+	b.bed(rad.x * 1.25, 0.02, 16, _hex("#5a5048"), _hex("#6e6455"), 0.2, float(variant) * 2.3)
+	b.mat = Mat.ROCK
+	b.blob(center, rad, host_basis, 2, amp, freq, nseed, slate, 0.45, flat_y, col_fn)
 	# A smaller companion rock.
 	var side := Vector3(rng.randf_range(0.55, 0.7), 0.0, rng.randf_range(-0.4, 0.4))
 	var r2 := rad * rng.randf_range(0.38, 0.48)
 	b.blob(side + Vector3(0, r2.y * 0.45, 0), r2, Basis(Vector3.UP, rng.randf() * TAU), 1, 0.22, 1.6, float(variant) * 9.1 + 3.0, slate * 1.05, 0.5, -0.5)
-	# Coal lumps along the seam (embedded) and a few at the base (loose).
-	b.mat = Mat.COAL
-	var lumps: Array = []
-	var tries := 0
-	while lumps.size() < 11 and tries < 300:
-		tries += 1
-		var d := Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.2, 1), rng.randf_range(-1, 1)).normalized()
-		d = (d - seam_n * (d.dot(seam_n) - seam_off / maxf(rad.y, 0.1))).normalized()
-		if d.y < -0.05:
-			continue
-		var p := center + Vector3(d.x * rad.x, d.y * rad.y, d.z * rad.z) * 0.93
-		var ok := true
-		for q in lumps:
-			if (q[0] as Vector3).distance_to(p) < 0.15:
-				ok = false
-				break
-		if ok:
-			lumps.append([p, d, 0.4 + 0.55 * rng.randf()])
+	# Loose lumps at the foot of the rock are taken first.
 	var nl := rng.randi_range(2, 3)
 	for i in nl:
 		var a := rng.randf() * TAU
-		var p := Vector3(cos(a) * rad.x * 1.08, 0.05, sin(a) * rad.z * 1.08)
-		lumps.append([p, Vector3.UP, 0.75 + 0.2 * rng.randf()])
+		var p := Vector3(cos(a) * rad.x * 1.1, 0.04, sin(a) * rad.z * 1.1)
+		lumps.append([p, Vector3.UP, 0.8 + 0.15 * rng.randf()])
+	b.mat = Mat.COAL
 	for i in lumps.size():
 		var lp: Vector3 = lumps[i][0]
 		var ld: Vector3 = lumps[i][1]
 		var order: float = lumps[i][2]
 		b.part(lp, clampf(order, 0.02, 0.98))
-		var s := rng.randf_range(0.085, 0.135)
+		var s := rng.randf_range(0.085, 0.13)
 		var bs := basis_y(ld) * Basis(Vector3.UP, rng.randf() * TAU)
 		var shade := rng.randf_range(0.9, 1.15)
-		b.facet(lp + ld * s * 0.25, Vector3(s * 1.15, s * 0.85, s), bs, 0.3, Color(0.075 * shade, 0.075 * shade, 0.085 * shade))
+		b.facet(lp + ld * s * 0.2, Vector3(s * 1.15, s * 0.85, s), bs, 0.3, Color(0.075 * shade, 0.075 * shade, 0.085 * shade))
 		if i < 2:
 			b.glints.append(lp + ld * s)
 	b.radius = rad.x * 1.05
 	b.height = center.y + rad.y
+
+
+## The point on a `blob()` surface in direction `d` (same displacement).
+static func blob_point(d: Vector3, radii: Vector3, amp: float, freq: float, nseed: float, flat_y: float) -> Vector3:
+	var nz := noise()
+	var off := Vector3(nseed * 17.3, nseed * 5.1, nseed * 11.7)
+	var q := d * freq + off
+	var disp := 1.0 + amp * nz.get_noise_3d(q.x, q.y, q.z)
+	var p := Vector3(d.x * radii.x, d.y * radii.y, d.z * radii.z) * disp
+	if p.y < flat_y * radii.y:
+		p.y = lerpf(p.y, flat_y * radii.y, 0.85)
+	return p
 
 
 ## Round shrub of leaves dotted with clusters of red berries.
@@ -847,16 +865,7 @@ static func _mushrooms(b: Builder, variant: int) -> void:
 	var bed_r := rng.randf_range(0.3, 0.38)
 	b.part(Vector3.ZERO, -1.0)
 	b.mat = Mat.LITTER
-	b.bed(bed_r, 0.035, 12, _hex("#46502a"), _hex("#5a4f36"), 0.25, float(variant) * 1.7)
-	b.mat = Mat.LEAF
-	var litter := [_hex("#7a4e2c"), _hex("#8a6034"), _hex("#6b4529"), _hex("#76603a")]
-	for i in rng.randi_range(2, 4):
-		var a := rng.randf() * TAU
-		var r := rng.randf_range(0.12, 0.95) * bed_r
-		var p := Vector3(cos(a) * r, 0.018, sin(a) * r)
-		var along := Vector3(cos(a + rng.randf_range(-1.5, 1.5)), rng.randf_range(-0.05, 0.08), sin(a + rng.randf_range(-1.5, 1.5))).normalized()
-		var col: Color = litter[rng.randi() % litter.size()]
-		b.leaf(p, along, Vector3.UP, rng.randf_range(0.09, 0.12), rng.randf_range(0.07, 0.09), col, Vector3.UP, 0.85, 0.03)
+	b.bed(bed_r, 0.03, 16, _hex("#46502a"), _hex("#5a4f36"), 0.25, float(variant) * 1.7)
 	var count := 3 + (variant % 3)
 	var brown := variant % 3 != 2
 	var spots_on := brown
@@ -1035,7 +1044,7 @@ static func _bones(b: Builder, variant: int) -> void:
 ## Torn canvas scraps / an old tarp.
 static func _cloth(b: Builder, variant: int) -> void:
 	var rng := b.rng
-	var palette := [_hex("#9a4a36"), _hex("#a0805e"), _hex("#c9bc98"), _hex("#6a6c45"), _hex("#8a4632"), _hex("#58697a")]
+	var palette := [_hex("#a4442e"), _hex("#b08a3e"), _hex("#d3c6a2"), _hex("#6a6c45"), _hex("#4f6a8a"), _hex("#93402e")]
 	var col: Color = palette[(variant * 2 + 1) % palette.size()] if variant % 3 != 2 else palette[2]
 	var col2: Color = palette[(variant + 4) % palette.size()]
 	var nz := GatherableMeshes.noise()
@@ -1055,8 +1064,8 @@ static func _cloth(b: Builder, variant: int) -> void:
 		var pos_fn := func(u: float, vv: float) -> Vector3:
 			var x := (u - 0.5) * w
 			var z := (vv - 0.5) * d
-			var q := Vector2((x - 0.05) / 0.34, z / 0.3)
-			var dome := maxf(0.0, 1.0 - q.length_squared()) * 0.31
+			var q := Vector2((x - 0.05) / 0.42, z / 0.38)
+			var dome := pow(maxf(0.0, 1.0 - q.length_squared()), 0.6) * 0.37
 			var fold := 0.025 + 0.03 * sin(u * 9.0 + seed_f) * sin(vv * 6.0 + seed_f * 0.5) + 0.02 * nz.get_noise_2d(u * 4.0 + seed_f, vv * 4.0)
 			var edge := minf(minf(u, 1.0 - u), minf(vv, 1.0 - vv))
 			var y := maxf(fold * smoothstep(0.0, 0.18, edge), dome + 0.012 * nz.get_noise_2d(u * 7.0, vv * 7.0 + seed_f))
@@ -1110,8 +1119,8 @@ static func _cloth_col_fn(col: Color, col2: Color, nz: FastNoiseLite, seed_f: fl
 	return func(u: float, vv: float, _p: Vector3) -> Color:
 		var edge := minf(minf(u, 1.0 - u), minf(vv, 1.0 - vv))
 		var stain := 0.5 + 0.5 * nz.get_noise_2d(u * 3.0 + seed_f, vv * 3.0 - seed_f)
-		var cc := col.lerp(col2, 0.12 * stain)
-		cc = cc.darkened(0.15 * (1.0 - smoothstep(0.0, 0.12, edge)) + 0.1 * stain)
+		var cc := col.lerp(col2, 0.1 * stain)
+		cc = cc.darkened(0.12 * (1.0 - smoothstep(0.0, 0.12, edge)) + 0.05 * stain)
 		return Color(cc.r, cc.g, cc.b, lerpf(0.75, 1.0, smoothstep(0.0, 0.2, edge)))
 
 

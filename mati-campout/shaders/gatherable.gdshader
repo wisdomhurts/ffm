@@ -232,9 +232,10 @@ void fragment() {
 		// Fade the weave with distance so it never shimmers.
 		float wfade = 1.0 - smoothstep(1.5, 4.0, length(VERTEX));
 		base *= 1.0 - 0.07 * weave * wfade;
-		// Faded stripes on half of the scraps.
-		float stripe = smoothstep(0.42, 0.47, abs(fract(UV.x * 2.6 + rnd * 3.0) - 0.5)) * step(0.5, rnd);
-		base = mix(base, base * vec3(0.55, 0.6, 0.7), stripe * 0.6);
+		// Faded woven stripes (a pair of thin bands) on every scrap.
+		float sx = abs(fract(UV.x * 2.2 + rnd * 3.0) - 0.5);
+		float stripe = smoothstep(0.43, 0.46, sx) + smoothstep(0.03, 0.0, abs(sx - 0.34)) * 0.6;
+		base = mix(base, vec3(0.62, 0.58, 0.48), clamp(stripe, 0.0, 1.0) * 0.45);
 		float dirt = vg_noise3(p * 4.0 + rnd * 11.0);
 		base *= 0.85 + 0.2 * dirt;
 		rough = 0.92;

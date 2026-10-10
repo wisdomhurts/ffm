@@ -74,7 +74,7 @@ const SPARKLE_R := 26.0
 const SPARKLE_MAX_NODES := 28
 const MIN_SPACING := 2.6
 ## Shader fade distances (small kinds, big kinds) per quality.
-const FADE := {"high": [58.0, 115.0], "medium": [48.0, 95.0], "low": [38.0, 75.0]}
+const FADE := {"high": [50.0, 90.0], "medium": [42.0, 75.0], "low": [34.0, 60.0], "phone": [28.0, 50.0]}
 const STRUCTURE_LANDMARKS := ["lighthouse", "abandoned_camp", "lookout", "rosies_rest", "pips_dock", "brams_dig", "old_mine"]
 const SHADER_PATH := "res://shaders/gatherable.gdshader"
 const RING_SHADER_PATH := "res://shaders/gatherable_ring.gdshader"
@@ -849,7 +849,7 @@ func _update_sparkle() -> void:
 		var s := xf.basis.get_scale().x
 		for g in pc.glints:
 			pts.append(xf * g)
-			sizes.append(clampf(0.13 + _radius[id] * 0.12, 0.13, 0.24) * clampf(s, 0.8, 1.2))
+			sizes.append(clampf(0.11 + _radius[id] * 0.1, 0.11, 0.2) * clampf(s, 0.8, 1.2))
 			strengths.append(1.0)
 	_sparkle.set_points(pts, sizes, strengths)
 
@@ -1313,13 +1313,17 @@ func debug_release() -> void:
 		cancel_gather()
 
 
-## Screenshot helper: one node of every kind in a row east of `center`.
-## Returns the ids.
-func debug_gallery(center: Vector3, spacing: float = 1.9) -> PackedInt32Array:
+## Screenshot helper: one node of every kind in a row along +X centred on
+## `center` (or every variant of one `kind`). Returns the ids.
+func debug_gallery(center: Vector3, spacing: float = 1.9, kind: String = "") -> PackedInt32Array:
 	var ids := PackedInt32Array()
-	for k in KINDS.size():
-		var p := center + Vector3((float(k) - 3.5) * spacing, 0.0, 0.0)
-		ids.append(add_node(KINDS[k], p, k % GatherableMeshes.VARIANTS, 0.6))
+	var n := GatherableMeshes.VARIANTS if kind != "" else KINDS.size()
+	for i in n:
+		var p := center + Vector3((float(i) - float(n - 1) * 0.5) * spacing, 0.0, 0.0)
+		if kind != "":
+			ids.append(add_node(kind, p, i, 0.6))
+		else:
+			ids.append(add_node(KINDS[i], p, i % GatherableMeshes.VARIANTS, 0.6))
 	return ids
 
 
@@ -1335,8 +1339,27 @@ func debug_stats() -> Dictionary:
 		"nodes": node_count(), "available": avail, "kinds": counts_by_kind(), "chunks": _chunks.size(),
 		"chunk_meshes": meshes, "vertices": _vertex_total, "proxies": _proxies.size(),
 		"sparkles": _sparkle.point_count() if _sparkle else 0, "gathering": _g_idx,
-		"decor_avoided": _decor_count(),
+		"decor_avoided": _decor_count(), "meshes_in_range": _meshes_in_range(),
 	}
+
+
+## Chunk meshes whose visibility range covers the player (draw-call budget).
+func _meshes_in_range() -> int:
+	var pl := _player_node()
+	if pl == null:
+		return 0
+	var n := 0
+	for ci in _chunks:
+		for child in (_chunks[ci] as Node3D).get_children():
+			var mi := child as MeshInstance3D
+			if mi == null or mi.mesh == null:
+				continue
+			var box := mi.global_transform * mi.get_aabb()
+			var c := box.get_center()
+			var d := Vector2(c.x - pl.global_position.x, c.z - pl.global_position.z).length()
+			if d <= mi.visibility_range_end:
+				n += 1
+	return n
 
 
 func _decor_count() -> int:

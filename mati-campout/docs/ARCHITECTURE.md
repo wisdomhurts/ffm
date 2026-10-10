@@ -557,12 +557,14 @@ away, proxies, regrowth after real dawns).
   back in with a stagger).
 - **Rendering:** all nodes of a 64 m chunk are baked into two meshes (shadow
   casting: stones, coal, bushes, cloth, scrap; shadowless: mushrooms, twigs,
-  bones) → ~130 meshes in total, typically 4-10 visible draws. Six variants per
+  bones) → ~130 chunk meshes in the whole world. Six variants per
   kind (`GatherableMeshes.piece(kind, v)`, cached) + per-node yaw/scale/tilt
   and a per-node random. One RGBA8 state texture (texel per node: fill,
   shake, hidden, random) drives the shader, so gathering never rebuilds a
-  mesh. Nodes shrink away beyond 58/115 m (small/big, High; 48/95 Medium,
-  38/75 Low) measured from `player_position` (same in shadow passes). The
+  mesh. Nodes shrink away beyond 50/90 m (small/big, High; 42/75 Medium,
+  34/60 Low) measured from `player_position` (same in shadow passes); chunk
+  meshes are culled by visibility range (fade + 48 m chunk margin): ~15-20
+  chunk meshes are in range around the camp, about half of them in view. The
   shader reads `wetness` (darker, glossier), `wind_*` (leaves sway),
   `night_factor` (coal glitter). `Sparkle` twinkles 1-2 star glints on the
   ~28 nearest available nodes within 26 m (one MultiMesh, stronger at dusk).
@@ -582,12 +584,18 @@ away, proxies, regrowth after real dawns).
   `bone_amount`, `cloth_amount`, `scrap_metal_amount`), `gather_seconds`,
   `respawn_days`, `charges` (per kind), `counts` (per kind).
 - **Screenshot tour:** `"landmark": "@gather:<kind>"` anchors a shot on the
-  node of that kind nearest the camp (or `"gather_near": <landmark id>`),
-  `"gather_pose": 0..1` freezes it mid-gather, `"gallery": true` lines up
-  one node of every kind at `"gallery_at"`. Presets `gather_close`,
+  node of that kind nearest the camp (or `"gather_near": <landmark id>`; the
+  camera offset is turned to level, trunk-free ground), `"gather_pose": 0..1`
+  freezes it mid-gather, `"player_at_gather": <kind>` parks the player in
+  front of one (with `"hud": true` to see the prompt), `"gallery": true`
+  lines up one node of every kind (or every variant of `"gallery_kind"`) at
+  `"gallery_at"` (`"gallery_spacing"`). Presets `gather_close`,
   `gather_berries`, `ridge_coal`, `gather_mushrooms`, `gather_ruins`,
-  `gather_dusk`, `gather_gallery`, `gather_gallery_b`, `gather_gallery_dusk`
-  (render gallery presets last: the gallery nodes stay in the world).
+  `gather_dusk`, `gather_hud`, `gather_gallery`, `gather_gallery_b`,
+  `gather_variants_cloth`, `gather_variants_stone`, `gather_gallery_dusk`
+  (render gallery presets last: gallery nodes stay in the world).
+  `debug_stats()` also reports `meshes_in_range` (chunk meshes whose range
+  covers the player: the draw-call cost) and `decor_avoided`.
 
 
 ### Player, camera, character & items

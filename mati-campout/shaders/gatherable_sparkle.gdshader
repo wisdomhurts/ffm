@@ -9,7 +9,7 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, skip_vertex_tr
 global uniform float night_factor;
 
 uniform vec3 color : source_color = vec3(1.0, 0.9, 0.66);
-uniform float energy = 2.6;
+uniform float energy = 2.2;
 uniform float fade_near = 18.0;
 uniform float fade_far = 30.0;
 uniform float strength = 1.0;
@@ -25,9 +25,11 @@ void vertex() {
 	float t = TIME * speed + phase * 6.2832;
 	// Mostly dark, then a quick twinkle.
 	float pulse = pow(max(sin(t), 0.0), 14.0);
-	float idle = 0.09 * (0.5 + 0.5 * sin(t * 0.37 + 1.3));
 	// Dusk (night_factor 0.15..0.6) is the strongest, deep night a bit less.
-	float dusk = 1.0 + 0.8 * smoothstep(0.08, 0.45, night_factor) - 0.35 * smoothstep(0.75, 1.0, night_factor);
+	float duskk = smoothstep(0.08, 0.45, night_factor) - 0.4 * smoothstep(0.75, 1.0, night_factor);
+	float dusk = 1.0 + 1.1 * duskk;
+	// A faint steady shimmer between twinkles, clearer in the evening.
+	float idle = (0.05 + 0.1 * duskk) * (0.5 + 0.5 * sin(t * 0.37 + 1.3));
 	float fade = 1.0 - smoothstep(fade_near, fade_far, dist);
 	v_flash = (pulse + idle) * dusk * fade * INSTANCE_CUSTOM.w * strength;
 	v_rot = t * 0.15 + phase * 3.0;

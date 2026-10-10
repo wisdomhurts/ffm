@@ -91,10 +91,15 @@ const SHOTS := {
 	"ridge_coal": {"hour": 14.5, "fire": 0.9, "landmark": "@gather:coal_vein", "gather_near": "brams_dig", "cam": Vector3(2.6, 1.5, 2.2), "look": Vector3(0, 0.45, 0), "hide_player": true},
 	"gather_mushrooms": {"hour": 11.5, "fire": 0.9, "landmark": "@gather:mushrooms", "gather_near": "hollow", "cam": Vector3(1.0, 0.75, 0.9), "look": Vector3(0, 0.12, 0), "hide_player": true},
 	"gather_ruins": {"hour": 15.0, "fire": 0.9, "landmark": "@gather:cloth", "gather_near": "abandoned_camp", "cam": Vector3(2.6, 1.6, 2.4), "look": Vector3(0, 0.2, 0), "hide_player": true},
-	"gather_dusk": {"hour": 19.0, "fire": 0.9, "landmark": "@gather:twigs", "cam": Vector3(3.5, 1.7, 3.0), "look": Vector3(0, 0.2, 0), "hide_player": true},
+	"gather_dusk": {"hour": 18.6, "fire": 0.9, "landmark": "@gather:berry_bush", "cam": Vector3(4.2, 1.5, 3.6), "look": Vector3(0, 0.4, 0), "hide_player": true},
 	"gather_hud": {"hour": 10.5, "fire": 0.9, "hud": true, "player_at_gather": "stone_pile", "gather_pose": 0.45},
+	# Same view with and without gatherables: compare the SHOT stats draw counts.
+	"gather_perf": {"hour": 13.0, "fire": 0.9, "cam": Vector3(14, 2.2, -16), "look": Vector3(40, 1.0, -60)},
+	"gather_perf_off": {"hour": 13.0, "fire": 0.9, "cam": Vector3(14, 2.2, -16), "look": Vector3(40, 1.0, -60), "hide_gatherables": true},
 	"gather_gallery": {"hour": 10.0, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(-3.8, 1.35, 15.4), "look": Vector3(-3.8, 0.3, 12.5), "hide_player": true},
 	"gather_gallery_b": {"hour": 10.0, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(3.8, 1.35, 15.4), "look": Vector3(3.8, 0.2, 12.5), "hide_player": true},
+	"gather_variants_cloth": {"hour": 11.0, "fire": 0.9, "gallery": true, "gallery_kind": "cloth", "gallery_at": Vector3(0, 0, -11), "gallery_spacing": 1.5, "cam": Vector3(0, 2.0, -6.6), "look": Vector3(0, 0.1, -11), "hide_player": true},
+	"gather_variants_stone": {"hour": 11.0, "fire": 0.9, "gallery": true, "gallery_kind": "stone_pile", "gallery_at": Vector3(-12, 0, 0), "gallery_spacing": 2.0, "cam": Vector3(-12, 2.6, 5.4), "look": Vector3(-12, 0.2, 0), "hide_player": true},
 	"gather_gallery_dusk": {"hour": 18.9, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(0, 2.2, 18.8), "look": Vector3(0, 0.25, 12.5), "hide_player": true},
 }
 
@@ -424,6 +429,7 @@ func _park_player(pos: Vector3) -> void:
 # --- Gatherables options ------------------------------------------------------------
 
 var _gather_id := -1
+var _galleries: Dictionary = {}
 
 
 func _gatherables() -> Node:
@@ -479,10 +485,11 @@ func _gather_gallery(s: Dictionary) -> void:
 	var g := _gatherables()
 	if g == null or not g.has_method("debug_gallery"):
 		return
-	if bool(g.get_meta("shot_gallery", false)):
+	var at: Vector3 = s.get("gallery_at", Vector3(0, 0, 12))
+	if _galleries.has(at):
 		return
-	g.set_meta("shot_gallery", true)
-	g.call("debug_gallery", GameState.world_gen.ground(s.get("gallery_at", Vector3(0, 0, 12)) as Vector3))
+	_galleries[at] = true
+	g.call("debug_gallery", GameState.world_gen.ground(at), float(s.get("gallery_spacing", 1.9)), str(s.get("gallery_kind", "")))
 
 
 ## "gather_pose": 0..1 shows the anchored node mid-gather (ring + parts popping).
@@ -492,6 +499,8 @@ func _apply_gather_pose(s: Dictionary) -> void:
 	var g := _gatherables()
 	if g == null:
 		return
+	if g is Node3D:
+		(g as Node3D).visible = not bool(s.get("hide_gatherables", false))
 	if s.has("player_at_gather") and GameState.player:
 		_gather_id = int(g.call("nearest", Vector3.ZERO, str(s["player_at_gather"])))
 		if _gather_id >= 0:
@@ -509,3 +518,5 @@ func _release_gather() -> void:
 	var g := _gatherables()
 	if g and g.has_method("debug_release"):
 		g.call("debug_release")
+	if g is Node3D:
+		(g as Node3D).visible = true
