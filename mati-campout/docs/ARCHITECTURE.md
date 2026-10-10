@@ -259,6 +259,36 @@ fog catches the fire and moon.
 | Glow | on (light) | on | on |
 | MSAA / FXAA | FXAA | FXAA + TAA off | MSAA 2x + FXAA |
 
+## Platforms: desktop, browser and phones
+
+The same game ships as Windows/macOS desktop builds (Forward+) and as a
+browser build at campout.quest/play that must also work on **phones and
+tablets** (iOS Safari, Android Chrome) in landscape.
+
+- **Renderer:** browsers use Godot's Compatibility renderer
+  (`rendering/renderer/rendering_method.web = "gl_compatibility"`). Every
+  system must degrade gracefully there (no volumetric fog, SSAO/SSIL/SDFGI;
+  check `RenderingServer.get_current_rendering_method()`).
+- **Touch detection:** `Platform.is_touch()` = touchscreen available or the
+  `mobile` / `web_android` / `web_ios` feature tags. Never capture the mouse
+  on touch devices.
+- **Touch controls** (`ui/touch_controls.gd`, only shown on touch devices):
+  left thumb virtual joystick drives the `move_*` actions; dragging on the
+  right half orbits the camera (camera rig exposes `add_look_input(delta)`);
+  big buttons for Use, Jump, Sprint (toggle) and a context Interact button
+  that shows the current prompt text; Map, Build, Pause and the sack toggle
+  as small corner buttons; hotbar slots are tappable. Minimum touch target
+  ~64 px at 1080p-equivalent scale. Respect `DisplayServer.get_display_safe_area()`.
+- **Phone quality preset `"phone"`** (auto-selected on mobile browsers):
+  render scale ~0.7, sun shadows 1024 and no fire shadows, no volumetric
+  fog, grass mostly off, tree draw distance ~110 m, reduced particles,
+  simple water. Desktop presets stay Low/Medium/High.
+- **Orientation:** landscape. In portrait show a friendly "Turn your phone
+  sideways" overlay and pause.
+- **Downloads:** the web build uses the no-threads template so it runs
+  without cross-origin isolation; keep the .pck lean (OGG audio, no unused
+  assets).
+
 ## Testing
 
 - `tools/check.sh` — imports the project, parse-checks every script (with
