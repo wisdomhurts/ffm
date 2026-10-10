@@ -33,7 +33,32 @@ const SHOTS := {
 	"rain_day": {"hour": 14.0, "fire": 0.9, "rain": true, "cam": Vector3(9, 4.2, 11), "look": Vector3(0, 1.0, 0)},
 	"hud_day": {"hour": 10.5, "fire": 0.7, "hud": true},
 	"hud_night": {"hour": 22.0, "fire": 0.25, "hud": true},
+	# --- UI previews (generic options: give, sack, select, survival, player_pos,
+	#     modal, screen, hud_demo + demo_lead frames before the capture) ---------
+	"hud_sack": {"hour": 13.0, "fire": 0.8, "hud": true, "sack": "mega_sack", "select": 2,
+		"give": {"wood": 14, "stone": 6, "berries": 5, "kindling": 3, "flashlight": 1, "cooked_meat": 2, "coal": 4, "cloth": 2, "bandage": 1},
+		"hud_demo": ["sack", "toasts"], "demo_lead": 5},
+	"hud_dusk": {"hour": 18.6, "fire": 0.5, "hud": true, "player_pos": Vector3(46, 0, 30), "hud_demo": ["dusk"], "demo_lead": 5},
+	"hud_night_card": {"hour": 20.3, "fire": 0.9, "hud": true, "hud_demo": ["night"], "demo_lead": 6},
+	"hud_fire_out": {"hour": 23.0, "fire": -1.0, "hud": true, "survival": {"warmth": 9.0, "health": 22.0}, "hud_demo": ["fire_out"], "demo_lead": 4},
+	"hud_survived": {"hour": 5.4, "fire": 0.6, "hud": true, "hud_demo": ["survived"], "demo_lead": 7},
+	"ui_crafting": {"hour": 11.0, "fire": 0.8, "hud": true, "give": {"wood": 9, "cloth": 3, "coal": 2, "stone": 4, "scrap_metal": 4}, "modal": "crafting"},
+	"ui_storage": {"hour": 11.0, "fire": 0.8, "hud": true, "give": {"wood": 9, "berries": 4, "stone": 3}, "modal": "storage"},
+	"ui_pause": {"hour": 21.0, "fire": 0.8, "hud": true, "modal": "pause"},
+	"ui_settings": {"hour": 21.0, "fire": 0.8, "hud": true, "modal": "settings"},
+	"ui_title": {"hour": 21.0, "fire": 0.8, "screen": "title"},
+	"ui_loading": {"hour": 21.0, "fire": 0.8, "screen": "loading"},
+	"ui_game_over": {"hour": 1.0, "fire": -1.0, "screen": "game_over"},
+	"ui_leaderboard": {"hour": 21.0, "fire": 0.8, "screen": "leaderboard"},
+	"ui_howto": {"hour": 21.0, "fire": 0.8, "hud": true, "modal": "pause", "hud_demo": ["howto"], "demo_lead": 8},
+	"hud_prompt": {"hour": 21.5, "fire": 0.6, "hud": true, "player_pos": Vector3(1.6, 0, 1.0), "give": {"wood": 3}},
+	"hud_freezing": {"hour": 0.5, "fire": -1.0, "hud": true, "hud_demo": ["freeze", "hurt"], "demo_lead": 8},
+	"hud_contrast": {"hour": 22.0, "fire": 0.25, "hud": true, "settings": {"high_contrast": true, "colorblind_mode": "deuteranopia", "ui_scale": 1.15},
+		"hud_demo": ["toasts", "dev"], "demo_lead": 5},
 }
+
+var _screen_node: Node = null
+var _saved_settings: Dictionary = {}
 
 
 func _ready() -> void:
@@ -104,13 +129,19 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 			pcam.current = true
 		if GameState.player and GameState.player.has_method("teleport"):
 			GameState.player.call("teleport", GameState.world_gen.ground(Vector3(4, 0, 6), 0.1))
+	_apply_ui_options(s, hud)
 	# Let fog, TAA, particles and auto-exposure settle.
+	var lead := int(s.get("demo_lead", 6))
 	for _i in 45:
+		if _i == 45 - lead and s.has("hud_demo") and hud and hud.has_method("demo"):
+			for d in s["hud_demo"]:
+				hud.call("demo", str(d))
 		await get_tree().process_frame
 	var img := get_viewport().get_texture().get_image()
 	var path := "res://tests/output/shots/%s.png" % shot_name
 	img.save_png(path)
 	print("SHOT saved ", ProjectSettings.globalize_path(path))
+	_cleanup_ui_options(hud)
 	if hud is CanvasLayer:
 		(hud as CanvasLayer).visible = true
 
@@ -134,3 +165,74 @@ func _set_hour(h: float) -> void:
 	dc.phase = phase
 	dc.phase_time = (h - start) / span * dc.durations[phase]
 	GameState.time_scale = 0.0
+
+
+## Generic UI preview options (see the "UI previews" presets above).
+func _apply_ui_options(s: Dictionary, _hud: Node) -> void:
+	_saved_settings.clear()
+	if s.has("settings"):
+		var st: Dictionary = s["settings"]
+		for k in st:
+			_saved_settings[k] = Settings.get_value(str(k))
+			Settings.set_value(str(k), st[k], false)
+	if s.has("sack"):
+		GameState.upgrade_sack(str(s["sack"]))
+	if s.has("give"):
+		var g: Dictionary = s["give"]
+		for id in g:
+			GameState.give(str(id), int(g[id]))
+	if s.has("select"):
+		GameState.select_slot(int(s["select"]))
+	if s.has("survival"):
+		var sv: Dictionary = s["survival"]
+		for k in sv:
+			GameState.survival.set(str(k), float(sv[k]))
+	if s.has("player_pos") and GameState.player and GameState.player.has_method("teleport"):
+		var pp: Vector3 = s["player_pos"]
+		GameState.player.call("teleport", GameState.world_gen.ground(pp, 0.1))
+		if GameState.player.has_method("look_at_point"):
+			GameState.player.call("look_at_point", GameState.world_gen.ground(pp * 2.0, 1.0))
+	if s.has("modal"):
+		Events.request_modal.emit(str(s["modal"]), {})
+	if s.has("screen"):
+		_screen_node = _make_screen(str(s["screen"]))
+		if _screen_node:
+			main.add_child(_screen_node)
+			if _screen_node.has_method("set_progress"):
+				_screen_node.call("set_progress", 0.62, "Growing the forest...")
+
+
+func _make_screen(kind: String) -> Node:
+	match kind:
+		"title":
+			return load("res://ui/title_screen.gd").new()
+		"loading":
+			return load("res://ui/loading_screen.gd").new()
+		"game_over":
+			var over: Node = load("res://ui/game_over.gd").new()
+			over.set("summary", {"nights": 4, "day": 5, "cause": "night_stalker", "rank": 1, "best": 4,
+				"stats": {"nights": 4, "trees_chopped": 23, "enemies_defeated": 7, "distance": 1840.0,
+					"chests_opened": 3, "highest_tent": 2, "boss_encounters": 1}})
+			return over
+		"leaderboard", "settings":
+			var layer := CanvasLayer.new()
+			layer.layer = 60
+			var root: Control = load("res://ui/scaled_root.gd").new(true)
+			layer.add_child(root)
+			var path := "res://ui/leaderboard_screen.gd" if kind == "leaderboard" else "res://ui/settings_menu.gd"
+			root.add_child(load(path).new())
+			return layer
+	print("SHOT unknown screen: ", kind)
+	return null
+
+
+func _cleanup_ui_options(hud: Node) -> void:
+	for k in _saved_settings:
+		Settings.set_value(str(k), _saved_settings[k], false)
+	_saved_settings.clear()
+	if hud and hud.has_method("close_modal"):
+		hud.call("close_modal")
+	get_tree().paused = false
+	if _screen_node and is_instance_valid(_screen_node):
+		_screen_node.queue_free()
+	_screen_node = null
