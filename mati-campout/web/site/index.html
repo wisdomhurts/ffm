@@ -214,7 +214,7 @@
   <section class="controls" id="controls">
     <div class="wrap">
       <h2 class="section-title">Controls</h2>
-      <p class="section-sub">Keyboard and mouse, or a controller.</p>
+      <p class="section-sub">Keyboard and mouse, a controller, or touch on phones and tablets.</p>
       <div class="keys">
         <div class="key-row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</div>
         <div class="key-row"><kbd>Shift</kbd> Sprint</div>
@@ -224,6 +224,8 @@
         <div class="key-row"><kbd>M</kbd> Map</div>
         <div class="key-row"><kbd>B</kbd> Build</div>
         <div class="key-row"><kbd>Esc</kbd> Pause</div>
+        <div class="key-row"><kbd>Left thumb</kbd> Walk (touch)</div>
+        <div class="key-row"><kbd>Right side</kbd> Drag to look (touch)</div>
       </div>
       <div class="promise">🌲 <b>Made for families.</b> No ads, no loot boxes, no real-money purchases. Spooky, but never gory.</div>
     </div>
@@ -382,7 +384,7 @@
     if (r.ok) {
       const b = document.getElementById('play-btn');
       b.removeAttribute('aria-disabled');
-      document.getElementById('status').innerHTML = '<b>Now playable</b> on computers, phones and tablets (turn your phone sideways). Grab a snack and keep that fire going!';
+      document.getElementById('status').innerHTML = '<b>Early preview, now playable</b> on computers, phones and tablets (turn your phone sideways). New things arrive often!';
     } else {
       document.getElementById('play-btn').addEventListener('click', e => e.preventDefault());
     }
