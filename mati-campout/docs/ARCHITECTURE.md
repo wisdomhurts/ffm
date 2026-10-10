@@ -270,3 +270,49 @@ fog catches the fire and moon.
   with `func test_<thing>() -> void:` methods using `assert_eq`, `assert_true`...
 - `tools/screenshot_tour.gd` renders named shots (needs a display; in CI use
   `xvfb-run` + Mesa lavapipe).
+
+## System notes (each specialist documents their system here)
+
+### Terrain & water
+
+_(pending)_
+
+
+### Vegetation & trees
+
+_(pending)_
+
+
+### Lighting, sky, weather & quality presets
+
+_(pending)_
+
+
+### Campsite & campfire
+
+_(pending)_
+
+
+### Gatherables
+
+_(pending)_
+
+
+### Player, camera, character & items
+
+_(pending)_
+
+
+### UI
+
+_(pending)_
+
+
+### Audio
+
+_(pending)_
+
+
+### Monsters & spawning
+
+_(pending)_
