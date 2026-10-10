@@ -340,7 +340,92 @@ _(pending)_
 
 ### Audio
 
-_(pending)_
+Owner files: `autoload/audio_director.gd` (autoload `Audio`), `tools/gen_audio.py`,
+`assets/audio/*` (+ `manifest.json`), `tests/unit/test_audio.gd`.
+
+**Assets.** Every sound is synthesised by `python3 tools/gen_audio.py`
+(numpy + ffmpeg/libvorbis, deterministic, ~4 min; `--only chop,music_day`
+rebuilds a few, `--list` lists them, `--spectrograms DIR` writes PNGs).
+One-shots are mono OGG, loudness-normalised in the generator (the mix is
+baked there; per-id tweaks live in `SOUNDS` in the director). Loops and music
+are rendered on a circular timeline, so they repeat seamlessly; the director
+sets `loop = true` in code. All main music layers share one grid (D major /
+B minor, 72 BPM, 24 bars = exactly 80 s; the boss loop is 144 BPM, 48 bars,
+also 80 s) and are started at a shared clock, so crossfades stay on the beat.
+
+**Buses** (created in code): `Master` (hard limiter) -> `Music`, `SFX`
+(subtle reverb on Medium/High), `Ambience`, `UI`. Volumes come from Settings
+`master/music/sfx/ambience_volume` (UI follows SFX) and update live on
+`Settings.changed`. SFX + Ambience get a low-pass "muffle" while the game is
+paused (`Events.game_paused`) and after death.
+
+**API** (stable): `play(id, world_pos = null, volume_db = 0, pitch_jitter = 0.08)`
+(Vector3 = positional, null = 2D), `play_ui(id)`, `set_music_mood(mood)`
+(`title`, `day`, `dusk`, `night`, `danger`, `fire_out`, `boss`, `gameover`;
+`""`/`"auto"` = automatic again), `set_danger(0..1)`, `set_near_fire(0..1)`,
+`start_loop(id, node, volume_db = 0)` / `stop_loop(id, node)` (node = a Node3D
+for positional loops, `null` for global ones). Extras: `stinger(id)`,
+`set_loop_volume(id, node, db)`, `duck_ambience(seconds)`, `has_sound(id)`,
+`sound_length(id)`, `caption(text)`, `debug_state()`. Unknown ids are ignored.
+Variants (`chop_1..3`, `footstep_grass_1..4`, ...) are picked at random and
+never the same twice in a row. Positional voices: a pool of 24
+`AudioStreamPlayer3D` (16 on Low) with per-id `unit_size`, `max_distance` and
+air absorption; sounds beyond `max_distance` of the camera are culled, low
+priority voices are stolen first, and the same id at the same spot within
+~35 ms is dropped (so two systems playing one event do not double up).
+
+**What the director does by itself (do not duplicate):**
+- *Ambience:* `amb_day` (birds) / `amb_night` (crickets, distant owls)
+  crossfade by `day_cycle.darkness()`; `wind` follows `WorldGen.biome_at()`
+  at the player (Rocky Ridge loudest, shore/meadow medium, forest/camp
+  quiet); `rain` plays while `GameState.environment.raining`; random
+  positional birds/woodpecker by day, owls, twig snaps (when danger is up)
+  and far-off wolf howls by night.
+- *Stream:* an emitter slides along `WorldGen.stream` to the point nearest
+  the camera. Do not `start_loop("stream")` (if you do, the follower turns off).
+- *Campfire crackle:* attached to `GameState.campfire` automatically, volume
+  follows `GameState.fire` (silent while OUT). The campfire may still call
+  `start_loop("campfire", self)`: same key, no duplicate.
+- *Music moods* from Events: `run_started` -> day; `phase_changed` -> day /
+  dusk / night (dawn: day music returns after the dawn chime); fire OUT after
+  dark -> `fire_out`; `boss_spawned` -> `boss` until `boss_defeated` /
+  `boss_retreated`; `player_died` -> gameover. Menus call
+  `set_music_mood("title")` / `("gameover")`. Day music plays one pass, then
+  rests 30-50 s. At night a warm layer (lullaby, guitar) plays near a strong
+  fire and a sparse, tense layer away from it (auto from the campfire's
+  light/heat at the player, or `set_near_fire`). The danger layer (pulsing low
+  strings + drums) follows `set_danger()` or, automatically, the nearest live
+  node in group `"monster"` (full at ~6 m, none beyond ~40 m).
+- *Stingers:* `night_sting` at NIGHT, `dawn_chime` at DAWN, `level_up` on
+  `tent_upgraded` / `fire_level_changed` / `boss_defeated`, `sting_fire_out`
+  on `fire_extinguished`, `sting_gameover` on the game-over screen (or 2.4 s
+  after death). Stingers duck the music briefly.
+- *Sudden silence:* when danger rises past ~0.45 at night the ambience drops
+  to near-silence for ~3.5 s (40 s cooldown).
+- *Captions* (only with Settings `sound_captions`): monster nearby, fire low,
+  fire out, and whenever `wolf_howl`/`wolf_growl`/`wolf_bark`, `boss_roar`/
+  `boss_sprint`, `stalker_hiss`/`stalker_attack`, `watcher_whisper`, `thunder`
+  or a twig snap is played ("far away" variants beyond 40 m).
+- *Auto-played feedback* (other systems should NOT play these too; a repeat
+  within 0.25 s is dropped anyway): `Events.coins_changed` with delta > 0 ->
+  `coin`; `item_crafted` -> `craft`; `ui_modal_opened` -> `ui_open`;
+  `ui_modal_closed` -> `ui_close`; `chest_opened` -> `chest_open` (at the
+  chest); `pet_tamed` -> `tame`; `trade_completed` -> `trade`;
+  `player_died` -> `death`.
+
+**Expected callers** of the other ids: player (`footstep_*`, `swing`, `chop`,
+`hit`, `hit_enemy`, `player_hurt`, `eat`, `gunshot`, `rifle_shot`,
+`click_empty`, `flashlight_on/off`, torch `fire_ignite`/`fire_out`,
+`splash`), pickups (`pickup`, `wood_pickup`, `stone_pickup`, `coin`),
+vegetation (`tree_fall`), campfire (`fire_whoosh` when fed, `fire_ignite` on
+relight, `fire_out`, `cook_sizzle` + `start_loop("cooking", rack)`),
+monsters (`stalker_*`, `watcher_whisper`, `wolf_*`, `boss_*`), wildlife
+(`bunny_squeak`), environment (`thunder`, 2D), UI (`ui_click`, `ui_hover`,
+`deny`, `upgrade`). Loops: `campfire`, `stream`, `cooking` (positional),
+`rain`, `wind` (global, already automatic).
+
+Web build: browsers use sample playback, where bus effects (limiter, reverb,
+muffle) may be skipped; everything else works the same.
 
 
 ### Monsters & spawning
