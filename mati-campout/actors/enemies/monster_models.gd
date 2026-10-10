@@ -716,16 +716,16 @@ static func _build_watcher(b: _Builder, H: Dictionary) -> float:
 		var front := absf(ang) / 2.0
 		var keys: Array = []
 		var pts := [
-			Vector3(dirv.x * 0.13, 2.74, dirv.z * 0.1 + 0.01),
-			Vector3(dirv.x * 0.17, 2.98, dirv.z * 0.16),
-			Vector3(dirv.x * 0.165, 3.2, dirv.z * 0.17),
-			Vector3(dirv.x * 0.13, 3.42, dirv.z * 0.12 - 0.02),
-			Vector3(dirv.x * 0.06, 3.56 - front * 0.08, dirv.z * 0.03 - 0.07 - front * 0.04),
+			Vector3(dirv.x * 0.16, 2.73, dirv.z * 0.12 + 0.01),
+			Vector3(dirv.x * 0.18, 2.97, dirv.z * 0.16),
+			Vector3(dirv.x * 0.165, 3.2, dirv.z * 0.165),
+			Vector3(dirv.x * 0.12, 3.38, dirv.z * 0.11 - 0.03),
+			Vector3(dirv.x * 0.04, 3.47 - front * 0.06, dirv.z * 0.02 - 0.09 - front * 0.03),
 		]
 		for i in pts.size():
 			var f := float(i) / float(pts.size() - 1)
 			var w := {"chest": 1.0} if i == 0 else ({"neck": 0.5, "head": 0.5} if i == 1 else {"head": 1.0})
-			keys.append(_k(pts[i], 0.085 * lerpf(1.0, 0.55, f), 0.012, w, maxf(f - 0.35, 0.0) * 1.5, lerpf(0.75, 1.0, f)))
+			keys.append(_k(pts[i], 0.12 * lerpf(1.0, 0.6, f), 0.012, w, maxf(f - 0.45, 0.0) * 1.6, lerpf(0.75, 1.0, f)))
 		b.loft(keys, tan, 4, 2, true, true, 0.3)
 	# A tattered shroud of shadow ribbons hanging from the shoulders.
 	var angs := [-2.05, -1.4, -0.72, 0.0, 0.72, 1.4, 2.05]
