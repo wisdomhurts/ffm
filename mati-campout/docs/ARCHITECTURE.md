@@ -280,7 +280,73 @@ _(pending)_
 
 ### Vegetation & trees
 
-_(pending)_
+Files: `world/vegetation.gd` (Vegetation: placement, chunks, chopping,
+regrowth, obstacles), `world/tree_meshes.gd` (TreeMeshes: every procedural
+plant/rock mesh + materials, built once and cached), `world/rocks.gd`
+(Rocks), `world/ground_cover.gd` (GroundCover), `fx/wood_chips.gd`,
+`fx/dust_puff.gd`, `shaders/foliage_tree.gdshader` (bark + needles + leaves
+in one shader), `shaders/bark.gdshader` (stumps/logs), `shaders/grass.gdshader`
+(grass, flowers, ferns, mushrooms, debris), `shaders/rock.gdshader`,
+`shaders/foliage_noise.gdshaderinc` (shared noise/bump helpers).
+
+- **Placement** (seeded from `GameState.seed`): 7-9 starter firs 20-32 m from
+  camp (first wood in seconds), the main forest on a jittered 5 m grid thinned
+  by `WorldGen.forest_density` (denser north/east; ~4500-5000 trees), 12-20
+  Elder Trees only inside the Elder Grove, then bushes (trail sides, forest
+  edges), fallen logs, old stumps and saplings. Nothing on trails (1 m trail
+  distance raster), in water, in the camp clearing or on landmark pads.
+  `vegetation.path_distance(x, z)` and `vegetation.canopy_at(x, z)` (0..1 tree
+  cover) are public for other placers.
+- **Rendering**: static 64 m chunks; per chunk and variant a near MultiMesh
+  (full mesh, no shadows), a shadow-only proxy (cheap mesh) and a far LOD
+  (cheap mesh) switched by visibility ranges per `Settings.quality()`:
+  trees near/far 85/280 m (high), 70/200 (medium), 55/140 (low); Elder Trees
+  stay visible as silhouettes across the map. Ground cover streams in 32 m
+  chunks around the active camera (built a few per frame, freed beyond
+  135 m), grass/flowers fade into the ground at 30-46 m, density by quality
+  35/65/100 % via `visible_instance_count` (no rebuild).
+  `INSTANCE_CUSTOM` = (hue shift, brightness, wind phase, dryness).
+- **Shaders** read the global uniforms `wind_strength`, `wind_direction`
+  (sway + rolling grass gusts), `player_position` (grass/flowers bend away),
+  `wetness` (darker, glossier bark/rock/needles) and `night_factor` (Elder Tree
+  amber sap glows brighter at night). Foliage within ~2.6 m of the camera is
+  dithered away so a camera under branches never sees a wall of needles.
+- **Collision**: per-chunk `StaticBody3D` on layer 4 ("trees") with a cylinder
+  per trunk (disabled while felled); fallen logs and big boulders collide on
+  layer 1.
+- **Chopping** (`hit_tree`): damage = `power` (min 1); HP from
+  `balance.trees.regular_hp / giant_hp`. Each hit: wood chips toward `from`,
+  `Audio.play("chop")`, `Events.tree_hit`, the tree sways (temporary
+  MeshInstance3D). Elder Tree without `can_fell_giant` -> `{ok:false,
+  reason:"needs_mega_axe"}`, a "clunk" (`Audio "hit"`) and a rate-limited
+  float text "Needs the Mega Axe!" (callers do not need to show their own).
+  Fell: on the felling blow `GameState.stat_add("trees_chopped")`,
+  `Events.tree_chopped` and a "Timber!" float text fire immediately and
+  `tree_info().alive` becomes false; the tree tips away from `from` (picking
+  a direction with the fewest trunks in the way) over 1.4 s (giants 2.1 s),
+  accelerating; drops (`DB.loot_table("regular_tree"/"giant_tree")`, seeded)
+  are spawned with `Pickup.spawn` along the landed trunk ~1.3 s after the
+  blow; impact plays `Audio "tree_fall"`, `Events.camera_shake(0.25)` (giant
+  0.45) and dust; the trunk then vanishes in a puff, leaving a stump.
+  `hit_tree` on a stump/sapling returns `{ok:false, reason:"no_tree"}`.
+- **Regrowth**: on each `Events.phase_changed(DAWN)` felled regular trees
+  become a sapling after `regrow_days - 1` dawns and a full, choppable tree
+  after `regrow_days` dawns, never within `trees.regrow_clearance` (6 m) of
+  the player (retried next dawn). Elder Trees do not regrow.
+- **Obstacles**: `obstacles_near(pos, r)` returns `Vector4(x, y, z, radius)`
+  for standing trunks, logs (3 circles each) and big boulders from an 8 m
+  spatial hash (~2-3 us per call). Other systems may register their own
+  round obstacles with `add_obstacle(pos, r) -> id` /
+  `set_obstacle_enabled(id, on)` and test spots with `is_clear(pos, r)`.
+- `debug_stats()` returns counts (trees, giants, multimeshes, instances...).
+- Screenshot tour: presets `chop_close` (chips + sawdust on a hit) and
+  `tree_fall` (mid-fall) use the generic preset keys `chop` (hits),
+  `chop_wait` (game seconds), `chop_from` (swing origin relative to the
+  tree) and `hide_player`; `"landmark": "@tree"` anchors a shot on the tree
+  nearest the camp. Every shot prints `SHOT stats` (draw calls, objects,
+  primitives for the visible and shadow passes).
+- Balance keys (`trees`): `regular_hp`, `giant_hp`, `regrow_days`,
+  `regrow_clearance`, `forest_density_mult`.
 
 
 ### Lighting, sky, weather & quality presets

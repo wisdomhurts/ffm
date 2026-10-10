@@ -10,6 +10,7 @@ extends Node
 var shot_list: PackedStringArray = []
 var main: Node
 var cam: Camera3D
+var _last_look := Vector3.ZERO
 
 ## name -> {hour, fire (0..1 or -1 = out), cam (Vector3), look (Vector3),
 ##          landmark (optional id the cam/look are relative to), hud (bool), rain}
@@ -31,6 +32,8 @@ const SHOTS := {
 	"abandoned_camp": {"hour": 16.0, "fire": 0.9, "landmark": "abandoned_camp", "cam": Vector3(14, 4, 12), "look": Vector3(0, 1, 0)},
 	"elder_grove": {"hour": 12.0, "fire": 0.9, "landmark": "elder_grove", "cam": Vector3(20, 3, 20), "look": Vector3(0, 8, 0)},
 	"rain_day": {"hour": 14.0, "fire": 0.9, "rain": true, "cam": Vector3(9, 4.2, 11), "look": Vector3(0, 1.0, 0)},
+	"chop_close": {"hour": 10.5, "fire": 0.9, "landmark": "@tree", "cam": Vector3(3.2, 1.7, 2.6), "look": Vector3(0, 1.4, 0), "chop": 2, "chop_wait": 0.15, "chop_from": Vector3(1.3, 0, -1.0), "hide_player": true},
+	"tree_fall": {"hour": 15.5, "fire": 0.9, "landmark": "@tree", "cam": Vector3(-12, 3.5, 11), "look": Vector3(0, 4.0, 0), "chop": 5, "chop_wait": 1.0, "chop_from": Vector3(-1.5, 0, -1.6), "hide_player": true},
 	"hud_day": {"hour": 10.5, "fire": 0.7, "hud": true},
 	"hud_night": {"hour": 22.0, "fire": 0.25, "hud": true},
 }
@@ -81,12 +84,18 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 		var origin := Vector3.ZERO
 		if s.has("landmark"):
 			origin = GameState.world_gen.landmark_pos(str(s["landmark"]))
+			if str(s["landmark"]) == "@tree" and GameState.vegetation:
+				# The standing tree nearest the camp (first wood).
+				var tid := int(GameState.vegetation.call("find_tree", Vector3.ZERO, 80.0))
+				if tid >= 0:
+					origin = (GameState.vegetation.call("tree_info", tid) as Dictionary).get("pos", Vector3.ZERO)
 		var cpos: Vector3 = origin + (s["cam"] as Vector3)
 		var ground_h := GameState.world_gen.height_at(cpos.x, cpos.z)
 		cpos.y = maxf(cpos.y + ground_h, ground_h + 1.0) if not s.has("landmark") else maxf(cpos.y + origin.y, ground_h + 1.0)
 		var look: Vector3 = origin + (s["look"] as Vector3)
 		if not s.has("landmark"):
 			look.y += GameState.world_gen.height_at(look.x, look.z)
+		_last_look = look
 		if cam == null:
 			cam = Camera3D.new()
 			cam.fov = 62.0
@@ -104,15 +113,64 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 			pcam.current = true
 		if GameState.player and GameState.player.has_method("teleport"):
 			GameState.player.call("teleport", GameState.world_gen.ground(Vector3(4, 0, 6), 0.1))
+	var player_3d := GameState.player as Node3D
+	if player_3d and s.get("hide_player", false):
+		player_3d.visible = false
 	# Let fog, TAA, particles and auto-exposure settle.
 	for _i in 45:
 		await get_tree().process_frame
+	if s.has("chop"):
+		await _chop_action(s)
 	var img := get_viewport().get_texture().get_image()
 	var path := "res://tests/output/shots/%s.png" % shot_name
 	img.save_png(path)
 	print("SHOT saved ", ProjectSettings.globalize_path(path))
+	_print_render_stats(shot_name)
+	if player_3d and is_instance_valid(player_3d):
+		player_3d.visible = true
 	if hud is CanvasLayer:
 		(hud as CanvasLayer).visible = true
+
+
+## Draw calls / objects / primitives of the last frame (visible + shadow passes).
+func _print_render_stats(shot_name: String) -> void:
+	var vp := get_viewport()
+	var vis := Viewport.RENDER_INFO_TYPE_VISIBLE
+	var sh := Viewport.RENDER_INFO_TYPE_SHADOW
+	print("SHOT stats %s: draws %d (+%d shadow), objects %d (+%d), primitives %d (+%d)" % [shot_name,
+		vp.get_render_info(vis, Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME),
+		vp.get_render_info(vis, Viewport.RENDER_INFO_OBJECTS_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_OBJECTS_IN_FRAME),
+		vp.get_render_info(vis, Viewport.RENDER_INFO_PRIMITIVES_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_PRIMITIVES_IN_FRAME)])
+
+
+## Preset key "chop": N hits the tree nearest the look point N times through
+## the Vegetation API (from the camera side), then waits "chop_wait" seconds
+## of game time (slowed down so the low-fps renderer can catch the moment).
+func _chop_action(s: Dictionary) -> void:
+	var veg: Node = GameState.vegetation
+	if veg == null or not veg.has_method("find_tree"):
+		return
+	var look := _last_look
+	look.y = GameState.world_gen.height_at(look.x, look.z)
+	var id := int(veg.call("find_tree", look, 12.0))
+	if id < 0:
+		return
+	# The axe swings from "chop_from" (relative to the tree), else the camera.
+	var from: Vector3 = cam.global_position if cam else look + Vector3(3, 0, 0)
+	if s.has("chop_from"):
+		from = look + (s["chop_from"] as Vector3)
+	Engine.time_scale = 0.06
+	var results: Array = []
+	for _i in int(s.get("chop", 1)):
+		results.append(veg.call("hit_tree", id, 1, false, from))
+	print("SHOT chop tree %d: %s" % [id, str(results)])
+	# A scene-tree timer that follows Engine.time_scale counts game time.
+	await get_tree().create_timer(float(s.get("chop_wait", 0.1)), true, false, false).timeout
+	# Freeze the moment and make sure it has been drawn before capturing.
+	Engine.time_scale = 0.0
+	for _i in 3:
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
 
 
 ## Jump the clock to a specific hour without counting extra nights.
