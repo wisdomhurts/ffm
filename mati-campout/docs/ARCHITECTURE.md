@@ -1361,8 +1361,9 @@ iron, gold, gems, lacquer, glint sweep), `shaders/chest_burst.gdshader`
 (sparkle particles), `shaders/chest_ground.gdshader` (contact shadow). Tests:
 `tests/unit/test_chests.gd` (models, placement rules for 3 seeds, loot,
 restock, markers, manager API, map helpers) and the headless drive
-`godot --headless --path . res://tests/chest_drive.tscn [-- --seed=N]` (59
-checks: placement, starter in view, glints, M without a map, walk up + E,
+`godot --headless --path . res://tests/chest_drive.tscn [-- --seed=N]` (61
+checks: placement, starter in view, glints, far chests not registered as
+interactables, M without a map, walk up + E,
 lid/light/loot fountain, coins + items reach the sack, empty hint, minimap,
 M opens/closes the map, markers, zoom/pan, beacon dark/relit, minimap click,
 discovery of a rare chest, restock after real dawns, second opening).
@@ -1382,11 +1383,20 @@ discovery of a rare chest, restock after real dawns, second opening).
   >= `spacing` apart, level ground (slope < 0.06), dry (also 0.9 m around),
   >= 6 m from the stream, >= `trail_clear` from trails
   (`vegetation.path_distance`), clear of trunks/boulders
-  (`vegetation.is_clear(p, 1.3)`), gatherables (`gatherables.is_clear`), camp
-  props (`camp.clear_zones()`) and the core of every landmark with a building
-  (`STRUCTURES`, 0.85 x radius + 1.5 m). Chests register a round obstacle
-  (`vegetation.add_obstacle`) so creatures steer around them; each has a
-  `StaticBody3D` box on layer 1.
+  (`vegetation.is_clear(p, 1.3)`), bushes / stumps / saplings (Vegetation
+  decor, read like Gatherables does), gatherables (`gatherables.is_clear`),
+  camp props (`camp.clear_zones()`) and the core of every landmark with a
+  building (`STRUCTURES`, 0.85 x radius + 1.5 m). The starter is scored
+  from where the player starts (3, 4) looking at the fire: inside the
+  opening view (<= 30-40 degrees), ~14 degrees beside the view line (not
+  hidden behind the player), preferring the open right side (the crate and
+  storage box stand left of it), with no camp prop or trunk in the way.
+  Chests register a round obstacle (`vegetation.add_obstacle`) so creatures
+  steer around them; each has a `StaticBody3D` box on layer 1. Like
+  gatherables, chests join the `interactable` group only within 9 m of the
+  player (the manager toggles it 4x a second), so the player's interact
+  scan stays short; a `Chest` created without the manager is always
+  interactable.
 - **API for other systems** (`game.chests`): `add_chest(pos, tier, table_id,
   opts) -> Chest` (tier "common"|"rare"|"epic", table "" = the tier's
   `balance.chests.tables` entry; opts `restock_table`, `restock_days` (<= 0 =
@@ -1431,9 +1441,12 @@ discovery of a rare chest, restock after real dawns, second opening).
   Noticeability: a thin glint sweeps over the metal in world space (each
   chest flashes at its own moment), a faint warm rim and star twinkles from
   one shared `Sparkle` MultiMesh (closed chests within `glint_range`, own
-  material: fades 38-62 m), all stronger at dusk via `night_factor`.
+  material: fades 38-62 m; the starter's twinkles are 1.8x bigger until it is
+  first opened), all stronger at dusk via `night_factor`.
   Opened chests switch to a non-glinting material. Materials use plain
   uniforms only (no instance uniforms: nothing extra on Compatibility).
+  Under the Compatibility renderer the chest shader adds a little dusk fill
+  (no SSAO/SSIL bounce light there, so dark woods read black otherwise).
 - **Discovery & markers**: each chest is in group `map_marker` with
   `{kind: "chest", label, important: true, discovered, tier, opened}`; it is
   discovered when it is within `discover_radius` (30 m) and inside the
@@ -1457,7 +1470,9 @@ discovery of a rare chest, restock after real dawns, second opening).
   while `GameState.fire` is OUT all `important` markers fade and smear away,
   the map dims and a note reads "The beacon is dark... relight your campfire
   to see your markers." (geography, Home Camp and the arrow stay); they come
-  back when the fire is relit. Before the map is crafted the HUD shows "No
+  back when the fire is relit. On short screens (phones) the legend gets
+  compact so the map stays square and big. Before the map is crafted the
+  HUD shows "No
   map yet! Craft a Campfire Map at the crafting crate." instead (small hook in
   `HUD.open_modal`).
 - **Minimap** (`ui/minimap.gd`, added by the HUD when the file exists; hidden

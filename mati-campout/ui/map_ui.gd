@@ -43,21 +43,27 @@ var _stats: Label = null
 var _beacon_row: HBoxContainer = null
 var _beacon_label: Label = null
 var _beacon_icon: TextureRect = null
+var _last_lit: Variant = null
 
 
 func _ready() -> void:
 	close_actions = ["map"]
 	pauses_game = false
 	var avail := avail_size()
-	var side := clampf(minf(avail.y - 236.0, avail.x - 600.0), 360.0, 840.0)
-	build_frame("Campfire Map", Vector2(side + 500.0, side + 120.0), "ui_map", 0.62)
-	var row := UIKit.hbox(24)
+	# Phones (short screens): a compact legend so the map can stay big.
+	var compact := avail.y < 820.0
+	var legend_w := 370.0 if compact else 440.0
+	var side := clampf(minf(avail.y - (200.0 if compact else 236.0), avail.x - legend_w - 120.0), 340.0, 840.0)
+	build_frame("Campfire Map", Vector2(side + legend_w + 60.0, side + 110.0), "ui_map", 0.62)
+	var row := UIKit.hbox(24 if not compact else 18)
 	row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body.add_child(row)
 	view = MapView.new()
 	view.custom_minimum_size = Vector2(side, side)
+	# Keep the map square even when the legend column is taller.
+	view.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	row.add_child(view)
-	row.add_child(_build_legend())
+	row.add_child(_build_legend(compact, legend_w))
 
 
 func open(args: Dictionary) -> void:
@@ -113,15 +119,16 @@ func _on_tab_cycle(dir: int) -> void:
 
 # --- Legend ---------------------------------------------------------------------------
 
-func _build_legend() -> Control:
-	var col := UIKit.vbox(10)
-	col.custom_minimum_size = Vector2(440, 0)
+func _build_legend(compact: bool = false, width: float = 440.0) -> Control:
+	var fs := 19 if compact else 23
+	var col := UIKit.vbox(8 if compact else 10)
+	col.custom_minimum_size = Vector2(width, 0)
 	col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var card := PanelContainer.new()
 	card.theme_type_variation = "CardPanel"
-	var inner := UIKit.vbox(6)
+	var inner := UIKit.vbox(2 if compact else 6)
 	card.add_child(inner)
-	inner.add_child(UIKit.label("Legend", "HeaderLabel", 30))
+	inner.add_child(UIKit.label("Legend", "HeaderLabel", 24 if compact else 30))
 	var rows := [
 		["player", "", "You"],
 		["camp", "", "Home Camp"],
@@ -135,47 +142,51 @@ func _build_legend() -> Control:
 	if _has_kind("pet"):
 		rows.append(["pet", "", "Your pet"])
 	for r in rows:
-		var h := UIKit.hbox(12)
+		var h := UIKit.hbox(10 if compact else 12)
 		var ic := _LegendIcon.new()
 		ic.kind = str(r[0])
 		ic.tier = str(r[1])
-		ic.custom_minimum_size = Vector2(44, 40)
+		ic.custom_minimum_size = Vector2(40, 31) if compact else Vector2(44, 40)
+		ic.k = 0.8 if compact else 0.95
 		h.add_child(ic)
-		var l := UIKit.label(str(r[2]), "", 23)
+		var l := UIKit.label(str(r[2]), "", fs)
 		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		h.add_child(l)
 		inner.add_child(h)
 	col.add_child(card)
-	_stats = UIKit.label("", "", 23, ThemeFactory.GOLD)
+	_stats = UIKit.label("", "", fs, ThemeFactory.GOLD)
 	col.add_child(_stats)
 	_beacon_row = UIKit.hbox(10)
-	_beacon_icon = UIKit.icon_rect("ui_fire", 36)
+	_beacon_icon = UIKit.icon_rect("ui_fire", 30 if compact else 36)
 	_beacon_row.add_child(_beacon_icon)
-	_beacon_label = UIKit.wrap_label("", "", 380)
-	_beacon_label.add_theme_font_size_override("font_size", 21)
+	_beacon_label = UIKit.wrap_label("", "", width - 60.0)
+	_beacon_label.add_theme_font_size_override("font_size", 17 if compact else 21)
 	_beacon_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_beacon_row.add_child(_beacon_label)
 	col.add_child(_beacon_row)
 	col.add_child(UIKit.spacer(0, 0, true))
 	var btns := UIKit.hbox(10)
+	var bh := 54.0 if compact else 62.0
 	var me := UIKit.button("Find me", "", "ui_boot", 0)
-	me.custom_minimum_size = Vector2(0, 62)
+	me.custom_minimum_size = Vector2(0, bh)
 	me.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	me.pressed.connect(func() -> void: view.center_on_player())
 	btns.add_child(me)
 	var home := UIKit.button("Home", "", "ui_fire", 0)
-	home.custom_minimum_size = Vector2(0, 62)
+	home.custom_minimum_size = Vector2(0, bh)
 	home.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	home.pressed.connect(func() -> void: view.center_on_home())
 	btns.add_child(home)
 	for z in [["+", 1], ["-", -1]]:
-		var b := UIKit.button(str(z[0]), "", "", 62)
-		b.custom_minimum_size = Vector2(62, 62)
+		var b := UIKit.button(str(z[0]), "", "", bh)
+		b.custom_minimum_size = Vector2(bh, bh)
 		var step := int(z[1])
 		b.pressed.connect(func() -> void: view.zoom_step(step))
 		btns.add_child(b)
 	col.add_child(btns)
-	var hint := UIKit.wrap_label(_controls_hint(), "SmallLabel", 430)
+	var hint := UIKit.wrap_label(_controls_hint(), "SmallLabel", width - 10.0)
+	if compact:
+		hint.add_theme_font_size_override("font_size", 16)
 	col.add_child(hint)
 	return col
 
@@ -211,6 +222,9 @@ func _refresh_legend() -> void:
 					opened += 1
 	_stats.text = "Chests found: %d   Opened: %d" % [found, opened]
 	var lit := beacon_lit()
+	if lit == _last_lit:
+		return
+	_last_lit = lit
 	_beacon_label.text = "The beacon is lit: your markers glow on the map." if lit else BEACON_NOTE
 	_beacon_label.add_theme_color_override("font_color", ThemeFactory.text_dim() if lit else Color("ffb38a"))
 	_beacon_icon.modulate = Color.WHITE if lit else Color(0.45, 0.45, 0.5, 0.8)
@@ -819,10 +833,11 @@ class _LegendIcon:
 
 	var kind := ""
 	var tier := ""
+	var k := 0.95
 
 	func _draw() -> void:
 		var c := size * 0.5
 		if kind == "player":
-			MapUI.draw_player_arrow(self, c, Vector2(0.6, -0.8), 15.0, 1.0, false)
+			MapUI.draw_player_arrow(self, c, Vector2(0.6, -0.8), 15.0 * k / 0.95, 1.0, false)
 			return
-		MapUI.draw_badge(self, c, kind, tier, kind == "chest_open", 0.95)
+		MapUI.draw_badge(self, c, kind, tier, kind == "chest_open", k)

@@ -389,7 +389,7 @@ static func _common(body: MeshKit, lid: MeshKit, w: float, d: float, h: float, r
 
 static func _rare(body: MeshKit, lid: MeshKit, w: float, d: float, h: float, rise: float, rail: float, t: float,
 		glints: PackedVector3Array) -> void:
-	var tones := [Color("#5b3d27"), Color("#523622"), Color("#634329")]
+	var tones := [Color("#664530"), Color("#5c3e28"), Color("#6f4c31")]
 	for s: float in [1.0, -1.0]:
 		_board(body, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.024, s * (d * 0.5 - 0.075))), Vector3(w + 0.05, 0.048, 0.1), Color("#2e2118"), PAT_PLANK_X, 0.01)
 	_box_walls(body, w, d, h - 0.045, t, 0.045, 4, tones)

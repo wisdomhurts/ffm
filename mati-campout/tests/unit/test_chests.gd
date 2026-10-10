@@ -110,8 +110,9 @@ func test_starter_chest_near_camp_in_view() -> void:
 		var d := Vector2(p.x, p.z).length()
 		assert_true(d >= 16.0 - 0.01 and d <= 22.0 + 0.01, "seed %d starter 16-22 m from camp (%.1f)" % [seed_v, d])
 		var view := (-ChestManager.START_VIEW_FROM).normalized()
-		var ang := rad_to_deg(absf(Vector2(p.x, p.z).normalized().angle_to(view)))
-		assert_lt(ang, 50.0, "seed %d starter is in front of the opening view (%.0f deg)" % [seed_v, ang])
+		var seen := (Vector2(p.x, p.z) - ChestManager.START_VIEW_FROM).normalized()
+		var ang := rad_to_deg(absf(seen.angle_to(view)))
+		assert_lt(ang, 32.0, "seed %d starter is inside the opening view (%.0f deg)" % [seed_v, ang])
 		assert_gt(ang, 5.0, "seed %d starter is beside the view line, not hidden behind the player (%.0f deg)" % [seed_v, ang])
 		assert_eq(str(st["tier"]), "common", "starter is a common chest")
 		# It faces the camp.

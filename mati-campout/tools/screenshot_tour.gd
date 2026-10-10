@@ -700,14 +700,19 @@ func _apply_chest_options(s: Dictionary) -> void:
 		# Swing the camera around the chest (smallest turn first) until the view
 		# is free of trunks.
 		var veg: Node = GameState.vegetation
+		var space := get_viewport().world_3d.direct_space_state if get_viewport().world_3d else null
 		for ang in [0.0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.4, -2.4, PI]:
 			var test_off := off.rotated(Vector3.UP, float(ang))
 			var clear := true
-			if veg and veg.has_method("is_clear"):
-				for k in 4:
-					var q: Vector3 = o + b * (test_off * (0.35 + 0.22 * k))
-					if not bool(veg.call("is_clear", q, 0.55)):
-						clear = false
+			var cam_p: Vector3 = o + b * test_off
+			if veg and veg.has_method("is_clear") and not bool(veg.call("is_clear", cam_p, 0.8)):
+				clear = false
+			if clear and space:
+				# Trunks (layer 4) and world props (layer 1) between camera and chest.
+				var q := PhysicsRayQueryParameters3D.create(cam_p, o + Vector3(0, 0.45, 0), 1 | 8)
+				q.exclude = [(_shot_chest.get("collider") as CollisionObject3D).get_rid()] if _shot_chest.get("collider") is CollisionObject3D else []
+				if not space.intersect_ray(q).is_empty():
+					clear = false
 			if clear:
 				off = test_off
 				break

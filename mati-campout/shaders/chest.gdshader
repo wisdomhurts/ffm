@@ -177,6 +177,13 @@ void fragment() {
 	float duskk = smoothstep(0.08, 0.45, night_factor) - 0.35 * smoothstep(0.75, 1.0, night_factor);
 	float g = glint * (0.7 + 0.9 * duskk);
 	em += mix(glint_color, base * 4.0, 0.45) * band * shiny * facing * g * 1.1;
+	// A little fill so dark woods still read at dusk: the browser renderer
+	// has no SSAO / SSIL bounce light and its evenings come out darker.
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	em += base * (0.12 + 0.4 * max(duskk, 0.0));
+#else
+	em += base * 0.05 * max(duskk, 0.0);
+#endif
 	// A faint warm rim at dusk/night keeps the silhouette readable.
 	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 	em += glint_color * fres * glint * duskk * 0.05;

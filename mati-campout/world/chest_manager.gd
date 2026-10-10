@@ -30,8 +30,9 @@ const RARE_ANCHORS := ["abandoned_camp", "lookout", "old_mine", "ridge", "ridge"
 	"elder_grove", "hollow", "brams_dig", "lighthouse", "shore", "ridge"]
 ## Where the player stands at the start, looking at the fire (Player.setup).
 const START_VIEW_FROM := Vector2(3.0, 4.0)
-## The starter chest sits this many degrees beside the opening view line.
-const STARTER_VIEW_OFFSET := 22.0
+## The starter chest sits about this many degrees beside the opening view
+## line (seen from where the player starts).
+const STARTER_VIEW_OFFSET := 14.0
 const GLINT_SIZE := {"common": 0.24, "rare": 0.28, "epic": 0.3}
 const SPARKLE_CAP := 72
 ## Chests join the "interactable" group only within this distance.
@@ -293,9 +294,12 @@ func _process(delta: float) -> void:
 			else:
 				Events.notify.emit("A treasure chest! Walk up to it and press %s to open it." % Controls.prompt("interact"), "info")
 		if not ch.opened and d < glint_range and pts.size() < SPARKLE_CAP - 4:
+			# The starter chest twinkles bigger until it is first opened, so it
+			# catches the eye from the camp.
+			var big := 1.8 if ch.is_starter and ch.open_count == 0 else 1.0
 			for gp in ch.glint_points():
 				pts.append(gp)
-				sizes.append(float(GLINT_SIZE.get(ch.tier, 0.25)))
+				sizes.append(float(GLINT_SIZE.get(ch.tier, 0.25)) * big)
 				strengths.append(1.0)
 	if sparkle:
 		sparkle.set_points(pts, sizes, strengths)
@@ -558,30 +562,62 @@ class _Planner:
 		var d0 := float(dr[0])
 		var d1 := float(dr[1])
 		var view := (-ChestManager.START_VIEW_FROM).normalized()
+		# The camp's crate and storage box stand left of the view line: prefer
+		# the open side to the right.
+		var right := Vector2(-view.y, view.x)
 		var best := Vector2.INF
 		var best_score := INF
-		for i in 96:
-			var a := TAU * float(i) / 96.0 + rng.randf_range(-0.02, 0.02)
+		var eye := ChestManager.START_VIEW_FROM
+		for i in 180:
+			var a := TAU * float(i) / 180.0 + rng.randf_range(-0.01, 0.01)
 			var dir := Vector2(cos(a), sin(a))
-			for k in 4:
-				var r := lerpf(d0 + 0.5, d1 - 0.5, float(k) / 3.0)
+			for k in 6:
+				var r := lerpf(d0 + 0.3, d1 - 0.3, float(k) / 5.0)
 				var x := dir.x * r
 				var z := dir.y * r
+				# Seen from where the player starts: inside the opening view,
+				# beside the view line (not hidden behind the player or the fire).
+				var seen := (Vector2(x, z) - eye).normalized()
+				var ang := absf(view.angle_to(seen))
+				if ang > deg_to_rad(40.0):
+					continue
 				if not ok(x, z, d0 - 0.01, 0.0):
 					continue
-				# Beside the view line (not hidden behind the player or the fire).
-				var ang := absf(absf(dir.angle_to(view)) - deg_to_rad(STARTER_VIEW_OFFSET))
-				var score := ang * 2.0 + absf(r - 18.5) * 0.04
+				var score := absf(ang - deg_to_rad(STARTER_VIEW_OFFSET)) * 2.0 + (r - d0) * 0.06
+				if ang > deg_to_rad(30.0):
+					score += 1.5
+				if seen.dot(right) < 0.0:
+					score += 0.3
 				score += blocked(Vector2.ZERO, Vector2(x, z)) * 1.2
 				score += blocked(ChestManager.START_VIEW_FROM * 1.6, Vector2(x, z)) * 0.8
+				score += props_between(ChestManager.START_VIEW_FROM, Vector2(x, z)) * 1.5
 				if score < best_score:
 					best_score = score
 					best = Vector2(x, z)
 		if best == Vector2.INF:
-			# Nothing fits the rules (should not happen): relax trees/gatherables.
+			# Nothing in view fits the rules: anywhere on the ring that does.
+			for i in 180:
+				var a := TAU * float(i) / 180.0
+				var x := cos(a) * (d0 + d1) * 0.5
+				var z := sin(a) * (d0 + d1) * 0.5
+				if ok(x, z, d0 - 0.01, 0.0):
+					best = Vector2(x, z)
+					break
+		if best == Vector2.INF:
 			var a := rng.randf() * TAU
 			best = Vector2(cos(a), sin(a)) * (d0 + d1) * 0.5
 		add(best.x, best.y, "common", "starter", true)
+
+	## How many camp props (small `avoid` circles) stand on the line a -> b.
+	func props_between(a: Vector2, b: Vector2) -> float:
+		var n := 0.0
+		for z in avoid:
+			var v: Vector4 = z
+			if v.w > 6.0:
+				continue
+			if WorldGen._dist_to_segment(Vector2(v.x, v.z), a, b) < v.w + 0.4:
+				n += 1.0
+		return n
 
 	## How many trunks stand on the line of sight a -> b (eye height).
 	func blocked(a: Vector2, b: Vector2) -> float:
