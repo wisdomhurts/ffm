@@ -74,10 +74,15 @@
     "stone_pile_amount": [2, 3],
     "coal_vein_amount": [2, 3],
     "berry_bush_amount": [2, 4],
-    "mushroom_amount": [1, 1],
+    "mushroom_amount": [2, 3],
     "twigs_amount": [2, 3],
+    "bone_amount": [1, 2],
+    "cloth_amount": [2, 3],
+    "scrap_metal_amount": [2, 3],
     "gather_seconds": 1.0,
-    "respawn_days": 2
+    "respawn_days": 2,
+    "charges": {"stone_pile": 2, "coal_vein": 2},
+    "counts": {"stone_pile": 72, "coal_vein": 36, "berry_bush": 48, "mushrooms": 60, "twigs": 90, "bones": 16, "cloth": 13, "scrap": 18}
   },
   "spawning": {
     "stalker_base": 2,

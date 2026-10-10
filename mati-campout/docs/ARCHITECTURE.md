@@ -502,7 +502,92 @@ _(pending)_
 
 ### Gatherables
 
-_(pending)_
+Files: `world/gatherables.gd` (`Gatherables`: placement, chunk meshes, state
+texture, interaction, regrowth), `world/gatherable_node.gd`
+(`GatherableNode`: the light interactable stand-in), `world/gatherable_meshes.gd`
+(`GatherableMeshes`: procedural pieces + chunk baking), `fx/sparkle.gd`
+(`Sparkle`: twinkling glints, reusable), `shaders/gatherable.gdshader`,
+`shaders/gatherable_sparkle.gdshader`, `shaders/gatherable_ring.gdshader`.
+Tests: `tests/unit/test_gatherables.gd` (pieces, placement rules for several
+seeds, gather/deplete/overflow/regrow, clear_area) and the headless drive
+`godot --headless --path . res://tests/gather_drive.tscn [-- --seed=N]` (real
+world + Player API: walk up, E, progress prompt, items, cancel by walking
+away, proxies, regrowth after real dawns).
+
+- **Kinds** (id → item): `stone_pile` → stone, `coal_vein` → coal,
+  `berry_bush` → berries, `mushrooms` → mushroom, `twigs` → kindling,
+  `bones` → bone, `cloth` → cloth, `scrap` → scrap_metal.
+- **Placement** (seeded from `GameState.seed`, ~350 nodes, ~140 ms): 3 twig
+  bundles and 2 stone heaps 21-25 m from camp, 2 berry bushes 23-34 m, a
+  mushroom patch 26-42 m (first reward in seconds); cloth/scrap/bones in a
+  ring around the Abandoned Campsite, cloth/scrap at the Ranger Lookout,
+  coal + scrap at the Old Mine, scrap + stones at Bram's Dig, mushrooms in
+  Fern Hollow; then coal on the Rocky Ridge (`biome_at == "ridge"`, weighted
+  by `rock_factor`), stones by `rock_factor`, berries on meadows and forest
+  edges (`canopy_at` 0.02-0.7), mushrooms in shade (`canopy_at` > 0.3, Elder
+  Grove), twigs in woods, stray bones/scrap/cloth far from camp. Never in the
+  camp clearing (< 20.5 m), water, the stream (< 4.2 m + node radius), on trails
+  (`vegetation.path_distance`), on trunks/logs/boulders (`vegetation.is_clear`),
+  in decor bushes/stumps/saplings (read from `vegetation.decor_footprints()`
+  → Array of `Vector3(x, z, r)` if Vegetation ever adds it, else defensively
+  from its decor list) or in the core (0.62 × radius) of a structure landmark. Big kinds (stones,
+  coal, bushes, scrap) register round obstacles via `vegetation.add_obstacle`
+  so later placers and creatures avoid them.
+- **Gathering:** only nodes within 8.5 m of the player get a `GatherableNode`
+  in group `interactable` (freed beyond 11 m; 0-3 exist at a time), so the
+  player's 10 Hz scan stays cheap. Prompt `"Gather Stones"`, `"Dig Coal"`,
+  `"Pick Berries"`... One E press starts a `gather_seconds` action: the
+  prompt shows `"Gathering stones... 45%"`, a progress ring floats above the
+  node (on top of everything), the node wiggles and its parts (stones,
+  berries, coal lumps, twigs...) pop off one by one, the character reaches
+  again halfway. Walking > ~1.3 m outside the interact radius cancels it
+  (parts pop back). On completion: `GameState.give(item, n)` (n from
+  `balance.gatherables.<kind>_amount`, seeded), overflow → `Pickup.spawn`
+  with a hop toward the player, `Events.float_text("+3 Stone")` (or "Sack
+  full!"), `Audio.play(Pickup.sound_for(item))` (`stone_pickup` /
+  `wood_pickup` / `pickup`; footstep sounds tick while gathering),
+  `Events.resource_gathered(item, n)`, `stat_add("resources_gathered", n)`,
+  a dust puff (wood chips for twigs) and up to 3 little item models fly into
+  the player. Stone heaps and coal seams take 2 gathers (`charges`), others 1.
+- **Depletion & regrowth:** an empty node keeps what is natural (gravel bed,
+  the bare rock, the leafy bush) and shows a greyed hint ("Berries grow back
+  in 2 days"); mushrooms/twigs/bones/cloth/scrap vanish. On each
+  `Events.phase_changed(DAWN)` picked nodes count down and refill after
+  `respawn_days` dawns since their last gather (nodes near the player pop
+  back in with a stagger).
+- **Rendering:** all nodes of a 64 m chunk are baked into two meshes (shadow
+  casting: stones, coal, bushes, cloth, scrap; shadowless: mushrooms, twigs,
+  bones) → ~130 meshes in total, typically 4-10 visible draws. Six variants per
+  kind (`GatherableMeshes.piece(kind, v)`, cached) + per-node yaw/scale/tilt
+  and a per-node random. One RGBA8 state texture (texel per node: fill,
+  shake, hidden, random) drives the shader, so gathering never rebuilds a
+  mesh. Nodes shrink away beyond 58/115 m (small/big, High; 48/95 Medium,
+  38/75 Low) measured from `player_position` (same in shadow passes). The
+  shader reads `wetness` (darker, glossier), `wind_*` (leaves sway),
+  `night_factor` (coal glitter). `Sparkle` twinkles 1-2 star glints on the
+  ~28 nearest available nodes within 26 m (one MultiMesh, stronger at dusk).
+- **Public API** (`game.gatherables`): `node_count()`, `count_kind(kind)`,
+  `counts_by_kind()`, `node_info(id)` → `{kind, item, pos, radius, height,
+  charges, max_charges, available, dawns_left, removed, variant}`,
+  `nodes_near(pos, r, kind := "")`, `nearest(pos, kind := "", max_r,
+  available_only := true)`, `is_clear(pos, r)`, `begin_gather(id, player)`,
+  `gather_now(id, player := null)` (instant; returns `{item, count, given,
+  dropped}`), `cancel_gather()`, `is_gathering(id := -1)`,
+  `gather_progress()`, `regrow_step()`, **`clear_area(pos, r)`** (permanently
+  removes nodes under a prop; Landmarks/Campsite/building should call it for
+  their footprints since they are built after Gatherables), `add_node(kind,
+  pos)`, `debug_stats()`.
+- **Balance** (`gatherables`): `<kind>_amount` ranges (`stone_pile_amount`,
+  `coal_vein_amount`, `berry_bush_amount`, `mushroom_amount`, `twigs_amount`,
+  `bone_amount`, `cloth_amount`, `scrap_metal_amount`), `gather_seconds`,
+  `respawn_days`, `charges` (per kind), `counts` (per kind).
+- **Screenshot tour:** `"landmark": "@gather:<kind>"` anchors a shot on the
+  node of that kind nearest the camp (or `"gather_near": <landmark id>`),
+  `"gather_pose": 0..1` freezes it mid-gather, `"gallery": true` lines up
+  one node of every kind at `"gallery_at"`. Presets `gather_close`,
+  `gather_berries`, `ridge_coal`, `gather_mushrooms`, `gather_ruins`,
+  `gather_dusk`, `gather_gallery`, `gather_gallery_b`, `gather_gallery_dusk`
+  (render gallery presets last: the gallery nodes stay in the world).
 
 
 ### Player, camera, character & items
