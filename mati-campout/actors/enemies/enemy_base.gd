@@ -408,7 +408,8 @@ func _valid_step(from: Vector3, to: Vector3) -> bool:
 				return false
 	if fears_light and not retreating:
 		var l_to := light_at(to)
-		if l_to >= light_fear * HOLD and l_to > light_at(from) + 0.0005:
+		# Above the hold line light may never increase (no creeping inward).
+		if l_to >= light_fear * HOLD and l_to > light_at(from):
 			held_by_light = true
 			return false
 	var t := target()
@@ -600,10 +601,14 @@ func _die() -> void:
 func _update_death(delta: float) -> void:
 	_death_t += delta
 	if model:
+		var k := 1.0 - exp(-10.0 * delta)
 		model.death = minf(_death_t / 0.6, 1.0)
 		model.dissolve = clampf((_death_t - 0.1) / 0.9, 0.0, 1.0)
 		model.eye_flare = 0.0
 		model.move_speed = 0.0
+		model.windup = lerpf(model.windup, 0.0, k)
+		model.lunge = lerpf(model.lunge, 0.0, k)
+		model.recoil = lerpf(model.recoil, 0.0, k)
 	_knock = _knock.move_toward(Vector3.ZERO, 10.0 * delta)
 	global_position += _knock * delta
 	_snap_ground()

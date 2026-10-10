@@ -382,7 +382,9 @@ through darkness) → eyes brighten → CHASE → ATTACK → RECOVER; FLEE_LIGHT
 (recoil, arms over the eyes, then run) from any light. Night-1 fairness: a
 ~1.5 s grace before stepping out of the light is noticed, a 3-6 s stalk
 before a chase, a 0.85 s eye-flare telegraph, a 0.45 s wind-up; a whack makes
-it back off. One-time hint toast when first seen.
+it back off; only 1 stalker may chase/attack at a time on nights 1-2 (2 later,
++1 while the fire is out), the others keep circling in the dark. One-time hint
+toast when first seen.
 
 **Watcher** APPEAR (fade in) → STARE (motionless, slow body turn, head
 tracks, whispers) → FLEE (player within 15 m or light ≥ 0.2: runs and fades)

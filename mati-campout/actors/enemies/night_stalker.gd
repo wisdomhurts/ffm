@@ -29,6 +29,10 @@ var observe_range := 22.0
 var flee_time := 2.5
 var recover_time := 3.0
 
+## Stalkers currently allowed to chase/attack (instance id -> true). Others
+## keep circling in the dark, so a young player is never swarmed.
+static var _chasers: Dictionary = {}
+
 var _goal := Vector3.INF
 var _lurk_offset := 0.0
 var _pace_t := 0.0
@@ -57,6 +61,37 @@ func _read_stats() -> void:
 
 func state_name() -> String:
 	return STATE_NAMES[state]
+
+
+## How many stalkers may chase/attack at once: 1 on nights 1-2, 2 later,
+## one more while the campfire is out.
+func _max_chasers() -> int:
+	var n := 1 if night <= 2 else 2
+	if aggression > 1.01:
+		n += 1
+	return n
+
+
+func _take_chase_token() -> bool:
+	var id := get_instance_id()
+	if _chasers.has(id):
+		return true
+	for k in _chasers.keys():
+		var o := instance_from_id(int(k))
+		if o == null or not is_instance_valid(o) or (o as NightStalker).dying or (o as NightStalker).retreating:
+			_chasers.erase(k)
+	if _chasers.size() >= _max_chasers():
+		return false
+	_chasers[id] = true
+	return true
+
+
+func _release_chase_token() -> void:
+	_chasers.erase(get_instance_id())
+
+
+func _exit_tree() -> void:
+	_release_chase_token()
 
 
 ## Seconds the player may stand in darkness before a lurking stalker reacts.
@@ -198,11 +233,11 @@ func _lurk_point(ppos: Vector3) -> Vector3:
 	if base.length() < 0.5:
 		base = Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-1.0, 1.0))
 	base = base.normalized().rotated(Vector3.UP, _lurk_offset)
-	var hold := light_fear * 0.75
+	var hold := light_fear * 0.85
 	var r := 2.0
 	while r < 45.0 and light_at(ppos + base * r) >= hold:
-		r += 1.0
-	r += rng.randf_range(0.8, 2.4)
+		r += 0.5
+	r += rng.randf_range(0.3, 1.5)
 	r = maxf(r, 6.0)
 	return ppos + base * r
 
@@ -225,7 +260,12 @@ func _st_stalk(delta: float, alive: bool, ppos: Vector3) -> void:
 		pose_crouch = 0.7
 		pose_flare = 1.0
 		if _pre_chase <= 0.0:
-			_enter(S.CHASE)
+			if _take_chase_token():
+				_enter(S.CHASE)
+			else:
+				# Someone else is already hunting: keep circling in the dark.
+				_pre_chase = -1.0
+				state_time = 0.0
 		return
 	pose_crouch = 0.62
 	pose_flare = 0.35
@@ -309,6 +349,8 @@ func _st_recover(alive: bool, ppos: Vector3) -> void:
 func _enter(s: int) -> void:
 	if state == s and state_time > 0.0:
 		return
+	if s != S.CHASE and s != S.ATTACK:
+		_release_chase_token()
 	state = s
 	state_time = 0.0
 	_goal = Vector3.INF

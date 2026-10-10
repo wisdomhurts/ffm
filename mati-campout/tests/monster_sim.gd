@@ -92,6 +92,14 @@ func _stalkers() -> Array:
 	return out
 
 
+func _hunters() -> int:
+	var n := 0
+	for s in _stalkers():
+		if (s as EnemyBase).state_name() in ["chase", "attack"]:
+			n += 1
+	return n
+
+
 func _set_night() -> void:
 	var dc := GameState.day_cycle
 	if dc.phase != DayCycle.Phase.NIGHT:
@@ -159,6 +167,8 @@ func _scenario_firelight() -> void:
 	var hits_before := _hits.size()
 	var health_before := GameState.survival.health
 	var seen_states: Dictionary = {}
+	var last_state: Dictionary = {}
+	var flips := 0
 	for f in 60 * 60:
 		await get_tree().physics_frame
 		GameState.fire.fuel = GameState.fire.max_fuel()
@@ -169,13 +179,19 @@ func _scenario_firelight() -> void:
 			max_light = maxf(max_light, Lights.intensity_at(e.global_position + Vector3.UP, false))
 			min_fire_dist = minf(min_fire_dist, e.flat_dist(fire))
 			seen_states[e.state_name()] = true
+			if last_state.has(e) and last_state[e] != e.state_name():
+				flips += 1
+			last_state[e] = e.state_name()
 			if e.state_name() == "observe":
 				observed += 1
 	var fear := float(DB.enemy("night_stalker").get("light_fear", 0.35))
 	print("   light radius %.1f m, closest stalker %.1f m, max light on a stalker %.3f, states %s" % [radius, min_fire_dist, max_light, str(seen_states.keys())])
 	check(max_light < fear, "A stalkers never enter strong firelight (max %.3f < %.2f)" % [max_light, fear])
+	check(max_light <= fear * EnemyBase.HOLD + 0.001, "A stalkers hold at the edge line (max %.3f <= %.3f)" % [max_light, fear * EnemyBase.HOLD])
 	check(min_fire_dist < radius * 1.35, "A stalkers come to lurk at the light edge (closest %.1f m, edge %.1f m)" % [min_fire_dist, radius])
 	check(observed > 0, "A stalkers observe from the edge of the light")
+	var per_min := float(flips) / maxf(float(last_state.size()), 1.0)
+	check(not seen_states.has("flee_light") and per_min < 10.0, "A no jitter at the edge: no flee/approach flip-flop (%.1f state changes per stalker per minute)" % per_min)
 	check(_hits.size() == hits_before and GameState.survival.health >= health_before - 0.01, "A no attack lands on a player in the firelight")
 
 
@@ -203,9 +219,11 @@ func _scenario_darkness() -> void:
 	var states: Dictionary = {}
 	var first_hit_s := -1.0
 	var closest := 1e9
+	var max_hunters := 0
 	for f in 60 * 45:
 		await get_tree().physics_frame
 		_keep_player_safe()
+		max_hunters = maxi(max_hunters, _hunters())
 		for s in _stalkers():
 			var e := s as EnemyBase
 			states[e.state_name()] = true
@@ -220,6 +238,7 @@ func _scenario_darkness() -> void:
 	check(_hits.size() > hits_before, "B a stalker attacks the player in the dark")
 	check(_windup_before_hit, "B every hit is telegraphed by a wind-up")
 	check(first_hit_s < 0.0 or first_hit_s > 2.0, "B the first hit is not instant (fair warning: %.1f s)" % first_hit_s)
+	check(max_hunters <= 1, "B night 1: only one stalker hunts at a time (%d)" % max_hunters)
 
 
 func _scenario_fire_out() -> void:
@@ -249,9 +268,11 @@ func _scenario_fire_out() -> void:
 	var closest := 1e9
 	var entered_s := -1.0
 	var hits_before := _hits.size()
+	var max_hunters := 0
 	for f in 60 * 40:
 		await get_tree().physics_frame
 		_keep_player_safe()
+		max_hunters = maxi(max_hunters, _hunters())
 		for s in _stalkers():
 			closest = minf(closest, (s as EnemyBase).flat_dist(fire))
 		if closest < 8.0 and entered_s < 0.0:
@@ -262,6 +283,7 @@ func _scenario_fire_out() -> void:
 	check(lit_closest > 10.0, "C stalkers keep out of camp while the fire burns")
 	check(closest < 4.0, "C stalkers come into camp when the fire is out (%.1f m from the fire)" % closest)
 	check(_hits.size() > hits_before, "C they reach the player at the cold fire")
+	check(max_hunters <= 2, "C even with the fire out at most two stalkers hunt at once (%d of %d)" % [max_hunters, _stalkers().size()])
 
 
 func _scenario_dawn() -> void:

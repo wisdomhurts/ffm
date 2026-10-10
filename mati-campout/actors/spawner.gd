@@ -134,7 +134,8 @@ static func find_spot(kind: String, center: Vector3, min_r: float, max_r: float,
 						trees += 1
 		if blocked:
 			continue
-		var seen := EnemyBase.on_screen(p + Vector3.UP * 1.6, vp) or EnemyBase.on_screen(p + Vector3.UP * 0.3, vp)
+		var seen := EnemyBase.on_screen(p + Vector3.UP * 0.3, vp) or EnemyBase.on_screen(p + Vector3.UP * 1.6, vp) \
+			or (kind == "watcher" and EnemyBase.on_screen(p + Vector3.UP * 3.1, vp))
 		if seen and need_offscreen:
 			continue
 		var score := p_rng.randf() * 0.5
