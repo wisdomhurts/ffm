@@ -473,10 +473,10 @@ func _beam() -> void:
 	_beam_mat = ShaderMaterial.new()
 	_beam_mat.shader = load(LandmarkKit.BEAM) as Shader
 	_beam_mat.set_shader_parameter("intensity", 0.0)
-	var length := DB.bf("landmarks.beam_range", 120.0)
+	var length := DB.bf("landmarks.beam_range", 260.0)
 	beam_mesh = MeshInstance3D.new()
 	beam_mesh.name = "BeamCones"
-	beam_mesh.mesh = beam_cones_mesh(length, 0.45, length * 0.075, 0.035)
+	beam_mesh.mesh = beam_cones_mesh(length, 0.45, length * 0.06, -0.012)
 	beam_mesh.material_override = _beam_mat
 	beam_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	beam_mesh.visible = false
@@ -504,7 +504,7 @@ func _beam() -> void:
 func _make_spot() -> void:
 	if spot != null or beam_pivot == null:
 		return
-	var length := DB.bf("landmarks.beam_range", 120.0)
+	var length := DB.bf("landmarks.spot_range", 110.0)
 	spot = SpotLight3D.new()
 	spot.name = "BeamSpot"
 	spot.light_color = Color(1.0, 0.86, 0.64)
@@ -570,7 +570,7 @@ func update_site(delta: float, darkness: float, cam: Camera3D) -> void:
 	if not is_nan(hold_angle):
 		beam_angle = hold_angle
 	beam_pivot.rotation.y = beam_angle
-	_beam_mat.set_shader_parameter("intensity", 0.5 * _night)
+	_beam_mat.set_shader_parameter("intensity", 0.4 * _night)
 	if spot:
 		spot.light_energy = 9.0 * _night
 	# Flare: a steady glow plus a flash when one of the beams sweeps past us.

@@ -1370,8 +1370,8 @@ Shaders: `shaders/landmark.gdshaderinc` (surface code), `landmark.gdshader`
 `balance.json` → `landmarks` (discovery radius, beam period/range, lantern
 light distance, chest settings, discovery toasts, notes). Tests:
 `tests/unit/test_landmarks.gd`, `godot --headless --path . -s
-res://tests/landmark_drive_launcher.gd` (65 checks: bodies, markers,
-discovery once, walking into the keeper's room / up the lookout stairs / into
+res://tests/landmark_drive_launcher.gd` (67 checks: bodies, markers,
+discovery once, the keeper's log, walking into the keeper's room / up the lookout stairs / into
 the mine / onto the dock, clear trader spots, chests via a fake ChestManager
 and the fallback loot, lanterns + beam at night).
 
@@ -1387,7 +1387,9 @@ ruins, ferns and mushrooms are placed around the trees that grow there
 centre (`TraderCamp.CLEAR`) for the trader NPC.
 
 **Rendering.** Per site: one `Structure` MeshInstance3D (solid + cloth
-surface, visible far: lighthouse always, others 160-300 m), one `Details`
+surface, visible far: lighthouse always, others 160-300 m; double-sided
+shadow casting, so the inward-facing walls, ceilings and tunnel keep the sun
+out), one `Details`
 mesh (small props, 80-95 m, no shadows on phone/low), optional `Glass`
 (lantern room, display case), sign `Label3D`s (35 m). No MultiMeshes and no
 `instance uniform`s (Compatibility-safe): lantern glass, the lens and glowing
@@ -1404,11 +1406,11 @@ dusk/night only when the camera is within `landmarks.lantern_light_distance`
 (70 m); indoor lamps (`always`) also by day. On the "phone" preset no lights
 are shown: the emissive glass carries the glow. The lighthouse: a lens that
 blazes at night, an OmniLight in the lantern room, two opposite soft
-additive light cones (`lighthouse_beam.gdshader`, ~120 m, fog-free, brightest
+additive light cones (`lighthouse_beam.gdshader`, 260 m with a long faint tail that sweeps over the camp above the treetops, fog-free, brightest
 along the axis) rotating once per `beam_period` (14 s), a camera-facing lamp
 flare (it grows with distance so the lamp reads as a bright star across the
 lake) that flashes when a beam sweeps past the camera, and an unshadowed
-`SpotLight3D` on the beam (not on phone) whose pool sweeps the lake.
+`SpotLight3D` on the beam (`spot_range` 110 m, not on phone) whose pool sweeps the lake.
 
 **Discovery.** Every 0.2 s while playing, the player's XZ distance to each
 landmark is compared with `max(radius * discover_radius_mult,
@@ -1462,17 +1464,19 @@ Old Mine tunnel (4.6 m) has the terrain as its floor; Rosie's tent can be
 walked into. Bram's adit is decorative (closed by darkness).
 
 **Screenshot tour.** Options `"lm_local": true` (cam/look in the landmark's
-frame), `"lm_player": Vector3` (park the player in that frame, y = height on
+frame), `"lm_chest": true` (with `lm_local`: in its chest's frame instead,
++Z facing visitors), `"lm_player": Vector3` (park the player in that frame, y = height on
 a raised floor), `"lm_discover": true`, `"lm_beam": degrees` (hold the
 lighthouse beam that far from pointing at the camera; landmark cameras also
-swing up to ±60° around their target to avoid tree trunks). Presets
+swing up to ±60° around their target to avoid tree trunks, unless they
+look out from the landmark). Presets
 `lm_lighthouse_day`, `lm_lighthouse_door`, `lm_lighthouse_room`,
 `lm_lighthouse_top`, `lm_lighthouse_night`, `lm_lighthouse_beam`,
 `lm_lighthouse_from_camp`, `lm_lighthouse_from_shore`,
 `lm_lighthouse_flash`, `lm_lookout_day`, `lm_lookout_top`,
 `lm_abandoned_day`, `lm_rosie_day`, `lm_rosie_night`, `lm_pip_day`,
 `lm_bram_day`, `lm_mine_day`, `lm_mine_inside`, `lm_mine_night`,
-`lm_hollow_day`, `lm_hollow_night`.
+`lm_hollow_day`, `lm_hollow_arch`, `lm_hollow_night`.
 
 **Open items for other owners.** Ground cover (`world/ground_cover.gd`)
 does not know about buildings, so grass can poke through the lighthouse

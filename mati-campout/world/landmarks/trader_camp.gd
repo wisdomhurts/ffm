@@ -276,7 +276,7 @@ func _pip() -> void:
 	var rp := rack.origin
 	add_shapes([LandmarkProps.box_shape(Vector3(1.3, 1.0, 0.4), rack * Transform3D(Basis.IDENTITY, Vector3(0, 0.5, 0)))])
 	zone(rp.x, rp.z, 0.7)
-	var nf := -side * 3.6 + u * 0.8
+	var nf := -side * 3.9 + u * 0.9
 	var nt := lxf(nf.x, nf.z, atan2(u.x, u.z) + 0.15, 1.2)
 	for x in [-1.1, 1.1]:
 		detail.log_piece(nt * Vector3(x, -0.3, 0), nt * Vector3(x, 2.0, 0), 0.055, 9910, true, Color("#5a4232"))
@@ -314,7 +314,7 @@ func _bram() -> void:
 	var pc := u * dp + Vector3(0, floor_y, 0)
 	MineBits.portal(self, Transform3D(b, pc), 2.2, 2.4, 0.45, 0.25, false, 10000)
 	# Tracks from just outside the trader spot up to the portal.
-	var t0 := u * 3.0
+	var t0 := u * 3.2
 	MineBits.tracks(self, Vector3(t0.x, 0, t0.z), Vector3(pc.x, 0, pc.z) - u * 0.15, 10100)
 	# A cart of ore on the tracks.
 	var cd := lerpf(3.0, dp, 0.55)

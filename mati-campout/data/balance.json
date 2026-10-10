@@ -161,7 +161,8 @@
     "discover_radius_mult": 1.0,
     "discover_min_radius": 10.0,
     "beam_period": 14.0,
-    "beam_range": 120.0,
+    "beam_range": 260.0,
+    "spot_range": 110.0,
     "lantern_light_distance": 70.0,
     "chests": {
       "lighthouse": {"tier": "rare", "table": "lighthouse", "restock_table": "lighthouse_restock", "restock_days": 3, "label": "Keeper's Chest"},

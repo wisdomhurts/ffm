@@ -142,7 +142,8 @@ const SHOTS := {
 	"gather_variants_stone": {"hour": 11.0, "fire": 0.9, "gallery": true, "gallery_kind": "stone_pile", "gallery_at": Vector3(-12, 0, 0), "gallery_spacing": 2.0, "cam": Vector3(-12, 2.6, 5.4), "look": Vector3(-12, 0.2, 0), "hide_player": true},
 	"gather_gallery_dusk": {"hour": 18.9, "fire": 0.9, "gallery": true, "gallery_at": Vector3(0, 0, 12.5), "cam": Vector3(0, 2.2, 18.8), "look": Vector3(0, 0.25, 12.5), "hide_player": true},
 	# Landmarks (generic options: "lm_local": true turns cam/look offsets into
-	# the landmark's own frame (+Z = toward its trail); "lm_player": Vector3
+	# the landmark's own frame (+Z = toward its trail), or with "lm_chest": true
+	# into its chest's frame (+Z = facing visitors); "lm_player": Vector3
 	# parks the player at a local point (y > 0 = on a raised floor);
 	# "lm_discover": true discovers it first (banner + marker)).
 	"lm_lighthouse_day": {"hour": 14.0, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(15, 8.4, 25), "look": Vector3(0, 10.5, 0), "hide_player": true},
@@ -151,20 +152,21 @@ const SHOTS := {
 	"lm_lighthouse_top": {"hour": 10.5, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(9, 26, 10), "look": Vector3(0, 19.6, 0), "hide_player": true},
 	"lm_lighthouse_night": {"hour": 22.5, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(26, 7, 36), "look": Vector3(0, 14, 0), "hide_player": true, "lm_beam": 55.0},
 	"lm_lighthouse_beam": {"hour": 23.0, "fire": 0.9, "landmark": "lighthouse", "lm_local": true, "cam": Vector3(7, 2.5, 12), "look": Vector3(0, 18.5, 0), "hide_player": true, "lm_beam": 70.0},
-	"lm_lighthouse_from_camp": {"hour": 23.0, "fire": 0.9, "cam": Vector3(-14, 4.5, -6), "look": Vector3(-212, 22, -78), "hide_player": true, "lm_beam": 30.0},
+	"lm_lighthouse_from_camp": {"hour": 23.0, "fire": 0.9, "cam": Vector3(-9, 1.8, -3), "look": Vector3(-70, 42, -28), "hide_player": true, "lm_beam": 7.0},
 	"lm_lighthouse_from_shore": {"hour": 22.8, "fire": 0.9, "landmark": "pips_dock", "cam": Vector3(-6, 2.2, 2), "look": Vector3(-114, 18, -136), "hide_player": true, "lm_beam": 40.0},
 	"lm_lighthouse_flash": {"hour": 22.8, "fire": 0.9, "landmark": "pips_dock", "cam": Vector3(-6, 2.2, 2), "look": Vector3(-114, 18, -136), "hide_player": true, "lm_beam": 3.0},
 	"lm_lookout_day": {"hour": 13.5, "fire": 0.9, "landmark": "lookout", "lm_local": true, "cam": Vector3(-8.5, 3.8, 8.0), "look": Vector3(-1.0, 3.6, -0.6), "hide_player": true},
-	"lm_lookout_top": {"hour": 16.0, "fire": 0.9, "landmark": "lookout", "lm_local": true, "cam": Vector3(1.6, 7.6, -1.2), "look": Vector3(-30, 3, 40), "lm_player": Vector3(0.6, 5.85, 0.4)},
+	"lm_lookout_top": {"hour": 16.0, "fire": 0.9, "landmark": "lookout", "lm_local": true, "cam": Vector3(1.7, 7.3, -1.9), "look": Vector3(-3, 2.0, 9), "lm_player": Vector3(0.2, 5.85, 0.9)},
 	"lm_abandoned_day": {"hour": 15.5, "fire": 0.9, "landmark": "abandoned_camp", "lm_local": true, "cam": Vector3(6.5, 3.4, 8.5), "look": Vector3(-0.8, 0.7, -2.2), "hide_player": true},
 	"lm_rosie_day": {"hour": 11.0, "fire": 0.9, "landmark": "rosies_rest", "lm_local": true, "cam": Vector3(5.5, 3.2, 8.5), "look": Vector3(0, 1.2, -3.5), "hide_player": true},
 	"lm_rosie_night": {"hour": 21.5, "fire": 0.9, "landmark": "rosies_rest", "lm_local": true, "cam": Vector3(5.5, 3.2, 8.5), "look": Vector3(0, 1.2, -3.5), "hide_player": true},
 	"lm_pip_day": {"hour": 10.0, "fire": 0.9, "landmark": "pips_dock", "lm_local": true, "cam": Vector3(7, 4.5, 6), "look": Vector3(-1, -0.5, -6), "hide_player": true},
 	"lm_bram_day": {"hour": 14.5, "fire": 0.9, "landmark": "brams_dig", "lm_local": true, "cam": Vector3(-4, 3.6, 9), "look": Vector3(0, 1.6, -5), "hide_player": true},
 	"lm_mine_day": {"hour": 12.5, "fire": 0.9, "landmark": "old_mine", "lm_local": true, "cam": Vector3(3.5, 2.8, 5.5), "look": Vector3(0, 1.6, -6), "hide_player": true},
-	"lm_mine_inside": {"hour": 12.5, "fire": 0.9, "landmark": "old_mine", "lm_local": true, "cam": Vector3(0.3, 1.7, -2.6), "look": Vector3(0, 0.6, -9), "hide_player": true},
+	"lm_mine_inside": {"hour": 12.5, "fire": 0.9, "landmark": "old_mine", "lm_local": true, "lm_chest": true, "cam": Vector3(0.5, 1.5, 2.8), "look": Vector3(0.0, 0.45, -1.0), "hide_player": true},
 	"lm_mine_night": {"hour": 22.0, "fire": 0.9, "landmark": "old_mine", "lm_local": true, "cam": Vector3(3.5, 2.8, 5.5), "look": Vector3(0, 1.6, -6), "hide_player": true},
 	"lm_hollow_day": {"hour": 11.5, "fire": 0.9, "landmark": "hollow", "lm_local": true, "cam": Vector3(5, 2.6, 7.5), "look": Vector3(0, 1.2, -4), "hide_player": true},
+	"lm_hollow_arch": {"hour": 11.0, "fire": 0.9, "landmark": "hollow", "lm_local": true, "lm_chest": true, "cam": Vector3(1.6, 1.7, 5.2), "look": Vector3(0, 1.4, -0.6), "hide_player": true},
 	"lm_hollow_night": {"hour": 22.5, "fire": 0.9, "landmark": "hollow", "lm_local": true, "cam": Vector3(5, 2.6, 7.5), "look": Vector3(0, 1.2, -4), "hide_player": true},
 }
 
@@ -266,9 +268,17 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 		var look_off: Vector3 = s["look"]
 		if s.has("landmark") and bool(s.get("lm_local", false)):
 			var lm_yaw := _landmark_yaw(str(s["landmark"]))
+			# "lm_chest": true = offsets in the frame of the landmark's chest (+Z faces visitors).
+			var chest := _landmark_chest(str(s["landmark"])) if bool(s.get("lm_chest", false)) else {}
+			if not chest.is_empty():
+				origin = chest["pos"]
+				lm_yaw = float(chest["rot"])
 			cam_off = cam_off.rotated(Vector3.UP, lm_yaw)
 			look_off = look_off.rotated(Vector3.UP, lm_yaw)
-			cam_off = _landmark_cam_clear(origin, cam_off, look_off)
+			# Outside looking in: swing around trunks. Looking out from the
+			# landmark (tower top, doorway): keep the camera where it is.
+			if Vector2(cam_off.x, cam_off.z).length() > Vector2(look_off.x, look_off.z).length():
+				cam_off = _landmark_cam_clear(origin, cam_off, look_off)
 			# The landmark branch below adds origin.y twice; keep cam relative to it.
 			cam_off.y -= origin.y
 		if s.has("landmark") and str(s["landmark"]).begins_with("@gather:"):
@@ -659,6 +669,17 @@ func _landmark_yaw(id: String) -> float:
 	return float((site as Node).get("yaw")) if site is Node else 0.0
 
 
+## A landmark's chest spot ({pos, rot, ...} in world space), or {}.
+func _landmark_chest(id: String) -> Dictionary:
+	var lm := _landmarks()
+	if lm == null or not lm.has_method("chest_spots"):
+		return {}
+	for spot in lm.call("chest_spots"):
+		if spot is Dictionary and str((spot as Dictionary).get("id", "")) == id:
+			return spot
+	return {}
+
+
 ## Swing a landmark camera offset around the look point (in 15° steps, up to
 ## ±60°) until no tree trunk stands at the camera or halfway to the target.
 func _landmark_cam_clear(origin: Vector3, cam_off: Vector3, look_off: Vector3) -> Vector3:
@@ -689,7 +710,8 @@ func _apply_landmark_options(s: Dictionary) -> void:
 		var hold := NAN
 		if s.has("lm_beam") and cam and cam.current:
 			var to_cam: Vector3 = cam.global_position - (lh as Node3D).global_position
-			hold = atan2(-to_cam.z, to_cam.x) + deg_to_rad(float(s["lm_beam"]))
+			# The beam pivot turns inside the (already turned) lighthouse frame.
+			hold = atan2(-to_cam.z, to_cam.x) + deg_to_rad(float(s["lm_beam"])) - float((lh as Node3D).get("yaw"))
 		(lh as Node3D).set("hold_angle", hold)
 	if not s.has("landmark"):
 		return

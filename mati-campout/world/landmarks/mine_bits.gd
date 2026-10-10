@@ -78,23 +78,27 @@ static func portal(site: LandmarkSite, t: Transform3D, w: float, h: float, depth
 		k.paint(ROCK.lerp(Color("#8c8579"), rng.randf()), 0.92, 0.0, 0.0, CampKit.P.STONE)
 		k.blob(c, Vector3(r, r * 0.8, r * 0.9), seed_v + 40 + i, 0.15, 14, 9)
 		site.cyl(r * 0.85, r * 1.6, Transform3D(Basis.IDENTITY, c))
-	# Over the cap: a row of rocks so the frame sits in the hill.
-	var caps := 2 + int(mound * 3.0)
+	# Over the cap: a row of modest rocks so the frame sits in the hill
+	# (big ones would perch on top like a hat).
+	var caps := 2 + int(mound * 4.0)
 	for i in caps:
 		var x := lerpf(-hw - 0.4, hw + 0.4, (float(i) + 0.5) / caps)
-		var r := lerpf(0.9, 1.3 + mound * 1.5, rng.randf())
-		var c := t * Vector3(x, h + 0.4 + r * 0.75, -r * 0.75 - 0.15)
+		var r := lerpf(0.8, 1.0 + mound * 0.6, rng.randf())
+		var c := t * Vector3(x, h + 0.3 + r * 0.75, -r * 0.7 - 0.2)
 		k.paint(ROCK.lerp(Color("#6f6a62"), rng.randf()), 0.92, 0.0, 0.0, CampKit.P.STONE)
 		k.blob(c, Vector3(r * 1.1, r * 0.75, r), seed_v + 80 + i, 0.15, 14, 9)
 	if mound > 0.3:
-		# Earth cap over the tunnel (its underside stays above the ceiling)
-		# and rocks closing the back.
-		var ry := 1.2 + mound * 1.2
-		k.paint(Color("#6a5a48"), 0.97, 0.0, 0.0, LandmarkKit.LP.EARTH)
-		k.blob(t * Vector3(0, h + 0.35 + ry, -tunnel * 0.55 - 0.6), Vector3(hw + 2.2 + mound, ry, tunnel * 0.6 + 1.6), seed_v + 99, 0.15, 16, 10)
+		# A low rocky hump over the back of the tunnel (its underside stays
+		# above the ceiling, its front hidden behind the cap rocks, which
+		# cover the front part) and rocks closing the back.
+		var ry := 0.9 + mound * 0.6
+		var rz := 2.6
+		k.paint(ROCK.lerp(Color("#8c8579"), 0.5), 0.94, 0.0, 0.0, CampKit.P.STONE)
+		k.blob(t * Vector3(0, h + 0.35 + ry, -tunnel + 0.6), Vector3(hw + 1.6 + mound, ry, rz), seed_v + 99, 0.15, 16, 10)
 		for i in 3:
 			var r := 1.5 + mound * 0.8
-			var c := t * Vector3((float(i) - 1.0) * (hw + 0.6), h * 0.5, -tunnel - r * 0.75)
+			# Wholly behind the dark end face (they must not poke into the tunnel).
+			var c := t * Vector3((float(i) - 1.0) * (hw + 0.6), h * 0.5, -tunnel - r * 1.0 - 0.45)
 			k.paint(ROCK.lerp(Color("#857f74"), rng.randf()), 0.92, 0.0, 0.0, CampKit.P.STONE)
 			k.blob(c, Vector3(r * 1.1, r, r), seed_v + 120 + i, 0.15, 14, 9)
 			site.cyl(r * 0.9, r * 2.0, Transform3D(Basis.IDENTITY, c))

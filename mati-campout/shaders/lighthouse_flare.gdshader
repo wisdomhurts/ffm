@@ -30,6 +30,7 @@ void fragment() {
 	// Four soft streaks for a lens-like sparkle.
 	float streak = exp(-abs(d.y) * 40.0) * exp(-abs(d.x) * 2.5) + exp(-abs(d.x) * 40.0) * exp(-abs(d.y) * 2.5);
 	float a = (halo + streak * 0.35) * (1.0 - smoothstep(0.85, 1.0, r));
-	ALBEDO = flare_color;
-	ALPHA = clamp(a * intensity, 0.0, 1.0);
+	// HDR (up to 3x) so the core blooms at night: additive = ALBEDO * ALPHA.
+	ALBEDO = flare_color * 3.0;
+	ALPHA = clamp(a * intensity / 3.0, 0.0, 1.0);
 }

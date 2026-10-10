@@ -8,7 +8,7 @@ render_mode blend_add, depth_draw_never, cull_disabled, unshaded, fog_disabled, 
 
 uniform float intensity = 0.0;
 uniform vec3 beam_color : source_color = vec3(1.0, 0.86, 0.62);
-uniform float softness = 1.8;
+uniform float softness = 2.3;
 
 varying float v_along;
 
@@ -31,7 +31,10 @@ void fragment() {
 	float facing = abs(dot(normalize(NORMAL), normalize(VIEW)));
 	float core = pow(facing, softness);
 	float along = clamp(v_along, 0.0, 1.0);
-	float fade = pow(1.0 - along, 1.5) * smoothstep(0.0, 0.025, along);
+	// Bright near the lens, then a long faint tail that still sweeps over the
+	// camp across the lake, fading out at the very end.
+	float fade = mix(1.0, 0.22, smoothstep(0.0, 0.45, along)) * (1.0 - smoothstep(0.82, 1.0, along));
+	fade *= smoothstep(0.0, 0.012, along);
 	// Slowly drifting dust and haze in the beam.
 	float dust = 0.78 + 0.22 * bnoise(vec2(along * 55.0 - TIME * 0.5, UV.x * 5.0 + TIME * 0.1));
 	// Fade out when the camera is right next to (or inside) the cone.

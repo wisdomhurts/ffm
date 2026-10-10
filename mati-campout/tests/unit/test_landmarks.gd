@@ -159,6 +159,12 @@ func test_trader_spots_stay_clear() -> void:
 				dist = Vector2(xf.origin.x, xf.origin.z).length() - cs.radius
 			worst = minf(worst, dist)
 		assert_gt(worst, TraderCamp.CLEAR - 0.05, "%s: nothing solid within %.1f m of the centre (closest %.2f)" % [id, TraderCamp.CLEAR, worst])
+		# Footprints (cleared of gatherables, AI obstacles) stay out too.
+		var zone_worst := INF
+		for z in s.zones:
+			var zv: Vector3 = z
+			zone_worst = minf(zone_worst, Vector2(zv.x, zv.y).length() - zv.z)
+		assert_gt(zone_worst, TraderCamp.CLEAR - 0.05, "%s: no footprint inside the trader spot (closest %.2f)" % [id, zone_worst])
 		s.free()
 
 

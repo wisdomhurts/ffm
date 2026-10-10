@@ -321,6 +321,9 @@ func finish() -> void:
 	var shadows_detail := not low
 	structure_mesh = LandmarkKit.instance(big, big_cloth, "Structure", true)
 	if structure_mesh:
+		# Walls, ceilings and tunnels are single-sided (facing inward): cast
+		# shadows from both sides so the sun does not leak into rooms.
+		structure_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_DOUBLE_SIDED
 		_set_range(structure_mesh, far_range)
 		add_child(structure_mesh)
 	detail_mesh = LandmarkKit.instance(detail, detail_cloth, "Details", shadows_detail)

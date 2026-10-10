@@ -54,7 +54,7 @@ func build_site() -> void:
 	lantern_light(flame2, 1.0, 6.0)
 	# The epic chest just inside, facing out.
 	var cz := -1.75
-	var cl := pt * Vector3(0, 0, cz)
+	var cl := pt * Vector3(-0.3, 0, cz)
 	var cy := gy(cl.x, cl.z)
 	chest_spot(Vector3(cl.x, cy, cl.z), atan2(-u.x, -u.z), Vector3(cl.x, 0.0, cl.z))
 	# Old planks on the tunnel floor and tracks running out of the mine.
@@ -62,8 +62,8 @@ func build_site() -> void:
 		var pz := -0.6 - 0.95 * float(i)
 		var pp := pt * Vector3(-0.75 + 0.1 * sin(float(i) * 2.0), 0, pz)
 		LandmarkProps.slat(detail, Transform3D(b * Basis(Vector3.UP, 0.1 * sin(float(i))), Vector3(pp.x, gy(pp.x, pp.z) + 0.03, pp.z)), Vector3(0.28, 0.035, 0.9), Color("#6a5a48"))
-	var t_in := pt * Vector3(0.55, 0, -DEPTH + 0.6)
-	var t_out := pt * Vector3(0.9, 0, 6.5)
+	var t_in := pt * Vector3(0.75, 0, -DEPTH + 0.6)
+	var t_out := pt * Vector3(1.0, 0, 6.5)
 	MineBits.tracks(self, Vector3(t_in.x, 0, t_in.z), Vector3(t_out.x, 0, t_out.z), 11100)
 	# A tipped cart with spilled coal beside the tracks.
 	var cp := pt * Vector3(-1.4, 0, 4.6)
