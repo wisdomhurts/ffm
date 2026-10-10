@@ -192,7 +192,7 @@ func _compose() -> void:
 			# Rock: steep slopes, patches along the Rocky Ridge and the headland.
 			var rk := smoothstep(0.2, 0.45, slope)
 			var rd := WorldGen._dist_to_segment(p2, ridge_a, ridge_b)
-			rk = maxf(rk, smoothstep(75.0, 22.0, rd) * 0.42 + smoothstep(0.08, 0.2, slope) * smoothstep(75.0, 30.0, rd) * 0.3)
+			rk = maxf(rk, smoothstep(75.0, 22.0, rd) * 0.26 + smoothstep(0.09, 0.22, slope) * smoothstep(75.0, 30.0, rd) * 0.32)
 			rk = maxf(rk, smoothstep(34.0, 12.0, p2.distance_to(lh2)) * 0.4 * smoothstep(wl + 0.6, wl + 1.8, h))
 			rock[i] = clampf(rk * (1.0 - c), 0.0, 1.0)
 			# Beaches: gentle ground just above the lake.

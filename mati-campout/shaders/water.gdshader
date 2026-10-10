@@ -33,6 +33,13 @@ uniform float foam_width = 0.7;
 uniform float reflect_strength = 1.0;
 uniform int ssr_steps = 24;
 uniform float roughness = 0.035;
+// Terrain heightmaps (see tc_ground).
+uniform sampler2D height_inner : filter_linear, repeat_disable;
+uniform sampler2D height_outer : filter_linear, repeat_disable;
+uniform vec4 inner_rect = vec4(-320.0, -320.0, 640.0, 640.0);
+uniform vec2 inner_res = vec2(321.0, 321.0);
+uniform vec4 outer_rect = vec4(-2048.0, -1792.0, 1792.0, 3584.0);
+uniform vec2 outer_res = vec2(113.0, 225.0);
 
 float scene_view_z(vec2 uv, mat4 inv_proj) {
 	float d = textureLod(depth_tex, uv, 0.0).r;
@@ -60,22 +67,26 @@ void fragment() {
 	vec3 Nw = normalize(vec3(wn.x, 1.0, wn.y));
 	vec3 Nv = normalize((VIEW_MATRIX * vec4(Nw, 0.0)).xyz);
 
-	// --- What is behind the surface -------------------------------------------------------
-	float bg_z = scene_view_z(SCREEN_UV, INV_PROJECTION_MATRIX);
-	vec3 bg_view = vec3(0.0);
-	{
-		float d = textureLod(depth_tex, SCREEN_UV, 0.0).r;
-		vec4 p = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, d, 1.0);
-		bg_view = p.xyz / p.w;
+	// --- Water depth: from the terrain heightmap (always available), refined by
+	// the depth buffer when there is one (things standing in the water). -------------
+	float ground = tc_ground(height_inner, inner_rect, inner_res, height_outer, outer_rect, outer_res, wp);
+	float depth_v = max(wpos.y - ground, 0.0);                // vertical water depth
+	vec3 vdir = normalize(wpos - CAMERA_POSITION_WORLD);
+	float thick = depth_v / max(abs(vdir.y), 0.12);           // path length through water
+	float d_raw = textureLod(depth_tex, SCREEN_UV, 0.0).r;
+	bool has_depth = d_raw > 0.0;
+	if (has_depth) {
+		vec4 bp = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, d_raw, 1.0);
+		vec3 bg_view = bp.xyz / bp.w;
+		vec3 bg_world = (INV_VIEW_MATRIX * vec4(bg_view, 1.0)).xyz;
+		depth_v = min(depth_v, max(wpos.y - bg_world.y, 0.0));
+		thick = min(thick, distance(bg_view, VERTEX));
 	}
-	vec3 bg_world = (INV_VIEW_MATRIX * vec4(bg_view, 1.0)).xyz;
-	float depth_v = max(wpos.y - bg_world.y, 0.0);           // vertical water depth
-	float thick = max(distance(bg_view, VERTEX), 0.0);       // path length through water
 	thick = min(thick, depth_v * 6.0 + 2.0);
 
 	// Refraction: bend the lookup a little, but never sample things in front.
 	vec2 ruv = SCREEN_UV + wn * refraction * clamp(depth_v * 0.6, 0.0, 1.0) / (1.0 + dist * 0.04);
-	if (scene_view_z(ruv, INV_PROJECTION_MATRIX) > VERTEX.z) {
+	if (has_depth && scene_view_z(ruv, INV_PROJECTION_MATRIX) > VERTEX.z) {
 		ruv = SCREEN_UV;
 	}
 	vec3 refr = textureLod(screen_tex, ruv, 0.0).rgb;
@@ -91,8 +102,11 @@ void fragment() {
 	float foam_n = texture(noise_tex, wp * 0.21 + vec2(TIME * 0.011, -TIME * 0.007)).g;
 	float foam_n2 = texture(noise_tex, tc_rot(wp, 0.8) * 0.53 - vec2(TIME * 0.02, 0.0)).a;
 	float edge = 1.0 - smoothstep(0.0, foam_width * (0.6 + lap * 0.6), depth_v);
-	float foam = edge * smoothstep(0.28, 0.6, foam_n * 0.7 + foam_n2 * 0.5) ;
-	foam = max(foam, smoothstep(0.08, 0.0, depth_v) * 0.5) * (1.0 - smoothstep(60.0, 180.0, dist));
+	// Lacy foam: the borders of drifting cells, broken up by fbm.
+	float lace = smoothstep(0.42, 0.72, foam_n) * smoothstep(0.35, 0.65, foam_n2 + 0.15);
+	float foam = edge * lace * 0.6;
+	foam = max(foam, smoothstep(0.06, 0.0, depth_v) * 0.35 * smoothstep(0.3, 0.6, foam_n2 + 0.2));
+	foam *= 1.0 - smoothstep(60.0, 180.0, dist);
 
 	// --- Fresnel ---------------------------------------------------------------------------
 	float ndv = clamp(dot(Nv, -normalize(VERTEX)), 0.0, 1.0);
@@ -102,7 +116,7 @@ void fragment() {
 	// --- Screen-space reflection march (shore, trees, mountains) -------------------------
 	vec3 refl = vec3(0.0);
 	float refl_mask = 0.0;
-	if (ssr_steps > 0) {
+	if (ssr_steps > 0 && has_depth) {
 		vec3 Nr = normalize((VIEW_MATRIX * vec4(normalize(vec3(wn.x * 0.35, 1.0, wn.y * 0.35)), 0.0)).xyz);
 		vec3 R = reflect(normalize(VERTEX), Nr);
 		float t = 0.6;

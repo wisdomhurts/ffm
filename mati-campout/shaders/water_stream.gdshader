@@ -22,6 +22,13 @@ uniform vec3 foam_col : source_color = vec3(0.86, 0.91, 0.90);
 uniform vec3 absorb = vec3(0.32, 0.12, 0.11);
 uniform float flow_speed = 0.8;
 uniform float refraction = 0.03;
+// Terrain heightmaps (see tc_ground).
+uniform sampler2D height_inner : filter_linear, repeat_disable;
+uniform sampler2D height_outer : filter_linear, repeat_disable;
+uniform vec4 inner_rect = vec4(-320.0, -320.0, 640.0, 640.0);
+uniform vec2 inner_res = vec2(321.0, 321.0);
+uniform vec4 outer_rect = vec4(-2048.0, -1792.0, 1792.0, 3584.0);
+uniform vec2 outer_res = vec2(113.0, 225.0);
 
 varying vec4 v_col;
 
@@ -52,15 +59,24 @@ void fragment() {
 	vec3 Nw = normalize(vec3(n.x, 1.0, n.y));
 	vec3 Nv = normalize((VIEW_MATRIX * vec4(Nw, 0.0)).xyz);
 
-	vec3 bg_view;
-	view_z_at(SCREEN_UV, INV_PROJECTION_MATRIX, bg_view);
-	vec3 bg_world = (INV_VIEW_MATRIX * vec4(bg_view, 1.0)).xyz;
-	float depth_v = max(wpos.y - bg_world.y, 0.0);
-	float thick = min(distance(bg_view, VERTEX), depth_v * 5.0 + 0.5);
+	// Water depth from the terrain heightmap, refined by the depth buffer if any.
+	float ground = tc_ground(height_inner, inner_rect, inner_res, height_outer, outer_rect, outer_res, wpos.xz);
+	float depth_v = max(wpos.y - ground, 0.0);
+	vec3 vdir = normalize(wpos - CAMERA_POSITION_WORLD);
+	float thick = depth_v / max(abs(vdir.y), 0.15);
+	bool has_depth = textureLod(depth_tex, SCREEN_UV, 0.0).r > 0.0;
+	if (has_depth) {
+		vec3 bg_view;
+		view_z_at(SCREEN_UV, INV_PROJECTION_MATRIX, bg_view);
+		vec3 bg_world = (INV_VIEW_MATRIX * vec4(bg_view, 1.0)).xyz;
+		depth_v = min(depth_v, max(wpos.y - bg_world.y, 0.0));
+		thick = min(thick, distance(bg_view, VERTEX));
+	}
+	thick = min(thick, depth_v * 5.0 + 0.5);
 
 	vec2 ruv = SCREEN_UV + n * refraction * clamp(depth_v * 1.5, 0.0, 1.0) / (1.0 + dist * 0.05);
 	vec3 tmp;
-	if (view_z_at(ruv, INV_PROJECTION_MATRIX, tmp) > VERTEX.z) {
+	if (has_depth && view_z_at(ruv, INV_PROJECTION_MATRIX, tmp) > VERTEX.z) {
 		ruv = SCREEN_UV;
 	}
 	vec3 refr = textureLod(screen_tex, ruv, 0.0).rgb;
@@ -71,7 +87,7 @@ void fragment() {
 	float fn = texture(noise_tex, vec2(uv.x * 0.6, uv.y * 0.18 - TIME * speed * 0.18)).g;
 	float streak = texture(noise_tex, vec2(uv.x * 0.35 + 0.2, uv.y * 0.06 - TIME * speed * 0.06)).r;
 	float streak2 = texture(noise_tex, vec2(uv.x * 0.8 + 0.6, uv.y * 0.11 - TIME * speed * 0.11)).b;
-	float foam = bank * smoothstep(0.3, 0.6, fn) * 0.45;
+	float foam = bank * smoothstep(0.45, 0.75, fn) * smoothstep(0.4, 0.7, streak2 + 0.2) * 0.4;
 	float rapids = smoothstep(0.3, 0.85, steep);
 	foam = max(foam, smoothstep(0.6, 0.85, streak * 0.7 + streak2 * 0.5) * rapids * 0.7);
 	foam *= 1.0 - smoothstep(50.0, 120.0, dist);

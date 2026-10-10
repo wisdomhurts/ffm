@@ -67,3 +67,16 @@ vec4 tc_triplanar(sampler2D tex, vec3 p, vec3 n, float scale) {
 vec2 tc_nmap(vec4 t) {
 	return t.xy * 2.0 - 1.0;
 }
+
+// Terrain height at a world xz from heightmap textures: `inner` covers
+// `inner_rect` (x0, z0, width, depth) with `inner_res` grid points, `outer`
+// the coarse surroundings. Used by the water so its depth colour, foam and
+// soft shoreline do not depend on the depth buffer (unavailable with MSAA).
+float tc_ground(sampler2D inner, vec4 inner_rect, vec2 inner_res, sampler2D outer, vec4 outer_rect, vec2 outer_res, vec2 xz) {
+	vec2 ui = (xz - inner_rect.xy) / inner_rect.zw;
+	if (ui.x >= 0.0 && ui.y >= 0.0 && ui.x <= 1.0 && ui.y <= 1.0) {
+		return textureLod(inner, (ui * (inner_res - 1.0) + 0.5) / inner_res, 0.0).r;
+	}
+	vec2 uo = clamp((xz - outer_rect.xy) / outer_rect.zw, 0.0, 1.0);
+	return textureLod(outer, (uo * (outer_res - 1.0) + 0.5) / outer_res, 0.0).r;
+}

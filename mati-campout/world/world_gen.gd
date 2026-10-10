@@ -406,10 +406,14 @@ func _base_height(x: float, z: float) -> float:
 	h += ridge_shape * (14.0 + ridged * 16.0)
 
 	# Distant walls (north, east, south edges) so the map feels enclosed.
+	# The foot of the walls wanders and their faces have spurs and gullies, so
+	# they read as wooded hillsides with rocky outcrops, not a uniform rampart.
 	var edge := maxf(maxf(absf(x), absf(z)), 0.0)
-	var wall := smoothstep(262.0, 320.0, edge)
+	var foot := 254.0 + _n_forest.get_noise_2d(x * 0.45 + 300.0, z * 0.45) * 16.0
+	var wall := smoothstep(foot, 322.0, edge)
 	if x > -230.0:
-		h += wall * wall * (38.0 + _n_ridge.get_noise_2d(x * 0.6, z * 0.6) * 10.0)
+		var spurs := 0.72 + 0.28 * _n_meadow.get_noise_2d(x * 1.6, z * 1.6)
+		h += wall * wall * (38.0 + _n_ridge.get_noise_2d(x * 0.6, z * 0.6) * 10.0) * spurs
 
 	# Camp clearing: flat and level.
 	var camp_d := p.length()

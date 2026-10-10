@@ -34,6 +34,8 @@ func setup(_game: Game, terrain: Terrain) -> void:
 		return
 	_compat = RenderingServer.get_current_rendering_method() == "gl_compatibility"
 	_make_materials(Terrain.noise_textures())
+	if not _compat:
+		_set_heightmaps()
 	_build_lake()
 	_build_stream()
 	_place_emitters()
@@ -68,6 +70,37 @@ func _make_materials(tex: Array) -> void:
 	# mouth, then everything else (particles, fireflies...).
 	lake_material.render_priority = -2
 	stream_material.render_priority = -1
+
+
+## Terrain heightmaps for the water shaders: the 2 m map grid and a coarse
+## (16 m) grid of the lake beyond the map. The water reads its depth from
+## these, so depth colour, foam and the soft shoreline work even when the
+## depth buffer is unavailable to transparent shaders (e.g. with MSAA).
+func _set_heightmaps() -> void:
+	var g := WorldGen.GRID
+	var inner := Image.create_from_data(g, g, false, Image.FORMAT_RF, gen.heights.to_byte_array())
+	inner.convert(Image.FORMAT_RH)
+	var step := 16.0
+	var x0 := -2048.0
+	var z0 := -1792.0
+	var nx := int((-256.0 - x0) / step) + 1
+	var nz := int((1792.0 - z0) / step) + 1
+	var data := PackedFloat32Array()
+	data.resize(nx * nz)
+	for j in nz:
+		for i in nx:
+			data[j * nx + i] = gen.outer_height(x0 + i * step, z0 + j * step)
+	var outer := Image.create_from_data(nx, nz, false, Image.FORMAT_RF, data.to_byte_array())
+	outer.convert(Image.FORMAT_RH)
+	var tin := ImageTexture.create_from_image(inner)
+	var tout := ImageTexture.create_from_image(outer)
+	for m: ShaderMaterial in [lake_material, stream_material]:
+		m.set_shader_parameter("height_inner", tin)
+		m.set_shader_parameter("height_outer", tout)
+		m.set_shader_parameter("inner_rect", Vector4(-WorldGen.HALF, -WorldGen.HALF, WorldGen.HALF * 2.0, WorldGen.HALF * 2.0))
+		m.set_shader_parameter("inner_res", Vector2(g, g))
+		m.set_shader_parameter("outer_rect", Vector4(x0, z0, (nx - 1) * step, (nz - 1) * step))
+		m.set_shader_parameter("outer_res", Vector2(nx, nz))
 
 
 func _build_lake() -> void:

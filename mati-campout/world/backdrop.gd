@@ -265,18 +265,18 @@ static func fir_mesh(tiers: int, sides: int) -> ArrayMesh:
 	var dark := Color(0.07, 0.13, 0.085)
 	var light := Color(0.18, 0.26, 0.145)
 	var bark := Color(0.22, 0.16, 0.11)
-	# Trunk: a 5-sided post from below the ground into the first tier.
+	# Trunk: a 3-sided post from below the ground into the first tier.
 	var tb := verts.size()
-	for s in 5:
-		var a := TAU * float(s) / 5.0
+	for s in 3:
+		var a := TAU * float(s) / 3.0
 		var d := Vector3(cos(a), 0.0, sin(a))
 		for y: float in [-0.8, 2.2]:
-			verts.append(d * 0.26 + Vector3(0.0, y, 0.0))
+			verts.append(d * 0.3 + Vector3(0.0, y, 0.0))
 			norms.append(d)
 			cols.append(bark)
-	for s in 5:
+	for s in 3:
 		var a0 := tb + s * 2
-		var a1 := tb + ((s + 1) % 5) * 2
+		var a1 := tb + ((s + 1) % 3) * 2
 		idx.append_array(PackedInt32Array([a0, a1 + 1, a0 + 1, a0, a1, a1 + 1]))
 	for ti in specs.size():
 		var sp: Array = specs[ti]
@@ -302,7 +302,10 @@ static func fir_mesh(tiers: int, sides: int) -> ArrayMesh:
 			idx.append(apex)
 			idx.append(ring + s)
 			idx.append(ring + s2)
-		# Underside (seen from below on slopes).
+		# Underside of the lowest tier (seen from below on slopes); the upper
+		# tiers' undersides are hidden by the tier beneath.
+		if ti > 0:
+			continue
 		var center := verts.size()
 		verts.append(Vector3(0.0, by + 0.3, 0.0))
 		norms.append(Vector3.DOWN)
@@ -348,8 +351,12 @@ func _build_forest() -> void:
 			var px := x + rng.randf_range(-5.0, 5.0)
 			var pz := z + rng.randf_range(-5.0, 5.0)
 			z += sp
-			# Start a little past the map edge (the real forest stops at the edge).
-			if absf(px) < WorldGen.HALF + 16.0 and absf(pz) < WorldGen.HALF + 16.0:
+			# Start just past the map edge: right at it on top of the high walls
+			# (they form the skyline seen from below), a little further out on
+			# low ground where the player could walk up close.
+			if absf(px) < WorldGen.HALF + 1.0 and absf(pz) < WorldGen.HALF + 1.0:
+				continue
+			if absf(px) < WorldGen.HALF + 16.0 and absf(pz) < WorldGen.HALF + 16.0 and gen.outer_height(px, pz) < 18.0:
 				continue
 			var r := Vector2(px, pz).length()
 			var ca := px / maxf(r, 0.001)
@@ -381,7 +388,7 @@ func _build_forest() -> void:
 	var far_mat := ShaderMaterial.new()
 	far_mat.shader = load("res://shaders/backdrop_trees_far.gdshader") as Shader
 	_haze_mats.append(far_mat)
-	var near_mesh := fir_mesh(3, 10)
+	var near_mesh := fir_mesh(3, 8)
 	var far_mesh := fir_mesh(2, 6)
 	for i in 8:
 		_add_tree_chunk(near_sets[i], near_mesh, near_mat, rng, "Firs%d" % i)

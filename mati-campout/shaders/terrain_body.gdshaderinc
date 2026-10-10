@@ -34,9 +34,9 @@ uniform vec3 dirt_col : source_color = vec3(0.38, 0.32, 0.24);
 uniform vec3 dirt_light : source_color = vec3(0.52, 0.46, 0.36);
 uniform vec3 earth_col : source_color = vec3(0.34, 0.30, 0.245);
 uniform vec3 earth_dust : source_color = vec3(0.46, 0.43, 0.37);
-uniform vec3 rock_a : source_color = vec3(0.53, 0.51, 0.47);
-uniform vec3 rock_b : source_color = vec3(0.37, 0.36, 0.35);
-uniform vec3 rock_warm : source_color = vec3(0.50, 0.44, 0.37);
+uniform vec3 rock_a : source_color = vec3(0.51, 0.51, 0.48);
+uniform vec3 rock_b : source_color = vec3(0.32, 0.33, 0.32);
+uniform vec3 rock_warm : source_color = vec3(0.53, 0.47, 0.39);
 uniform vec3 lichen_col : source_color = vec3(0.50, 0.54, 0.38);
 uniform vec3 sand_col : source_color = vec3(0.78, 0.69, 0.52);
 uniform vec3 sand_wet : source_color = vec3(0.55, 0.48, 0.36);
@@ -176,21 +176,45 @@ void fragment() {
 
 	// --- Rock: triplanar, strata, lichen on top faces ----------------------------------
 	float rock_w = smoothstep(0.38, 0.66, m_rock + (n_mid.g - 0.5) * 0.35 + (nf - 0.5) * 0.25);
+	vec3 rock_n = N;
 	if (rock_w > 0.001) {
+		vec4 t0 = tc_triplanar(noise_tex, wpos, N, 0.011);
 		vec4 t1 = tc_triplanar(noise_tex, wpos, N, 0.045);
-		vec4 t2 = tc_triplanar(noise_tex, wpos, N, 0.19);
+		vec4 t3 = tc_triplanar(noise_tex, wpos, N, 0.5);
+		vec4 t2 = tc_triplanar(noise_tex, wpos, N, 0.03);
+		// Blocky rock: big cell interiors are faces, the borders are cracks.
+		float big = smoothstep(0.7, 0.42, t0.g + (t1.r - 0.5) * 0.25);
+		float blocks = smoothstep(0.75, 0.45, t2.g + (t1.b - 0.5) * 0.3) * 0.5 + 0.5;
 		float strata = sin(wpos.y * 1.3 + t1.r * 9.0 + t2.b * 4.0) * 0.5 + 0.5;
-		vec3 rk = mix(rock_b, rock_a, smoothstep(0.2, 0.8, t1.b * 0.85 + strata * 0.18 + t2.r * 0.2));
-		rk = mix(rk, rock_warm, smoothstep(0.55, 0.85, t1.r) * 0.45);
-		rk *= mix(0.78, 1.12, t2.a);
-		// cracks
-		rk *= mix(1.0, 0.55, smoothstep(0.07, 0.02, t2.g) * mid_k);
-		float lichen = smoothstep(0.55, 0.85, N.y) * smoothstep(0.45, 0.7, t2.r + 0.1);
-		rk = mix(rk, lichen_col, lichen * 0.6);
+		vec3 rk = mix(rock_b, rock_a, smoothstep(0.2, 0.8, t1.b * 0.7 + strata * 0.15 + big * 0.35));
+		rk = mix(rk, rock_warm, smoothstep(0.5, 0.85, t1.r) * 0.5);
+		rk *= mix(0.62, 1.08, blocks * 0.6 + big * 0.4);
+		rk *= mix(0.86, 1.1, t3.a * near_k + (1.0 - near_k) * 0.5);
+		// Sunny top faces are dusty and light; moss and lichen speckles on top.
+		rk = mix(rk, rk * 1.1 + vec3(0.02, 0.016, 0.008), smoothstep(0.6, 0.9, N.y) * 0.5);
+		float lichen = smoothstep(0.5, 0.85, N.y) * smoothstep(0.5, 0.72, t2.r + 0.1);
+		rk = mix(rk, lichen_col, lichen * 0.55);
+		float speck = smoothstep(0.12, 0.05, t3.g) * near_k * smoothstep(0.3, 0.6, N.y);
+		rk = mix(rk, vec3(0.62, 0.55, 0.25), speck * 0.5);
+		// Rain stains running down steep faces; grassy ledges on the flatter bits.
+		float stain = texture(noise_tex, vec2((wpos.x - wpos.z) * 0.06, wpos.y * 0.007)).b;
+		rk *= mix(0.72, 1.06, smoothstep(0.25, 0.75, stain)) * mix(1.0, 0.9, 1.0 - N.y);
+		float ledge = smoothstep(0.74, 0.9, N.y) * smoothstep(0.4, 0.68, t1.r + (nf - 0.5) * 0.4);
+		rk = mix(rk, grass * 0.88, ledge * 0.75);
 		col = mix(col, rk, rock_w);
-		rough = mix(rough, 0.8, rock_w);
-		spec = mix(spec, 0.4, rock_w);
-		bump = mix(bump, bump_strength * 2.2, rock_w);
+		rough = mix(rough, 0.78, rock_w);
+		spec = mix(spec, 0.42, rock_w);
+		// Derivative bump from the block pattern (works on any slope).
+		float hgt = (blocks * 0.3 + big * 0.6 + t3.a * 0.08 * near_k) * mid_k;
+		vec3 dpdx = dFdx(wpos);
+		vec3 dpdy = dFdy(wpos);
+		float dhx = dFdx(hgt);
+		float dhy = dFdy(hgt);
+		vec3 r1 = cross(dpdy, N);
+		vec3 r2 = cross(N, dpdx);
+		float det = dot(dpdx, r1);
+		vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
+		rock_n = normalize(abs(det) * N - grad * 0.22);
 	}
 
 	// --- Lake bed under water ----------------------------------------------------
@@ -208,7 +232,8 @@ void fragment() {
 	vec2 d2 = tc_nmap(texture(normal_tex, tc_rot(wp, 2.6) * 0.83));
 	vec2 dn = (d1 * mid_k + d2 * 0.7 * near_k) * bump;
 	dn *= 1.0 - under * 0.6;
-	N = normalize(N + vec3(dn.x, 0.0, dn.y));
+	vec3 Ng = normalize(N + vec3(dn.x, 0.0, dn.y) * (1.0 - rock_w));
+	N = normalize(mix(Ng, rock_n, rock_w));
 #endif
 
 	// --- Rain: darker, glossier ground, puddle gloss in hollows ----------------------
