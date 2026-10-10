@@ -91,6 +91,12 @@ func _build() -> void:
 	root.add_child(fire_widget)
 	clock = ClockWidget.new()
 	root.add_child(clock)
+	# Round minimap (ui/minimap.gd): appears once the Campfire Map is crafted.
+	if ResourceLoader.exists("res://ui/minimap.gd"):
+		var mm: Variant = (load("res://ui/minimap.gd") as GDScript).new()
+		if mm is Control:
+			(mm as Control).set("hud", self)
+			root.add_child(mm as Control)
 	hotbar = Hotbar.new()
 	root.add_child(hotbar)
 	hotbar.expanded_changed.connect(func(_e: bool) -> void: _update_mouse())
@@ -164,6 +170,9 @@ func open_modal(modal: String, args: Dictionary = {}) -> Control:
 			return null
 		close_modal()
 	var path: String = MODAL_SCRIPTS.get(modal, "res://ui/%s_ui.gd" % modal)
+	if modal == "map" and not bool(GameState.flags.get("has_map", false)) and not bool(args.get("force", false)):
+		_missing_modal(modal)
+		return null
 	if not ResourceLoader.exists(path):
 		_missing_modal(modal)
 		return null
@@ -231,7 +240,7 @@ func _missing_modal(modal: String) -> void:
 	match modal:
 		"map":
 			if not bool(GameState.flags.get("has_map", false)):
-				feed.toast("You don't have a map yet. Craft one at the crafting crate!", "info")
+				feed.toast("No map yet! Craft a Campfire Map at the crafting crate.", "info")
 			else:
 				feed.toast("The map is still being drawn. Coming soon!", "info")
 		"build":

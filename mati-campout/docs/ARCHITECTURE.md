@@ -1346,3 +1346,139 @@ switching between keyboard and touch, portrait card, hidden-tab pause; no
 console errors or warnings. Not verified: real iOS Safari / WebKit, real
 GPUs and frame rates on phones (SwiftShader runs at ~1 FPS), audio unlock,
 Add to Home Screen, notch insets, touch scrolling of long menus.
+
+
+### Chests & loot + the map
+
+Files: `world/chest_manager.gd` (`ChestManager`: placement, `add_chest`,
+discovery, glints, dawn restock), `world/chest.gd` (`Chest`: interactable,
+map marker, opening, loot fountain, effects, restock), `world/chest_models.gd`
+(`ChestModels`: procedural meshes + materials per tier), `ui/map_ui.gd`
+(`MapUI`, modal "map", plus static helpers shared with the minimap),
+`ui/minimap.gd` (`Minimap`, HUD corner), `shaders/chest.gdshader` (planks,
+iron, gold, gems, lacquer, glint sweep), `shaders/chest_burst.gdshader`
+(light shafts / flash / golden ground glow), `shaders/chest_sparkle.gdshader`
+(sparkle particles), `shaders/chest_ground.gdshader` (contact shadow). Tests:
+`tests/unit/test_chests.gd` (models, placement rules for 3 seeds, loot,
+restock, markers, manager API, map helpers) and the headless drive
+`godot --headless --path . res://tests/chest_drive.tscn [-- --seed=N]` (59
+checks: placement, starter in view, glints, M without a map, walk up + E,
+lid/light/loot fountain, coins + items reach the sack, empty hint, minimap,
+M opens/closes the map, markers, zoom/pan, beacon dark/relit, minimap click,
+discovery of a rare chest, restock after real dawns, second opening).
+
+- **Placement** (`ChestManager.plan_chests(gen, seed, veg, gather, avoid)`,
+  pure + deterministic, ~0.3 s): a starter common chest 16-22 m from the fire
+  in the direction the player looks at the start (past the fire), scored for
+  a clear line of sight (Vegetation trunks) and facing the camp; then
+  `epic_count` golden chests (>= 115 m) at the lighthouse, Old Mine, Elder
+  Grove, Ranger Lookout, Fern Hollow or the top of the Rocky Ridge;
+  `rare_count` rare chests (>= 70 m) around ruins (abandoned camp, lookout,
+  mine, Bram's Dig, lighthouse), on the ridge (`biome_at == "ridge"`) and the
+  lake shore (`"shore"`); the rest of `common_count` across the map (a couple
+  on the shore and ridge first, then by biome weight, most within 16 m of a
+  trail) facing the nearest trail. Rules for every chest: inside the playable
+  square (10 m margin), >= `camp_clear` from the fire (not the starter),
+  >= `spacing` apart, level ground (slope < 0.06), dry (also 0.9 m around),
+  >= 6 m from the stream, >= `trail_clear` from trails
+  (`vegetation.path_distance`), clear of trunks/boulders
+  (`vegetation.is_clear(p, 1.3)`), gatherables (`gatherables.is_clear`), camp
+  props (`camp.clear_zones()`) and the core of every landmark with a building
+  (`STRUCTURES`, 0.85 x radius + 1.5 m). Chests register a round obstacle
+  (`vegetation.add_obstacle`) so creatures steer around them; each has a
+  `StaticBody3D` box on layer 1.
+- **API for other systems** (`game.chests`): `add_chest(pos, tier, table_id,
+  opts) -> Chest` (tier "common"|"rare"|"epic", table "" = the tier's
+  `balance.chests.tables` entry; opts `restock_table`, `restock_days` (<= 0 =
+  never), `label`, `rot` (yaw; the front faces +Z rotated by it), `variant`,
+  `keep_y` (do not snap to the terrain, e.g. on a building floor),
+  `discovered`). The chests step runs after landmarks and camp: call it later
+  (deferred / `Events.run_started`) or use the static
+  `ChestManager.request_chest(...)`, which queues until the manager is set up.
+  Queries: `chest_count()`, `count_tier(t)`, `counts_by_tier()`, `chest(i)`,
+  `starter()`, `nearest(pos, tier, closed_only, max_r)`, `restock_step()`,
+  `discover_all()`, `debug_stats()`, `debug_gallery(at, spacing, yaw)`.
+  `Chest`: `open_chest(player) -> loot`, `preview_loot()`, `restock(animate)`,
+  `dawn_tick(player_pos)`, `days_until_restock()`, `glint_points()`,
+  `mouth_position()`, `tier`, `opened`, `discovered`, `open_count`,
+  `last_loot`, signals `chest_opened(chest, loot)`, `chest_restocked(chest)`.
+- **Opening** ("Open Chest" / "Open Rare Chest" / "Open Golden Chest", radius
+  2.4, point at the front): the latch rattles, the lid swings ~108 degrees
+  with an overshoot, the body squashes; a warm `OmniLight3D` burst (no
+  shadows, freed after 2.2 s), shafts of light rising out of the box, a flash
+  at the mouth and 28/40/64 golden star sparkles
+  (`QualityPresets.particle_count`). Loot = `Loot.roll(DB.loot_table(table),
+  rng)` with the rng seeded by world seed, chest index, opening number and
+  table (`preview_loot()` gives the same answer), popped out one by one as
+  `Pickup.spawn` with an impulse fanning out of the front toward the player
+  (coins split into piles of <= `coin_pile_max`). Then
+  `Events.chest_opened(tier, pos)` (the audio director plays `chest_open`),
+  `stat_add("chests_opened")`, a small camera shake and a loot toast
+  ("Chest: 8 coins, 3 Wood, Bandage"). The chest stays open and empty with
+  the hint "Empty! It fills up again in 3 days".
+- **Restock**: on every `Events.phase_changed(DAWN)` each opened chest counts
+  a dawn; after `restock_days` (`balance.chests.restock_days`, default 3) the
+  lid closes again (animated with "Refilled!" when the player is within 45 m)
+  and the next opening rolls `restock_table` (or the same table). A toast says
+  so when a discovered chest refills.
+- **Look**: common = honey planks with iron corner brackets, rivets, hasp +
+  ring and side handles; rare = dark planks with wrap-around iron bands,
+  studs and a brass padlock; epic = plum lacquer in a gold frame with ball
+  feet, gold bands, studs, a star crest with a pink gem and a glowing teal
+  gem lock, a soft pulsing ground glow and (within 32 m) a small warm
+  `OmniLight3D`. 6.1k / 8k / 10.6k triangles, two draw calls each (body +
+  lid) + a contact-shadow quad; visibility range 80/100/125/150 m by preset.
+  Noticeability: a thin glint sweeps over the metal in world space (each
+  chest flashes at its own moment), a faint warm rim and star twinkles from
+  one shared `Sparkle` MultiMesh (closed chests within `glint_range`, own
+  material: fades 38-62 m), all stronger at dusk via `night_factor`.
+  Opened chests switch to a non-glinting material. Materials use plain
+  uniforms only (no instance uniforms: nothing extra on Compatibility).
+- **Discovery & markers**: each chest is in group `map_marker` with
+  `{kind: "chest", label, important: true, discovered, tier, opened}`; it is
+  discovered when it is within `discover_radius` (30 m) and inside the
+  camera frustum, or when opened (`Events.chest_discovered(tier, pos)`, a
+  "You spotted a Golden Chest!" toast for rare/epic, and a one-time "press E"
+  hint near the first chest). The marker contract accepts optional `pos`
+  (else the node's position), `tier` and `opened`.
+- **The map** (`ui/map_ui.gd`, modal "map"; M / gamepad Y, the minimap or the
+  touch Map button; Esc / M / B close it; does not pause): the painted map
+  (`Terrain.get_map_image(512)`, else `WorldGen.render_map_image`; painted
+  once while loading by `ChestManager.setup`) in a carved wooden frame with
+  brass corners, faint 100 m survey lines, a compass rose, a scale bar,
+  geography labels (lake, ridge, meadow, grove), a legend and chest counts.
+  Markers: player arrow + view cone (turns with the camera), Home Camp,
+  discovered chests (ring colour by tier, opened ones greyed with a tick),
+  landmarks / traders / pet from any `map_marker` node, and WorldGen
+  landmarks the player came near (`GameState.flags.map_seen`, also set by
+  `Events.landmark_discovered`) unless a marker node already covers them.
+  Pan / zoom: wheel + drag, pinch + one-finger drag, trackpad gestures, left
+  stick / WASD, right stick, LB / RB, + / -, "Find me", "Home". **Beacon**:
+  while `GameState.fire` is OUT all `important` markers fade and smear away,
+  the map dims and a note reads "The beacon is dark... relight your campfire
+  to see your markers." (geography, Home Camp and the arrow stay); they come
+  back when the fire is relit. Before the map is crafted the HUD shows "No
+  map yet! Craft a Campfire Map at the crafting crate." instead (small hook in
+  `HUD.open_modal`).
+- **Minimap** (`ui/minimap.gd`, added by the HUD when the file exists; hidden
+  until `flags.has_map`, pops in on `Events.map_unlocked`): a 184 px round
+  live map (75 m radius, north up) with the player arrow, nearby markers
+  (fading with the beacon), Home Camp or an arrow on the rim pointing home,
+  an N cap and an M key hint. Desktop: bottom-left corner; touch layout: under
+  the clock, left of the Pause/Map/Build column, shrinking to fit above the
+  touch buttons. Click / tap opens the map.
+- **Balance** (`chests`): `common_count`, `rare_count`, `epic_count`,
+  `restock_days`, `near_camp_starter`, `starter_dist`, `camp_clear`,
+  `common_min_dist`, `rare_min_dist`, `epic_min_dist`, `spacing`,
+  `trail_clear`, `discover_radius`, `glint_range`, `coin_pile_max`,
+  `tables` (tier -> loot table).
+- **Screenshot tour** options: `"chest": {"tier": "common"|"rare"|"epic"|
+  "starter", "near": landmark}` anchors on a placed chest (`chest_cam` /
+  `chest_look` in the chest's frame), `"chest_gallery": {"at", "yaw"}` lines up
+  one chest per tier, `"chest_open": s` opens it and captures s game seconds
+  later, `"chest_lid"`, `"chest_player"`, `"map_unlock"`, `"discover_all"`,
+  `"open_some": n`, `"map_modal": {center, zoom}`. Presets: `chest_gallery_day`,
+  `chest_gallery_dusk`, `chest_common_day`, `chest_rare_day`, `chest_epic_day`,
+  `chest_common_dusk`, `chest_rare_dusk`, `chest_epic_dusk`, `chest_far`,
+  `chest_open_burst`, `chest_open_epic`, `chest_opened`, `hud_start_chest`,
+  `hud_minimap`, `hud_minimap_dark`, `map_ui`, `map_ui_dark`, `map_ui_zoom`.
