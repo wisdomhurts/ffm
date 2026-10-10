@@ -12,7 +12,8 @@ var main: Node
 var cam: Camera3D
 
 ## name -> {hour, fire (0..1 or -1 = out), cam (Vector3), look (Vector3),
-##          landmark (optional id the cam/look are relative to), hud (bool), rain}
+##          landmark (optional id the cam/look are relative to), hud (bool), rain,
+##          weather (optional "clear"|"cloudy"|"rain"|"storm"|"fog")}
 const SHOTS := {
 	"camp_day": {"hour": 11.0, "fire": 0.9, "cam": Vector3(9, 4.2, 11), "look": Vector3(0, 1.0, 0)},
 	"camp_golden": {"hour": 17.4, "fire": 0.9, "cam": Vector3(-8, 3.5, 10), "look": Vector3(0, 1.2, 0)},
@@ -73,6 +74,11 @@ const SHOTS := {
 		"cam": Vector3(-2.6, 1.3, -2.2), "look": Vector3(0, 1.2, 0)}, "pose": {"item": "good_axe", "action": "chop", "u": 0.32}},
 	"player_night": {"hour": 22.5, "fire": 0.9, "player_view": {"pos": Vector3(16, 0, 12), "yaw": 2.4,
 		"cam": Vector3(0.9, 1.5, -3.2), "look": Vector3(0, 1.0, 0)}, "pose": {"item": "flashlight", "torch": true, "lit": true}},
+	# Lighting / weather presets ("weather": clear|cloudy|rain|storm|fog).
+	"night_sky": {"hour": 23.0, "fire": 0.9, "cam": Vector3(-7, 1.8, -9), "look": Vector3(40, 46, 48)},
+	"camp_dawn": {"hour": 6.1, "fire": 0.5, "weather": "fog", "cam": Vector3(-12, 2.6, 7), "look": Vector3(30, 4.0, -6)},
+	"cloudy_day": {"hour": 12.5, "fire": 0.9, "weather": "cloudy", "cam": Vector3(9, 2.2, 11), "look": Vector3(-30, 16, -40)},
+	"storm_night": {"hour": 21.5, "fire": 0.8, "weather": "storm", "cam": Vector3(8, 3.4, 9), "look": Vector3(0, 1.0, 0)},
 }
 
 var _screen_node: Node = null
@@ -140,7 +146,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 		GameState.fire.burn(0.0001)
 	var env: Node = GameState.environment
 	if env and env.has_method("set_weather"):
-		env.call("set_weather", "rain" if s.get("rain", false) else "clear", true)
+		env.call("set_weather", str(s.get("weather", "rain" if s.get("rain", false) else "clear")), true)
 	var hud_visible := bool(s.get("hud", false))
 	var hud: Node = GameState.game.get("hud") if GameState.game else null
 	if hud is CanvasLayer:
