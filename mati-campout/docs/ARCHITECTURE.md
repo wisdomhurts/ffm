@@ -320,7 +320,139 @@ _(pending)_
 
 ### Campsite & campfire
 
-_(pending)_
+**Files.** `camp/campsite.gd` (`Campsite`, layout + decor + dawn kindling),
+`camp/campfire.gd` (`Campfire`, logic, light, interactions),
+`camp/fire_pit.gd` (`FirePit`, level 1-3 structures + per-level config),
+`camp/cooking_rack.gd` (`CookingRack`), `camp/tent.gd` (`Tent`) +
+`camp/tent_builder.gd` (`TentBuilder`, 8 looks), `camp/crafting_crate.gd`
+(`CraftingCrate`), `camp/storage_box.gd` (`StorageBox`),
+`camp/lantern_pole.gd` (`LanternPole`), `camp/camp_props.gd` (`CampProps`,
+static prop builders), `camp/camp_kit.gd` (`CampKit extends MeshKit`: logs
+with end grain, planks with 3D grain, stones, canvas sheets, ropes),
+`fx/fire_fx.gd` (`FireFX`), `fx/sparks.gd` (`FireSparks`: celebrate / puff /
+sparks one-shots). Shaders: `wood_camp.gdshaderinc` (shared surface code,
+pattern ids = `CampKit.P`), `wood_camp.gdshader` (solid props),
+`canvas_camp.gdshader` (double-sided canvas: backlight glow + wind flutter,
+CUSTOM0.y = flutter weight), `fire_flame.gdshader`, `fire_sparks.gdshader`,
+`fire_embers.gdshader`, `smoke_puff.gdshader`. Tests:
+`tests/unit/test_camp.gd`; integration driver
+`godot --headless --path . -s res://tests/camp_drive_launcher.gd` (70 checks:
+layout/snapping, feeding, full/empty hints, storage fuel, low warning, fire
+out, relight, cooking incl. pause, tent rest/shelter/levels, modals, fire
+levels, dawn kindling).
+
+**Layout** (camp-local metres, fire at the origin, +X east, -Z north): log
+benches W / S / N and two stumps at ~3 m; tent door 4.6 m NE facing the fire
+(the tent grows away from the fire, its door stays put); picnic table SW
+(-3.75, 3.85); crafting crate W (-5.3, -0.2) facing the fire with the storage
+box at (-4.85, -2.05); firewood stack + chopping block NW; lantern pole
+(-2.35, 3.35); bucket, kettle, mugs, backpack, loose logs; "MATI's Campout"
+sign at (1.3, 7.6) facing the south trail. Every prop is snapped to
+`WorldGen.height_at` (lowest point of its footprint). All static decor is ONE
+mesh + ONE `StaticBody3D` (layer 1); crate, box, tent, lantern pole and the
+fire have their own bodies. The tent collides on its back/side walls only
+(door side open) so the player can walk in.
+
+**Public refs:** `GameState.camp` = Campsite with `campfire`, `tent`,
+`crate`, `storage_box`, `cooking_rack`, `lantern_pole`, `structures` (Node3D
+for future buildables), `decor`; `ground_y(x, z)` (camp-local);
+`clear_zones() -> [Vector4(x, y, z, r)]` (world circles ground cover should
+keep clear of: fire pit, tent + door, seats, table, crate, box, firewood,
+sign; Vegetation can use it so grass does not grow inside the tent);
+`obstacles_near(pos, r)` (same format as `Vegetation.obstacles_near`, for AI
+that wants to steer around props); `spawn_dawn_kindling()`. The campsite is
+in group `map_marker` (`{"kind": "camp", "label": "Home Camp"}`).
+
+**Campfire API:** `light_intensity_at(pos)` (= `FireModel.light_at_distance(d,
+balance.fire.light_fear_edge)`), `light_origin()`, `heat_at(pos)`,
+`is_burning()`, `flame_position()`, `feed(id, inv, player)`,
+`relight(player)`, `set_level(n, celebrate)`, `debug_set_out_time(t)`,
+`light` (main OmniLight3D), `core_light`, `fx`, `rack`, `level`; static pure
+`pick_fuel(fire, selected, sack, storages)` / `pick_relight(...)`.
+- Burns `GameState.fire` with `delta * time_scale` while playing (rain from
+  `GameState.environment.raining`). Polls the model each frame, so tools that
+  change `GameState.fire` directly (dev keys, tour, tests) stay in sync; it
+  follows `fire.level` (and `Events.fire_level_changed` celebrates).
+- Fuel: selected hotbar item if it is fuel, else wood, else coal (kindling
+  only when selected), from the sack first, then camp storage (+ extra
+  storage). Feeding: fuel arcs into the flames, flare ~0.7 s, spark burst,
+  light pulse, `fire_whoosh`, `camera_shake(0.08)`, `Events.fire_fed`,
+  `stat_add("fuel_added")`, float text "Fire +27%". Full: hint "The fire is
+  full". OUT: "Relight fire (1 Kindling + 1 Wood)" (kindling + wood/coal from
+  sack or storage) → `FireModel.relight` immediately (Events.fire_relit comes
+  from the GameState relay, not re-emitted), `fire_ignite`, dramatic ignite
+  FX. Hints say what is missing ("Need Kindling: craft it from Wood at the
+  crate").
+- Warnings: STRONG→LOW `notify("The fire is getting low! Add wood.", "warn")`
+  (20 s throttle); on going OUT while playing: `big_message("THE FIRE IS
+  OUT. YOU ARE NO LONGER SAFE.", #ff5a2a, 4)`, `Audio "fire_out"`,
+  `stat_add("fire_outs")`.
+- Light: shadowed warm `#ffb15c` OmniLight3D high over the fire (1.8 / 2.1 /
+  2.9 m so the pool of light is wide and the near ground does not blow out),
+  `omni_range = light_radius * 1.45`, energy by strength, never-strobing
+  3-octave noise flicker (smaller with `reduce_flashing`), tiny position sway,
+  `light_volumetric_fog_energy` 0.6 (with the lighting build's camp haze more
+  looked milky), shadows only on Medium/High and only when it is dark
+  (cube on High, dual paraboloid on Medium); a small hot core light without
+  shadows (dim red glow while smouldering). Globals `fire_position` (flame
+  base) and `fire_strength` (smoothed, 0 when out) are written every frame.
+- Safe ring: a `Decal` at the edge of the light radius (texture band at 93 %
+  of its half size), fading in at dusk and shrinking with the fire, gone when
+  out; plus a soot decal under the pit. Decal emission ignores alpha, so the
+  emission texture is premultiplied.
+
+**Fire visuals (`FireFX`).** Two persistent "hero" flame billboards (the
+silhouette) + GPU particle flame tongues + a soft core + rising embers +
+smoke + a one-shot spark burst, all scaled by `strength`/`visual_intensity`:
+smaller, lower and redder when LOW; OUT → no flames, embers smoulder
+`balance.fire.smoulder_seconds` (20 s; charred-log cracks and the ember bed
+fade, thick smoke then a thin wisp), then grey ash. Flames are premultiplied
+alpha (solid-looking orange bodies in daylight, HDR cores that bloom at
+night), `fog_disabled`. Particle counts follow quality (0.5 / 0.75 / 1.0).
+Levels (`FirePit`): 1 stone ring + log teepee, 2 two-course stone hearth with
+an iron grate, 3 stone plinth with an iron beacon basket; each changes the
+collider, interact radius (2.6 / 2.95 / 3.2), light height and rack size.
+
+**Cooking rack** (child of the campfire, interact at the nearest stake):
+"Cook Raw Meat" (selected cookable first, else first in the sack; needs a lit
+fire and a free `balance.fire.rack_slots` slot) → food turns on the spit,
+browns via the `cook` instance uniform over `fire.cook_seconds` (paused while
+out), smoke puffs, `Audio.start_loop("cooking", rack)`; done → swaps to the
+cooked model, `Events.food_cooked`, "Take Cooked Meat (2)" gives everything
+(overflow drops as pickups). Progress: "Cook X (Cooking... 60%)" or the hint
+"Cooking... 60%". The rack wins the prompt over the fire while food is ready
+or a cookable item is selected; otherwise the fire wins.
+
+**Tent** (groups `shelter`, `interactable`): `set_level(n, celebrate := true)`
+rebuilds (confetti + sparkles + dust ring, `Events.tent_upgraded`,
+`GameState.tent_level`, `stat_max("highest_tent")`, storage capacity grows
+to `camp.storage_slots + storage_bonus`), `contains(pos)`, `tent_warmth()`
+(level `warmth`), `rest_heal_mult()` (level `rest_heal`, alias `rest_mult()`
+for the Player), `rest_spot()`, `level_name()`, `max_level()`, `info`
+(w/d/h/door/rest). "Rest in tent" teleports the player onto the bedroll,
+faces the door and sets `player.resting = true`. Lanterns / string lights /
+interior glow only at night while the fire burns; starstones (L8) glow at
+night always (dimmer when the fire is out). None of these are protective
+light sources.
+
+**Crate / storage:** "Open Crafting Crate" → `Events.request_modal("crafting",
+{})`; "Open Storage Box (n/16)" → `request_modal("storage", {})`.
+
+**Dawn kindling:** on `phase_changed(DAWN)` the campsite tops up kindling
+pickups within 25 m to `balance.camp.safe_kindling_respawn` (4), placed on a
+`balance.camp.kindling_ring` (9-13 m) seeded by seed + day.
+
+**Screenshot presets / options:** `camp_overview`, `camp_fire_close`,
+`camp_fire_macro`, `camp_fire_day`, `fire_l2`, `fire_l3`, `fire_smoulder`,
+`fire_ash`, `camp_cooking`, `camp_crate`, `camp_table`, `camp_sign`,
+`safe_ring`, `tent_close`, `tent_night`, `tent_l1`..`tent_l8`; generic options
+`fire_level`, `tent_level`, `fire_out_age`, `cook {id: progress}`,
+`player_sit`.
+
+**Cost (High):** campfire ≈ 1 shadowed omni + 1 small omni, 2 decals, 5
+particle systems (~30-40 flame + 12 core + 34-56 embers + 18 smoke) and 2
+hero quads; all static decor is 1 draw call (+ shadow passes), each other
+prop 1-2. Lanterns/tent add up to 3 small unshadowed omnis at night.
 
 
 ### Gatherables
