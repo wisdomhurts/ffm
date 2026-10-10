@@ -89,6 +89,7 @@
     "despawn_dist": 110,
     "fire_out_aggression_mult": 1.6,
     "fire_out_extra_stalkers": 2,
+    "max_monsters": 16,
     "wolf_packs": 4,
     "wolves_per_pack": [2, 3],
     "bunnies": 22,

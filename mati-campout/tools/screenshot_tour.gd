@@ -23,6 +23,11 @@ const SHOTS := {
 	"fire_out": {"hour": 1.0, "fire": -1.0, "cam": Vector3(8, 3.4, 9), "look": Vector3(0, 1.0, 0)},
 	"forest_day": {"hour": 10.0, "fire": 0.9, "cam": Vector3(40, 2.0, -25), "look": Vector3(60, 3.0, -45)},
 	"forest_night": {"hour": 22.0, "fire": 0.9, "cam": Vector3(26, 2.0, 18), "look": Vector3(0, 1.5, 0)},
+	# Monsters (generic options: spawn, spawn_only, player_at; see _apply_spawn_option).
+	"stalker_edge": {"hour": 23.0, "fire": 0.95, "cam": Vector3(0.6, 1.45, -2.2), "look": Vector3(-3.0, 1.25, -12.5), "player_at": Vector3(1.6, 0, 1.0), "spawn_only": true,
+		"spawn": [{"kind": "night_stalker", "pos": Vector3(-4.0, 0, -13.9), "pose": "observe"}, {"kind": "night_stalker", "pos": Vector3(4.6, 0, -14.6), "pose": "observe"}]},
+	"watcher": {"hour": 22.5, "fire": 0.9, "cam": Vector3(13, 1.6, 13), "look": Vector3(23, 2.4, 26), "player_at": Vector3(12, 0, 11.5), "spawn_only": true,
+		"spawn": [{"kind": "watcher", "pos": Vector3(24, 0, 27.5)}]},
 	"meadow_day": {"hour": 9.5, "fire": 0.9, "cam": Vector3(15, 3.0, 45), "look": Vector3(35, 1.0, 85)},
 	"lake_sunset": {"hour": 18.6, "fire": 0.9, "landmark": "pips_dock", "cam": Vector3(12, 3.0, 6), "look": Vector3(-40, 0.0, -10)},
 	"lighthouse_day": {"hour": 13.0, "fire": 0.9, "landmark": "lighthouse", "cam": Vector3(38, 8, -30), "look": Vector3(0, 12, 0)},
@@ -124,6 +129,7 @@ func _player_view(s: Dictionary) -> void:
 
 func _shoot(shot_name: String, s: Dictionary) -> void:
 	_set_hour(float(s.get("hour", 12.0)))
+	_apply_spawn_option(s)
 	var f := float(s.get("fire", 0.9))
 	if f < 0.0:
 		GameState.fire.extinguish()
@@ -283,3 +289,44 @@ func _cleanup_ui_options(hud: Node) -> void:
 	if _screen_node and is_instance_valid(_screen_node):
 		_screen_node.queue_free()
 	_screen_node = null
+
+
+## Generic monster options for a shot:
+##   "spawn": [{"kind", "pos" (relative to the shot origin), "pose" ("observe",
+##             "windup", "chase"), "face" (optional relative point; default:
+##             the camera)}] - spawned frozen (AI off, still animating);
+##   "spawn_only": true - remove other monsters and pause natural spawning;
+##   "player_at": Vector3 - park the player here after the camera is placed.
+var _monster_shot := false
+
+
+func _apply_spawn_option(s: Dictionary) -> void:
+	var sp: Variant = GameState.game.get("spawner") if GameState.game else null
+	if not (sp is Node) or not (sp as Node).has_method("spawn_at"):
+		return
+	var spawner := sp as Node
+	var wants := s.has("spawn") or bool(s.get("spawn_only", false))
+	spawner.set("auto_spawn", not bool(s.get("spawn_only", false)))
+	if wants or _monster_shot:
+		spawner.call("clear_all")
+	_monster_shot = wants
+	var origin := Vector3.ZERO
+	if s.has("landmark"):
+		origin = GameState.world_gen.landmark_pos(str(s["landmark"]))
+	for e in s.get("spawn", []):
+		var d: Dictionary = e
+		var m: Variant = spawner.call("spawn_at", str(d.get("kind", "night_stalker")), origin + (d.get("pos", Vector3.ZERO) as Vector3))
+		if m is Node3D:
+			var mn := m as Node3D
+			mn.set("ai_enabled", false)
+			mn.set("hold_pose", str(d.get("pose", "")))
+			if d.has("face"):
+				mn.set("hold_face", GameState.world_gen.ground(origin + (d["face"] as Vector3), 1.5))
+			mn.call("fade_in", 0.05)
+	if s.has("player_at") and GameState.world_gen:
+		_park_player.call_deferred(GameState.world_gen.ground(origin + (s["player_at"] as Vector3), 0.1))
+
+
+func _park_player(pos: Vector3) -> void:
+	if GameState.player and GameState.player.has_method("teleport"):
+		GameState.player.call("teleport", pos)
