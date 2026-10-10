@@ -285,7 +285,118 @@ _(pending)_
 
 ### Lighting, sky, weather & quality presets
 
-_(pending)_
+Files: `env/environment_controller.gd` (`EnvironmentController`, the only
+WorldEnvironment and the only DirectionalLight3Ds: please don't add others),
+`env/sky_keys.gd` (`SkyKeys`, the time-of-day look table), `env/sky.gdshader`,
+`env/weather.gd` (`Weather`) + `env/rain.gdshader`, `env/fireflies.gd`
+(`Fireflies`) + `env/fireflies.gdshader`, `env/quality.gd` (`QualityPresets`).
+Tests: `tests/unit/test_environment.gd`. Weather tuning: `balance.json` → `weather`.
+
+**Every frame** the controller reads `GameState.day_cycle` (hour, darkness),
+samples `SkyKeys` (keys at 0, 4.3, 5.4, 6.2, 7.6, 10, 15.6, 17.4, 18.6, 19.3,
+20.4 h, smoothstep-blended; colours are sRGB hex so they can be tuned by eye),
+mixes in weather and the campfire state, then drives the sky shader, sun, moon,
+ambient, depth + volumetric fog, a ground-mist `FogVolume` that follows the
+camera, exposure/glow/grading, the shader globals and `Lights.daylight`.
+
+- **Sun:** rises in the east (+X) at 06:00, arcs over the south (+Z, max 62°),
+  sets in the west (-X, over the lake) at 19:00. Golden sunrise, warm-neutral
+  day (energy ~1.5), orange golden hour and a deep orange sunset with long
+  shadows. **Moon:** separate `DirectionalLight3D`, `#7a95d8`, energy ~0.16,
+  soft (blurred) shadows, rises ~18:50 east, sets ~06:50 west. Exactly one
+  of them casts shadows (the stronger); the swap happens when both are dim.
+  Shadows: PSSM 4 splits (0.06/0.17/0.42), bias 0.04, normal bias 1.1,
+  pancake 30, distance from the quality preset.
+- **Sky** (`sky.gdshader`, `Sky.PROCESS_MODE_REALTIME`, radiance 256): zenith →
+  horizon gradient warmer on the sun side, sun disk + halo, shaded gibbous
+  moon with halo, twinkling stars + milky way fading in at dusk, domain-warped
+  clouds lit by the sun (pink/orange at sunset, silver at night), overcast
+  dome in rain, lightning flash. The cubemap pass (ambient + reflections)
+  skips stars and fine cloud octaves. It never goes pure black.
+- **Post:** AgX tonemapper (contrast 1.3), exposure per time; glow threshold
+  1.6 by day → 1.0 at night so only HDR emitters bloom (make emissive eyes,
+  embers, lantern glass brighter than that); SSAO/SSIL per preset; colour
+  correction = per-channel split-tone LUT (warm highlights, cool shadows),
+  contrast/saturation per time, `Settings brightness` → `adjustment_brightness`.
+- **Fog:** exponential depth fog + height fog + aerial perspective for
+  distance; volumetric fog (density/albedo/emission/anisotropy per time: dawn
+  mist, golden haze, blue night) so firelight and moonlight glow in the air;
+  ground mist in hollows at dawn/dusk/night; and a warm **camp haze**
+  ellipsoid `FogVolume` over `GameState.campfire` at night whose width is
+  `2 × fire.light_radius()` and density follows `fire.strength()`, so the
+  glowing safe circle visibly shrinks as the fire weakens and is gone when
+  it is out (Medium/High only).
+- **Fire-aware mood:** when `GameState.fire` is OUT at night (and a little as
+  it weakens) ambient dips ~30 %, fog thickens and turns dark/cold-blue
+  (absorbing, not glowing), saturation drops. Moon and stars still light the
+  ground near the player, so it stays navigable.
+- **Globals written:** `night_factor` (smoothed darkness 0..1), `time_of_day`
+  (h), `wind_strength` (0..~1.3, gusty noise, weather-scaled),
+  `wind_direction` (unit vec2, slowly veering), `wetness` (0..1, ~35 s to soak,
+  ~140 s to dry). `Lights.daylight = 1 - night_factor` (time skips snap).
+
+**Public API** (`GameState.environment`, may be null in tests):
+```
+raining: bool                      # true while it rains (fire burns faster, colder)
+weather: String                    # "clear" | "cloudy" | "rain" | "storm" | "fog"
+set_weather(kind, instant := false) # force a kind; "auto" = back to the schedule
+weather_amounts() -> Dictionary    # {cloud, rain, fog, wind, wetness, storm} 0..1
+wind_vector() -> Vector2           # direction * strength (same as the globals)
+sun_direction() / moon_direction() -> Vector3   # unit vectors towards them
+apply_quality(q := "")             # re-apply a preset (done on Settings.changed)
+QualityPresets.value(key, default) # per-preset knobs for other systems (see table)
+```
+**Weather:** seeded per day from `GameState.seed` (`Weather.day_segments`).
+Day 1 is always dry; rain from day 2, storms from day 3; ~50 % clear,
+~26 % cloudy, ~17 % rain (2–4.5 game hours), ~7 % storm, plus foggy mornings
+(30 %, dawn → ~09:30). Clouds gather before rain and clear after it. Rain =
+velocity-aligned GPU streaks around the active camera (amount per preset;
+drops near the campfire glow warm via `fire_position`/`fire_strength`).
+Storms add thunder (`Audio.play("thunder")` 0.5–2 s after the flash, caption
+`[thunder rumbles]`) and lightning; `Settings reduce_flashing` replaces the
+strobe with one slow, gentle swell (peak 0.22). Loops: `rain` while raining,
+`wind` during storms (anchored to the camera). `Events.weather_changed(kind)`
+on every change, plus kid-friendly toasts ("It's raining! Your fire burns
+faster in the rain.").
+
+**Fireflies:** one GPUParticles3D (32/56/90 per preset) around the player from
+dusk to dawn, only where `Fireflies.habitat()` says (meadows, stream banks,
+lake shore, the camp edge 11–36 m from the fire); none in rain or thick fog.
+
+**Quality presets** (`Settings.quality()`, applied at start and on change):
+
+| | Low | Medium | High |
+|---|---|---|---|
+| Sun/moon shadows | 2048 atlas, 2 splits, 60 m, soft very-low | 4096, 4 splits, 85 m, soft low | 4096, 4 splits + blend, 110 m, soft medium |
+| Positional shadow atlas | 2048 | 2048 | 4096 |
+| `fire_shadows` / `light_shadow_distance` | off / 18 m | on / 26 m | on / 36 m |
+| Volumetric fog | off (denser depth fog instead) | 64³ froxels, 64 m | 96³ + filter, 80 m |
+| Ground mist volume | off | on | on |
+| SSAO / SSIL / SSR | – / – / – | SSAO low half-res / – / – | SSAO medium / SSIL low half-res / SSR |
+| SDFGI | off | off | off (see below) |
+| AA | FXAA | SMAA | MSAA 2× + SMAA (no TAA: ghosting on rain/particles) |
+| Mesh LOD threshold | 4.0 | 2.0 | 1.0 |
+| Glow levels | 3 | 5 | 5 |
+| `grass_density` / `tree_distance` | 0.35 / 140 m | 0.65 / 200 m | 1.0 / 280 m |
+| `particles` (multiplier) / rain drops / fireflies | 0.5 / 1400 / 32 | 0.75 / 2600 / 56 | 1.0 / 4000 / 90 |
+
+**SDFGI is off on every preset.** Tested on/off at High (4 cascades, 0.4 m
+cells): by day it only slightly lifts the shadowed ground under trees, at
+night the campfire bounce was not visible at all, yet it was by far the most
+expensive pass (the test frames rendered roughly 10× slower). With a 640 m
+world, a camera that moves constantly and thin MultiMesh foliage (which
+voxelises poorly and tends to leak light), it is not worth its cost: the
+campfire bounce is sold by SSIL + volumetric fog and day ambient comes from
+the realtime sky radiance. Revisit if large solid structures are added.
+
+**For other systems:** the campfire's OmniLight should use
+`light_volumetric_fog_energy` ≈ 1.5–2.5 so its glow shows in the fog, keep
+writing `fire_position`/`fire_strength`, and read
+`QualityPresets.value("fire_shadows")`. Wet materials should darken/gloss
+with `wetness`. Vegetation reads `wind_*`, `grass_density`, `tree_distance`.
+Water gets sky reflections from the sky radiance (SSR on High).
+`tools/screenshot_tour.gd` shots accept `"weather": "storm"` etc.; extra
+presets: `night_sky`, `camp_dawn`, `cloudy_day`, `storm_night`.
 
 
 ### Campsite & campfire
