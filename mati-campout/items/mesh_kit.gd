@@ -48,7 +48,7 @@ var _i := PackedInt32Array()
 static func material() -> ShaderMaterial:
 	if _material == null:
 		_material = ShaderMaterial.new()
-		_material.shader = load(SHADER_PATH)
+		_material.shader = ShaderCompat.shader(SHADER_PATH)
 	return _material
 
 

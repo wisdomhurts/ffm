@@ -120,17 +120,25 @@ func set_progress(frac: float, text: String) -> void:
 		_status.text = text
 
 
+## Touch screens: keyboard words become the on-screen buttons.
+static func _tip_text(tip: Array) -> String:
+	var t := str(tip[1])
+	if Platform.is_touch():
+		t = t.replace("Press Tab to see", "Tap the bag to see")
+	return t
+
+
 func _show_tip(instant: bool = false) -> void:
 	var tip: Array = TIPS[_tip_index % TIPS.size()]
 	if instant:
 		_tip_icon.texture = ThemeFactory.icon(str(tip[0]))
-		_tip_label.text = str(tip[1])
+		_tip_label.text = _tip_text(tip)
 		return
 	var tw := create_tween()
 	tw.tween_property(_tip_box, "modulate:a", 0.0, 0.25)
 	tw.tween_callback(func() -> void:
 		_tip_icon.texture = ThemeFactory.icon(str(tip[0]))
-		_tip_label.text = str(tip[1]))
+		_tip_label.text = _tip_text(tip))
 	tw.tween_property(_tip_box, "modulate:a", 1.0, 0.3)
 
 

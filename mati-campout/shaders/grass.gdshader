@@ -67,7 +67,13 @@ void vertex() {
 	VERTEX = vec3(dot(rel, MODEL_MATRIX[0].xyz), dot(rel, MODEL_MATRIX[1].xyz), dot(rel, MODEL_MATRIX[2].xyz)) / s2;
 	// Soft, mostly-up normals so both faces of a blade light alike.
 	vec3 wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	// Browsers/phones: BACKLIGHT does nothing there, so lean the normals
+	// further up or blades facing away from the sun turn almost black.
+	v_up_normal = normalize(mix(wn, vec3(0.0, 1.0, 0.0), 0.88));
+#else
 	v_up_normal = normalize(mix(wn, vec3(0.0, 1.0, 0.0), 0.55 + 0.25 * (1.0 - CUSTOM0.g)));
+#endif
 }
 
 vec3 palette(float slot) {

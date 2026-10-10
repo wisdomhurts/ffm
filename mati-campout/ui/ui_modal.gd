@@ -9,6 +9,12 @@ extends Control
 ##   var pauses_game: bool               true = HUD pauses the tree while open
 ##   func open(args: Dictionary) -> void called right after it enters the tree
 ## Esc / B (and any extra `close_actions`) close the top-most modal.
+##
+## Small screens (phones): build_frame() caps the panel to the space
+## available (so scroll areas inside shrink) and _fit_to_screen() scales the
+## whole window down if its content still does not fit. avail_size() tells
+## subclasses how much room there is. In touch mode the header shows a big
+## close button instead of the Esc key hint.
 
 signal closed()
 
@@ -26,6 +32,9 @@ var header: HBoxContainer
 var title_label: Label
 var _closing := false
 var _opened_at := 0
+var _fit := 1.0
+var _center: CenterContainer = null
+const FIT_MARGIN := Vector2(24.0, 16.0)
 
 
 func _init() -> void:
@@ -64,8 +73,10 @@ func build_frame(title: String, panel_size: Vector2, icon_id: String = "", dim_a
 	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(cc)
+	_center = cc
 	panel = PanelContainer.new()
-	panel.custom_minimum_size = panel_size
+	var avail := avail_size()
+	panel.custom_minimum_size = Vector2(minf(panel_size.x, avail.x - FIT_MARGIN.x * 2.0), minf(panel_size.y, avail.y - FIT_MARGIN.y * 2.0))
 	var sb := ThemeFactory.panel_style(24, 1.12)
 	sb.set_content_margin_all(28)
 	sb.shadow_size = 28
@@ -83,15 +94,21 @@ func build_frame(title: String, panel_size: Vector2, icon_id: String = "", dim_a
 	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	header.add_child(title_label)
 	var hint := UIKit.hbox(8)
-	hint.add_child(KeyCap.new("pause", "", 34))
-	var hl := UIKit.label("Close", "SmallLabel")
-	hl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hint.add_child(hl)
+	var touch := Platform.is_touch()
+	if not touch:
+		hint.add_child(KeyCap.new("pause", "", 34))
+		var hl := UIKit.label("Close", "SmallLabel")
+		hl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		hint.add_child(hl)
 	var close_btn := Button.new()
 	close_btn.text = "  X  "
 	close_btn.focus_mode = Control.FOCUS_NONE
 	close_btn.tooltip_text = "Close"
 	close_btn.pressed.connect(close)
+	if touch:
+		# A thumb-sized close button.
+		close_btn.custom_minimum_size = Vector2(84, 64)
+		close_btn.add_theme_font_size_override("font_size", 30)
 	hint.add_child(close_btn)
 	header.add_child(hint)
 	var sep := HSeparator.new()
@@ -102,19 +119,76 @@ func build_frame(title: String, panel_size: Vector2, icon_id: String = "", dim_a
 	_animate_in()
 
 
+## Room for the window: the parent's area (the HUD / title root).
+func avail_size() -> Vector2:
+	var a := Vector2.ZERO
+	if is_inside_tree():
+		a = get_parent_area_size()
+		if a.x < 2.0 or a.y < 2.0:
+			a = get_viewport_rect().size
+	if a.x < 2.0 or a.y < 2.0:
+		a = Vector2(1920, 1080)
+	return a
+
+
+## Scale factor that makes the panel fit the screen (1 = fits).
+func fit_scale() -> float:
+	if panel == null:
+		return 1.0
+	var avail := avail_size() - FIT_MARGIN * 2.0
+	var need := panel.get_combined_minimum_size()
+	if need.x <= 1.0 or need.y <= 1.0:
+		return 1.0
+	return clampf(minf(avail.x / need.x, avail.y / need.y), 0.5, 1.0)
+
+
+func _fit_to_screen() -> void:
+	if panel == null or not is_inside_tree():
+		return
+	_fit = fit_scale()
+	var need := panel.get_combined_minimum_size()
+	panel.pivot_offset = need * 0.5
+	panel.scale = Vector2(_fit, _fit)
+	# A CenterContainer grows to fit a panel taller than the screen and then
+	# pins it to the top-left: centre it on the screen ourselves.
+	if need.y > size.y or need.x > size.x:
+		panel.position = (size - need) * 0.5
+
+
 func _animate_in() -> void:
 	if panel == null:
 		return
+	_fit = fit_scale()
 	panel.pivot_offset = panel.custom_minimum_size * 0.5
 	panel.modulate.a = 0.0
-	panel.scale = Vector2(0.96, 0.96)
+	panel.scale = Vector2(0.96, 0.96) * _fit
 	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(panel, "modulate:a", 1.0, 0.18)
-	tw.tween_property(panel, "scale", Vector2.ONE, 0.22)
+	tw.tween_property(panel, "scale", Vector2.ONE * _fit, 0.22)
 	if dim:
 		var target := dim.color.a
 		dim.color.a = 0.0
 		tw.tween_property(dim, "color:a", target, 0.2)
+	tw.chain().tween_callback(_fit_to_screen)
+	_fit_to_screen.call_deferred()
+	if not resized.is_connected(_fit_to_screen):
+		resized.connect(_fit_to_screen)
+	# Wrapped labels settle their height a frame later: refit then too.
+	panel.minimum_size_changed.connect(_queue_fit)
+	if _center:
+		_center.sort_children.connect(_fit_to_screen)
+
+
+var _fit_queued := false
+
+
+func _queue_fit() -> void:
+	if _fit_queued:
+		return
+	_fit_queued = true
+	(func() -> void:
+		_fit_queued = false
+		_fit_to_screen()).call_deferred()
 
 
 ## Override to fill the window. Called by the opener after add_child().

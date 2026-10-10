@@ -49,7 +49,7 @@ static func spawn(parent: Node, pos: Vector3, size: float = 1.5, amount: int = 8
 	var p := DustPuff.new()
 	p.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	p.mesh = _mesh
-	p.amount = maxi(amount, 1)
+	p.amount = maxi(QualityPresets.particle_count(amount), 1)
 	p.one_shot = true
 	p.explosiveness = 0.85
 	p.lifetime = 1.7

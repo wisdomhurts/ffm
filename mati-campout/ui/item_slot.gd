@@ -160,12 +160,37 @@ func _draw() -> void:
 func _gui_input(event: InputEvent) -> void:
 	if not interactive:
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and not event.double_click:
-		activated.emit(self)
-		accept_event()
+	# Touch: activate on release when the finger did not slide (so scrolling a
+	# list or starting a drag never moves an item by accident). Extra fingers
+	# (multi-touch) get no emulated mouse click: handle them here.
+	if event is InputEventScreenTouch:
+		var t := event as InputEventScreenTouch
+		if t.index > 0 or not Input.emulate_mouse_from_touch:
+			_touch_release(t.pressed, t.position)
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.double_click:
+		if Platform.is_touch():
+			_touch_release(event.pressed, event.position)
+		elif event.pressed:
+			activated.emit(self)
+			accept_event()
 	elif event.is_action_pressed("ui_accept"):
 		activated.emit(self)
 		accept_event()
+
+
+var _press_pos := Vector2.INF
+
+
+func _touch_release(pressed: bool, pos: Vector2) -> void:
+	if pressed:
+		_press_pos = pos
+	elif _press_pos != Vector2.INF and pos.distance_to(_press_pos) < 26.0:
+		_press_pos = Vector2.INF
+		activated.emit(self)
+	else:
+		_press_pos = Vector2.INF
+	accept_event()
 
 
 func _get_tooltip(_at: Vector2) -> String:

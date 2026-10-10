@@ -43,7 +43,7 @@ func _ready() -> void:
 
 	var footer := UIKit.hbox(14)
 	footer.add_child(UIKit.icon_rect("ui_info", 30))
-	var hint := UIKit.label("Click an item to move it across. Your Camp Box is shared with the crafting crate.", "DimLabel")
+	var hint := UIKit.label("%s an item to move it across. Your Camp Box is shared with the crafting crate." % ("Tap" if Platform.is_touch() else "Click"), "DimLabel")
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	footer.add_child(hint)

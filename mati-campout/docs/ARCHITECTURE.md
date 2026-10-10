@@ -70,6 +70,10 @@ Command-line (after `--`):
 - `--autostart` skip the title; `--seed=N` fixed seed; `--dev` dev mode;
 - `--smoke` run `tests/smoke_test.gd` autopilot then quit;
 - `--shots=a,b,c` run `tools/screenshot_tour.gd` and save PNGs to `tests/output/`.
+- `--touch` force touch mode on a desktop (mouse clicks become touches),
+  `--dpr=N` preview the phone UI scale, `--quality=phone|low|medium|high`
+  pick a preset for this run only (not saved). Example phone preview:
+  `godot --path . --resolution 1266x585 --rendering-method gl_compatibility -- --touch --dpr=1.5 --quality=phone`.
 
 ## The Game root (`game/game.gd`, class `Game`)
 
@@ -248,46 +252,66 @@ fog catches the fire and moon.
 
 ## Quality presets (`Settings.quality()`)
 
-| | Low | Medium | High |
-|---|---|---|---|
-| Shadows | sun 2048, fire off | sun 4096, fire on | sun 4096 soft, fire on |
-| Volumetric fog | off (depth fog) | on, low res | on |
-| SSAO / SSIL | off | SSAO | SSAO + SSIL |
-| SDFGI | off | off | on |
-| Grass density | 35% | 65% | 100% |
-| Tree draw distance | 140 m | 200 m | 280 m |
-| Glow | on (light) | on | on |
-| MSAA / FXAA | FXAA | FXAA + TAA off | MSAA 2x + FXAA |
+`Settings.QUALITY_LEVELS = ["phone", "low", "medium", "high"]` (lightest
+first). Use `Settings.is_low_quality()` (phone or low) instead of comparing
+with `"low"`, and `QualityPresets.value(key)` for per-system knobs.
+
+| | Phone | Low | Medium | High |
+|---|---|---|---|---|
+| Shadows | sun 1024, 2 splits, 32 m, fire off | sun 2048, fire off | sun 4096, fire on | sun 4096 soft, fire on |
+| Volumetric fog | off (depth fog) | off (depth fog) | on, low res | on |
+| SSAO / SSIL | off | off | SSAO | SSAO + SSIL |
+| SDFGI | off | off | off | off |
+| Grass density / reach | 12% / 46 m streaming, 60% draw | 35% | 65% | 100% |
+| Tree draw distance | 110 m | 140 m | 200 m | 280 m |
+| Glow | on (2 levels) | on (light) | on | on |
+| MSAA / FXAA | none | FXAA | SMAA | MSAA 2x + SMAA |
+| Render scale | 70% of the setting, 3D at most 720 px tall | 100% | 100% | 100% |
+| Sky | radiance 32, incremental, 4 updates/s | realtime 256 | realtime 256 | realtime 256 |
+
+Under the Compatibility renderer (every browser) the Forward+-only effects
+are forced off whatever the preset says (see "Mobile & web" below).
 
 ## Platforms: desktop, browser and phones
 
 The same game ships as Windows/macOS desktop builds (Forward+) and as a
-browser build at campout.quest/play that must also work on **phones and
-tablets** (iOS Safari, Android Chrome) in landscape.
+browser build at campout.quest/play that also works on **phones and
+tablets** (iOS Safari, Android Chrome) in landscape. Details and gotchas:
+"Mobile & web" in the system notes.
 
-- **Renderer:** browsers use Godot's Compatibility renderer
-  (`rendering/renderer/rendering_method.web = "gl_compatibility"`). Every
-  system must degrade gracefully there (no volumetric fog, SSAO/SSIL/SDFGI;
-  check `RenderingServer.get_current_rendering_method()`).
-- **Touch detection:** `Platform.is_touch()` = touchscreen available or the
-  `mobile` / `web_android` / `web_ios` feature tags. Never capture the mouse
-  on touch devices.
-- **Touch controls** (`ui/touch_controls.gd`, only shown on touch devices):
-  left thumb virtual joystick drives the `move_*` actions; dragging on the
-  right half orbits the camera (camera rig exposes `add_look_input(delta)`);
-  big buttons for Use, Jump, Sprint (toggle) and a context Interact button
-  that shows the current prompt text; Map, Build, Pause and the sack toggle
-  as small corner buttons; hotbar slots are tappable. Minimum touch target
-  ~64 px at 1080p-equivalent scale. Respect `DisplayServer.get_display_safe_area()`.
-- **Phone quality preset `"phone"`** (auto-selected on mobile browsers):
-  render scale ~0.7, sun shadows 1024 and no fire shadows, no volumetric
-  fog, grass mostly off, tree draw distance ~110 m, reduced particles,
-  simple water. Desktop presets stay Low/Medium/High.
-- **Orientation:** landscape. In portrait show a friendly "Turn your phone
-  sideways" overlay and pause.
-- **Downloads:** the web build uses the no-threads template so it runs
-  without cross-origin isolation; keep the .pck lean (OGG audio, no unused
-  assets).
+- **Platform helpers:** `core/platform.gd` (class `Platform`, all static):
+  `is_web()`, `is_mobile()` (native or `web_android` / `web_ios`),
+  `is_mobile_web()`, `is_touch_device()` (touchscreen, mobile or `--touch`),
+  `is_touch()` (touch controls active right now), `is_compat_renderer()`,
+  `dpr()`, `safe_insets()`, `ui_scale_boost()`, `device_word()`.
+- **Renderer:** browsers and native mobile use the Compatibility renderer
+  (`rendering/renderer/rendering_method.web/.mobile = "gl_compatibility"`).
+  Systems must degrade there: no volumetric fog / FogVolumes, SSAO, SSIL,
+  SSR, SDFGI, FXAA/SMAA/TAA. Instance uniforms are scarce (see
+  `ShaderCompat`) and MultiMeshes need instance colours (see below).
+- **Touch mode:** `Platform.is_touch()` is on for phones/tablets from the
+  start and on any touchscreen after the first touch; a key press, a real
+  mouse click (not on phones) or a gamepad switches back
+  (`Events.input_mode_changed(touch)`). Never capture the mouse in touch
+  mode. `Controls.prompt(action)` returns the button names ("USE", "JUMP",
+  "Tap") in touch mode.
+- **Touch controls** (`ui/touch_controls.gd`, added by the HUD on touch
+  devices): floating left-thumb joystick (move_* with analog strength), drag
+  on the right to look (`Player.add_look_input(delta)` / `CameraRig`), big
+  USE / JUMP / RUN buttons and a context button with the prompt text
+  (`player.interact_nearest()`), Pause / Map / Build in the top-right, the
+  sack badge toggles the sack rows, hotbar slots are tappable. Multi-touch:
+  every finger is tracked by its touch index.
+- **Phone quality preset `"phone"`** (auto-selected on the first run on
+  phones/tablets; desktop browsers start on "low"): see the quality table.
+- **Orientation & focus:** `ui/device_guard.gd` (added by `main.gd`) shows a
+  "Turn your phone sideways" card and pauses in portrait, and pauses while
+  the app/tab is hidden (`Events.device_paused`).
+- **Small screens:** `ScaledRoot` multiplies the UI scale by
+  `Platform.ui_scale_boost()` on dense touch screens and keeps the HUD
+  inside the notch-safe area; `UIModal` windows shrink to fit.
+- **Downloads:** the web build uses the no-threads template (no
+  cross-origin isolation needed). `tools/export_web.sh` prints the sizes.
 
 ## Testing
 
@@ -300,6 +324,10 @@ tablets** (iOS Safari, Android Chrome) in landscape.
   with `func test_<thing>() -> void:` methods using `assert_eq`, `assert_true`...
 - `tools/screenshot_tour.gd` renders named shots (needs a display; in CI use
   `xvfb-run` + Mesa lavapipe).
+- Phones & browser: `godot --headless --path . res://tests/touch_drive.tscn`
+  (touch controls, joystick, look, USE + aim assist, JUMP, RUN, context
+  button, hotbar taps, pause, input-mode switching, hidden-app pause) and
+  the real-browser check `tests/web/web_check.cjs` (see "Mobile & web").
 
 ## System notes (each specialist documents their system here)
 
@@ -828,3 +856,182 @@ ground), plus a GPU smoke trail (off on low). Instance uniforms `dissolve`,
 spawns frozen monsters relative to the shot origin, `"spawn_only": true`
 clears others and pauses natural spawning, `"player_at"` parks the player.
 Presets: `stalker_edge`, `watcher`.
+
+
+### Mobile & web
+
+Files: `core/platform.gd` (Platform), `core/shader_compat.gd`
+(ShaderCompat), `ui/touch_controls.gd` (TouchControls + TouchButton),
+`ui/device_guard.gd` (DeviceGuard), `ui/scaled_root.gd` (UI boost + safe
+area), `export_presets.cfg`, `web/shell/` (HTML shell + PWA icons),
+`tools/export_web.sh`, `tools/gen_web_icons.gd`, `tests/touch_drive.*`,
+`tests/web/web_check.cjs`, `tests/unit/test_platform.gd`.
+
+**Exporting.** `tools/export_web.sh` builds `web/shell/index.html` from
+`web/shell/shell.src.html` (inlines the Fredoka font so the page needs no
+external requests), exports the **Web** preset to `build/web/` (no-threads
+template, PWA on: fullscreen display, landscape orientation, icons from
+`web/shell/icon-*.png`), fixes Godot's service worker (the apostrophe in
+"MATI's" broke its JS string), prints sizes and copies the result to
+`web/site/play/` (served at campout.quest/play by `web/site`). `build/` and
+`web/site/play/` are gitignored; publishing binaries is the owner's call.
+Desktop presets: **Windows Desktop** (`build/windows/MATIsCampout.exe`,
+x86_64, pck embedded) and **macOS** (`build/macos/MATIsCampout.zip`,
+universal, unsigned): `godot --headless --path . --export-release "Windows Desktop" build/windows/MATIsCampout.exe`.
+
+**The web page** (`web/shell/shell.src.html`): night sky, animated
+campfire, themed progress bar while the 9.6 MB (gzip) engine and the
+game data download, then a pulsing **Tap to start** button (the tap
+unlocks audio on phones and, on Android, goes fullscreen + locks
+landscape). The page stays up ("Lighting the fire...") until the game
+calls `window.matiGameReady()` from the title screen. It also exposes
+`window.matiSafeArea()` (CSS `env(safe-area-inset-*)`, read by
+`Platform.safe_insets()`), shows "Turn your phone sideways" in portrait and
+a friendly error if WebGL 2 is missing. QA: `index.html?autostart` skips
+the tap, `?godot_args=--quality=phone%20--touch` passes engine arguments;
+`window.matiDebug = true` makes `main.gd` publish `window.matiState` (JSON:
+state, quality, touch, player position, yaw, selected slot, swings, on-screen
+rects of the touch buttons...).
+
+**Compatibility renderer rules** (browsers, phones). Found the hard way:
+- *Instance uniforms:* Compatibility keeps all `instance uniform`s in one
+  uniform buffer with 16 slots per object: 4096 slots on desktop WebGL
+  (~255 objects) and as few as 1024 on iPhones (~63 objects). Every
+  GeometryInstance3D whose material declares one takes a block, even if it
+  never sets it. Load such shaders with `ShaderCompat.shader(path)` and set
+  per-object values with `ShaderCompat.set_param(gi, name, value)`: under
+  Forward+ nothing changes; under Compatibility the shader's instance
+  uniforms become plain uniforms and the object gets its own material copy.
+  Used by trees/bark/rocks (TreeMeshes), MeshKit (characters, items,
+  pickups), ItemModels sprites, monsters and hit flashes. **Campsite, water
+  and future systems with many instances must do the same** (or avoid
+  instance uniforms).
+- *MultiMesh colours:* a MultiMesh without per-instance colours hands the
+  shader `COLOR = 0` under Compatibility (grass, bark and rocks rendered
+  black). Call `ShaderCompat.prepare_multimesh(mm)` before
+  `mm.instance_count = n` and `ShaderCompat.fill_colors(mm)` after (white
+  colours, only under Compatibility).
+- *Fog:* `FogVolume` / `FogMaterial` cannot even compile there; the
+  environment skips them and thickens the depth fog instead. Volumetric fog,
+  SSAO, SSIL, SSR, SDFGI and screen-space AA are forced off
+  (`QualityPresets.effective_profile(q, compat)`), which also avoids the
+  console warnings.
+- *Shadows:* WebGL shadow maps need more bias; under Compatibility the sun
+  and moon use at least `shadow_bias` 0.1 / `normal_bias` 2.2 (no acne
+  stripes at sunrise). Positional (omni) shadows are expensive there: the
+  phone preset turns `fire_shadows` off.
+- `BACKLIGHT` (grass translucency) has no effect, so backlit grass is a bit
+  darker in the browser than on desktop.
+- Shaders can branch per renderer with the built-in preprocessor defines
+  `CURRENT_RENDERER == RENDERER_COMPATIBILITY`.
+
+**Touch controls** (`TouchControls`, bottom-most child of the HUD's
+ScaledRoot, so the hotbar and modals stay above it). Joystick: left 42 % of
+the screen below the top bar; floats to where the thumb lands, follows a
+thumb that slides past the rim, 14 % deadzone with a soft curve (gentle
+push = slow walk); a ghost joystick + "Move" and a "Drag to look" hint show
+until first used. Look: 2.8 rad per screen-height of drag × the "Touch look
+speed" setting (Settings `touch_sensitivity`, Controls tab on touch
+devices). USE sends the real `use` action (so holding it keeps chopping like
+holding the mouse) after `Player.aim_assist()`: with an axe or melee weapon
+it turns the view (0.18 s ease, `CameraRig.assist_yaw`) toward the nearest
+creature, else the nearest standing tree, within reach and 60° of the view,
+and aims that swing at it. The button shows the held item and its verb
+(CHOP / HIT / SHOOT / EAT / HEAL / LIGHT; dim when the item has no use).
+RUN sets `Player.touch_sprint` (lit while on, switches off after standing
+still for 1.2 s). JUMP sends `jump`. The context pill shows the prompt text
+(or the greyed hint) with an icon guessed from the text and calls
+`interact_nearest()`. Pause / Map / Build open the HUD modals (Map and Build
+only appear once `ui/map_ui.gd` / `ui/build_ui.gd` exist). Buttons are
+76-164 layout px (hit circles 8-14 px larger than drawn), at least ~40 CSS
+px on an iPhone. In touch mode the HUD shows the hotbar compact (80 px
+tiles) and always tappable (ItemSlot handles extra fingers; finger 0 comes
+as an emulated mouse click; in touch mode a slot activates when the finger
+lifts without sliding, so scrolling the storage grid never moves items),
+the sack badge toggles the extra rows, toasts
+move under the survival bars, the pickup feed sits above the buttons, the
+keyboard prompt pill hides, and the top row scales down on narrow phones.
+Mouse events emulated from touches are swallowed by the controls, and the
+`use` binding only matches the real mouse (device 32), so a tap is never a
+game click; `Player`/`HUD` never capture the mouse in touch mode.
+
+**Small screens.** `Platform.ui_scale_boost()` (touch devices only) makes
+24 px text about 13 CSS px: ×1.5 on an iPhone 14 (layout ~1537×710),
+×1.44 on a 20:9 Android, capped so the layout stays at least 1360×620
+units (iPhone SE ×1.41), 1.0 on iPads and desktops. `ScaledRoot` also
+insets itself by the notch / home-indicator safe area (`safe_margins`).
+`UIModal.build_frame()` caps panels to the screen and `_fit_to_screen()`
+scales a window down when its content still does not fit (re-fit when
+wrapped labels settle or the screen rotates); the settings pages get
+shorter and scroll; option lists become `<  value  >` arrows on touch
+devices (drop-down popups are tiny on phones); headers get a big close
+button. The title screen stacks logo / menu / best badge to the height and
+hides Quit in the browser; the game-over summary scales to fit; How to Play
+lists the touch controls.
+
+**Pausing.** `DeviceGuard` (CanvasLayer 120, always processing): portrait on
+a touch device -> full-screen night card with a turning phone + "Turn your
+phone sideways", tree paused; back to landscape -> resumes. Hidden app/tab
+(`NOTIFICATION_APPLICATION_FOCUS_OUT` on touch devices,
+`NOTIFICATION_APPLICATION_PAUSED`, and `document.visibilitychange` on the
+web) -> paused; on return it waits 3 frames (the first frame back can carry
+a huge delta) and resumes. It only undoes pauses it made, so an open pause
+menu stays open. It also runs **dynamic resolution** on the phone preset:
+below ~24 FPS for 6 s the 3D resolution steps down 10 % (to 60 % at most,
+`Settings.dynamic_scale`), above ~48 FPS for 8 s it steps back up.
+
+**Phone preset for other systems.** Read `Settings.quality() == "phone"`
+(or `QualityPresets.value(...)`): `"water": "simple"` (phone) /
+`"normal"` / `"full"`, `"fire_shadows"` (false), `"particles"` (0.3; use
+`QualityPresets.particle_count(n)` for bursts), `"light_shadow_distance"`
+(10 m), `"cover_radius"`. The render scale cap lives in
+`Settings.effective_render_scale()`.
+
+**Desktop browsers.** Mouse look needs pointer lock, which browsers only
+grant after a click in the game view (the existing "click to recapture"
+handles it). `CameraRig` ignores big mouse jumps in the first 300 ms / 3
+frames after the capture starts (browsers can report one huge warp then,
+which flung the camera at the sky in the Chromium test).
+
+**Memory** (Chromium, measured by `tests/web/web_check.cjs`): wasm heap
+~220 MB; the JS heap holds the web audio samples (Godot's web "sample"
+playback keeps decoded PCM: all 1000 s of sound are ~310 MB as float32,
+the eight music loops ~215 MB of it) - the biggest item on phones. See the
+audio item below.
+
+**Open items for other owners** (their files were stubs on this branch):
+- *Terrain:* if the terrain uses MultiMeshes or `instance uniform`s, route
+  them through `ShaderCompat`; on `"phone"` use coarser chunks / fewer
+  chunks in view (~110-150 m), drop extra triplanar/noise octaves (or branch
+  on `CURRENT_RENDERER == RENDERER_COMPATIBILITY`), and let the terrain
+  receive but not cast sun shadows.
+- *Water:* read `QualityPresets.value("water")`: `"simple"` = no
+  screen/depth-texture refraction and no SSR (absent in Compatibility
+  anyway), one scrolling normal, fresnel to the sky colour, alpha blend
+  only; avoid FogVolumes.
+- *Campsite & campfire:* OmniLight shadows from
+  `QualityPresets.value("fire_shadows")` (false on phone); ember/smoke
+  counts through `QualityPresets.particle_count(n)`; any custom shader with
+  `instance uniform`s via `ShaderCompat`. The night "safe circle" haze is a
+  FogVolume (Forward+ only): on the Compatibility renderer show the circle
+  another way (e.g. a soft additive ground-glow decal/disc sized by
+  `fire.light_radius()`).
+- *Gatherables:* MultiMesh -> `ShaderCompat.prepare_multimesh()` /
+  `fill_colors()`; sparkle shaders with instance uniforms -> `ShaderCompat`.
+- *Audio:* 13 MB of OGG make up most of the 14.8 MB .pck; re-encoding the
+  eight 80 s music loops at a lower bitrate (or mono) for the web build
+  would roughly halve the download. In the browser every sound that plays
+  is kept as decoded float32 PCM (music alone ~215 MB): on phones prefer
+  mono / 22 kHz music for the web build, register only the current mood's
+  layers, or try `playback_type = STREAM` for music on desktop browsers
+  (it may stutter in the no-threads build when frames are slow).
+
+**Verified** (Chromium + SwiftShader WebGL 2 via Playwright, see
+`tests/web/web_check.cjs`; real phones were not available): desktop
+1280×720 and iPhone-14-landscape emulation (844×390 @2x, touch, iOS UA):
+boot page, tap to start, title, Play by key/tap, world loads, touch
+controls, joystick, look, multi-touch, USE, hotbar taps, RUN, pause,
+switching between keyboard and touch, portrait card, hidden-tab pause; no
+console errors or warnings. Not verified: real iOS Safari / WebKit, real
+GPUs and frame rates on phones (SwiftShader runs at ~1 FPS), audio unlock,
+Add to Home Screen, notch insets, touch scrolling of long menus.

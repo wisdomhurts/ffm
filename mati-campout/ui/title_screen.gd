@@ -15,6 +15,7 @@ var _overlay: Node = null
 var _t := 0.0
 var _logo: Control
 var _foot: Label
+var _badge: Control
 
 
 func _ready() -> void:
@@ -61,9 +62,11 @@ func _ready() -> void:
 	var st := UIKit.button("Settings", "BigMenuButton", "ui_star")
 	st.pressed.connect(_open_settings)
 	menu.add_child(st)
-	var quit := UIKit.button("Quit", "BigMenuButton", "ui_moon")
-	quit.pressed.connect(func() -> void: get_tree().quit())
-	menu.add_child(quit)
+	# A browser tab cannot quit itself: no Quit button on the web.
+	if not Platform.is_web():
+		var quit := UIKit.button("Quit", "BigMenuButton", "ui_moon")
+		quit.pressed.connect(func() -> void: get_tree().quit())
+		menu.add_child(quit)
 	for b in menu.get_children():
 		(b as Button).alignment = HORIZONTAL_ALIGNMENT_LEFT
 		(b as Button).add_theme_constant_override("icon_max_width", 42)
@@ -86,13 +89,16 @@ func _ready() -> void:
 	badge.add_child(row)
 	badge.position = Vector2(120, 860)
 	ui.add_child(badge)
+	_badge = badge
 
-	_foot = UIKit.label("v%s  -  Scores are saved on this computer" % str(ProjectSettings.get_setting("application/config/version", "0.1")), "SmallLabel")
+	_foot = UIKit.label("v%s  -  Scores are saved on this %s" % [str(ProjectSettings.get_setting("application/config/version", "0.1")),
+		"device" if Platform.is_touch_device() or Platform.is_web() else "computer"], "SmallLabel")
 	_foot.size = Vector2(530, 30)
 	_foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	ui.add_child(_foot)
 	ui.relayout.connect(_layout)
 	_layout()
+	_layout.call_deferred()
 
 	menu.modulate.a = 0.0
 	_logo.modulate.a = 0.0
@@ -103,9 +109,25 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
+## Stacks logo, menu and best badge to fit the screen height: on short
+## (phone-sized) screens the logo shrinks and everything moves up.
 func _layout() -> void:
 	var s := ui.size
 	_foot.position = Vector2(s.x - 560, s.y - 50)
+	if _badge == null:
+		return
+	var menu_h := menu.get_combined_minimum_size().y
+	var badge_h := _badge.get_combined_minimum_size().y
+	# Full layout needs ~ 92 + 300 + 28 + menu + 40 + badge + 40.
+	var need := 92.0 + 300.0 + 28.0 + menu_h + 20.0 + badge_h + 40.0
+	var k := clampf((s.y - (menu_h + badge_h + 90.0)) / (need - menu_h - badge_h - 90.0), 0.55, 1.0) if s.y < need else 1.0
+	var top := 92.0 * k if k < 1.0 else 92.0
+	_logo.scale = Vector2(k, k)
+	_logo.position = Vector2(104.0 - 40.0 * (1.0 - k), top - 10.0 * (1.0 - k))
+	var my := _logo.position.y + 300.0 * k + (28.0 if k >= 1.0 else 6.0)
+	menu.position = Vector2(_logo.position.x + 16.0, maxf(my, 420.0) if k >= 1.0 else my)
+	var by := menu.position.y + menu_h + (20.0 if k >= 1.0 else 14.0)
+	_badge.position = Vector2(menu.position.x, maxf(by, 860.0) if k >= 1.0 else by)
 
 
 func _process(delta: float) -> void:

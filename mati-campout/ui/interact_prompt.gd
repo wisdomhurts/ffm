@@ -40,9 +40,17 @@ static func query() -> Array:
 	if p == null or not is_instance_valid(p) or GameState.ui_blocking or not GameState.is_playing():
 		return ["", false]
 	if p.has_method("get_interact_text_full"):
-		var full := str(p.call("get_interact_text_full"))
-		if full != "":
-			return [full, false]
+		# Player returns {text, hint, key}; older stubs may return a String.
+		var full: Variant = p.call("get_interact_text_full")
+		if full is Dictionary:
+			var d := full as Dictionary
+			if str(d.get("text", "")) != "":
+				return [str(d["text"]), false]
+			if str(d.get("hint", "")) != "":
+				return [str(d["hint"]), true]
+			return ["", false]
+		if str(full) != "":
+			return [str(full), false]
 	var target: Variant = p.call("get_interact_target") if p.has_method("get_interact_target") else null
 	if target == null or not is_instance_valid(target):
 		return ["", false]
@@ -63,6 +71,9 @@ func _process(delta: float) -> void:
 	var q := query()
 	var txt: String = q[0]
 	var is_hint: bool = q[1]
+	# Touch mode: the context button of the touch controls shows the prompt.
+	if Platform.is_touch() and not Controls.using_gamepad:
+		txt = ""
 	if txt != "":
 		if txt != _last:
 			_last = txt

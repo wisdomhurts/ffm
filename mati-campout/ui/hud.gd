@@ -14,6 +14,11 @@ extends CanvasLayer
 ## Events.ui_modal_opened/closed. The pause menu pauses the tree; the HUD runs
 ## with PROCESS_MODE_ALWAYS. The HUD owns Esc (pause), Tab (sack), M (map),
 ## B (build), 1-7 and next/prev item (mouse wheel, LB/RB).
+##
+## Phones and tablets: on touch devices the HUD adds TouchControls (joystick,
+## look, USE/JUMP/RUN, context button, Pause/Map/Build) under everything else,
+## never captures the mouse in touch mode, keeps the hotbar tappable, moves
+## toasts to the left and shrinks the top row to make room.
 
 const MODAL_SCRIPTS := {
 	"crafting": "res://ui/crafting_ui.gd",
@@ -39,6 +44,9 @@ var dev_overlay: DevOverlay
 var fps_label: Label
 var crosshair: Control
 var float_layer: Control
+## On-screen touch controls (null on devices without a touchscreen).
+var touch: TouchControls = null
+var _touch_layout := false
 
 var _modal: Control = null
 var _modal_name := ""
@@ -71,6 +79,10 @@ func _build() -> void:
 	add_child(float_layer)
 	root = ScaledRoot.new(true)
 	add_child(root)
+	if Platform.is_touch_device():
+		touch = TouchControls.new()
+		touch.hud = self
+		root.add_child(touch)
 
 	stats = StatBars.new()
 	stats.position = Vector2(26, 22)
@@ -82,6 +94,8 @@ func _build() -> void:
 	hotbar = Hotbar.new()
 	root.add_child(hotbar)
 	hotbar.expanded_changed.connect(func(_e: bool) -> void: _update_mouse())
+	if touch:
+		touch.hotbar = hotbar
 	prompt = InteractPrompt.new()
 	prompt.hotbar = hotbar
 	prompt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -122,6 +136,7 @@ func _build() -> void:
 		feed.toast("Map unlocked! Press %s to open it." % Controls.prompt("map"), "good"))
 	Dev.overlay_toggled.connect(func(v: bool) -> void: dev_overlay.visible = v)
 	Settings.changed.connect(_on_setting)
+	Events.input_mode_changed.connect(func(_t: bool) -> void: _update_mouse())
 	_update_mouse()
 
 
@@ -229,7 +244,9 @@ func _missing_modal(modal: String) -> void:
 func _update_mouse() -> void:
 	if hotbar == null:
 		return
-	var want_visible := is_modal_open() or hotbar.expanded or not GameState.is_playing()
+	# Touch mode: slots are always tappable and the mouse is never captured.
+	var touch_mode := Platform.is_touch()
+	var want_visible := is_modal_open() or hotbar.expanded or not GameState.is_playing() or touch_mode
 	hotbar.set_interactive(want_visible and not is_modal_open())
 	if DisplayServer.get_name() == "headless":
 		return
@@ -281,6 +298,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if root == null:
 		return
+	_update_touch_layout()
 	var vp := root.size
 	# FPS
 	fps_label.visible = bool(Settings.get_value("show_fps"))
@@ -305,6 +323,31 @@ func _process(delta: float) -> void:
 			if float(_floats[i]["t"]) > 1.3:
 				_floats.remove_at(i)
 		float_layer.queue_redraw()
+
+
+## Touch layout: compact hotbar, toasts on the left, the top row scaled to
+## leave room for the Pause button on narrow phones.
+func _update_touch_layout() -> void:
+	var on := touch != null and Platform.is_touch()
+	if on != _touch_layout:
+		_touch_layout = on
+		hotbar.set_compact(on)
+		feed.touch_layout = on
+		if not on:
+			for c in [stats, fire_widget, clock]:
+				(c as Control).scale = Vector2.ONE
+			clock.right_inset = 0.0
+	if not on:
+		return
+	var reserve := touch.top_right_reserve()
+	var need := stats.size.x + FireWidget.FULL.x + ClockWidget.SIZE.x + 26.0 * 2.0 + 48.0 + reserve
+	var k := clampf(root.size.x / need, 0.7, 1.0)
+	for c in [stats, fire_widget, clock]:
+		(c as Control).scale = Vector2(k, k)
+	stats.position = Vector2(26, 22)
+	clock.right_inset = reserve
+	feed.top_left_y = stats.position.y + stats.size.y * k + 12.0
+	feed.pickup_bottom_y = touch.cluster_top() - 14.0
 
 
 func _on_player_died(_cause: String) -> void:

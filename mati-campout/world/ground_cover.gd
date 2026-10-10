@@ -5,15 +5,19 @@ extends Node3D
 ## Streamed in 32 m chunks around the active camera (built a few per frame,
 ## freed when far away) so the whole map never sits in memory. Each chunk is
 ## generated deterministically from GameState.seed and the chunk coordinates.
-## Density follows Settings.quality() (low 35%, medium 65%, high 100%) by
-## trimming each MultiMesh's visible_instance_count (instances are stored in
-## random order, so any prefix is an even thinning).
+## Density follows Settings.quality() (phone 12%, low 35%, medium 65%, high
+## 100%) by trimming each MultiMesh's visible_instance_count (instances are
+## stored in random order, so any prefix is an even thinning). The phone
+## preset also streams a smaller radius (QualityPresets "cover_radius") and
+## draws each layer 40 % shorter.
 
 const CHUNK := 32.0
 const BUILD_RADIUS := 100.0
 const FREE_RADIUS := 135.0
 const SEED_COVER := 7411
-const DENSITY := {"low": 0.35, "medium": 0.65, "high": 1.0}
+const DENSITY := {"phone": 0.12, "low": 0.35, "medium": 0.65, "high": 1.0}
+## Draw-distance multiplier per quality (phones skip far grass).
+const VIS_MULT := {"phone": 0.6}
 
 ## name -> visibility end (m), shadow casting
 const LAYERS := {
@@ -81,6 +85,7 @@ var build_count := 0
 
 func apply_quality() -> void:
 	_density = float(DENSITY.get(Settings.quality(), 1.0))
+	var vm := _vis_mult()
 	for key in _chunks:
 		var holder: Node3D = _chunks[key]
 		for c in holder.get_children():
@@ -88,6 +93,21 @@ func apply_quality() -> void:
 			if mmi:
 				var total := mmi.multimesh.instance_count
 				mmi.multimesh.visible_instance_count = clampi(int(ceil(float(total) * _density)), 0, total)
+				if LAYERS.has(str(mmi.name)):
+					mmi.visibility_range_end = float(LAYERS[str(mmi.name)]["vis"]) * vm
+
+
+func _vis_mult() -> float:
+	return float(VIS_MULT.get(Settings.quality(), 1.0))
+
+
+## Streaming radius (m): BUILD_RADIUS, or less on the phone preset.
+func _build_radius() -> float:
+	return minf(float(QualityPresets.value("cover_radius", BUILD_RADIUS)), BUILD_RADIUS)
+
+
+func _free_radius() -> float:
+	return _build_radius() + (FREE_RADIUS - BUILD_RADIUS)
 
 
 # =============================================================================
@@ -110,7 +130,9 @@ func _key_center(k: Vector2i) -> Vector2:
 
 func _update_needed(focus: Vector3) -> void:
 	var f := Vector2(focus.x, focus.z)
-	var reach := int(ceil(BUILD_RADIUS / CHUNK)) + 1
+	var build_r := _build_radius()
+	var free_r := _free_radius()
+	var reach := int(ceil(build_r / CHUNK)) + 1
 	var fk := Vector2i(int(floor(f.x / CHUNK)), int(floor(f.y / CHUNK)))
 	var wanted: Array = []
 	for dz in range(-reach, reach + 1):
@@ -119,7 +141,7 @@ func _update_needed(focus: Vector3) -> void:
 			if k.x < -_half_n or k.y < -_half_n or k.x >= _half_n or k.y >= _half_n:
 				continue
 			var d := _key_center(k).distance_to(f)
-			if d > BUILD_RADIUS:
+			if d > build_r:
 				continue
 			if _chunks.has(k) or _queue.has(k):
 				continue
@@ -130,11 +152,11 @@ func _update_needed(focus: Vector3) -> void:
 	# Drop queued chunks that are no longer needed and free far ones.
 	var keep: Array[Vector2i] = []
 	for k in _queue:
-		if _key_center(k).distance_to(f) <= FREE_RADIUS:
+		if _key_center(k).distance_to(f) <= free_r:
 			keep.append(k)
 	_queue = keep
 	for k: Vector2i in _chunks.keys():
-		if _key_center(k).distance_to(f) > FREE_RADIUS:
+		if _key_center(k).distance_to(f) > free_r:
 			var n: Node3D = _chunks[k]
 			if is_instance_valid(n):
 				n.queue_free()
@@ -264,8 +286,10 @@ func _finish_job(job: CoverJob) -> void:
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.use_custom_data = true
+		ShaderCompat.prepare_multimesh(mm)
 		mm.mesh = mesh
 		mm.instance_count = xs.size()
+		ShaderCompat.fill_colors(mm)
 		var cs: PackedColorArray = ld["c"]
 		for i in xs.size():
 			mm.set_instance_transform(i, xs[i])
@@ -275,7 +299,7 @@ func _finish_job(job: CoverJob) -> void:
 		mmi.name = name
 		mmi.multimesh = mm
 		var spec: Dictionary = LAYERS[name]
-		mmi.visibility_range_end = float(spec["vis"])
+		mmi.visibility_range_end = float(spec["vis"]) * _vis_mult()
 		mmi.visibility_range_end_margin = 6.0
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if bool(spec["shadow"]) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mmi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED

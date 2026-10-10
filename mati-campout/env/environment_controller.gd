@@ -65,6 +65,10 @@ var _grade_tex := GradientTexture1D.new()
 var _grade_key := Vector2(-1.0, -1.0)
 var _brightness := 1.0
 var _ready_done := false
+## Phone preset: the sky material (and so its radiance map) is refreshed a
+## few times per second instead of every frame.
+var _sky_interval := 0.0
+var _sky_t := 0.0
 
 
 func setup(_game: Game) -> void:
@@ -134,7 +138,7 @@ func _build_environment() -> void:
 	env.fog_sky_affect = 0.12
 	env.fog_aerial_perspective = 0.45
 	env.fog_height = WorldGen.WATER_LEVEL + 1.0
-	env.volumetric_fog_enabled = true
+	env.volumetric_fog_enabled = not Platform.is_compat_renderer()
 	env.volumetric_fog_ambient_inject = 0.9
 	env.volumetric_fog_gi_inject = 0.0
 	env.volumetric_fog_sky_affect = 0.04
@@ -201,7 +205,11 @@ func _build_lights() -> void:
 
 ## Low-lying mist: a fog volume around the camera whose density falls off
 ## with height, so hollows and the lake shore fill with mist at dawn.
+## Fog volumes need Forward+ (the Compatibility renderer cannot even compile a
+## fog material), so browsers skip them and rely on the denser depth fog.
 func _build_mist() -> void:
+	if Platform.is_compat_renderer():
+		return
 	mist = FogVolume.new()
 	mist.name = "GroundMist"
 	mist.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
@@ -239,6 +247,17 @@ func apply_quality(q: String = "") -> void:
 		mist.visible = bool(profile.get("volumetric_fog", true))
 	if camp_haze:
 		camp_haze.visible = bool(profile.get("volumetric_fog", true))
+	if sky:
+		var rs := int(profile.get("sky_radiance", 256))
+		if rs < 256:
+			sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
+			sky.radiance_size = Sky.RADIANCE_SIZE_32 if rs <= 32 else (Sky.RADIANCE_SIZE_64 if rs <= 64 else Sky.RADIANCE_SIZE_128)
+		else:
+			sky.process_mode = Sky.PROCESS_MODE_REALTIME
+			sky.radiance_size = Sky.RADIANCE_SIZE_256
+	var hz := float(profile.get("sky_update_hz", 0.0))
+	_sky_interval = 1.0 / hz if hz > 0.0 else 0.0
+	_sky_t = 0.0
 
 
 func _on_setting_changed(key: String) -> void:
@@ -397,7 +416,7 @@ func _update(delta: float, instant: bool) -> void:
 	env.adjustment_saturation = float(k["sat"]) * (1.0 - overcast * 0.12) * (1.0 - _danger * 0.12)
 
 	# --- Fog --------------------------------------------------------------------
-	var vol_on := env.volumetric_fog_enabled
+	var vol_on := env.volumetric_fog_enabled and mist != null
 	var fog_col := (k["fog_col"] as Color).lerp(Color(0.55, 0.58, 0.63).lerp(Color("141a33"), _night), overcast * 0.55)
 	fog_col = fog_col.lerp(Color("0a0e22"), _danger * 0.65)
 	env.fog_light_color = fog_col
@@ -424,7 +443,10 @@ func _update(delta: float, instant: bool) -> void:
 		_update_camp_haze(fire)
 
 	# --- Sky ---------------------------------------------------------------------
-	_update_sky(k, overcast, flash)
+	_sky_t -= delta
+	if instant or _sky_interval <= 0.0 or _sky_t <= 0.0 or flash > 0.001:
+		_sky_t = _sky_interval
+		_update_sky(k, overcast, flash)
 
 	# --- Grading -------------------------------------------------------------------
 	_update_grade(float(k["warm"]) * (1.0 - overcast * 0.5) * (1.0 - _danger * 0.5),

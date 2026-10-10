@@ -41,6 +41,7 @@ const SHOTS := {
 	"chop_close": {"hour": 10.5, "fire": 0.9, "landmark": "@tree", "cam": Vector3(3.2, 1.7, 2.6), "look": Vector3(0, 1.4, 0), "chop": 2, "chop_wait": 0.15, "chop_from": Vector3(1.3, 0, -1.0), "hide_player": true},
 	"tree_fall": {"hour": 15.5, "fire": 0.9, "landmark": "@tree", "cam": Vector3(-12, 3.5, 11), "look": Vector3(0, 4.0, 0), "chop": 5, "chop_wait": 1.0, "chop_from": Vector3(-1.5, 0, -1.6), "hide_player": true},
 	"hud_day": {"hour": 10.5, "fire": 0.7, "hud": true},
+	"hud_morning": {"hour": 7.4, "fire": 0.9, "hud": true},
 	"hud_night": {"hour": 22.0, "fire": 0.25, "hud": true},
 	# --- UI previews (generic options: give, sack, select, survival, player_pos,
 	#     modal, screen, hud_demo + demo_lead frames before the capture) ---------
@@ -61,6 +62,8 @@ const SHOTS := {
 	"ui_leaderboard": {"hour": 21.0, "fire": 0.8, "screen": "leaderboard"},
 	"ui_howto": {"hour": 21.0, "fire": 0.8, "hud": true, "modal": "pause", "hud_demo": ["howto"], "demo_lead": 8},
 	"hud_prompt": {"hour": 21.5, "fire": 0.6, "hud": true, "player_pos": Vector3(1.6, 0, 1.0), "give": {"wood": 3}},
+	# Facing the campfire with wood: the interact prompt (touch: the context button).
+	"hud_act": {"hour": 19.4, "fire": 0.5, "hud": true, "player_pos": Vector3(1.5, 0, 0.9), "player_face": Vector3(0, 0.6, 0), "give": {"wood": 3}},
 	"hud_freezing": {"hour": 0.5, "fire": -1.0, "hud": true, "hud_demo": ["freeze", "hurt"], "demo_lead": 8},
 	"hud_contrast": {"hour": 22.0, "fire": 0.25, "hud": true, "settings": {"high_contrast": true, "colorblind_mode": "deuteranopia", "ui_scale": 1.15},
 		"hud_demo": ["toasts", "dev"], "demo_lead": 5},
@@ -308,7 +311,8 @@ func _apply_ui_options(s: Dictionary, _hud: Node) -> void:
 		var pp: Vector3 = s["player_pos"]
 		GameState.player.call("teleport", GameState.world_gen.ground(pp, 0.1))
 		if GameState.player.has_method("look_at_point"):
-			GameState.player.call("look_at_point", GameState.world_gen.ground(pp * 2.0, 1.0))
+			var face: Vector3 = s.get("player_face", pp * 2.0)
+			GameState.player.call("look_at_point", GameState.world_gen.ground(face, 1.0))
 	if s.has("modal"):
 		Events.request_modal.emit(str(s["modal"]), {})
 	if s.has("screen"):

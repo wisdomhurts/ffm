@@ -7,6 +7,8 @@ const SIZE := Vector2(400, 168)
 
 var _coin_bump := 0.0
 var _coins_shown := 0.0
+## Extra room kept free on the right (the touch Pause button), layout units.
+var right_inset := 0.0
 
 
 func _ready() -> void:
@@ -21,7 +23,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	var vp := get_parent_area_size()
-	position = Vector2(vp.x - SIZE.x - 26.0, 22.0)
+	position = Vector2(vp.x - SIZE.x * scale.x - 26.0 - right_inset, 22.0)
 	_coin_bump = maxf(_coin_bump - delta * 3.0, 0.0)
 	_coins_shown = move_toward(_coins_shown, float(GameState.coins), maxf(absf(GameState.coins - _coins_shown) * delta * 8.0, delta * 10.0))
 	queue_redraw()

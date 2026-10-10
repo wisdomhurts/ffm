@@ -111,12 +111,42 @@ func _axis(action: String, axis: int, dir: float) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton or (event is InputEventJoypadMotion and absf(event.axis_value) > 0.4):
 		using_gamepad = true
-	elif event is InputEventKey or event is InputEventMouseButton:
+		_set_touch(false)
+	elif event is InputEventKey:
 		using_gamepad = false
+		_set_touch(false)
+	elif event is InputEventMouseButton:
+		using_gamepad = false
+		# Emulated mouse clicks (device -1) come from touches.
+		if event.device != InputEvent.DEVICE_ID_EMULATION and Platform.mouse_leaves_touch() and (event as InputEventMouseButton).pressed:
+			_set_touch(false)
+	elif event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		using_gamepad = false
+		_set_touch(true)
 
 
-## Button label for prompts, e.g. prompt("interact") -> "E" or "X".
+## Desktop `--touch` testing: mouse clicks become touches, so the mouse
+## itself must not also trigger Use / item cycling.
+func strip_mouse_bindings() -> void:
+	for action in ["use", "next_item", "prev_item"]:
+		for ev in InputMap.action_get_events(action):
+			if ev is InputEventMouseButton:
+				InputMap.action_erase_event(action, ev)
+
+
+## Touch controls on/off (Platform keeps the state; Events tells the HUD).
+func _set_touch(on: bool) -> void:
+	if Platform.set_touch_active(on):
+		Events.input_mode_changed.emit(on)
+
+
+## Button label for prompts, e.g. prompt("interact") -> "E" or "X" (or the
+## on-screen button name in touch mode, e.g. "USE").
 func prompt(action: String) -> String:
+	if Platform.is_touch() and not using_gamepad:
+		return {"interact": "Tap", "use": "USE", "jump": "JUMP", "sprint": "RUN", "map": "Map",
+			"build": "Build", "toggle_sack": "Sack", "pause": "Pause", "flashlight": "USE",
+			"drop_item": "Drop"}.get(action, action)
 	if using_gamepad:
 		return {"interact": "X", "use": "RT", "jump": "A", "sprint": "LT", "map": "Y",
 			"build": "D-Pad Up", "toggle_sack": "D-Pad Down", "pause": "Start",

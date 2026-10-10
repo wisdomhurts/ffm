@@ -14,6 +14,12 @@ var _toast_box: VBoxContainer
 var _pickup_box: VBoxContainer
 var _caption_box: VBoxContainer
 var hotbar: Hotbar
+## Touch layout: the right side belongs to the touch buttons, so toasts go
+## under the survival bars (top_left_y) and the pickup feed to the left.
+var touch_layout := false
+var top_left_y := 214.0
+## Touch layout: the pickup feed sits right-aligned above the touch buttons.
+var pickup_bottom_y := 0.0
 
 
 func _ready() -> void:
@@ -149,11 +155,17 @@ func caption(text: String) -> void:
 
 func _process(delta: float) -> void:
 	var vp := get_parent_area_size()
-	_toast_box.position = Vector2(vp.x - 456.0, 214.0)
-	_toast_box.size = Vector2(430, 0)
 	var pb := _pickup_box.get_combined_minimum_size()
 	_pickup_box.size = Vector2(maxf(pb.x, 10.0), pb.y)
-	_pickup_box.position = Vector2(vp.x - _pickup_box.size.x - 30.0, vp.y - 150.0 - pb.y)
+	if touch_layout:
+		_toast_box.position = Vector2(26.0, top_left_y)
+		_toast_box.size = Vector2(430, 0)
+		var pby := pickup_bottom_y if pickup_bottom_y > 0.0 else vp.y - 150.0
+		_pickup_box.position = Vector2(vp.x - _pickup_box.size.x - 30.0, pby - pb.y)
+	else:
+		_toast_box.position = Vector2(vp.x - 456.0, 214.0)
+		_toast_box.size = Vector2(430, 0)
+		_pickup_box.position = Vector2(vp.x - _pickup_box.size.x - 30.0, vp.y - 150.0 - pb.y)
 	var cb := _caption_box.get_combined_minimum_size()
 	_caption_box.size = Vector2(1200, cb.y)
 	var top := hotbar.top_y() if hotbar else vp.y - 150.0
