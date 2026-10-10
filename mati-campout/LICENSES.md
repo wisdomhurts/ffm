@@ -11,12 +11,23 @@ Original. Engine: Godot Engine 4.7 (MIT licence, https://godotengine.org/license
 
 ## Fonts
 
-_(pending)_
+Both fonts are licensed under the SIL Open Font License 1.1. The latin
+subsets (woff2) were taken from the `@fontsource` npm packages, version 5.3.0
+(https://www.npmjs.com/package/@fontsource/fredoka,
+https://www.npmjs.com/package/@fontsource/nunito). Full licence texts are next
+to the files.
+
+| File | Family | Licence |
+|---|---|---|
+| `assets/fonts/fredoka-latin-500/600/700-normal.woff2` | Fredoka, Copyright 2016 The Fredoka Project Authors (https://github.com/hafontia/Fredoka-One) | OFL 1.1, `assets/fonts/Fredoka-OFL.txt` |
+| `assets/fonts/nunito-latin-600/700/800-normal.woff2` | Nunito, Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito) | OFL 1.1, `assets/fonts/Nunito-OFL.txt` |
 
 
 ## Icons
 
-_(pending)_
+Original artwork. Every icon in `assets/icons/` (item icons, `coins` and
+the `ui_*` glyphs) is drawn procedurally by `tools/gen_icons.py` (Python +
+Pillow + numpy) for MATI's Campout. No third-party images were used.
 
 
 ## Audio
