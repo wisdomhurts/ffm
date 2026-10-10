@@ -315,4 +315,91 @@ _(pending)_
 
 ### Monsters & spawning
 
-_(pending)_
+Files: `actors/spawner.gd` (`Spawner`), `actors/enemies/enemy_base.gd`
+(`EnemyBase`), `night_stalker.gd` (`NightStalker`), `watcher.gd` (`Watcher`),
+`monster_models.gd` (`MonsterModel`), `fx/shadow_puff.gd` (`ShadowPuff`),
+`shaders/shadow_creature*.gdshader`. Test: `tests/monster_sim.tscn`.
+
+**Spawner** (child of Game, owns every night monster):
+- Late DUSK + NIGHT (`DayCycle.monsters_active()`, polled every 0.5 s, so it
+  also works when the clock is set directly): keeps
+  `Difficulty.monster_counts(night, balance.spawning, fire_out)` monsters out,
+  topping up one per tick (a burst when night begins), capped by
+  `balance.spawning.max_monsters`. Spawn spots: dry land, artificial light
+  < 0.1, `spawn_min_dist..spawn_max_dist` from the player (Watchers 30-45 m,
+  preferring spots among trees), preferably outside the camera frustum.
+- Fire OUT: `fire_out_extra_stalkers` join and every monster's `aggression`
+  becomes `fire_out_aggression_mult` (faster, less patient, sight +48 %, they
+  prowl into camp). Relit: back to 1 and the camp light drives them out.
+- DAWN: every monster flees and fades (`retreat()`), DAY/DAWN polling cleans
+  up stragglers. Beyond `despawn_dist` monsters are removed and replaced nearer.
+- Public: `spawn_at(kind, pos) -> EnemyBase`, `debug_spawn(kind)` (~12 m in
+  front of the player; `wild_wolf` is forwarded to `game.wildlife.debug_spawn`
+  if it exists, `boss_wolf` notifies "not available yet"), static
+  `find_spot(kind, center, min_r, max_r, rng, viewport, need_offscreen)`,
+  `clear_all()`, `active_monsters()`, `count_kind(kind)`, `auto_spawn`,
+  `aggression`, `monsters`.
+- Audio: plays `night_sting` when NIGHT begins **unless the audio director
+  defines `var plays_night_sting := true`**; calls `Audio.set_danger(0..1)`
+  (max monster threat, smoothed) every 0.5 s.
+
+**EnemyBase** (groups `monster` + `damageable`, `team = "monster"`):
+- Stats: `DB.enemy(kind)` with hp × `Difficulty.hp_mult`, damage ×
+  `Difficulty.damage_mult` for the current night (`hp_per_night` /
+  `damage_per_night` are not added on top, to avoid double scaling).
+- Kinematic: `y = world_gen.height_at`, steering around
+  `vegetation.obstacles_near` (cached 0.3 s), separation from monsters and the
+  player, never into water / out of `in_playable`.
+- Light: `EnemyBase.light_at(p) = Lights.intensity_at(p + 1 m, false)`
+  (artificial light only; daylight is handled by the dawn retreat). A step is
+  refused when it leads to light ≥ `light_fear × 0.9` (moving out of light is
+  always allowed), so monsters hold at the edge of the safe circle and follow
+  it as the fire shrinks. Light ≥ `light_fear + 0.02` on the monster makes it
+  flee (`Lights.flee_direction`) with hysteresis. A player standing in light
+  ≥ `light_fear` is never hit (checked at wind-up and at the strike).
+- Attacks: wind-up (eyes flare, rear back, `stalker_attack` / whisper +
+  caption) → strike → follow-through; damage via
+  `player.take_damage(dmg, monster, kind)` with kind `"night_stalker"` /
+  `"watcher"`. (If the player has no `take_damage`, falls back to
+  `GameState.survival.damage` + `Events.player_damaged` + `camera_shake`.)
+- `take_damage(amount, source, kind)`: hit flash, knockback, small
+  `ShadowPuff`, `Audio "hit_enemy"`, `Events.enemy_damaged`, and an
+  `Events.float_text` damage number at the creature (weapons should not emit
+  their own for monsters). Defeat: dissolve + big puff, loot
+  `Loot.roll(DB.loot_table(def.loot), rng seeded by seed+serial)` →
+  `Pickup.spawn`, `Events.enemy_killed`, `stat_add("enemies_defeated")`.
+- Hitscan: each monster carries an `AnimatableBody3D` "Hitbox" capsule on
+  physics layer 3 (creatures, mask 0) with meta `"damageable"` = the monster;
+  a ray with mask `1 << 2` finds it (disabled while dying / vanished). Melee
+  can keep using the `damageable` group + distance.
+- Also: `is_alive()`, `retreat()`, `threat_level()`, `state_name()`, signals
+  `attacked(target, amount)` and `defeated(enemy)`; `ai_enabled = false` +
+  `hold_face` / `hold_pose` freeze a monster for screenshots.
+
+**Night Stalker** IDLE → WANDER → OBSERVE (lurk just outside the light,
+pacing its edge, head tracking/tilting) → STALK (hiss, follow at 6-9 m
+through darkness) → eyes brighten → CHASE → ATTACK → RECOVER; FLEE_LIGHT
+(recoil, arms over the eyes, then run) from any light. Night-1 fairness: a
+~1.5 s grace before stepping out of the light is noticed, a 3-6 s stalk
+before a chase, a 0.85 s eye-flare telegraph, a 0.45 s wind-up; a whack makes
+it back off. One-time hint toast when first seen.
+
+**Watcher** APPEAR (fade in) → STARE (motionless, slow body turn, head
+tracks, whispers) → FLEE (player within 15 m or light ≥ 0.2: runs and fades)
+→ HIDDEN → relocates to a new spot **only while off-screen**
+(`Camera3D.is_position_in_frustum` on the active camera); rare APPROACH
+(`attack_chance` every 6 s after the player lingers 10 s in darkness) →
+one telegraphed swipe → vanish. Being hit makes it vanish too.
+
+**Look**: `MonsterModel.create(kind, seed, quality)` builds one skinned
+`MeshInstance3D` (body + camera-facing eye glints, ~5.4k / 4.2k tris, mesh
+shared per kind) on a `Skeleton3D` with procedural animation (limping gait,
+lurk crouch, wind-up, lunge, recoil, flinch, collapse, feet planted on the
+ground), plus a GPU smoke trail (off on low). Instance uniforms `dissolve`,
+`flash`, `seed`, `eye_flare` keep one material per kind. Shadows only within
+30 m of the camera (never on low); far creatures re-pose every 2nd/4th frame.
+
+**Screenshot tour options** (generic): `"spawn": [{kind, pos, pose, face}]`
+spawns frozen monsters relative to the shot origin, `"spawn_only": true`
+clears others and pauses natural spawning, `"player_at"` parks the player.
+Presets: `stalker_edge`, `watcher`.
