@@ -168,6 +168,31 @@ const SHOTS := {
 	"lm_hollow_day": {"hour": 11.5, "fire": 0.9, "landmark": "hollow", "lm_local": true, "cam": Vector3(5, 2.6, 7.5), "look": Vector3(0, 1.2, -4), "hide_player": true},
 	"lm_hollow_arch": {"hour": 11.0, "fire": 0.9, "landmark": "hollow", "lm_local": true, "lm_chest": true, "cam": Vector3(1.6, 1.7, 5.2), "look": Vector3(0, 1.4, -0.6), "hide_player": true},
 	"lm_hollow_night": {"hour": 22.5, "fire": 0.9, "landmark": "hollow", "lm_local": true, "cam": Vector3(5, 2.6, 7.5), "look": Vector3(0, 1.2, -4), "hide_player": true},
+	# Chests & map (generic options, see _apply_chest_options): "chest": {"tier":
+	# "common"|"rare"|"epic"|"starter", "near": landmark id} anchors the camera on
+	# a placed chest ("chest_cam" / "chest_look" in the chest's frame, front =
+	# +Z); "chest_gallery": {"at", "yaw"} lines up one chest per tier;
+	# "chest_open": s opens it and captures s game-seconds later; "chest_lid":
+	# 0..1 shows the lid open; "chest_player": offset parks the player;
+	# "map_unlock", "discover_all", "open_some": n, "map_modal": {args}.
+	"chest_gallery_day": {"hour": 11.0, "fire": 0.9, "chest_gallery": {"at": Vector3(-9, 0, 9), "yaw": 0.6}, "chest_cam": Vector3(0.0, 1.15, 2.7), "chest_look": Vector3(0, 0.35, 0), "hide_player": true},
+	"chest_gallery_dusk": {"hour": 18.75, "fire": 0.9, "chest_gallery": {"at": Vector3(-9, 0, 9), "yaw": 0.6}, "chest_cam": Vector3(0.0, 1.35, 3.4), "chest_look": Vector3(0, 0.35, 0), "hide_player": true},
+	"chest_common_day": {"hour": 10.5, "fire": 0.9, "chest": {"tier": "starter"}, "chest_cam": Vector3(1.1, 1.05, 1.9), "chest_look": Vector3(0, 0.35, 0), "hide_player": true},
+	"chest_rare_day": {"hour": 13.5, "fire": 0.9, "chest": {"tier": "rare"}, "chest_cam": Vector3(1.2, 1.1, 2.0), "chest_look": Vector3(0, 0.38, 0), "hide_player": true},
+	"chest_epic_day": {"hour": 12.0, "fire": 0.9, "chest": {"tier": "epic"}, "chest_cam": Vector3(1.3, 1.15, 2.2), "chest_look": Vector3(0, 0.42, 0), "hide_player": true},
+	"chest_common_dusk": {"hour": 18.8, "fire": 0.9, "chest": {"tier": "starter"}, "chest_cam": Vector3(-1.4, 1.2, 2.4), "chest_look": Vector3(0, 0.35, 0), "hide_player": true},
+	"chest_rare_dusk": {"hour": 18.8, "fire": 0.9, "chest": {"tier": "rare"}, "chest_cam": Vector3(-1.4, 1.2, 2.4), "chest_look": Vector3(0, 0.38, 0), "hide_player": true},
+	"chest_epic_dusk": {"hour": 19.1, "fire": 0.9, "chest": {"tier": "epic"}, "chest_cam": Vector3(-1.5, 1.25, 2.6), "chest_look": Vector3(0, 0.42, 0), "hide_player": true},
+	"chest_far": {"hour": 18.6, "fire": 0.9, "chest": {"tier": "starter"}, "chest_cam": Vector3(2.0, 2.2, 14.0), "chest_look": Vector3(0, 0.5, 0), "hide_player": true},
+	"chest_open_burst": {"hour": 17.6, "fire": 0.9, "chest": {"tier": "starter"}, "chest_cam": Vector3(2.1, 1.55, 3.2), "chest_look": Vector3(0, 0.75, 0), "chest_player": Vector3(-0.35, 0, 1.35), "chest_open": 0.42},
+	"chest_open_epic": {"hour": 21.5, "fire": 0.9, "chest": {"tier": "epic"}, "chest_cam": Vector3(2.0, 1.6, 3.3), "chest_look": Vector3(0, 0.8, 0), "chest_player": Vector3(-0.4, 0, 1.4), "chest_open": 0.5},
+	"chest_opened": {"hour": 15.0, "fire": 0.9, "chest": {"tier": "rare"}, "chest_cam": Vector3(1.6, 1.4, 2.8), "chest_look": Vector3(0, 0.3, 0.6), "hide_player": true, "chest_open": 2.6},
+	"hud_start_chest": {"hour": 10.0, "fire": 0.9, "hud": true, "player_pos": Vector3(3, 0, 4), "player_face": Vector3(0, 0.6, 0)},
+	"hud_minimap": {"hour": 11.0, "fire": 0.8, "hud": true, "map_unlock": true, "discover_all": true, "player_pos": Vector3(34, 0, 30)},
+	"hud_minimap_dark": {"hour": 22.5, "fire": -1.0, "hud": true, "map_unlock": true, "discover_all": true, "player_pos": Vector3(34, 0, 30)},
+	"map_ui": {"hour": 12.0, "fire": 0.9, "hud": true, "map_unlock": true, "discover_all": true, "open_some": 4, "map_modal": {}},
+	"map_ui_dark": {"hour": 23.0, "fire": -1.0, "hud": true, "map_unlock": true, "discover_all": true, "open_some": 4, "map_modal": {}},
+	"map_ui_zoom": {"hour": 12.0, "fire": 0.9, "hud": true, "map_unlock": true, "discover_all": true, "open_some": 4, "player_pos": Vector3(60, 0, 20), "map_modal": {"center": Vector2(40, 0), "zoom": 2.6}},
 }
 
 var _screen_node: Node = null
@@ -312,6 +337,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 	_apply_ui_options(s, hud)
 	_apply_gather_pose(s)
 	_apply_landmark_options(s)
+	_apply_chest_options(s)
 	var player_3d := GameState.player as Node3D
 	if player_3d and s.get("hide_player", false):
 		player_3d.visible = false
@@ -324,6 +350,8 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 		await get_tree().process_frame
 	if s.has("chop"):
 		await _chop_action(s)
+	if s.has("chest_open"):
+		await _chest_open_action(s)
 	var img := get_viewport().get_texture().get_image()
 	var path := "res://tests/output/shots/%s.png" % shot_name
 	img.save_png(path)
@@ -333,6 +361,7 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 	if "--breakdown" in OS.get_cmdline_user_args():
 		await _print_breakdown(shot_name)
 	_release_gather()
+	_release_chests()
 	if player_3d and is_instance_valid(player_3d):
 		player_3d.visible = true
 	if hud is CanvasLayer:
@@ -768,3 +797,127 @@ func _apply_landmark_options(s: Dictionary) -> void:
 			GameState.player.call("look_at_point", (site as Node3D).global_position + Vector3(0, 1.5, 0))
 	if bool(s.get("lm_discover", false)):
 		lm.call("discover", str(s["landmark"]))
+
+# --- Chests & map options -----------------------------------------------------------
+
+var _chest_galleries: Dictionary = {}
+var _shot_chest: Node3D = null
+
+
+func _chests() -> Node:
+	var c: Variant = GameState.game.get("chests") if GameState.game else null
+	if c is Node and (c as Node).has_method("add_chest"):
+		return c as Node
+	return null
+
+
+func _apply_chest_options(s: Dictionary) -> void:
+	if bool(s.get("map_unlock", false)):
+		GameState.unlock_map()
+	var cm := _chests()
+	_shot_chest = null
+	if cm:
+		if bool(s.get("discover_all", false)):
+			cm.call("discover_all")
+		if s.has("open_some"):
+			var n := int(s["open_some"])
+			var list: Array = (cm.get("chests") as Array).duplicate()
+			list.sort_custom(func(a: Node3D, b: Node3D) -> bool: return a.global_position.length() < b.global_position.length())
+			for c in list:
+				if n <= 0:
+					break
+				if not bool(c.get("opened")) and c.is_in_group("map_marker"):
+					c.set("opened", true)
+					c.call("debug_show_open", 1.0)
+					c.call("_apply_state_visuals")
+					n -= 1
+		if s.has("chest_gallery"):
+			var g: Dictionary = s["chest_gallery"]
+			var at: Vector3 = g.get("at", Vector3(0, 0, 10))
+			if not _chest_galleries.has(at):
+				_chest_galleries[at] = cm.call("debug_gallery", GameState.world_gen.ground(at), float(g.get("spacing", 1.7)), float(g.get("yaw", 0.0)))
+			var row: Array = _chest_galleries[at]
+			_shot_chest = row[1] if row.size() > 1 else null
+		elif s.has("chest"):
+			var spec: Dictionary = s["chest"]
+			var tier := str(spec.get("tier", "common"))
+			var near := Vector3.ZERO
+			if spec.has("near"):
+				near = GameState.world_gen.landmark_pos(str(spec["near"]))
+			var c: Variant = cm.call("starter") if tier == "starter" else cm.call("nearest", near, tier, false)
+			_shot_chest = c as Node3D
+			if _shot_chest:
+				print("SHOT chest %s at %s" % [_shot_chest.name, str(_shot_chest.global_position)])
+	if _shot_chest:
+		_shot_chest.call("debug_reset")
+		if s.has("chest_lid"):
+			_shot_chest.call("debug_show_open", float(s["chest_lid"]))
+		var b := _shot_chest.global_transform.basis.orthonormalized()
+		var o := _shot_chest.global_position
+		var off: Vector3 = s.get("chest_cam", Vector3(1.2, 1.1, 2.2))
+		# Swing the camera around the chest (smallest turn first) until the view
+		# is free of trunks.
+		var veg: Node = GameState.vegetation
+		var space := get_viewport().world_3d.direct_space_state if get_viewport().world_3d else null
+		for ang in [0.0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, 2.4, -2.4, PI]:
+			var test_off := off.rotated(Vector3.UP, float(ang))
+			var clear := true
+			var cam_p: Vector3 = o + b * test_off
+			if veg and veg.has_method("is_clear") and not bool(veg.call("is_clear", cam_p, 0.8)):
+				clear = false
+			if clear and space:
+				# Trunks (layer 4) and world props (layer 1) between camera and chest.
+				var q := PhysicsRayQueryParameters3D.create(cam_p, o + Vector3(0, 0.45, 0), 1 | 8)
+				q.exclude = [(_shot_chest.get("collider") as CollisionObject3D).get_rid()] if _shot_chest.get("collider") is CollisionObject3D else []
+				if not space.intersect_ray(q).is_empty():
+					clear = false
+			if clear:
+				off = test_off
+				break
+		var cp: Vector3 = o + b * off
+		cp.y = maxf(cp.y, GameState.world_gen.height_at(cp.x, cp.z) + 0.45)
+		if cam == null:
+			cam = Camera3D.new()
+			cam.fov = 62.0
+			add_child(cam)
+		cam.global_position = cp
+		cam.look_at(o + b * (s.get("chest_look", Vector3(0, 0.4, 0)) as Vector3))
+		cam.current = true
+		if GameState.player and GameState.player.has_method("teleport"):
+			if s.has("chest_player"):
+				var pp: Vector3 = o + b * (s["chest_player"] as Vector3)
+				_park_player.call_deferred(GameState.world_gen.ground(pp, 0.05))
+				_face_player.call_deferred(o)
+			else:
+				_park_player.call_deferred(GameState.world_gen.ground(cp.lerp(o, 0.2), 0.1))
+	if s.has("map_modal"):
+		Events.request_modal.emit("map", s["map_modal"])
+
+
+func _face_player(p: Vector3) -> void:
+	if GameState.player and GameState.player.has_method("look_at_point"):
+		GameState.player.call("look_at_point", p + Vector3(0, 0.5, 0))
+
+
+## "chest_open": open the anchored chest and capture that many game seconds
+## later (slowed down so the software renderer catches the moment).
+func _chest_open_action(s: Dictionary) -> void:
+	if _shot_chest == null:
+		return
+	Engine.time_scale = 0.1
+	_shot_chest.call("open_chest", GameState.player)
+	await get_tree().create_timer(float(s["chest_open"]), true, false, false).timeout
+	Engine.time_scale = 0.0
+	for _i in 3:
+		await get_tree().process_frame
+	Engine.time_scale = 1.0
+
+
+func _release_chests() -> void:
+	if _shot_chest and is_instance_valid(_shot_chest):
+		var o := _shot_chest.global_position
+		for p in get_tree().get_nodes_in_group("pickup"):
+			if p is Node3D and (p as Node3D).global_position.distance_to(o) < 8.0:
+				(p as Node).queue_free()
+		_shot_chest.call("debug_reset")
+	_shot_chest = null

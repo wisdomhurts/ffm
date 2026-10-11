@@ -131,7 +131,18 @@
     "rare_count": 9,
     "epic_count": 3,
     "restock_days": 3,
-    "near_camp_starter": true
+    "near_camp_starter": true,
+    "starter_dist": [16.0, 22.0],
+    "camp_clear": 26.0,
+    "common_min_dist": 30.0,
+    "rare_min_dist": 70.0,
+    "epic_min_dist": 115.0,
+    "spacing": 26.0,
+    "trail_clear": 3.0,
+    "discover_radius": 30.0,
+    "glint_range": 60.0,
+    "coin_pile_max": 12,
+    "tables": {"common": "chest_common", "rare": "chest_rare", "epic": "chest_epic"}
   },
   "taming": {
     "max_pets": 1,

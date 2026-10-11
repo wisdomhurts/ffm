@@ -66,6 +66,8 @@ signal resource_gathered(item_id: String, count: int)
 signal enemy_damaged(enemy_kind: String, amount: float)
 signal enemy_killed(enemy_kind: String, world_pos: Vector3)
 signal chest_opened(tier: String, world_pos: Vector3)
+## A chest was seen for the first time (it now shows on the map).
+signal chest_discovered(tier: String, world_pos: Vector3)
 
 # --- Camp progression ----------------------------------------------------------
 signal tent_upgraded(level: int)
