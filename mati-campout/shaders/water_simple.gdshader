@@ -1,6 +1,8 @@
-// Fallback water for the Compatibility renderer (browser / phones): no screen
-// or depth texture reads, plain alpha blending with fresnel and moving
-// ripples. Used for both the lake and the stream (flow = true).
+// Fallback water for the Compatibility renderer (browser / phones) and the
+// phone preset: no screen or depth texture reads, plain alpha blending with
+// fresnel (the engine's sky reflection shows through the fresnel) and moving
+// ripples. Used for both the lake and the stream (flow = true); the phone
+// preset sets two_layers = false (one scrolling normal sample).
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
 
@@ -13,6 +15,7 @@ uniform sampler2D normal_tex : hint_normal, filter_linear_mipmap, repeat_enable;
 uniform vec3 shallow_col : source_color = vec3(0.22, 0.50, 0.47);
 uniform vec3 deep_col : source_color = vec3(0.04, 0.17, 0.21);
 uniform bool flow = false;
+uniform bool two_layers = true;
 uniform float flow_speed = 0.8;
 
 varying vec4 v_col;
@@ -28,8 +31,10 @@ void fragment() {
 		float speed = flow_speed * (0.5 + v_col.r * 3.0);
 		n = tc_nmap(texture(normal_tex, vec2(UV.x * 0.9, UV.y * 0.22 - TIME * speed * 0.22))) * 0.3;
 	} else {
-		n = tc_nmap(texture(normal_tex, wpos.xz * 0.04 + TIME * 0.01)) * 0.15
-			+ tc_nmap(texture(normal_tex, wpos.xz * 0.009 - TIME * 0.003)) * 0.12;
+		n = tc_nmap(texture(normal_tex, wpos.xz * 0.04 + TIME * 0.01)) * 0.15;
+		if (two_layers) {
+			n += tc_nmap(texture(normal_tex, wpos.xz * 0.009 - TIME * 0.003)) * 0.12;
+		}
 		n *= 0.7 + wind_strength;
 	}
 	vec3 Nv = normalize((VIEW_MATRIX * vec4(normalize(vec3(n.x, 1.0, n.y)), 0.0)).xyz);

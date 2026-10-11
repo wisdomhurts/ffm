@@ -8,7 +8,10 @@ extends Node3D
 ## - Stream: a flowing ribbon along WorldGen.stream at the stream's water
 ##   height (shaders/water_stream.gdshader) with looping "stream" audio
 ##   emitters along it.
-## The Compatibility renderer (browser/phones) gets shaders/water_simple.gdshader.
+## The Compatibility renderer (browser/phones) and the phone preset
+## (QualityPresets "water" == "simple") get shaders/water_simple.gdshader: no
+## screen or depth texture reads, alpha blend with fresnel; "simple" also
+## drops the lake to a single scrolling normal layer.
 
 const LAKE_EAST := -30.0
 const LAKE_WEST := -1950.0
@@ -23,6 +26,12 @@ var lake_material: ShaderMaterial
 var stream_material: ShaderMaterial
 var emitters: Array[Node3D] = []
 var _compat := false
+# Forward+ materials (screen/depth reads) and the simple ones; apply_quality()
+# picks a pair (the simple pair always under Compatibility).
+var _full_lake: ShaderMaterial
+var _full_stream: ShaderMaterial
+var _simple_lake: ShaderMaterial
+var _simple_stream: ShaderMaterial
 
 
 func setup(_game: Game, terrain: Terrain) -> void:
@@ -39,6 +48,7 @@ func setup(_game: Game, terrain: Terrain) -> void:
 	_build_lake()
 	_build_stream()
 	_place_emitters()
+	apply_quality(Settings.quality())
 
 
 func _exit_tree() -> void:
@@ -48,28 +58,47 @@ func _exit_tree() -> void:
 
 
 func apply_quality(q: String) -> void:
-	if lake_material and not _compat:
-		lake_material.set_shader_parameter("ssr_steps", int(SSR_STEPS.get(q, 24)))
+	var simple := _compat or str(QualityPresets.profile(q).get("water", "full")) == "simple"
+	lake_material = _simple_lake if simple else _full_lake
+	stream_material = _simple_stream if simple else _full_stream
+	if _simple_lake:
+		# Phone ("simple"): one scrolling normal layer instead of two.
+		_simple_lake.set_shader_parameter("two_layers", str(QualityPresets.profile(q).get("water", "full")) != "simple")
+	if _full_lake:
+		_full_lake.set_shader_parameter("ssr_steps", int(SSR_STEPS.get(q, 24)))
+	if lake:
+		lake.material_override = lake_material
+	if stream_ribbon:
+		stream_ribbon.material_override = stream_material
 
 
 func _make_materials(tex: Array) -> void:
-	lake_material = ShaderMaterial.new()
-	stream_material = ShaderMaterial.new()
-	if _compat:
-		var simple := load("res://shaders/water_simple.gdshader") as Shader
-		lake_material.shader = simple
-		stream_material.shader = simple
-		stream_material.set_shader_parameter("flow", true)
-	else:
-		lake_material.shader = load("res://shaders/water.gdshader") as Shader
-		stream_material.shader = load("res://shaders/water_stream.gdshader") as Shader
-	for m: ShaderMaterial in [lake_material, stream_material]:
+	var simple := load("res://shaders/water_simple.gdshader") as Shader
+	_simple_lake = ShaderMaterial.new()
+	_simple_lake.shader = simple
+	_simple_stream = ShaderMaterial.new()
+	_simple_stream.shader = simple
+	_simple_stream.set_shader_parameter("flow", true)
+	var mats: Array[ShaderMaterial] = [_simple_lake, _simple_stream]
+	if not _compat:
+		_full_lake = ShaderMaterial.new()
+		_full_lake.shader = load("res://shaders/water.gdshader") as Shader
+		_full_stream = ShaderMaterial.new()
+		_full_stream.shader = load("res://shaders/water_stream.gdshader") as Shader
+		mats.append_array([_full_lake, _full_stream])
+	for m: ShaderMaterial in mats:
 		m.set_shader_parameter("normal_tex", tex[1])
 		m.set_shader_parameter("noise_tex", tex[0])
 	# Transparent sort order: the lake first, then the stream over it at the
 	# mouth, then everything else (particles, fireflies...).
-	lake_material.render_priority = -2
-	stream_material.render_priority = -1
+	for m: ShaderMaterial in [_simple_lake, _full_lake]:
+		if m:
+			m.render_priority = -2
+	for m: ShaderMaterial in [_simple_stream, _full_stream]:
+		if m:
+			m.render_priority = -1
+	lake_material = _full_lake if _full_lake else _simple_lake
+	stream_material = _full_stream if _full_stream else _simple_stream
 
 
 ## Terrain heightmaps for the water shaders: the 2 m map grid and a coarse
@@ -94,7 +123,7 @@ func _set_heightmaps() -> void:
 	outer.convert(Image.FORMAT_RH)
 	var tin := ImageTexture.create_from_image(inner)
 	var tout := ImageTexture.create_from_image(outer)
-	for m: ShaderMaterial in [lake_material, stream_material]:
+	for m: ShaderMaterial in [_full_lake, _full_stream]:
 		m.set_shader_parameter("height_inner", tin)
 		m.set_shader_parameter("height_outer", tout)
 		m.set_shader_parameter("inner_rect", Vector4(-WorldGen.HALF, -WorldGen.HALF, WorldGen.HALF * 2.0, WorldGen.HALF * 2.0))

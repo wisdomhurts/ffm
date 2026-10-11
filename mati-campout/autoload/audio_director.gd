@@ -134,8 +134,22 @@ const CAPTIONS := {
 ## system sounds them (documented in ARCHITECTURE.md -> Audio).
 const AUTO_GAP := 0.25
 
+## Browser (see docs/ARCHITECTURE.md, Audio -> Web build): every sound plays
+## as a WebAudio "sample" (Godot's web default). STREAM playback would keep
+## no decoded audio, but the no-threads build mixes it on the main thread and
+## it dropped out badly whenever frames were slow (measured), so it is not
+## used. The page shell (web/shell) shares one decoded buffer between voices,
+## loops samples natively and releases big samples that stopped playing; the
+## director helps by stopping positional loops that are out of earshot and by
+## keeping the current mood's layers running muted when they fall silent
+## (day music resting, the warm night layer away from the fire), so they are
+## not released and decoded again every couple of minutes.
+
 var enabled := true
 var music_mood := ""
+## True in the browser (Platform.is_web()); tests may set it to exercise the
+## browser behaviour on a desktop.
+var web_policy := false
 
 var _manifest_groups: Dictionary = {}       # group id -> Array of file ids
 var _streams: Dictionary = {}               # file id -> AudioStream
@@ -189,11 +203,17 @@ var _muffle_target := 0.0
 var _rng := RandomNumberGenerator.new()
 var _audio_started := false
 var _last_tick := -1.0
+var _web_debug := false                     # browser QA: window.matiAudio / matiAudioCmd
+var _web_debug_timer := 0.0
+var _qa_danger := -1.0                      # browser QA: held danger level (-1 = off)
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
+	web_policy = Platform.is_web()
+	if web_policy and Engine.has_singleton("JavaScriptBridge"):
+		_web_debug = bool(JavaScriptBridge.eval("!!window.matiDebug", true))
 	_setup_buses()
 	_load_manifest()
 	_load_streams()
@@ -335,6 +355,8 @@ func start_loop(loop_id: String, node: Node3D, volume_db: float = 0.0) -> void:
 		"vol": volume_db + float(cfg.get("vol", 0.0)), "gain": 0.0, "target": 1.0, "mod": 1.0,
 		"fade": float(cfg.get("fade", 1.0)), "stopping": false, "on": false,
 	}
+	if _loop_held(player):
+		return  # browser: started by _update_loops once it is in earshot
 	(_loops[key] as Dictionary)["on"] = _start_player(player, _rng.randf() * maxf(stream.get_length() - 0.1, 0.0))
 
 
@@ -837,6 +859,41 @@ func _process(_delta: float) -> void:
 		_death_timer -= delta
 		if _death_timer <= 0.0:
 			_play_gameover_sting()
+	if _web_debug:
+		_web_debug_tick(delta)
+
+
+## Browser QA (window.matiDebug): publishes debug_state() as window.matiAudio
+## and applies window.matiAudioCmd = '{"mood": "boss", "danger": 1}' (the
+## danger level is held until a command sets 0; "auto" also ends the boss).
+func _web_debug_tick(delta: float) -> void:
+	_web_debug_timer -= delta
+	if _web_debug_timer > 0.0:
+		return
+	_web_debug_timer = 0.5
+	var cmd: Variant = JavaScriptBridge.eval("(function(){var c=window.matiAudioCmd||'';window.matiAudioCmd='';return c;})()", true)
+	if cmd is String and str(cmd) != "":
+		var d: Variant = JSON.parse_string(str(cmd))
+		if d is Dictionary:
+			var dd := d as Dictionary
+			if dd.has("mood"):
+				var m := str(dd["mood"])
+				if m == "auto" or m == "":
+					_boss_active = false
+				set_music_mood(m)
+			if dd.has("danger"):
+				_qa_danger = float(dd["danger"]) if float(dd["danger"]) > 0.0 else -1.0
+	if _qa_danger > 0.0:
+		# Held well past the next tick (ticks can be seconds apart at low FPS).
+		_danger_ext = clampf(_qa_danger, 0.0, 1.0)
+		_danger_ext_time = _now() + 10.0
+	var st := debug_state()
+	var playing := 0
+	for c in get_children():
+		if c.has_method("is_playing") and bool(c.call("is_playing")):
+			playing += 1
+	st["players"] = playing
+	JavaScriptBridge.eval("window.matiAudio = %s;" % JSON.stringify(JSON.stringify(st)), true)
 
 
 func _player_pos() -> Vector3:
@@ -986,6 +1043,12 @@ func _update_music(delta: float) -> void:
 		st["gain"] = cur
 		var p := st["player"] as AudioStreamPlayer
 		if cur <= 0.001 and target <= 0.0:
+			if web_policy and targets.has(layer) and bool(st["on"]):
+				# Browser: a layer of the current mood (day music resting, the
+				# warm night layer away from the fire, danger at 0) idles muted
+				# instead of stopping, so it is not released and decoded again.
+				p.volume_db = -80.0
+				continue
 			if bool(st["on"]):
 				p.stop()
 				st["on"] = false
@@ -1143,6 +1206,14 @@ func _update_loops(delta: float) -> void:
 		var g := move_toward(float(st["gain"]), target, delta / maxf(float(st["fade"]), 0.05))
 		st["gain"] = g
 		var node := player as Node
+		if _loop_held(node) and not (g <= 0.001 and target <= 0.0 and bool(st["stopping"])):
+			# Browser: a positional loop out of earshot stops (one WebAudio
+			# voice less, and its decoded buffer can be released); it starts
+			# again at a random point when the camera comes back.
+			if bool(st["on"]):
+				node.call("stop")
+				st["on"] = false
+			continue
 		if g <= 0.001 and target <= 0.0:
 			if bool(st["stopping"]):
 				node.queue_free()
@@ -1157,6 +1228,18 @@ func _update_loops(delta: float) -> void:
 		node.set("volume_db", float(st["vol"]) + linear_to_db(maxf(sqrt(g), 0.0001)))
 	for k in dead_keys:
 		_loops.erase(k)
+
+
+## Browser only: a positional loop beyond its max_distance (+8 m) from the
+## camera, which is silent anyway and should not hold a voice.
+func _loop_held(node: Node) -> bool:
+	if not web_policy or node == null:
+		return false
+	var p3 := node as AudioStreamPlayer3D
+	if p3 == null or not p3.is_inside_tree():
+		return false
+	var lp := listener_position()
+	return lp != Vector3.INF and p3.global_position.distance_to(lp) > p3.max_distance + 8.0
 
 
 func _ensure_campfire_loop() -> void:

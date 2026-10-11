@@ -553,6 +553,10 @@ func _build() -> void:
 	_ring.distance_fade_length = 30.0
 	_ring.visible = false
 	add_child(_ring)
+	# Compatibility renderer (browsers, phones): no decals, no FogVolume haze;
+	# a draped ground glow shows the safe circle instead (fx/safe_glow.gd).
+	if Platform.is_compat_renderer():
+		add_child(SafeGlow.new())
 
 	_apply_quality()
 	set_level(GameState.fire.level, false)
@@ -560,6 +564,8 @@ func _build() -> void:
 
 func _particle_mult() -> float:
 	match Settings.quality():
+		"phone":
+			return float(QualityPresets.value("particles", 0.3))
 		"low":
 			return 0.5
 		"medium":
@@ -569,9 +575,11 @@ func _particle_mult() -> float:
 
 func _apply_quality() -> void:
 	var q := Settings.quality()
-	_shadows_ok = q != "low"
+	# QualityPresets "fire_shadows": off on phone and low (same as before on desktop presets).
+	_shadows_ok = bool(QualityPresets.value("fire_shadows", q != "low")) and q != "low"
 	if light:
-		light.omni_shadow_mode = OmniLight3D.SHADOW_CUBE if q == "high" else OmniLight3D.SHADOW_DUAL_PARABOLOID
+		# The Compatibility renderer has no dual-paraboloid omni shadows (it logs an error every frame).
+		light.omni_shadow_mode = OmniLight3D.SHADOW_CUBE if q == "high" or Platform.is_compat_renderer() else OmniLight3D.SHADOW_DUAL_PARABOLOID
 	_flicker_amp = 0.05 if bool(Settings.get_value("reduce_flashing")) else 0.14
 	if fx:
 		fx.configure(level, _particle_mult())

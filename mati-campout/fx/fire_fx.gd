@@ -294,7 +294,7 @@ func _build() -> void:
 	_pm_flames.turbulence_influence_min = 0.05
 	_pm_flames.turbulence_influence_max = 0.16
 	flames = _emitter("Flames", _pm_flames, _flame_quad, 0.85, AABB(Vector3(-2.5, -0.5, -2.5), Vector3(5.0, 5.0, 5.0)))
-	flames.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+	flames.draw_order = _sorted_order()
 	for i in 2:
 		var hm := _shader_mat(FLAME_SHADER)
 		hm.set_shader_parameter("fixed_age", 0.32 if i == 0 else 0.4)
@@ -364,7 +364,7 @@ func _build() -> void:
 	_pm_smoke.turbulence_influence_min = 0.02
 	_pm_smoke.turbulence_influence_max = 0.07
 	smoke = _emitter("Smoke", _pm_smoke, smoke_quad, 6.5, AABB(Vector3(-9.0, -1.0, -9.0), Vector3(18.0, 15.0, 18.0)))
-	smoke.draw_order = GPUParticles3D.DRAW_ORDER_VIEW_DEPTH
+	smoke.draw_order = _sorted_order()
 
 	# One-shot spark shower (feeding / relighting).
 	_pm_burst = ParticleProcessMaterial.new()
@@ -456,3 +456,13 @@ static func _alpha_ramp(points: Array) -> GradientTexture1D:
 	t.width = 64
 	t.gradient = g
 	return t
+
+
+## View-depth sorting, except under the Compatibility renderer (browsers,
+## phones): without compute shaders it sorts on the CPU, reading the particle
+## buffer back from the GPU every frame (a pipeline stall, and a WebGL
+## performance warning per frame in Chromium). There the default order is used.
+static func _sorted_order() -> GPUParticles3D.DrawOrder:
+	if Platform.is_compat_renderer():
+		return GPUParticles3D.DRAW_ORDER_INDEX
+	return GPUParticles3D.DRAW_ORDER_VIEW_DEPTH

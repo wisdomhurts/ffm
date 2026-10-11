@@ -18,9 +18,13 @@ const CHUNK := 64.0
 const CHUNK_CELLS := 32
 const CHUNKS := 10
 ## Near (2 m) chunks are drawn up to this distance, 4 m chunks beyond.
-const NEAR_RANGE := {"low": 95.0, "medium": 135.0, "high": 175.0}
+const NEAR_RANGE := {"phone": 110.0, "low": 95.0, "medium": 135.0, "high": 175.0}
 ## Distance over which close-up ground detail fades out.
-const DETAIL_DISTANCE := {"low": 45.0, "medium": 60.0, "high": 75.0}
+const DETAIL_DISTANCE := {"phone": 32.0, "low": 45.0, "medium": 60.0, "high": 75.0}
+## Phone preset: beyond this distance 2x2 chunks are drawn as one 8 m-cell
+## block (a quarter of the draw calls and a quarter of the triangles of four
+## 4 m chunks; the fog hides the difference).
+const PHONE_BLOCK_RANGE := 150.0
 const RING_A := 640.0
 const RING_B := 2048.0
 
@@ -30,6 +34,8 @@ static var _normal_tex: Texture2D = null
 var gen: WorldGen
 var masks: TerrainMasks
 var material: ShaderMaterial
+## Phone preset: the same ground with cheap shading (terrain_lite.gdshader).
+var lite_material: ShaderMaterial
 var outer_material: ShaderMaterial
 var far_material: ShaderMaterial
 var body: StaticBody3D
@@ -38,6 +44,7 @@ var bridges: Bridges
 var backdrop: Backdrop
 var _near: Array[MeshInstance3D] = []
 var _far: Array[MeshInstance3D] = []
+var _blocks: Array[MeshInstance3D] = []    # phone only (built on demand)
 var _outer: Array[MeshInstance3D] = []
 var _map_cache: Dictionary = {}
 
@@ -165,6 +172,7 @@ static func _build_noise_atlas(size: int) -> Texture2D:
 func _make_materials() -> void:
 	var tex := noise_textures()
 	material = _terrain_material("res://shaders/terrain.gdshader", tex)
+	lite_material = _terrain_material("res://shaders/terrain_lite.gdshader", tex)
 	outer_material = _terrain_material("res://shaders/terrain_outer.gdshader", tex)
 	far_material = _terrain_material("res://shaders/terrain_far.gdshader", tex)
 
@@ -257,6 +265,34 @@ func _build_chunks() -> void:
 			return
 
 
+## Phone preset only: 5x5 blocks of 2x2 chunks with 8 m cells, drawn beyond
+## PHONE_BLOCK_RANGE. Each 4 m chunk names its block as visibility parent
+## (Godot's HLOD), so a chunk shows only while its block is too close to be
+## drawn and the two never overlap or leave a gap.
+func _build_phone_blocks() -> void:
+	var holder := Node3D.new()
+	holder.name = "PhoneBlocks"
+	add_child(holder)
+	var n := CHUNKS / 2
+	for bz in n:
+		for bx in n:
+			var origin := Vector3(-WorldGen.HALF + (bx + 0.5) * CHUNK * 2.0, 0.0, -WorldGen.HALF + (bz + 0.5) * CHUNK * 2.0)
+			var blk := MeshInstance3D.new()
+			blk.name = "Block_%d_%d" % [bx, bz]
+			blk.mesh = TerrainMesher.build_chunk(gen, masks, bx * CHUNK_CELLS * 2, bz * CHUNK_CELLS * 2, CHUNK_CELLS * 2, 4, 5.0, origin)
+			blk.material_override = lite_material
+			blk.position = origin
+			blk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			blk.visibility_range_begin = PHONE_BLOCK_RANGE
+			blk.visibility_range_begin_margin = 10.0
+			holder.add_child(blk)
+			_blocks.append(blk)
+			for dz in 2:
+				for dx in 2:
+					var far := _far[(bz * 2 + dz) * CHUNKS + bx * 2 + dx]
+					far.set_meta("block_path", far.get_path_to(blk))
+
+
 ## Outer ring: 8 m cells to 640 m, then 32 m cells to the horizon.
 func _build_outer() -> void:
 	var holder := Node3D.new()
@@ -313,16 +349,32 @@ func _on_setting_changed(key: String) -> void:
 
 func _apply_quality() -> void:
 	var q := Settings.quality()
+	var phone := q == "phone"
 	var r: float = NEAR_RANGE.get(q, 175.0)
+	# Phone: cheap shading, and the ground only receives sun shadows (casting
+	# them would redraw every chunk in the shadow pass).
+	var mat: ShaderMaterial = lite_material if phone and lite_material else material
+	var near_cast := GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if phone else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	var far_cast := GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if phone or q == "low" else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	if phone and _blocks.is_empty() and not _far.is_empty():
+		_build_phone_blocks()
 	for mi in _near:
 		mi.visibility_range_end = r
 		mi.visibility_range_end_margin = 8.0
+		mi.cast_shadow = near_cast
+		mi.material_override = mat
 	for mi in _far:
 		mi.visibility_range_begin = r
 		mi.visibility_range_begin_margin = 8.0
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if q == "low" else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	if material:
-		material.set_shader_parameter("detail_distance", float(DETAIL_DISTANCE.get(q, 75.0)))
+		mi.cast_shadow = far_cast
+		mi.material_override = mat
+		# Phone: hidden while the 8 m block that holds this chunk is drawn.
+		mi.visibility_parent = mi.get_meta("block_path", NodePath()) if phone else NodePath()
+	for mi in _blocks:
+		mi.visible = phone
+	for m in [material, lite_material]:
+		if m:
+			(m as ShaderMaterial).set_shader_parameter("detail_distance", float(DETAIL_DISTANCE.get(q, 75.0)))
 	if water:
 		water.apply_quality(q)
 	if backdrop:

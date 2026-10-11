@@ -286,6 +286,8 @@ func _shoot(shot_name: String, s: Dictionary) -> void:
 	print("SHOT saved ", ProjectSettings.globalize_path(path))
 	_cleanup_ui_options(hud)
 	_print_render_stats(shot_name)
+	if "--breakdown" in OS.get_cmdline_user_args():
+		await _print_breakdown(shot_name)
 	_release_gather()
 	if player_3d and is_instance_valid(player_3d):
 		player_3d.visible = true
@@ -302,6 +304,44 @@ func _print_render_stats(shot_name: String) -> void:
 		vp.get_render_info(vis, Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME),
 		vp.get_render_info(vis, Viewport.RENDER_INFO_OBJECTS_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_OBJECTS_IN_FRAME),
 		vp.get_render_info(vis, Viewport.RENDER_INFO_PRIMITIVES_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_PRIMITIVES_IN_FRAME)])
+
+
+func _render_numbers() -> Array:
+	var vp := get_viewport()
+	var vis := Viewport.RENDER_INFO_TYPE_VISIBLE
+	var sh := Viewport.RENDER_INFO_TYPE_SHADOW
+	return [vp.get_render_info(vis, Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME),
+		vp.get_render_info(vis, Viewport.RENDER_INFO_PRIMITIVES_IN_FRAME), vp.get_render_info(sh, Viewport.RENDER_INFO_PRIMITIVES_IN_FRAME)]
+
+
+## `-- --breakdown` (perf QA): after each shot hide every system of the Game
+## (and the parts of the terrain and the camp) in turn and print what each
+## one costs in draw calls and primitives (visible + shadow passes).
+func _print_breakdown(shot_name: String) -> void:
+	var game: Node = GameState.game
+	if game == null:
+		return
+	var base := _render_numbers()
+	var targets: Array[Node3D] = []
+	for c in game.get_children():
+		if c is Node3D and (c as Node3D).visible:
+			targets.append(c as Node3D)
+	for holder_name in ["Terrain", "Camp", "Vegetation"]:
+		var h := game.find_child(holder_name, false, false)
+		if h:
+			for c in h.get_children():
+				if c is Node3D and (c as Node3D).visible:
+					targets.append(c as Node3D)
+	for n in targets:
+		n.visible = false
+		for _i in 3:
+			await get_tree().process_frame
+		var r := _render_numbers()
+		n.visible = true
+		print("SHOT cost %s %s/%s: draws %d (+%d shadow), primitives %d (+%d shadow)" % [shot_name, n.get_parent().name, n.name,
+			int(base[0]) - int(r[0]), int(base[1]) - int(r[1]), int(base[2]) - int(r[2]), int(base[3]) - int(r[3])])
+	for _i in 3:
+		await get_tree().process_frame
 
 
 ## Preset key "chop": N hits the tree nearest the look point N times through

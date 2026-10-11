@@ -32,10 +32,19 @@ Browser check (Playwright + Chromium, software WebGL, slow):
 
 ```sh
 tools/export_web.sh --no-copy
-NODE_PATH=$(npm root -g) node tests/web/web_check.cjs        # --only=desktop | --only=phone
+NODE_PATH=$(npm root -g) node tests/web/web_check.cjs        # --only=desktop | phone | visibility | audio
 ```
 
-Screenshots land in `tests/output/web/`.
+Screenshots land in `tests/output/web/`. Every scenario must leave the
+console without a single warning or error; `audio` plays a phone day and
+night with the dev keys and checks the decoded web audio stays under 120 MB
+(`--only=stream` is an extra probe of streamed audio vs. frame rate).
+
+Phone render cost per system (draw calls / primitives, visible + shadow):
+
+```sh
+xvfb-run -a -s "-screen 0 1600x900x24" godot --path . --resolution 1280x720 --rendering-method gl_compatibility -- --shots=camp_day,camp_night --quality=phone --breakdown
+```
 
 ## Export
 

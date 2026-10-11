@@ -139,3 +139,35 @@ func test_music_moods() -> void:
 	Audio.set_music_mood("auto")
 	Audio.set_music_mood("title")
 	assert_eq(Audio.call("_current_mood"), "title")
+
+
+
+## Browser: positional loops beyond earshot are stopped (their WebAudio voice
+## and decoded buffer can go); desktop never holds a loop.
+func test_web_loop_culling() -> void:
+	var was: bool = Audio.web_policy
+	var cam := Camera3D.new()
+	_host().add_child(cam)
+	cam.global_position = Vector3(0, 0, 0)
+	cam.current = true
+	var near := Node3D.new()
+	var far := Node3D.new()
+	_host().add_child(near)
+	_host().add_child(far)
+	near.global_position = Vector3(5, 0, 0)
+	far.global_position = Vector3(500, 0, 0)
+	Audio.web_policy = false
+	Audio.start_loop("campfire", far)
+	var p_far: Node = far.get_child(0)
+	assert_false(Audio.call("_loop_held", p_far), "desktop: never held")
+	Audio.web_policy = true
+	assert_true(Audio.call("_loop_held", p_far), "web: a loop 500 m away is held")
+	Audio.start_loop("campfire", near)
+	assert_false(Audio.call("_loop_held", near.get_child(0)), "web: a loop 5 m away plays")
+	assert_false(Audio.call("_loop_held", null))
+	Audio.web_policy = was
+	Audio.stop_loop("campfire", near)
+	Audio.stop_loop("campfire", far)
+	for n in [near, far, cam]:
+		_host().remove_child(n)
+		n.free()

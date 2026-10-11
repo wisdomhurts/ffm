@@ -258,7 +258,7 @@ with `"low"`, and `QualityPresets.value(key)` for per-system knobs.
 
 | | Phone | Low | Medium | High |
 |---|---|---|---|---|
-| Shadows | sun 1024, 2 splits, 32 m, fire off | sun 2048, fire off | sun 4096, fire on | sun 4096 soft, fire on |
+| Shadows | sun 1024, 2 splits, 32 m, fire off; terrain and gatherables cast none | sun 2048, fire off | sun 4096, fire on | sun 4096 soft, fire on |
 | Volumetric fog | off (depth fog) | off (depth fog) | on, low res | on |
 | SSAO / SSIL | off | off | SSAO | SSAO + SSIL |
 | SDFGI | off | off | off | off |
@@ -268,6 +268,9 @@ with `"low"`, and `QualityPresets.value(key)` for per-system knobs.
 | MSAA / FXAA | none | FXAA | SMAA | MSAA 2x + SMAA |
 | Render scale | 70% of the setting, 3D at most 720 px tall | 100% | 100% | 100% |
 | Sky | radiance 32, incremental, 4 updates/s | realtime 256 | realtime 256 | realtime 256 |
+| Terrain | 2 m mesh to 110 m, cheap shader (`terrain_lite`), 8 m blocks beyond 150 m | 2 m to 95 m | 2 m to 135 m | 2 m to 175 m |
+| Water | simple (no screen/depth reads, one normal layer) | normal | normal | full (+SSR) |
+| Backdrop firs / particles | 20 % / 0.3 | 35 % / 0.5 | 65 % / 0.75 | 100 % / 1.0 |
 
 Under the Compatibility renderer (every browser) the Forward+-only effects
 are forced off whatever the preset says (see "Mobile & web" below).
@@ -388,7 +391,11 @@ and outer-ring meshes), `world/terrain_map.gd` (TerrainMap: painted map),
   the steep upper reach, clear shallow edges. Transparent sort:
   `render_priority` lake -2, stream -1 (draw before other transparents).
   4 `"stream"` audio loops along it (`Water.emitters`). Compatibility
-  renderer: `water_simple.gdshader` (alpha + fresnel, no screen reads).
+  renderer and the phone preset (`QualityPresets` `"water": "simple"`):
+  `water_simple.gdshader` (alpha + fresnel to the sky reflection, no screen
+  or depth reads; the phone preset also drops the lake to one scrolling
+  normal layer via `two_layers = false`). `Water.apply_quality(q)` swaps the
+  material pair at runtime.
 - **Bridges.** `Bridges.find_crossings(gen)` (trail x stream intersections,
   3 with the default layout); each bridge: arched plank deck, stringers,
   posts, two rails, sill logs; collision = 8 tilted deck boxes that ramp into
@@ -415,6 +422,22 @@ and outer-ring meshes), `world/terrain_map.gd` (TerrainMap: painted map),
   reflections of nearby shore objects need MSAA off (TAA/FXAA/SMAA are fine). The lake is 6 m deep: the player system should
   wade/swim or push back using `water_height_at`. The outer-ring firs start
   ~1 m past the map edge on the high walls and ~16 m past it on low ground.
+- **Phone preset** (`Settings.quality() == "phone"`, browsers/phones):
+  2 m chunks to 110 m (`NEAR_RANGE`; at 70 m the 2 m / 4 m seam showed
+  through the shallow lake as a darker square), detail fades by 32 m, all chunks
+  use `terrain_lite.gdshader` (`TERRAIN_LITE` in `terrain_body.gdshaderinc`:
+  ~7 texture reads instead of ~20 - one triplanar rock sample, no rock bump,
+  no detail normal maps, no twig/stain layers - and Lambert diffuse), and
+  no chunk casts sun shadows (the ground still receives them). Beyond
+  `PHONE_BLOCK_RANGE` (150 m) 2x2 chunks are drawn as one 8 m-cell block
+  (`_build_phone_blocks`, built the first time the phone preset is applied):
+  each 4 m chunk names its block as `visibility_parent` (Godot HLOD), so the
+  two never overlap or leave a gap. Backdrop firs: 20 %. Measured at the
+  camp (Compatibility, 1280x720, `--breakdown`): terrain 61 -> 40 draw
+  calls, 171k -> 99k primitives, 18k -> 0 shadow primitives (backdrop
+  99k -> 44k of them).
+- **Backdrop under Compatibility:** its fir MultiMeshes go through
+  `ShaderCompat.prepare_multimesh()` / `fill_colors()` (they rendered black).
 - Build cost: ~2.3 s headless on top of WorldGen (masks 0.9 s, chunks
   0.5 s, outer 0.45 s, backdrop 0.4 s), with yields between steps.
 - Tests: `tests/unit/test_terrain.gd` (height/triangle agreement, chunk
@@ -691,6 +714,16 @@ balance.fire.light_fear_edge)`), `light_origin()`, `heat_at(pos)`,
   of its half size), fading in at dusk and shrinking with the fire, gone when
   out; plus a soot decal under the pit. Decal emission ignores alpha, so the
   emission texture is premultiplied.
+- **Compatibility renderer (browsers, phones):** decals are not drawn and the
+  night camp haze is a FogVolume (Forward+ only), so the campfire adds a
+  `SafeGlow` (`fx/safe_glow.gd` + `shaders/safe_glow.gdshader`): a polar
+  grid draped 8 cm over the terrain around the fire (one unshaded additive
+  draw call, ~5k triangles, world-aligned) with a soft warm wash and a
+  dotted glowing band exactly at `fire.light_radius()`; it fades in at dusk,
+  shrinks with the fire and is gone when the fire is out. Fire shadows follow
+  `QualityPresets.value("fire_shadows")` (off on phone and low) and use cube
+  shadows under Compatibility (dual-paraboloid logs an error every frame
+  there); particle counts use the preset's `particles` (0.3 on phone).
 
 **Fire visuals (`FireFX`).** Two persistent "hero" flame billboards (the
 silhouette) + GPU particle flame tongues + a soft core + rising embers +
@@ -699,7 +732,11 @@ smaller, lower and redder when LOW; OUT → no flames, embers smoulder
 `balance.fire.smoulder_seconds` (20 s; charred-log cracks and the ember bed
 fade, thick smoke then a thin wisp), then grey ash. Flames are premultiplied
 alpha (solid-looking orange bodies in daylight, HDR cores that bloom at
-night), `fog_disabled`. Particle counts follow quality (0.5 / 0.75 / 1.0).
+night), `fog_disabled`. Particle counts follow quality (0.3 phone / 0.5 /
+0.75 / 1.0). Flames and smoke sort by view depth on Forward+ only: the
+Compatibility renderer sorts particles on the CPU after reading the particle
+buffer back from the GPU every frame (a pipeline stall and a WebGL
+performance warning per frame), so there they use the default order.
 Levels (`FirePit`): 1 stone ring + log teepee, 2 two-course stone hearth with
 an iron grate, 3 stone plinth with an iron beacon basket; each changes the
 collider, interact radius (2.6 / 2.95 / 3.2), light height and rack size.
@@ -812,7 +849,11 @@ away, proxies, regrowth after real dawns).
   meshes are culled by visibility range (fade + 48 m chunk margin): ~15-20
   chunk meshes are in range around the camp, about half of them in view. The
   shader reads `wetness` (darker, glossier), `wind_*` (leaves sway),
-  `night_factor` (coal glitter). `Sparkle` twinkles 1-2 star glints on the
+  `night_factor` (coal glitter). Phone preset: the chunk meshes cast no sun
+  shadows and their range margin is the chunk half-diagonal (45 m) instead of
+  48 m. Compatibility renderer (no `BACKLIGHT`, no SSIL): the baked AO is
+  halved and leaves, berries and cloth get a little emission from their
+  backlight term, so bushes in shade look like they do on desktop. `Sparkle` twinkles 1-2 star glints on the
   ~28 nearest available nodes within 26 m (one MultiMesh, stronger at dusk).
 - **Public API** (`game.gatherables`): `node_count()`, `count_kind(kind)`,
   `counts_by_kind()`, `node_info(id)` → `{kind, item, pos, radius, height,
@@ -1071,8 +1112,23 @@ monsters (`stalker_*`, `watcher_whisper`, `wolf_*`, `boss_*`), wildlife
 `deny`, `upgrade`). Loops: `campfire`, `stream`, `cooking` (positional),
 `rain`, `wind` (global, already automatic).
 
-Web build: browsers use sample playback, where bus effects (limiter, reverb,
-muffle) may be skipped; everything else works the same.
+**Web build.** Browsers play every sound as a WebAudio "sample" (Godot's web
+default; bus effects - limiter, reverb, muffle - are skipped there). Godot
+4.7 decodes each sound the first time it plays into stereo float32 PCM at
+the AudioContext rate and never frees it, copies it again for every voice
+and loops by restarting voices by hand: the eight music layers alone came to ~215-245 MB (44.1-48 kHz) and
+a phone-emulated session to 380 MB of decoded audio by the first night.
+Fixes (docs: Mobile & web -> Memory): the page's audio shim
+(`web/shell/shell.src.html`, enabled by `tools/export_web.sh`) shares one
+buffer between voices, loops natively (gapless, and back to the start so the
+music layers stay on the beat), releases samples >= 6 s that nobody played
+for 60 s (re-decoded on the next play) and runs WebAudio at 24 kHz on phones;
+the director (`web_policy`, true in the browser) stops positional loops
+beyond their `max_distance` + 8 m and lets the current mood's layers idle
+muted instead of stopping (so they are not released and decoded again every
+couple of minutes). STREAM playback was tried and measured: the no-threads build
+mixes it on the main thread and only 5-11 % of the audio arrived at 1-12 FPS
+(`web_check.cjs --only=stream`), so it is not used.
 
 
 ### Monsters & spawning
@@ -1230,7 +1286,16 @@ rects of the touch buttons...).
 - *Shadows:* WebGL shadow maps need more bias; under Compatibility the sun
   and moon use at least `shadow_bias` 0.1 / `normal_bias` 2.2 (no acne
   stripes at sunrise). Positional (omni) shadows are expensive there: the
-  phone preset turns `fire_shadows` off.
+  phone preset turns `fire_shadows` off. A shadowed omni light also draws
+  every object in its range a second time (the campfire added ~90 draw calls
+  at night), and `SHADOW_DUAL_PARABOLOID` is not supported (an error every
+  frame): use `SHADOW_CUBE`.
+- *Particles:* a `GPUParticles3D` with `DRAW_ORDER_VIEW_DEPTH` or
+  `DRAW_ORDER_REVERSE_LIFETIME` is sorted on the CPU after reading its
+  buffer back from the GPU **every frame** (`glGetBufferSubData`: a pipeline
+  stall, and Chromium logs "READ-usage buffer was read back without waiting
+  on a fence" each time). Use the default (index) or lifetime order there.
+- *Decals* are not drawn (the camp's safe ring uses `SafeGlow` instead).
 - `BACKLIGHT` (grass translucency) has no effect, so backlit grass is a bit
   darker in the browser than on desktop.
 - Shaders can branch per renderer with the built-in preprocessor defines
@@ -1304,45 +1369,101 @@ handles it). `CameraRig` ignores big mouse jumps in the first 300 ms / 3
 frames after the capture starts (browsers can report one huge warp then,
 which flung the camera at the sky in the Chromium test).
 
-**Memory** (Chromium, measured by `tests/web/web_check.cjs`): wasm heap
-~220 MB; the JS heap holds the web audio samples (Godot's web "sample"
-playback keeps decoded PCM: all 1000 s of sound are ~310 MB as float32,
-the eight music loops ~215 MB of it) - the biggest item on phones. See the
-audio item below.
+**Memory** (Chromium, iPhone-14 emulation; before: title, a day, then dusk,
+night, a monster and the fire out with the dev keys; after:
+`web_check.cjs --only=audio`, title, a day, then every music mood).
+Godot 4.7 plays web audio as WebAudio "samples": the first play of a sound
+decodes it in wasm (a transient of 16 bytes per frame at the mix rate in the
+wasm heap, which never shrinks) into a stereo float32 `AudioBuffer` at the
+AudioContext rate that is never freed, every voice got a full copy of it,
+and loops restarted by hand (a further copy per pass). Before: 94 MB of
+decoded audio at the title, 219 MB after a few seconds of play, 380 MB by
+the time a monster showed up at night (wasm heap 267 MB, which never
+shrinks). The fix lives in the page, not the game:
+- `tools/export_web.sh` exposes the engine's `GodotAudio` object as
+  `window.matiGodotAudio` (one checked text patch of `index.js`; the export
+  fails if the engine code no longer matches).
+- The shell's audio shim (`web/shell/shell.src.html`, first `<script>`):
+  every voice plays the one registered buffer; `forward` loops use native
+  `AudioBufferSourceNode.loop` (gapless; loops back to the start so the
+  80 s music layers stay on the shared beat grid - the engine's restart went
+  back to each voice's first offset); samples >= 6 s (music, stingers,
+  ambience beds) that no voice has used for 60 s are released and decoded
+  again by the engine on their next play (a start for a released sample is
+  skipped instead of throwing); phones and tablets run the AudioContext at
+  24 kHz (half the PCM of 48 kHz; desktop browsers keep the device rate).
+  `window.matiAudioShim` reports `{phone, installed, released}`.
+- The director (`web_policy`) stops positional loops beyond earshot and lets
+  the current mood's layers idle muted instead of stopping (day music
+  resting, the warm night layer away from the fire, danger at 0).
+After (same emulation, 24 kHz): 25.6 MB at the title (and still 25.6 MB
+20 s later: no per-voice or per-loop copies), 57.5 MB in the day, peak
+94.4 MB while the night layers fade in over the dusk ones (the check
+crowds every mood into a few minutes at ~1 FPS, where fades run 10x slow),
+falling back as idle layers are released (6 released by the end); wasm
+heap 155 -> 223 MB (was 186 -> 267). `web_check.cjs --only=audio` fails
+above 120 MB of decoded audio; numbers in `tests/output/web/report.json`.
+- STREAM playback (`AudioServer.PLAYBACK_TYPE_STREAM`) keeps nothing decoded
+  but was rejected: in the no-threads build the mixer is fed from the main
+  thread one 128-frame message at a time, and at 1-12 FPS only 5-11 % of
+  the audio arrived (`web_check.cjs --only=stream`, even with a 170 ms ring
+  buffer) - music would stutter whenever a phone is busy.
 
-**Open items for other owners** (their files were stubs on this branch):
-- *Terrain:* if the terrain uses MultiMeshes or `instance uniform`s, route
-  them through `ShaderCompat`; on `"phone"` use coarser chunks / fewer
-  chunks in view (~110-150 m), drop extra triplanar/noise octaves (or branch
-  on `CURRENT_RENDERER == RENDERER_COMPATIBILITY`), and let the terrain
-  receive but not cast sun shadows.
-- *Water:* read `QualityPresets.value("water")`: `"simple"` = no
-  screen/depth-texture refraction and no SSR (absent in Compatibility
-  anyway), one scrolling normal, fresnel to the sky colour, alpha blend
-  only; avoid FogVolumes.
-- *Campsite & campfire:* OmniLight shadows from
-  `QualityPresets.value("fire_shadows")` (false on phone); ember/smoke
-  counts through `QualityPresets.particle_count(n)`; any custom shader with
-  `instance uniform`s via `ShaderCompat`. The night "safe circle" haze is a
-  FogVolume (Forward+ only): on the Compatibility renderer show the circle
-  another way (e.g. a soft additive ground-glow decal/disc sized by
-  `fire.light_radius()`).
-- *Gatherables:* MultiMesh -> `ShaderCompat.prepare_multimesh()` /
-  `fill_colors()`; sparkle shaders with instance uniforms -> `ShaderCompat`.
-- *Audio:* 13 MB of OGG make up most of the 14.8 MB .pck; re-encoding the
-  eight 80 s music loops at a lower bitrate (or mono) for the web build
-  would roughly halve the download. In the browser every sound that plays
-  is kept as decoded float32 PCM (music alone ~215 MB): on phones prefer
-  mono / 22 kHz music for the web build, register only the current mood's
-  layers, or try `playback_type = STREAM` for music on desktop browsers
-  (it may stutter in the no-threads build when frames are slow).
+**Phone budget** (`--quality=phone --rendering-method gl_compatibility`,
+1280x720, `screenshot_tour.gd -- --breakdown`; draw calls / primitives +
+shadow-pass primitives; target at the camp: < 250 draws, < 500k
+primitives):
+
+| Shot | Before this pass | After |
+|---|---|---|
+| camp_day | 196 / 676k + 150k | 171 / 602k + 115k |
+| camp_night | 281 / 679k + 179k | 174 / 603k + 144k |
+| forest_day | 131 / 395k + 125k | 112 / 364k + 96k |
+| safe_ring (night, wide) | 290 / 604k + 159k | 181 / 525k + 129k |
+| lake_day | 66 / 383k + 17k | 47 / 280k + 0 |
+
+Night lost ~100 draw calls with the fire's shadows (a shadowed omni light
+redraws everything in its range under Compatibility). Draw calls are within
+budget; primitives are not, and **vegetation is two thirds of them**
+(camp_day: vegetation 61 draws, 399k + 30k shadow; the camp 31 draws, 65k +
+61k shadow; the player 36 draws, 28k + 25k shadow; terrain incl. water and
+backdrop 40 draws, 99k + 0). Most vegetation primitives are the far-LOD
+trees, not the near ones: a 64 m chunk 100 m from the camera (only far LOD
+in range) still costs ~49k primitives in 6 draws. Knobs for the vegetation
+owner: `Vegetation.RANGES["tree"]["phone"]` (near 42 m / far 110 m; the
+ranges are per 64 m chunk, measured to the chunk centre), the far-LOD tree
+mesh (`TreeMeshes`, ~700-1000 triangles per tree), and the share of trees
+drawn on phone. Measured (camp_day, everything else as above): phone tree
+ranges [42, 80] -> 153 draws, 489k + 115k; [30, 80] -> 148 draws, 420k +
+91k (the budget, give or take; the forest beyond 80 m thins out). For the
+camp owner: the decor mesh and the crafting crate cast 27k + 16k shadow
+primitives on phone (sun shadows reach only 32 m).
+
+**Open items:**
+- *Vegetation* dominates the phone frame (see "Phone budget" above).
+- *Audio download:* 13 MB of OGG make up most of the 15 MB .pck; lower
+  bitrate (or mono) web music would roughly halve it.
+- *Decode hitches:* the first play of a long sound (and the replay of a
+  released one) decodes it on the main thread in one go (~0.2 s per 80 s
+  layer on a desktop core, likely 0.5-1 s on a phone) - at mood changes.
 
 **Verified** (Chromium + SwiftShader WebGL 2 via Playwright, see
 `tests/web/web_check.cjs`; real phones were not available): desktop
 1280×720 and iPhone-14-landscape emulation (844×390 @2x, touch, iOS UA):
 boot page, tap to start, title, Play by key/tap, world loads, touch
 controls, joystick, look, multi-touch, USE, hotbar taps, RUN, pause,
-switching between keyboard and touch, portrait card, hidden-tab pause; no
-console errors or warnings. Not verified: real iOS Safari / WebKit, real
-GPUs and frame rates on phones (SwiftShader runs at ~1 FPS), audio unlock,
-Add to Home Screen, notch insets, touch scrolling of long menus.
+switching between keyboard and touch, portrait card, hidden-tab pause, the
+phone's decoded audio through every music mood; every scenario must leave
+the console without a single warning or error. Not verified: real iOS
+Safari / WebKit, real GPUs and frame rates on phones (SwiftShader runs at
+~1 FPS), audio unlock, how audio actually sounds (24 kHz on phones, native
+loops), the decode hitch on a phone, Add to Home Screen, notch insets,
+touch scrolling of long menus.
+
+**Test browser caveat:** headless Chromium's renderer grows by ~25 MB/s for
+good once `requestPointerLock()` has been called (reproduced on a blank
+WebGL page), so after the game captured the mouse the test tab used to
+reach 2-3 GB and get killed. `web_check.cjs` refuses the lock in its page
+init script (`qaPage`), as a real browser does without a click; renderer
+memory figures from before that change are inflated by it (the audio
+buffer figures are not).
