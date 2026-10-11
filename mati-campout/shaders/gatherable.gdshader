@@ -291,6 +291,13 @@ void fragment() {
 	AO = ao;
 	AO_LIGHT_AFFECT = 0.35;
 	EMISSION = emit;
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	// Browsers/phones: no BACKLIGHT and no SSIL, so bushes in shade went near
+	// black. Soften the baked AO and let leaves, berries and cloth glow a
+	// little with the light they would let through (less at night).
+	AO = mix(ao, 1.0, 0.5);
+	EMISSION += backlight * 0.18 * (1.0 - 0.75 * night_factor);
+#endif
 	if (m == M_LEAF || m == M_BERRY || m == M_CLOTH || m == M_STEM || m == M_SPOT || m == M_BONE) {
 		BACKLIGHT = backlight;
 	}

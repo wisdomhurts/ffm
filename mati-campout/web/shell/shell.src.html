@@ -297,6 +297,125 @@ $GODOT_HEAD_INCLUDE
 
 <script src="$GODOT_URL"></script>
 <script>
+// Web audio memory (docs/ARCHITECTURE.md, Mobile & web -> Memory). Godot's
+// web "sample" playback keeps every sound it has played as decoded float32
+// PCM (a WebAudio AudioBuffer) for good, makes a full copy of it for every
+// voice that plays it, and loops by restarting the voice by hand (one more
+// copy per pass, a small seam, and back to the voice's first offset, which
+// pulled the beat-aligned music layers apart). tools/export_web.sh exposes the
+// engine's audio object as window.matiGodotAudio; this shim then
+//  - lets every voice play the one decoded buffer (no per-voice copies),
+//  - loops samples natively and gaplessly over the whole buffer,
+//  - releases big samples (>= 6 s: music, stingers, ambience) that no voice
+//    has played for 60 s; the engine decodes them again when they next play,
+//  - runs WebAudio at 24 kHz on phones and tablets (half the PCM of 48 kHz).
+// Anything unexpected (another engine version) leaves the engine untouched.
+(function () {
+	'use strict';
+	const ua = navigator.userAgent || '';
+	const phone = /iPhone|iPad|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+	const BIG_SECONDS = 6;
+	const IDLE_MS = 60000;
+	const PHONE_RATE = 24000;
+	window.matiAudioShim = { phone: phone, installed: false, released: 0 };
+
+	const AC = window.AudioContext || window.webkitAudioContext;
+	if (AC && phone) {
+		const PhoneAudioContext = function (opts) {
+			const o = Object.assign({}, opts || {});
+			if (!o.sampleRate) {
+				o.sampleRate = PHONE_RATE;
+			}
+			try {
+				return new AC(o);
+			} catch (e) {
+				return new AC(opts || {});
+			}
+		};
+		PhoneAudioContext.prototype = AC.prototype;
+		window.AudioContext = PhoneAudioContext;
+		if (window.webkitAudioContext) {
+			window.webkitAudioContext = PhoneAudioContext;
+		}
+	}
+
+	function install(GA) {
+		const S = GA && GA.Sample && GA.Sample.prototype;
+		const N = GA && GA.SampleNode && GA.SampleNode.prototype;
+		if (!S || !N || typeof S.getAudioBuffer !== 'function' || typeof N._addEndedListener !== 'function'
+			|| typeof N._pause !== 'function' || typeof GA.start_sample !== 'function' || typeof GA.Sample.getSampleOrNull !== 'function') {
+			return;
+		}
+		S.getAudioBuffer = function () {
+			return this._audioBuffer;
+		};
+		const loopOf = function (node) {
+			const smp = GA.Sample.getSampleOrNull(node.streamObjectId);
+			return smp && smp.loopMode === 'forward' && smp._audioBuffer ? smp._audioBuffer.duration : 0;
+		};
+		const addEnded = N._addEndedListener;
+		N._addEndedListener = function () {
+			addEnded.call(this);
+			if (this._source && loopOf(this) > 0) {
+				this._source.loop = true;
+				this._source.loopStart = 0;
+				this._source.loopEnd = 0;
+			}
+		};
+		// A paused looping voice resumes where it was, wrapped into the loop.
+		const pause = N._pause;
+		N._pause = function () {
+			pause.call(this);
+			const dur = loopOf(this);
+			if (dur > 0 && this.isPaused) {
+				const at = (((this.offset + this.pauseTime) % dur) + dur) % dur;
+				this.pauseTime = at - this.offset;
+			}
+		};
+		// Never start a voice for a sample that is not there (released between
+		// the engine's check and the start): skip it instead of throwing.
+		const start = GA.start_sample;
+		GA.start_sample = function (playbackObjectId, streamObjectId, busIndex, startOptions) {
+			if (GA.Sample.getSampleOrNull(streamObjectId) == null) {
+				return;
+			}
+			return start.call(this, playbackObjectId, streamObjectId, busIndex, startOptions);
+		};
+		const lastUsed = new Map();
+		setInterval(function () {
+			if (!GA.samples || !GA.sampleNodes) {
+				return;
+			}
+			const now = Date.now();
+			const busy = new Set();
+			for (const node of GA.sampleNodes.values()) {
+				busy.add(node.streamObjectId);
+			}
+			for (const [id, smp] of GA.samples) {
+				const buf = smp._audioBuffer;
+				if (!buf || buf.duration < BIG_SECONDS || busy.has(id) || !lastUsed.has(id)) {
+					lastUsed.set(id, now);
+					continue;
+				}
+				if (now - lastUsed.get(id) > IDLE_MS) {
+					lastUsed.delete(id);
+					smp.clear();
+					window.matiAudioShim.released += 1;
+				}
+			}
+		}, 5000);
+		window.matiAudioShim.installed = true;
+	}
+
+	const wait = setInterval(function () {
+		if (window.matiGodotAudio) {
+			clearInterval(wait);
+			install(window.matiGodotAudio);
+		}
+	}, 50);
+}());
+</script>
+<script>
 const GODOT_CONFIG = $GODOT_CONFIG;
 const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
 

@@ -657,7 +657,23 @@ func _apply_quality() -> void:
 			if mi == null:
 				continue
 			var big := mi.name == "Big"
-			mi.visibility_range_end = float(f[1] if big else f[0]) + CHUNK * 0.75
+			mi.visibility_range_end = float(f[1] if big else f[0]) + _range_margin()
+			mi.cast_shadow = _big_shadows() if big else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## Chunk visibility margin beyond the shader fade: a node can sit anywhere in
+## its 64 m chunk (half-diagonal ~45 m). Phone: just that, so fewer chunk
+## meshes stay in range (their far nodes are shrunk away by the shader anyway).
+func _range_margin() -> float:
+	var q := Settings.quality() if Settings.has_method("quality") else "high"
+	return CHUNK * (0.71 if q == "phone" else 0.75)
+
+
+## Phone preset: gatherables do not cast sun shadows (one shadow pass less per
+## chunk mesh; the sun shadow distance is only 32 m there anyway).
+func _big_shadows() -> GeometryInstance3D.ShadowCastingSetting:
+	var q := Settings.quality() if Settings.has_method("quality") else "high"
+	return GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if q == "phone" else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 
 
 func _on_setting_changed(key: String) -> void:
@@ -717,10 +733,10 @@ func _rebuild_chunk(ci: int) -> void:
 		var mi := MeshInstance3D.new()
 		mi.name = str(pair[1])
 		mi.mesh = acc.commit(pair[2] as ShaderMaterial)
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if bool(pair[3]) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.cast_shadow = _big_shadows() if bool(pair[3]) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		mi.extra_cull_margin = 0.6
-		mi.visibility_range_end = float(pair[4]) + CHUNK * 0.75
+		mi.visibility_range_end = float(pair[4]) + _range_margin()
 		mi.visibility_range_end_margin = 8.0
 		holder.add_child(mi)
 		_vertex_total += acc.verts.size()

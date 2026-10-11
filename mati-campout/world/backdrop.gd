@@ -24,7 +24,7 @@ const LAYERS := [
 ## Azimuth (from +X toward +Z) beyond which the inner ranges stop (the lake).
 const WEST_CUT_DEG := 118.0
 ## Share of forest silhouettes shown per quality.
-const TREE_SHARE := {"low": 0.35, "medium": 0.65, "high": 1.0}
+const TREE_SHARE := {"phone": 0.2, "low": 0.35, "medium": 0.65, "high": 1.0}
 
 var gen: WorldGen
 var mountains: Array[MeshInstance3D] = []
@@ -426,7 +426,10 @@ func _add_tree_chunk(items: Array, mesh: Mesh, mat: Material, rng: RandomNumberG
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
 	mm.mesh = mesh
+	# Compatibility renderer: without instance colours COLOR reads as black.
+	ShaderCompat.prepare_multimesh(mm)
 	mm.instance_count = items.size()
+	ShaderCompat.fill_colors(mm)
 	for i in items.size():
 		var it: Array = items[i]
 		mm.set_instance_transform(i, it[0])

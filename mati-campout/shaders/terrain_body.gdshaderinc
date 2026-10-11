@@ -1,6 +1,9 @@
 // Terrain surface: stylised-realistic ground painted from per-vertex masks.
 // Included by terrain.gdshader (playable map) and terrain_far.gdshader
 // (outer ring beyond the map edge: TERRAIN_FAR is defined).
+// terrain_lite.gdshader (phone preset) defines TERRAIN_LITE: the same palette
+// and masks with ~7 texture reads instead of ~20 (one triplanar rock sample,
+// no rock bump, no detail normal maps, no twig/stain layers).
 //
 //   COLOR    r path (trail dirt)  g forest (floor / far canopy)  b meadow  a camp ground
 //   CUSTOM0  r rock / slope       g shore sand  b wet soil  a cavity (baked AO, 1 = open)
@@ -137,8 +140,10 @@ void fragment() {
 	ff = mix(ff, floor_moss, smoothstep(0.52, 0.8, n_mid.r * 0.6 + n_fine.r * 0.5) * 0.9);
 	float needles = n_micro.a;
 	ff *= mix(1.0, mix(0.75, 1.2, needles), near_k);
+#ifndef TERRAIN_LITE
 	float twig = smoothstep(0.1, 0.03, texture(noise_tex, tc_rot(wp, 0.4) * 0.6).g) * near_k;
 	ff = mix(ff, floor_red * 0.7, twig * 0.6);
+#endif
 	float forest_w = smoothstep(0.18, 0.62, m_forest + (nf - 0.5) * 0.45 + (nm - 0.5) * 0.15);
 	col = mix(grass, ff, forest_w);
 	spec = mix(0.32, 0.25, forest_w);
@@ -178,10 +183,17 @@ void fragment() {
 	float rock_w = smoothstep(0.38, 0.66, m_rock + (n_mid.g - 0.5) * 0.35 + (nf - 0.5) * 0.25);
 	vec3 rock_n = N;
 	if (rock_w > 0.001) {
+#ifdef TERRAIN_LITE
+		vec4 t1 = tc_triplanar(noise_tex, wpos, N, 0.045);
+		vec4 t0 = vec4(n_mid.r, n_mid.g, n_mid.b, n_mid.a);
+		vec4 t2 = vec4(t1.g, t1.r, t1.a, t1.b);
+		vec4 t3 = vec4(0.5);
+#else
 		vec4 t0 = tc_triplanar(noise_tex, wpos, N, 0.011);
 		vec4 t1 = tc_triplanar(noise_tex, wpos, N, 0.045);
 		vec4 t3 = tc_triplanar(noise_tex, wpos, N, 0.5);
 		vec4 t2 = tc_triplanar(noise_tex, wpos, N, 0.03);
+#endif
 		// Blocky rock: big cell interiors are faces, the borders are cracks.
 		float big = smoothstep(0.7, 0.42, t0.g + (t1.r - 0.5) * 0.25);
 		float blocks = smoothstep(0.75, 0.45, t2.g + (t1.b - 0.5) * 0.3) * 0.5 + 0.5;
@@ -197,13 +209,18 @@ void fragment() {
 		float speck = smoothstep(0.12, 0.05, t3.g) * near_k * smoothstep(0.3, 0.6, N.y);
 		rk = mix(rk, vec3(0.62, 0.55, 0.25), speck * 0.5);
 		// Rain stains running down steep faces; grassy ledges on the flatter bits.
+#ifdef TERRAIN_LITE
+		rk *= mix(1.0, 0.9, 1.0 - N.y);
+#else
 		float stain = texture(noise_tex, vec2((wpos.x - wpos.z) * 0.06, wpos.y * 0.007)).b;
 		rk *= mix(0.72, 1.06, smoothstep(0.25, 0.75, stain)) * mix(1.0, 0.9, 1.0 - N.y);
+#endif
 		float ledge = smoothstep(0.74, 0.9, N.y) * smoothstep(0.4, 0.68, t1.r + (nf - 0.5) * 0.4);
 		rk = mix(rk, grass * 0.88, ledge * 0.75);
 		col = mix(col, rk, rock_w);
 		rough = mix(rough, 0.78, rock_w);
 		spec = mix(spec, 0.42, rock_w);
+#ifndef TERRAIN_LITE
 		// Derivative bump from the block pattern (works on any slope).
 		float hgt = (blocks * 0.3 + big * 0.6 + t3.a * 0.08 * near_k) * mid_k;
 		vec3 dpdx = dFdx(wpos);
@@ -215,6 +232,7 @@ void fragment() {
 		float det = dot(dpdx, r1);
 		vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
 		rock_n = normalize(abs(det) * N - grad * 0.22);
+#endif
 	}
 
 	// --- Lake bed under water ----------------------------------------------------
@@ -227,6 +245,7 @@ void fragment() {
 	// Baked cavity occlusion (ditches, stream beds, hollows).
 	col *= mix(0.62, 1.0, cavity);
 
+#ifndef TERRAIN_LITE
 	// Detail normals: two scales of tiling normal map.
 	vec2 d1 = tc_nmap(texture(normal_tex, tc_rot(wp, 0.3) * 0.21));
 	vec2 d2 = tc_nmap(texture(normal_tex, tc_rot(wp, 2.6) * 0.83));
@@ -234,6 +253,7 @@ void fragment() {
 	dn *= 1.0 - under * 0.6;
 	vec3 Ng = normalize(N + vec3(dn.x, 0.0, dn.y) * (1.0 - rock_w));
 	N = normalize(mix(Ng, rock_n, rock_w));
+#endif
 #endif
 
 	// --- Rain: darker, glossier ground, puddle gloss in hollows ----------------------

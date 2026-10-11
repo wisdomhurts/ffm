@@ -55,6 +55,24 @@ p.write_text(s2)
 print("  service worker cache prefix fixed" if s2 != s else "  service worker unchanged")
 PY
 
+# Expose the engine's web-audio object to the page shell, whose audio shim
+# (web/shell/shell.src.html) shares decoded sample buffers between voices,
+# loops them natively and releases big ones nobody plays (Godot 4.7 never
+# frees a decoded sample in the browser: hundreds of MB on a phone).
+python3 - "$OUT/index.js" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1])
+s = p.read_text()
+old, new = "var GodotAudio={", "var GodotAudio=globalThis.matiGodotAudio={"
+if new in s:
+    print("  audio shim hook already present")
+elif s.count(old) == 1:
+    p.write_text(s.replace(old, new))
+    print("  audio shim hook added (window.matiGodotAudio)")
+else:
+    sys.exit("!! index.js: expected exactly one '%s' (engine version changed?); the web audio shim would not work" % old)
+PY
+
 echo "== sizes"
 for f in "$OUT"/index.wasm "$OUT"/index.pck "$OUT"/index.js "$OUT"/index.html; do
   raw=$(stat -c %s "$f")
