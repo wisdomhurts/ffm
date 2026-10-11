@@ -9,4 +9,4 @@ builds/
 tests/output/
 # Exported builds (binaries are published separately)
 build/
-web/site/play/
+# web/site/play/ is committed: it is the published browser build (campout.quest/play)
