@@ -156,5 +156,47 @@
     "wetness_rise_seconds": 35.0,
     "wetness_dry_seconds": 140.0,
     "lightning_interval": [7.0, 20.0]
+  },
+  "landmarks": {
+    "discover_radius_mult": 1.0,
+    "discover_min_radius": 10.0,
+    "beam_period": 14.0,
+    "beam_range": 260.0,
+    "spot_range": 110.0,
+    "lantern_light_distance": 70.0,
+    "chests": {
+      "lighthouse": {"tier": "rare", "table": "lighthouse", "restock_table": "lighthouse_restock", "restock_days": 3, "label": "Keeper's Chest"},
+      "abandoned_camp": {"tier": "common", "table": "chest_common", "label": "Old Camp Chest"},
+      "lookout": {"tier": "rare", "table": "chest_rare", "label": "Ranger's Chest"},
+      "old_mine": {"tier": "epic", "table": "chest_epic", "label": "Miner's Chest"},
+      "hollow": {"tier": "epic", "table": "chest_epic", "label": "Hollow Chest"}
+    },
+    "discover_text": {
+      "lighthouse": "The keeper's room is open. Something glints inside!",
+      "abandoned_camp": "Nobody has camped here for a long time...",
+      "lookout": "Climb the stairs for a great view!",
+      "rosies_rest": "Smells like stew! Old Rosie trades food and warm things.",
+      "pips_dock": "Pip the fisher trades by the water.",
+      "brams_dig": "Bram the prospector digs for treasure here.",
+      "old_mine": "An old mine! Peek inside, if you dare.",
+      "hollow": "A secret glade full of glowing mushrooms!"
+    },
+    "notes": {
+      "lighthouse": [
+        "Keeper's log: Keep the light burning and the shadows keep their distance.",
+        "Keeper's log: Fed the campfire before sundown. Never let it go out!",
+        "Keeper's log: The night things hate a bright light in the face.",
+        "Keeper's log: Spare batteries live in the chest. Take what you need, little camper."
+      ],
+      "lookout": [
+        "Ranger notes: From up here you can see the lighthouse beam at night.",
+        "Ranger notes: Coal burns longer than wood. Look for it on the Rocky Ridge.",
+        "Ranger notes: Wolves love a good bone. Stay calm and offer one."
+      ],
+      "abandoned_camp": [
+        "A soggy diary: 'We forgot to feed the fire. Never again!'",
+        "A soggy diary: 'Packed up in a hurry. Left the good chest behind...'"
+      ]
+    }
   }
 }

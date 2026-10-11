@@ -1467,3 +1467,146 @@ reach 2-3 GB and get killed. `web_check.cjs` refuses the lock in its page
 init script (`qaPage`), as a real browser does without a click; renderer
 memory figures from before that change are inflated by it (the audio
 buffer figures are not).
+
+switching between keyboard and touch, portrait card, hidden-tab pause; no
+console errors or warnings. Not verified: real iOS Safari / WebKit, real
+GPUs and frame rates on phones (SwiftShader runs at ~1 FPS), audio unlock,
+Add to Home Screen, notch insets, touch scrolling of long menus.
+
+
+### Landmarks
+
+Files: `world/landmarks.gd` (`Landmarks`: build, discovery, markers, chests,
+lanterns), `world/landmarks/landmark_site.gd` (`LandmarkSite`: base class,
+placement helpers, `finish()`), one class per landmark:
+`lighthouse.gd` (`LighthouseSite`), `ranger_lookout.gd` (`RangerLookout`),
+`abandoned_camp.gd` (`AbandonedCamp`), `trader_camp.gd` (`TraderCamp`, styles
+`rosie` / `pip` / `bram`), `old_mine.gd` (`OldMine`), `fern_hollow.gd`
+(`FernHollow`); shared builders `landmark_props.gd` (`LandmarkProps`: crates,
+barrels, carts, wheels, lanterns, benches, desk, shelves, flower pots, stew
+tripod, rowboat, net, giant ferns, glowing mushrooms...), `mine_bits.gd`
+(`MineBits`: timber portal + rocky mound + tunnel, boards, tracks),
+`landmark_kit.gd` (`LandmarkKit extends CampKit`: patterns, materials,
+`torn_surface`, `wall_arc`, `ring`, `beam`, `leaf_tri`),
+`landmark_discovery.gd` (`LandmarkDiscovery`, pure), `landmark_marker.gd`,
+`landmark_note.gd` (readable logbook / notice board), `landmark_label.gd`.
+Shaders: `shaders/landmark.gdshaderinc` (surface code), `landmark.gdshader`
+(solid), `landmark_cloth.gdshader` (double-sided, wind flutter, net cut-out),
+`lighthouse_beam.gdshader`, `lighthouse_flare.gdshader`. Tuning:
+`balance.json` → `landmarks` (discovery radius, beam period/range, lantern
+light distance, chest settings, discovery toasts, notes). Tests:
+`tests/unit/test_landmarks.gd`, `godot --headless --path . -s
+res://tests/landmark_drive_launcher.gd` (67 checks: bodies, markers,
+discovery once, the keeper's log, walking into the keeper's room / up the lookout stairs / into
+the mine / onto the dock, clear trader spots, chests via a fake ChestManager
+and the fallback loot, lanterns + beam at night).
+
+**Placement.** Each site sits at `WorldGen.landmark_pos(id)` (on the ground)
+and is turned so its local +Z faces the nearest trail point ~12 m away
+(`LandmarkSite.approach_dir`); everything is built in that local frame,
+snapped to `height_at` (lowest point of a prop's footprint), deterministic from
+`GameState.seed`. Built after Gatherables: every footprint is cleared with
+`gatherables.clear_area()` and registered with `vegetation.add_obstacle()`
+(AI steers around props). Vegetation has no removal API, so Fern Hollow's
+ruins, ferns and mushrooms are placed around the trees that grow there
+(`vegetation.is_clear`). Trader camps keep a clear 2.5 m circle at the
+centre (`TraderCamp.CLEAR`) for the trader NPC.
+
+**Rendering.** Per site: one `Structure` MeshInstance3D (solid + cloth
+surface, visible far: lighthouse always, others 160-300 m; double-sided
+shadow casting, so the inward-facing walls, ceilings and tunnel keep the sun
+out), one `Details`
+mesh (small props, 80-95 m, no shadows on phone/low), optional `Glass`
+(lantern room, display case), sign `Label3D`s (35 m). No MultiMeshes and no
+`instance uniform`s (Compatibility-safe): lantern glass, the lens and glowing
+mushroom caps read the global `night_factor`; the vertex emission channel
+scales them (0 = a dead lantern). Patterns (`LandmarkKit.LP`): whitewash,
+masonry (metallic > 0.5 = extra moss), glowing cap, paper, earth, leaf,
+painted metal, Fresnel lens, dark tunnel, fishing net (cut out), shingles;
+plus the camp patterns (planks, bark, canvas, stone, iron, rope, glass...).
+About 13-37k vertices per landmark, ~180k in total; build ~0.6 s.
+
+**Lights.** Each site lists lanterns (`lantern_light()`); Landmarks makes one
+unshadowed OmniLight3D per lantern (distance fade 55-70 m) and lights it at
+dusk/night only when the camera is within `landmarks.lantern_light_distance`
+(70 m); indoor lamps (`always`) also by day. On the "phone" preset no lights
+are shown: the emissive glass carries the glow. The lighthouse: a lens that
+blazes at night, an OmniLight in the lantern room, two opposite soft
+additive light cones (`lighthouse_beam.gdshader`, 260 m with a long faint tail that sweeps over the camp above the treetops, fog-free, brightest
+along the axis) rotating once per `beam_period` (14 s), a camera-facing lamp
+flare (it grows with distance so the lamp reads as a bright star across the
+lake) that flashes when a beam sweeps past the camera, and an unshadowed
+`SpotLight3D` on the beam (`spot_range` 110 m, not on phone) whose pool sweeps the lake.
+
+**Discovery.** Every 0.2 s while playing, the player's XZ distance to each
+landmark is compared with `max(radius * discover_radius_mult,
+discover_min_radius)`. First visit: `Events.landmark_discovered(id)` (once
+per landmark), `GameState.flags["<id>_found"]`, `stat_add("landmarks_found")`,
+`Events.big_message("You found <name>!")`, a toast from
+`landmarks.discover_text`, `Audio.play("discover")` (falls back to
+`level_up`), the map marker becomes `discovered`. The lighthouse also sets
+`GameState.flags["lighthouse_found"]` and `Profile.unlock("lighthouse")`
+(Keeper's Cap, toast the first time).
+
+**Chests.** When the run starts (`Events.run_started`, or the first frame
+while playing) every chest spot goes to
+`game.chests.add_chest(pos, tier, table_id, opts)` with opts `{label, rot
+(world yaw; the chest's local +Z faces visitors), landmark, restock_table,
+restock_days}`; the returned node is moved back to the exact position if the
+manager snapped it (indoors / on the platform). Settings
+(`landmarks.chests`): lighthouse = rare look, table `lighthouse`, restock
+`lighthouse_restock` every 3 days, "Keeper's Chest" (on the raised floor at
+the back of the keeper's room); Abandoned Campsite common; Ranger Lookout
+rare (on the platform); Old Mine epic (just inside the tunnel); Fern Hollow
+epic (under the arch). Without a ChestManager (or without `add_chest`) the
+loot of that table is rolled once (`Landmarks.fallback_loot(seed, id)`) and
+dropped as pickups at the chest's ground-level fallback spot on the first
+visit (the lookout's at the foot of the stairs, the lighthouse's by the
+steps).
+
+**Map markers.** A `LandmarkMarker` child at each centre, group
+`"map_marker"`: `{"kind": "landmark"|"trader", "label", "important": true,
+"discovered", "id", "icon"}` (id and icon = the WorldGen landmark id).
+
+**Public API** (`game.landmarks`): `site(id) -> LandmarkSite`,
+`lighthouse()`, `ids()`, `is_discovered(id)`, `discovered_ids()`,
+`discover(id)` (tests/dev), `trader_spot(id) -> {pos, yaw, facing}` (where a
+trader stands, facing the trail), `footprints() -> [Vector4(x, y, z, r)]`
+(same format as `Campsite.clear_zones()`: **ground cover should skip these**
+so grass does not grow through floors - not wired yet, see below),
+`obstacles_near(pos, r)`, `chest_spots()`, `chests` (id -> chest node),
+`chest_mode`, `register_chests(manager := null)`, `debug_stats()`. Static:
+`Landmarks.make_site(id)`, `chest_config(id)`, `fallback_loot(seed, id)`.
+Sites: `center`, `yaw`, `radius`, `to_world()`, `to_local_point()`,
+`world_zones()`, `world_chest_spots()`, `stand_spot()`; the lighthouse
+`beam_angle`, `beam_direction()`, `beam_pivot`, `spot`.
+
+**Walkable bits.** Player capsule (r 0.33) and 52° floors: the keeper's
+room floor is raised 0.45 m (three stone steps with a ramp collider), the
+door is 1.3 m wide; the lookout has two 1 m flights (29° and 42°) with a
+landing, upright handrail colliders (`LandmarkSite.rail_wall`) and a railed
+platform at 5.8 m; Pip's gangway slopes down the bank onto the dock; the
+Old Mine tunnel (4.6 m) has the terrain as its floor; Rosie's tent can be
+walked into. Bram's adit is decorative (closed by darkness).
+
+**Screenshot tour.** Options `"lm_local": true` (cam/look in the landmark's
+frame), `"lm_chest": true` (with `lm_local`: in its chest's frame instead,
++Z facing visitors), `"lm_player": Vector3` (park the player in that frame, y = height on
+a raised floor), `"lm_discover": true`, `"lm_beam": degrees` (hold the
+lighthouse beam that far from pointing at the camera; landmark cameras also
+swing up to ±60° around their target to avoid tree trunks, unless they
+look out from the landmark). Presets
+`lm_lighthouse_day`, `lm_lighthouse_door`, `lm_lighthouse_room`,
+`lm_lighthouse_top`, `lm_lighthouse_night`, `lm_lighthouse_beam`,
+`lm_lighthouse_from_camp`, `lm_lighthouse_from_shore`,
+`lm_lighthouse_flash`, `lm_lookout_day`, `lm_lookout_top`,
+`lm_abandoned_day`, `lm_rosie_day`, `lm_rosie_night`, `lm_pip_day`,
+`lm_bram_day`, `lm_mine_day`, `lm_mine_inside`, `lm_mine_night`,
+`lm_hollow_day`, `lm_hollow_arch`, `lm_hollow_night`.
+
+**Open items for other owners.** Ground cover (`world/ground_cover.gd`)
+does not know about buildings, so grass can poke through the lighthouse
+floor, Rosie's deck and the dock head: skip points inside
+`game.landmarks.footprints()` (and `camp.clear_zones()`), like it already
+skips the camp hearth. A real ChestManager should honour `opts.rot` and not
+snap chests that sit above the terrain.
