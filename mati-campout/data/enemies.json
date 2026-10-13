@@ -1,0 +1,41 @@
+{
+  "night_stalker": {
+    "name": "Night Stalker", "team": "monster", "fears_light": true, "light_fear": 0.35,
+    "hp": 50, "hp_per_night": 6, "walk_speed": 2.6, "stalk_speed": 3.4, "chase_speed": 6.3,
+    "damage": 11, "damage_per_night": 0.8, "attack_range": 1.9, "attack_windup": 0.45, "attack_cooldown": 1.5,
+    "sight_range": 34, "observe_range": 22, "flee_time": 2.5, "recover_time": 3.0,
+    "loot": "night_stalker", "night_only": true
+  },
+  "watcher": {
+    "name": "The Watcher", "team": "monster", "fears_light": true, "light_fear": 0.2,
+    "hp": 80, "hp_per_night": 5, "walk_speed": 1.6, "chase_speed": 5.0,
+    "damage": 8, "attack_range": 2.0, "attack_windup": 0.8, "attack_cooldown": 2.5,
+    "stare_min_dist": 18, "stare_max_dist": 45, "attack_chance": 0.08, "flee_speed": 7.5,
+    "loot": "night_stalker", "night_only": true
+  },
+  "wild_wolf": {
+    "name": "Wild Wolf", "team": "wildlife", "fears_light": true, "light_fear": 0.6,
+    "hp": 45, "walk_speed": 2.2, "trot_speed": 4.2, "chase_speed": 7.4,
+    "damage": 9, "attack_range": 1.7, "attack_windup": 0.35, "attack_cooldown": 1.3,
+    "territory_radius": 14, "alert_range": 11, "aggro_range": 6.5, "night_aggro_range": 11,
+    "flee_hp_fraction": 0.3, "tameable": true
+  },
+  "boss_wolf": {
+    "name": "Grimmaw, the Three-Headed Wolf", "team": "monster", "fears_light": false, "light_fear": 0,
+    "hp": 900, "hp_per_appearance": 300, "walk_speed": 3.4, "stalk_speed": 4.6, "sprint_speed": 17.0,
+    "sprint_duration": 1.9, "recovery_time": 3.4, "sprint_cooldown": 2.0,
+    "damage": 26, "bite_damage": 18, "attack_range": 3.4, "attack_windup": 0.55, "attack_cooldown": 1.2,
+    "recovery_damage_mult": 1.75, "first_night": 12, "repeat_every": 4,
+    "loot": "boss"
+  },
+  "bunny": {
+    "name": "Bunny", "team": "wildlife", "hp": 10, "walk_speed": 1.4, "flee_speed": 7.0, "flee_range": 7, "loot": "bunny"
+  },
+  "deer": {
+    "name": "Deer", "team": "wildlife", "hp": 40, "walk_speed": 1.6, "flee_speed": 9.0, "flee_range": 14, "loot": "deer"
+  },
+  "pet_wolf": {
+    "name": "Wolf Companion", "team": "pet", "hp": 80, "walk_speed": 3.0, "run_speed": 8.0,
+    "damage": 14, "attack_range": 1.8, "attack_cooldown": 1.0, "guard_radius": 16, "recover_time": 40
+  }
+}

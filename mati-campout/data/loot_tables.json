@@ -1,0 +1,132 @@
+{
+  "chest_common": {
+    "rolls": [2, 3],
+    "guaranteed": [{"id": "coins", "min": 6, "max": 16}],
+    "entries": [
+      {"id": "wood", "weight": 10, "min": 2, "max": 5},
+      {"id": "kindling", "weight": 7, "min": 2, "max": 4},
+      {"id": "stone", "weight": 8, "min": 2, "max": 4},
+      {"id": "berries", "weight": 8, "min": 2, "max": 4},
+      {"id": "cloth", "weight": 9, "min": 1, "max": 3},
+      {"id": "scrap_metal", "weight": 6, "min": 1, "max": 2},
+      {"id": "coal", "weight": 6, "min": 1, "max": 3},
+      {"id": "bone", "weight": 4, "min": 1, "max": 2},
+      {"id": "bandage", "weight": 3, "min": 1, "max": 1},
+      {"id": "canned_beans", "weight": 3, "min": 1, "max": 1},
+      {"id": "trail_mix", "weight": 3, "min": 1, "max": 2}
+    ]
+  },
+  "chest_rare": {
+    "rolls": [3, 4],
+    "guaranteed": [{"id": "coins", "min": 20, "max": 45}],
+    "entries": [
+      {"id": "coal", "weight": 8, "min": 2, "max": 5},
+      {"id": "scrap_metal", "weight": 9, "min": 2, "max": 5},
+      {"id": "cloth", "weight": 7, "min": 2, "max": 4},
+      {"id": "canned_beans", "weight": 6, "min": 1, "max": 2},
+      {"id": "bandage", "weight": 6, "min": 1, "max": 2},
+      {"id": "torch", "weight": 5, "min": 1, "max": 2},
+      {"id": "battery", "weight": 4, "min": 1, "max": 2},
+      {"id": "bone", "weight": 4, "min": 1, "max": 3},
+      {"id": "good_sack", "weight": 2, "min": 1, "max": 1},
+      {"id": "good_axe", "weight": 2, "min": 1, "max": 1},
+      {"id": "sword", "weight": 2, "min": 1, "max": 1},
+      {"id": "revolver_rounds", "weight": 2, "min": 3, "max": 6},
+      {"id": "starstone", "weight": 1, "min": 1, "max": 1}
+    ]
+  },
+  "chest_epic": {
+    "rolls": [3, 5],
+    "guaranteed": [{"id": "coins", "min": 60, "max": 120}],
+    "entries": [
+      {"id": "starstone", "weight": 8, "min": 1, "max": 2},
+      {"id": "medkit", "weight": 6, "min": 1, "max": 1},
+      {"id": "battery", "weight": 6, "min": 1, "max": 3},
+      {"id": "coal", "weight": 6, "min": 4, "max": 8},
+      {"id": "scrap_metal", "weight": 6, "min": 4, "max": 8},
+      {"id": "flashlight", "weight": 4, "min": 1, "max": 1},
+      {"id": "mega_sack", "weight": 3, "min": 1, "max": 1},
+      {"id": "revolver", "weight": 3, "min": 1, "max": 1},
+      {"id": "revolver_rounds", "weight": 4, "min": 6, "max": 12},
+      {"id": "rifle_rounds", "weight": 2, "min": 2, "max": 5},
+      {"id": "rifle", "weight": 1, "min": 1, "max": 1},
+      {"id": "best_sack", "weight": 1, "min": 1, "max": 1},
+      {"id": "mega_axe", "weight": 1, "min": 1, "max": 1}
+    ]
+  },
+  "lighthouse": {
+    "rolls": [1, 2],
+    "guaranteed": [
+      {"id": "flashlight", "min": 1, "max": 1},
+      {"id": "battery", "min": 2, "max": 3},
+      {"id": "coins", "min": 40, "max": 70},
+      {"id": "starstone", "min": 1, "max": 1}
+    ],
+    "entries": [
+      {"id": "medkit", "weight": 4, "min": 1, "max": 1},
+      {"id": "canned_beans", "weight": 4, "min": 2, "max": 3},
+      {"id": "rifle_rounds", "weight": 1, "min": 3, "max": 6}
+    ]
+  },
+  "lighthouse_restock": {
+    "rolls": [2, 3],
+    "guaranteed": [{"id": "battery", "min": 1, "max": 2}],
+    "entries": [
+      {"id": "coins", "weight": 6, "min": 15, "max": 35},
+      {"id": "canned_beans", "weight": 4, "min": 1, "max": 2},
+      {"id": "torch", "weight": 4, "min": 1, "max": 2},
+      {"id": "starstone", "weight": 1, "min": 1, "max": 1}
+    ]
+  },
+  "boss": {
+    "rolls": [2, 3],
+    "guaranteed": [
+      {"id": "coins", "min": 250, "max": 350},
+      {"id": "starstone", "min": 3, "max": 4}
+    ],
+    "entries": [
+      {"id": "best_sack", "weight": 3, "min": 1, "max": 1},
+      {"id": "rifle", "weight": 2, "min": 1, "max": 1},
+      {"id": "rifle_rounds", "weight": 3, "min": 6, "max": 10},
+      {"id": "medkit", "weight": 4, "min": 1, "max": 2}
+    ]
+  },
+  "night_stalker": {
+    "rolls": [1, 1],
+    "guaranteed": [{"id": "coins", "min": 2, "max": 6}],
+    "entries": [
+      {"id": "shadow_shard", "weight": 6, "min": 1, "max": 1},
+      {"id": "nothing", "weight": 4, "min": 0, "max": 0}
+    ]
+  },
+  "bunny": {
+    "rolls": [1, 1],
+    "guaranteed": [{"id": "raw_meat", "min": 1, "max": 1}],
+    "entries": [
+      {"id": "bone", "weight": 4, "min": 1, "max": 1},
+      {"id": "nothing", "weight": 6, "min": 0, "max": 0}
+    ]
+  },
+  "deer": {
+    "rolls": [1, 1],
+    "guaranteed": [{"id": "raw_meat", "min": 2, "max": 3}, {"id": "bone", "min": 1, "max": 2}],
+    "entries": [{"id": "cloth", "weight": 3, "min": 1, "max": 2}, {"id": "nothing", "weight": 5, "min": 0, "max": 0}]
+  },
+  "regular_tree": {
+    "rolls": [1, 1],
+    "guaranteed": [{"id": "wood", "min": 3, "max": 4}],
+    "entries": [
+      {"id": "kindling", "weight": 3, "min": 1, "max": 2},
+      {"id": "nothing", "weight": 7, "min": 0, "max": 0}
+    ]
+  },
+  "giant_tree": {
+    "rolls": [1, 2],
+    "guaranteed": [{"id": "wood", "min": 10, "max": 14}, {"id": "amber", "min": 1, "max": 1}],
+    "entries": [
+      {"id": "coins", "weight": 4, "min": 10, "max": 25},
+      {"id": "starstone", "weight": 1, "min": 1, "max": 1},
+      {"id": "kindling", "weight": 4, "min": 3, "max": 5}
+    ]
+  }
+}

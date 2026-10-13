@@ -1,0 +1,52 @@
+{
+  "skin_tones": ["#f6d7c3", "#eec1a0", "#d9a27c", "#c18560", "#a26a45", "#82522f", "#633b22", "#4a2b19"],
+  "hair_styles": [
+    {"id": "short", "name": "Short"},
+    {"id": "bob", "name": "Bob"},
+    {"id": "ponytail", "name": "Ponytail"},
+    {"id": "curly", "name": "Curly"},
+    {"id": "bun", "name": "Top Bun"},
+    {"id": "spiky", "name": "Spiky"},
+    {"id": "long", "name": "Long"},
+    {"id": "braids", "name": "Braids"},
+    {"id": "buzz", "name": "Buzz Cut"}
+  ],
+  "hair_colors": ["#2b1b12", "#4a2c1a", "#7a4a26", "#a8682e", "#d9a65b", "#f0d48a", "#b8371f", "#e8e8ea", "#9fa4ab", "#3c5ad6", "#d65ab0", "#2e9a6a"],
+  "shirt_colors": ["#d0463c", "#e3923a", "#e9c24a", "#5f9e4f", "#2f7f86", "#3f62b5", "#7b4fb3", "#e7e1d3", "#3b3b44"],
+  "jacket_styles": [
+    {"id": "none", "name": "No Jacket"},
+    {"id": "hoodie", "name": "Hoodie"},
+    {"id": "flannel", "name": "Flannel"},
+    {"id": "vest", "name": "Puffer Vest"},
+    {"id": "raincoat", "name": "Raincoat"}
+  ],
+  "jacket_colors": ["#2f5d3a", "#8a3b2c", "#c9a24a", "#2d4e7a", "#d8d2c2", "#e6763a", "#4b3f6b", "#262628"],
+  "pants_colors": ["#3b4f6e", "#5a4a3a", "#2e2e33", "#6f7a4a", "#8a6a4a", "#b4a68a"],
+  "backpacks": [
+    {"id": "classic", "name": "Classic Pack"},
+    {"id": "frame", "name": "Frame Pack"},
+    {"id": "satchel", "name": "Satchel"},
+    {"id": "bear", "name": "Bear Pack", "unlock": "nights_5"}
+  ],
+  "accessories": [
+    {"id": "none", "name": "None"},
+    {"id": "beanie", "name": "Beanie"},
+    {"id": "ranger_hat", "name": "Ranger Hat", "unlock": "nights_3"},
+    {"id": "glasses", "name": "Glasses"},
+    {"id": "scarf", "name": "Cozy Scarf"},
+    {"id": "flower_crown", "name": "Flower Crown"},
+    {"id": "headlamp", "name": "Headlamp (cosmetic)"},
+    {"id": "bucket_hat", "name": "Bucket Hat"},
+    {"id": "wolf_ears", "name": "Wolf-Ear Beanie", "unlock": "tame_wolf"},
+    {"id": "crown_of_embers", "name": "Crown of Embers", "unlock": "boss_defeated"},
+    {"id": "lighthouse_cap", "name": "Keeper's Cap", "unlock": "lighthouse"}
+  ],
+  "unlocks": {
+    "nights_3": "Survive 3 nights in one run",
+    "nights_5": "Survive 5 nights in one run",
+    "tame_wolf": "Tame a wolf",
+    "boss_defeated": "Defeat Grimmaw",
+    "lighthouse": "Reach the lighthouse"
+  },
+  "default": {"name": "Mati", "skin": 2, "hair_style": "short", "hair_color": 1, "shirt": 0, "jacket_style": "flannel", "jacket_color": 0, "pants": 0, "backpack": "classic", "accessory": "beanie"}
+}

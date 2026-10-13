@@ -1,0 +1,19 @@
+{
+  "lantern_post": {"name": "Lantern Post", "cost": {"wood": 4, "scrap_metal": 1, "coal": 1}, "max": 8, "radius": 0.4,
+    "light_radius": 7, "linked_to_fire": true,
+    "desc": "Extends the campfire's glow. Only shines while the campfire burns."},
+  "bench": {"name": "Log Bench", "cost": {"wood": 5}, "max": 6, "radius": 0.9,
+    "desc": "Sit by the fire. Resting here near a lit fire heals you a little faster."},
+  "fence": {"name": "Wooden Fence", "cost": {"wood": 3}, "max": 40, "radius": 1.1, "blocks": true,
+    "desc": "Keeps wolves and creatures from walking straight into camp."},
+  "storage_chest": {"name": "Storage Chest", "cost": {"wood": 10, "scrap_metal": 2}, "max": 3, "radius": 0.7, "storage_slots": 12,
+    "desc": "Extra camp storage, shared with the crafting crate."},
+  "drying_rack": {"name": "Drying Rack", "cost": {"wood": 6, "cloth": 2}, "max": 2, "radius": 0.9,
+    "desc": "Turns raw meat into trail jerky over a day. Slow, but no fire needed."},
+  "spare_tent": {"name": "Spare Tent", "cost": {"wood": 10, "cloth": 6, "coins": 40}, "max": 2, "radius": 1.6,
+    "desc": "A cozy spare tent. A tamed wolf will sleep here."},
+  "flag": {"name": "Camp Flag", "cost": {"wood": 2, "cloth": 2}, "max": 4, "radius": 0.3,
+    "desc": "Show your colours! Purely decorative."},
+  "flower_planter": {"name": "Flower Planter", "cost": {"wood": 3, "berries": 2}, "max": 6, "radius": 0.6,
+    "desc": "A pretty planter of wildflowers. Purely decorative."}
+}
