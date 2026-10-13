@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1791696885|6816991';
+const CACHE_VERSION = '1791855150|8962294';
 /** @type {string} */
 const CACHE_PREFIX = 'MATIsCampout-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;

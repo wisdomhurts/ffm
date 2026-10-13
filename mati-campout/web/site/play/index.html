@@ -519,6 +519,55 @@ const GODOT_THREADS_ENABLED = false;
 		// Let the engine report it.
 	}
 
+	// A lost graphics context (phone memory pressure, a GPU reset) used to end in
+	// Godot's "WebGL context lost, please reload the page" alert. Catch it here
+	// (capture phase, before the engine's own listener on the canvas), say what
+	// happened, and bring the game back with a reload. Three quick losses in ten
+	// minutes stop the automatic reloads, so a device that cannot run the game
+	// gets a button instead of a loop.
+	const LOSS_KEY = 'matiContextLoss';
+	const LOSS_WINDOW = 10 * 60 * 1000;
+	function recentLosses() {
+		let log = [];
+		try { log = JSON.parse(sessionStorage.getItem(LOSS_KEY) || '[]'); } catch (err) { log = []; }
+		const now = Date.now();
+		return log.filter(function (t) { return now - t < LOSS_WINDOW; });
+	}
+	function showLossNote(text, withButton) {
+		const note = document.createElement('div');
+		note.setAttribute('role', 'status');
+		note.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;background:rgba(11,16,36,.92);color:#fff4df;font:600 18px/1.4 Fredoka,Nunito,system-ui,sans-serif;text-align:center;';
+		const p = document.createElement('p');
+		p.style.margin = '0';
+		p.textContent = text;
+		note.appendChild(p);
+		if (withButton) {
+			const b = document.createElement('button');
+			b.type = 'button';
+			b.textContent = 'Try again';
+			b.style.cssText = 'font:600 18px Fredoka,Nunito,system-ui,sans-serif;padding:12px 24px;border:0;border-radius:14px;background:linear-gradient(180deg,#ffc46b,#e8892b);color:#2a1406;cursor:pointer;';
+			b.addEventListener('click', function () {
+				try { sessionStorage.removeItem(LOSS_KEY); } catch (err) { /* private mode */ }
+				location.reload();
+			});
+			note.appendChild(b);
+		}
+		document.body.appendChild(note);
+	}
+	window.addEventListener('webglcontextlost', function (e) {
+		e.preventDefault();
+		e.stopImmediatePropagation();
+		const log = recentLosses();
+		log.push(Date.now());
+		try { sessionStorage.setItem(LOSS_KEY, JSON.stringify(log)); } catch (err) { /* private mode */ }
+		if (log.length <= 3) {
+			showLossNote('The picture got lost for a moment. Lighting the campfire again...', false);
+			setTimeout(function () { location.reload(); }, 1500);
+		} else {
+			showLossNote('The picture keeps getting lost on this device. Your run cannot continue here right now.', true);
+		}
+	}, true);
+
 	const engine = new Engine(Object.assign({}, GODOT_CONFIG, {
 		onProgress: function (current, total) {
 			if (current > 0 && total > 0) {
